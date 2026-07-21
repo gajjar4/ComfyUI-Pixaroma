@@ -25,13 +25,14 @@ export const UNCATEGORIZED = "Uncategorized";
 // written). Gives a new user a working template; every seed is editable/deletable.
 const SEED = {
   version: 1,
-  categories: ["Styles", "Lighting", "Camera"],
+  categories: ["Styles", "Lighting", "Camera", "Wildcards"],
   tags: [
     { name: "oilpainting", cat: "Styles", text: "oil painting, thick impasto brush strokes, dramatic Rembrandt lighting, rich canvas texture, fine-art masterpiece" },
     { name: "watercolor", cat: "Styles", text: "loose watercolor wash, soft bleeding edges, paper texture, gentle pigment" },
     { name: "cyberpunk", cat: "Styles", text: "cyberpunk city, neon signs, rain-slick streets, volumetric fog, blade-runner mood" },
     { name: "goldenhour", cat: "Lighting", text: "golden hour, warm low sun, long soft shadows, cinematic rim light" },
     { name: "portrait", cat: "Camera", text: "head and shoulders portrait, shallow depth of field, 85mm lens, soft studio light" },
+    { name: "animals", cat: "Wildcards", text: "cat\ndog\nmouse\ntiger\nlion\neagle" },
   ],
 };
 
@@ -48,8 +49,62 @@ function cleanName(n) {
   return String(n == null ? "" : n).trim().replace(NAME_RE, "");
 }
 
+function migrateLegacyWildcards(src) {
+  if (!src || !Array.isArray(src.tags)) return src;
+  
+  const groups = new Map(); // catPrefix -> Array of tag texts
+  const normalTags = [];
+  const migratedCats = new Set();
+  
+  for (const t of src.tags) {
+    if (!t) continue;
+    const hasUnderscore = t.name && t.name.includes("_");
+    const isWildcardCat = t.cat && (t.cat.toLowerCase() === "wildcards" || (t.cat.toLowerCase() !== "styles" && t.cat.toLowerCase() !== "lighting" && t.cat.toLowerCase() !== "camera"));
+    
+    if (hasUnderscore && isWildcardCat) {
+      const parts = t.name.split("_");
+      const catPrefix = parts[0];
+      const key = catPrefix.toLowerCase();
+      if (!groups.has(key)) {
+        groups.set(key, { cat: "Wildcards", name: catPrefix, lines: [] });
+      }
+      groups.get(key).lines.push(t.text);
+      migratedCats.add(t.cat.toLowerCase());
+    } else {
+      normalTags.push(t);
+    }
+  }
+  
+  if (groups.size === 0) return src;
+  
+  const newTags = [];
+  for (const [key, info] of groups.entries()) {
+    const textContent = info.lines.filter(l => l && l.trim()).join("\n");
+    if (textContent) {
+      newTags.push({
+        name: info.name.toLowerCase(),
+        cat: "Wildcards",
+        text: textContent
+      });
+    }
+  }
+  
+  const oldCats = Array.isArray(src.categories) ? src.categories : [];
+  const nextCats = oldCats.filter(c => c && !migratedCats.has(c.toLowerCase()));
+  if (!nextCats.map(c => c.toLowerCase()).includes("wildcards")) {
+    nextCats.push("Wildcards");
+  }
+  
+  return {
+    version: src.version || 1,
+    categories: nextCats,
+    tags: newTags.concat(normalTags)
+  };
+}
+
 // Coerce any parsed blob into the canonical shape, deduping tag names.
 function normalize(raw) {
+  raw = migrateLegacyWildcards(raw);
   const out = { version: 1, categories: [], tags: [] };
   const src = raw && typeof raw === "object" ? raw : {};
   const cats = Array.isArray(src.categories) ? src.categories : [];
@@ -193,6 +248,30 @@ export function exportLibraryJSON() {
   return JSON.stringify(getLibrary(), null, 2);
 }
 
+// Parse standard .txt wildcard files (e.g. animals.txt with lines "cat", "dog", "mouse")
+// filesList is an array of { filename: string, content: string }.
+export function parseTxtWildcards(filesList) {
+  if (!Array.isArray(filesList) || !filesList.length) {
+    return { error: "No wildcard text files provided." };
+  }
+  const categories = ["Wildcards"];
+  const tags = [];
+  for (const item of filesList) {
+    const rawName = item.filename.replace(/\.txt$/i, "").trim();
+    const tagName = cleanName(rawName) || "wildcard";
+    const textContent = (item.content || "").trim();
+    if (!textContent) continue;
+    tags.push({ name: tagName, cat: "Wildcards", text: textContent });
+  }
+  if (!tags.length) {
+    return { error: "No valid text found in the imported wildcard file(s)." };
+  }
+  const data = normalize({ categories, tags });
+  const have = new Set(getTags().map((t) => t.name.toLowerCase()));
+  const conflicts = data.tags.filter((t) => have.has(t.name.toLowerCase())).map((t) => t.name);
+  return { data, conflicts };
+}
+
 // Parse an imported blob into a normalized library WITHOUT applying it. Returns
 // { data, conflicts:[name...] } so the caller can ask the user how to merge.
 export function parseImport(jsonStr) {
@@ -252,3 +331,4 @@ export function applyImport(parsed, mode) {
   setLibrary(next);
   return { added: toAdd.length };
 }
+

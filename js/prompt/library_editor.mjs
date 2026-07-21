@@ -10,7 +10,7 @@ import { app } from "/scripts/app.js";
 import { installGraphUndoGuard } from "../shared/graph_undo_guard.mjs";
 import { BRAND } from "../shared/utils.mjs";
 import {
-  getLibrary, commitLibrary, flushLibrary, exportLibraryJSON, parseImport, applyImport,
+  getLibrary, commitLibrary, flushLibrary, exportLibraryJSON, parseImport, parseTxtWildcards, applyImport,
   UNCATEGORIZED, NAME_RE,
 } from "./library.mjs";
 
@@ -26,6 +26,7 @@ let _search = "";
 let _undoGuardOff = null;
 let _catMenu = null;
 let _accent = BRAND;
+let _gridLimit = 100;
 // In-progress create-form values, kept alive across re-renders (clicking a sidebar
 // category or typing in search rebuilds the form) so a typed OR prefilled name/text
 // is never lost. Cleared on Create and on close.
@@ -393,7 +394,23 @@ function buildGrid() {
     e.className = "pix-prled-empty"; e.style.gridColumn = "1 / -1";
     e.textContent = _search ? "No tags match your search." : "No tags here yet - create one above.";
     grid.appendChild(e);
-  } else for (const t of rows) grid.appendChild(makeCard(t));
+  } else {
+    const page = rows.slice(0, _gridLimit);
+    for (const t of page) grid.appendChild(makeCard(t));
+    if (rows.length > _gridLimit) {
+      const more = document.createElement("div");
+      more.style.cssText = "grid-column:1/-1; display:flex; justify-content:center; padding:15px;";
+      const btn = document.createElement("button");
+      btn.className = "pix-prled-btn pri";
+      btn.textContent = `Show more (${rows.length - _gridLimit} remaining)`;
+      btn.addEventListener("click", () => {
+        _gridLimit += 100;
+        render();
+      });
+      more.appendChild(btn);
+      grid.appendChild(more);
+    }
+  }
   return grid;
 }
 function renderContent(content) {
@@ -438,6 +455,31 @@ function pickImportFile() {
     reader.readAsText(file);
   });
   document.body.appendChild(inp); inp.click();
+}
+function pickTxtWildcardFiles() {
+  const inp = document.createElement("input");
+  inp.type = "file"; inp.accept = ".txt"; inp.multiple = true;
+  inp.addEventListener("change", async () => {
+    const files = Array.from(inp.files || []);
+    inp.remove();
+    if (!files.length) return;
+    const fileDataList = [];
+    for (const f of files) {
+      try {
+        const text = await f.text();
+        fileDataList.push({ filename: f.name, content: text });
+      } catch { /* ignore read error */ }
+    }
+    startTxtImport(fileDataList);
+  });
+  document.body.appendChild(inp); inp.click();
+}
+function startTxtImport(filesList) {
+  flushLibrary();
+  const parsed = parseTxtWildcards(filesList);
+  if (parsed.error) { toast("warn", parsed.error); return; }
+  if (!parsed.conflicts.length) { applyLibraryImport(parsed, "both"); return; }
+  showImportModal(parsed);
 }
 function startImport(text) {
   flushLibrary(); // so parseImport sees exactly our working library
@@ -506,7 +548,7 @@ export function openLibraryEditor(node, opts) {
   _node = node; _opts = opts || {}; _accent = _opts.accent || BRAND;
   _createDraft = { name: "", text: (_opts.prefill || "").trim() };
   _data = clone(getLibrary());
-  _curCat = "All"; _search = "";
+  _curCat = "All"; _search = ""; _gridLimit = 100;
 
   const ov = document.createElement("div");
   ov.className = "pix-prled";
@@ -520,7 +562,8 @@ export function openLibraryEditor(node, opts) {
     `<span class="x" title="Close">✕</span></div>` +
     `<div class="pix-prled-main"><div class="pix-prled-side"></div><div class="pix-prled-content"></div></div>` +
     `<div class="pix-prled-foot"><button class="pix-prled-btn imp-export"><span>⭳</span> Export library</button>` +
-    `<button class="pix-prled-btn imp-import"><span>⭱</span> Import</button>` +
+    `<button class="pix-prled-btn imp-import"><span>⭱</span> Import JSON</button>` +
+    `<button class="pix-prled-btn imp-txt-wildcard" title="Import standard wildcard .txt files (each file becomes a category)"><span>📄</span> Import Wildcards (.txt)</button>` +
     `<button class="pix-prled-btn push imp-done">Done</button></div>`;
   document.body.appendChild(ov);
   _overlay = ov;
@@ -533,6 +576,7 @@ export function openLibraryEditor(node, opts) {
   ov.querySelector(".imp-done").addEventListener("click", closeLibraryEditor);
   ov.querySelector(".imp-export").addEventListener("click", doExport);
   ov.querySelector(".imp-import").addEventListener("click", pickImportFile);
+  ov.querySelector(".imp-txt-wildcard").addEventListener("click", pickTxtWildcardFiles);
 
   render();
   // Coming from "save selection as a tag": the text is already in the create form,

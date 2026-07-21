@@ -1,4 +1,4 @@
-// Prompt Pixaroma - @tag -> snippet-text expansion AND *category -> random-tag
+// Prompt Pixaroma - @tag -> snippet-text expansion AND *category / /category -> random-tag
 // wildcards (one level, no nesting).
 //
 // Used by BOTH the node body (live "Show expanded" preview + coloured highlighting)
@@ -9,33 +9,31 @@
 
 import { getTags } from "./library.mjs";
 
-// @name = a saved tag; *name = a random-from-category wildcard. name = letters /
+// @name = a saved tag; *name or /name = a random-from-category wildcard. name = letters /
 // digits / _ / - .
-const TOKEN_RE = /([@*])([a-zA-Z0-9_\-]+)/g;
+const TOKEN_RE = /([@*/])([a-zA-Z0-9_\-]+)/g;
 
-// Left-to-right scan for @tag and *wild tokens. A token counts when it's at the
+// Left-to-right scan for @tag, *wild, and /wild tokens. A token counts when it's at the
 // very start, after a NON-word char (space, comma, ...), OR immediately after
-// another token (a chain like @a@b / @a*b). This lets adjacent tokens work while
-// leaving an email's "user@name" (and arithmetic like "2*2") alone - their symbol
+// another token (a chain like @a@b / @a*b / /a/b). This lets adjacent tokens work while
+// leaving an email's "user@name" (and arithmetic like "2*2" or path "a/b") alone - their symbol
 // sits after a word char with no preceding token. Returns
-// [{kind:'tag'|'wild', sym, name, start, end, raw}]. Shared by scanTags / scanWilds
+// [{kind:'tag'|'wild'|'slash_wild', sym, name, start, end, raw}]. Shared by scanTags / scanWilds
 // / expandAll AND the node's highlight backdrop so all of them agree on exactly
 // which tokens count.
 export function scanTokens(text) {
   const out = [];
-  if (typeof text !== "string" || !/[@*]/.test(text)) return out;
+  if (typeof text !== "string" || !/[@*/]/.test(text)) return out;
   TOKEN_RE.lastIndex = 0;
   let m, lastEnd = -1, lastKind = null;
   while ((m = TOKEN_RE.exec(text))) {
     const at = m.index;
-    const kind = m[1] === "@" ? "tag" : "wild";
+    const kind = m[1] === "@" ? "tag" : (m[1] === "/" ? "slash_wild" : "wild");
     const prev = at > 0 ? text[at - 1] : "";
     // Unicode-aware: a letter/number/combining-mark/_ before the symbol (incl.
     // accented / CJK, precomposed OR decomposed) means it's an email local part or
-    // arithmetic, not a token - UNLESS it chains off a SAME-KIND token immediately
-    // before it (@a@b, *a*b). Cross-kind is deliberately NOT chained: an unknown
-    // *wildcard must never promote a following @tag into expanding (or vice-versa) -
-    // that would silently rewrite the prompt. Adjacency like @tag*Cat just needs a space.
+    // arithmetic/path, not a token - UNLESS it chains off a SAME-KIND token immediately
+    // before it (@a@b, *a*b, /a/b). Cross-kind is deliberately NOT chained.
     const chains = at === lastEnd && kind === lastKind;
     const isTok = !prev || !/[\p{L}\p{N}\p{M}_]/u.test(prev) || chains;
     if (isTok) {
@@ -51,15 +49,19 @@ export function scanTokens(text) {
 // @tags only (back-compat: same shape the highlight/preview/run used before).
 export function scanTags(text) { return scanTokens(text).filter((t) => t.kind === "tag"); }
 // *wildcards only.
-export function scanWilds(text) { return scanTokens(text).filter((t) => t.kind === "wild"); }
+export function scanAsteriskWilds(text) { return scanTokens(text).filter((t) => t.kind === "wild"); }
+// /wildcards only.
+export function scanSlashWilds(text) { return scanTokens(text).filter((t) => t.kind === "slash_wild"); }
+// All wildcards (* and /).
+export function scanWilds(text) { return scanTokens(text).filter((t) => t.kind === "wild" || t.kind === "slash_wild"); }
 
-// Expand @tags AND resolve *wildcards. `resolveWild(name)` returns the replacement
-// string, or null/undefined to leave the *token literal (unknown / empty category);
-// omit it to leave every *wildcard literal (pure @tag expansion). The caller owns
+// Expand @tags AND resolve * / / wildcards. `resolveWild(name, sym)` returns the replacement
+// string, or null/undefined to leave the token literal (unknown / empty category);
+// omit it to leave every wildcard literal (pure @tag expansion). The caller owns
 // the randomness. Returns { out, knownTags, unknownTags, knownWilds, unknownWilds }.
 export function expandAll(text, opts = {}) {
   const { tags, resolveWild } = opts;
-  if (typeof text !== "string" || !/[@*]/.test(text)) {
+  if (typeof text !== "string" || !/[@*/]/.test(text)) {
     return { out: typeof text === "string" ? text : "", knownTags: [], unknownTags: [], knownWilds: [], unknownWilds: [] };
   }
   const list = tags || getTags();
@@ -76,7 +78,7 @@ export function expandAll(text, opts = {}) {
       if (v != null) { out += v; knownTags.push(h.name); }
       else { out += h.raw; unknownTags.push(h.name); } // unknown tag left literal
     } else {
-      const rep = typeof resolveWild === "function" ? resolveWild(h.name) : null;
+      const rep = typeof resolveWild === "function" ? resolveWild(h.name, h.sym) : null;
       if (rep != null) { out += rep; knownWilds.push(h.name); }
       else { out += h.raw; unknownWilds.push(h.name); } // unknown / empty category left literal
     }
@@ -98,8 +100,9 @@ export function hasTags(text) {
   if (typeof text !== "string" || text.indexOf("@") === -1) return false;
   return scanTags(text).length > 0;
 }
-// Does this text reference at least one *wildcard?
+// Does this text reference at least one wildcard (* or /)?
 export function hasWilds(text) {
-  if (typeof text !== "string" || text.indexOf("*") === -1) return false;
+  if (typeof text !== "string" || (!text.includes("*") && !text.includes("/"))) return false;
   return scanWilds(text).length > 0;
 }
+

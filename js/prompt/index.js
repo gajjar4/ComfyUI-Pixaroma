@@ -100,6 +100,9 @@ function injectCSS() {
        category is unknown/empty. Colour only - same glyph width so the caret can't drift. */
     .pix-prm-wild { color:#b98cff; }
     .pix-prm-wild.bad { color:#ff4d4d; }
+    /* /wildcards: a distinct cyan (#38bdf8), red when category is unknown/empty. */
+    .pix-prm-slashwild { color:#38bdf8; }
+    .pix-prm-slashwild.bad { color:#ff4d4d; }
     /* preview GROWS with the node (flex, no fixed cap) so a big node shows more.
        LIGHTER gray (not the dark #1d1d1d of the editable inputs) so it reads as a
        read-only preview, not another input box - the green text stays readable. */
@@ -220,26 +223,41 @@ function catColor(name) {
 // One category lookup shared by the highlight, the preview, and the run so they
 // agree on which *categories are "live". Case-insensitive; returns {canonical, pool}
 // or null (unknown OR empty category -> the *token is left literal).
+// ── * / / wildcard resolution ────────────────────────────────────────────────
+function wildcardTagLines(name) {
+  const t = getTags().find((t) => (t.cat || "").toLowerCase() === "wildcards" && t.name.toLowerCase() === String(name).toLowerCase());
+  if (!t || typeof t.text !== "string") return null;
+  const lines = t.text.split(/\r?\n/).map((l) => l.trim()).filter((l) => l && !l.startsWith("#"));
+  return lines.length ? { name: t.name, lines } : null;
+}
+
 function wildCat(name) {
   const canonical = getCategories().find((c) => c && c.toLowerCase() === String(name).toLowerCase());
   if (!canonical) return null;
-  // Match the "Uncategorized" bucket too: an uncategorized tag is stored with cat ""
-  // (library normalize), while getCategories() surfaces it as the label "Uncategorized"
-  // - so fall the empty cat back to that label before comparing. Only string-text tags
-  // can be rolled (a corrupted import could carry a non-string text).
   const pool = getTags().filter((t) => (t.cat || UNCATEGORIZED).toLowerCase() === canonical.toLowerCase() && typeof t.text === "string");
   return pool.length ? { canonical, pool } : null;
 }
-// RUN resolver: a fresh random tag's text (Math.random at queue time -> new each run).
-function pickWild(name) {
+
+// RUN resolver: a fresh random pick (Math.random at queue time -> new each run).
+function pickWild(name, sym) {
+  if (sym === "/") {
+    const wt = wildcardTagLines(name);
+    if (wt && wt.lines.length) {
+      return wt.lines[Math.floor(Math.random() * wt.lines.length)];
+    }
+  }
   const w = wildCat(name);
   return w ? w.pool[Math.floor(Math.random() * w.pool.length)].text : null;
 }
-// PREVIEW resolver: a STABLE placeholder (the real pick happens at run time, so the
-// preview must not flicker a different sample on every keystroke).
-function previewWild(name) {
+
+// PREVIEW resolver: a STABLE placeholder.
+function previewWild(name, sym) {
+  if (sym === "/") {
+    const wt = wildcardTagLines(name);
+    if (wt && wt.lines.length) return `[random: /${wt.name}]`;
+  }
   const w = wildCat(name);
-  return w ? `[random: ${w.canonical}]` : null;
+  return w ? `[random: *${w.canonical}]` : null;
 }
 
 // A dark custom dropdown (never a native white <select> - house rule). Returns
@@ -288,8 +306,6 @@ function makeDropdown(value, options, onChange) {
     else pop.style.top = (r.bottom + 4) + "px";
     _ddOutside = (ev) => { if (!pop.contains(ev.target) && !btn.contains(ev.target)) closeDD(); };
     setTimeout(() => {
-      // pointerdown (capture) also fires when you start dragging the node or panning
-      // the canvas, so the popup closes instead of hanging in place.
       document.addEventListener("mousedown", _ddOutside, true);
       document.addEventListener("pointerdown", _ddOutside, true);
       document.addEventListener("wheel", _ddOutside, true);
@@ -311,6 +327,7 @@ const SEP_OPTIONS = [
 // ── @-autocomplete (single body-level popup) ───────────────────────────────
 const TAG_TOKEN_RE = /@([a-zA-Z0-9_\-]*)$/;
 const WILD_TOKEN_RE = /\*([a-zA-Z0-9_\-]*)$/;
+const SLASH_TOKEN_RE = /\/([a-zA-Z0-9_\-]*)$/;
 let _acEl = null;
 let _ac = null; // { node, ta, start, items, sel }
 
@@ -325,9 +342,6 @@ function closeAC() {
   if (_acEl) _acEl.style.display = "none";
   _ac = null;
 }
-// The popup only re-evaluates on 'input'; clicking or arrow-keying the caret OFF a
-// tag doesn't fire 'input', so it would linger. Watch caret moves and close/refresh
-// it. One singleton document listener (no per-node leak); no-ops when no AC is open.
 let _acSelInstalled = false;
 function installACSelWatch() {
   if (_acSelInstalled) return;
@@ -342,8 +356,6 @@ function installACSelWatch() {
 function maybeAC(node, ta) {
   const pos = ta.selectionStart;
   const upto = ta.value.slice(0, pos);
-  // @tag autocomplete. Boundary (Unicode-consistent with scanTokens): don't open
-  // when @ sits after a letter/number/mark/_ (an email) or another @.
   const mt = TAG_TOKEN_RE.exec(upto);
   if (mt) {
     const start = pos - mt[0].length;
@@ -352,13 +364,20 @@ function maybeAC(node, ta) {
     openAC(node, ta, start, mt[1].toLowerCase(), "tag");
     return;
   }
-  // *wildcard (category) autocomplete - same boundary so "2*2" doesn't trigger.
   const mw = WILD_TOKEN_RE.exec(upto);
   if (mw) {
     const start = pos - mw[0].length;
     const prev = start > 0 ? ta.value[start - 1] : "";
     if (prev && /[\p{L}\p{N}\p{M}_*]/u.test(prev)) { closeAC(); return; }
     openAC(node, ta, start, mw[1].toLowerCase(), "wild");
+    return;
+  }
+  const ms = SLASH_TOKEN_RE.exec(upto);
+  if (ms) {
+    const start = pos - ms[0].length;
+    const prev = start > 0 ? ta.value[start - 1] : "";
+    if (prev && /[\p{L}\p{N}\p{M}_/]/u.test(prev)) { closeAC(); return; }
+    openAC(node, ta, start, ms[1].toLowerCase(), "slash_wild");
     return;
   }
   closeAC();
@@ -369,14 +388,42 @@ function openAC(node, ta, start, q, mode) {
   el.style.setProperty("--acc", accentOf(node));
   el.innerHTML = "";
   const flat = [];
-  const sym = mode === "wild" ? "*" : "@";
+  const sym = mode === "slash_wild" ? "/" : (mode === "wild" ? "*" : "@");
 
-  if (mode === "wild") {
-    // *wildcards list only categories that (a) can be TYPED as one *token - the token
-    // grammar is [A-Za-z0-9_-]+, but a category name may contain spaces/symbols a
-    // *token can't capture (offering "Sci Fi" would insert *Sci Fi and leave garbage);
-    // AND (b) actually have at least one tag. Count comes straight from wildCat so the
-    // number shown is exactly the pool it rolls from. Picking inserts *Category.
+  if (mode === "slash_wild") {
+    // /wildcards strictly search tags inside the dedicated "Wildcards" category
+    const wtags = getTags()
+      .filter((t) => (t.cat || "").toLowerCase() === "wildcards" && t.name.toLowerCase().includes(q))
+      .map((t) => {
+        const lines = (t.text || "").split(/\r?\n/).map((l) => l.trim()).filter((l) => l && !l.startsWith("#"));
+        return { name: t.name, count: lines.length, lines };
+      })
+      .filter((t) => t.count > 0);
+
+    if (!wtags.length) {
+      const e = document.createElement("div");
+      e.className = "pix-prm-ac-empty";
+      e.textContent = q ? `No wildcard matches "/${q}".` : "No wildcards in Wildcards category yet. Open Tags to add one or import .txt files.";
+      el.appendChild(e);
+    } else {
+      const h = document.createElement("div");
+      h.className = "pix-prm-ac-h";
+      h.innerHTML = `<span class="cd" style="background:#38bdf8"></span>wildcard list`;
+      el.appendChild(h);
+      for (const w of wtags) {
+        const idx = flat.length;
+        flat.push({ name: w.name });
+        const d = document.createElement("div");
+        d.className = "pix-prm-ac-i wild" + (idx === 0 ? " sel" : "");
+        d.dataset.i = String(idx);
+        const sampleStr = w.lines.slice(0, 3).join(", ") + (w.lines.length > 3 ? "..." : "");
+        d.innerHTML = `<div class="pix-prm-ac-n" style="color:#38bdf8;">/${escapeHTML(w.name)}</div><div class="pix-prm-ac-d">${w.count} option${w.count === 1 ? "" : "s"} (${escapeHTML(sampleStr)})</div>`;
+        d.addEventListener("mousedown", (e) => { e.preventDefault(); pickAC(flat[idx]); });
+        el.appendChild(d);
+      }
+    }
+  } else if (mode === "wild") {
+    // *wildcards list categories that can be typed as one token
     const cats = getCategories()
       .filter((c) => c && c.toLowerCase().includes(q) && /^[a-zA-Z0-9_\-]+$/.test(c))
       .map((c) => ({ name: c, count: (wildCat(c)?.pool.length) || 0 }))
@@ -597,9 +644,10 @@ function readNodeText(src, depth) {
 }
 function renderBackdrop(node) {
   const els = node._pixPromptRoot?._els; if (!els) return;
-  // Colour the @tags AND *wildcards scanTokens counts (an email's @name / arithmetic
-  // *2 stay plain, matching the preview + the run). @tag: known=accent / unknown=red.
-  // *wildcard: known (category has tags)=violet / unknown-or-empty=red.
+  // Colour the @tags, *wildcards, and /wildcards scanTokens counts.
+  // @tag: known=accent / unknown=red.
+  // *wildcard: known=violet / unknown-or-empty=red.
+  // /wildcard: known=cyan / unknown-or-empty=red.
   const text = els.ta.value;
   const toks = scanTokens(text);
   let html = "";
@@ -609,6 +657,9 @@ function renderBackdrop(node) {
     if (h.kind === "tag") {
       const known = !!findTag(h.name);
       html += `<span class="pix-prm-chip${known ? "" : " bad"}">${escapeHTML(h.raw)}</span>`;
+    } else if (h.kind === "slash_wild") {
+      const known = !!wildcardTagLines(h.name) || !!wildCat(h.name);
+      html += `<span class="pix-prm-slashwild${known ? "" : " bad"}">${escapeHTML(h.raw)}</span>`;
     } else {
       const known = !!wildCat(h.name);
       html += `<span class="pix-prm-wild${known ? "" : " bad"}">${escapeHTML(h.raw)}</span>`;
