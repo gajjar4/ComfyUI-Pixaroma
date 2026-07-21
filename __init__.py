@@ -114,8 +114,12 @@ from .nodes.node_save_image import NODE_CLASS_MAPPINGS as _MAPS_SAVE_IMAGE
 from .nodes.node_save_image import NODE_DISPLAY_NAME_MAPPINGS as _NAMES_SAVE_IMAGE
 from .nodes.node_krea_lora_convert import NODE_CLASS_MAPPINGS as _MAPS_KREA_LORA_CONVERT
 from .nodes.node_krea_lora_convert import NODE_DISPLAY_NAME_MAPPINGS as _NAMES_KREA_LORA_CONVERT
+from .nodes.node_lora_loader import NODE_CLASS_MAPPINGS as _MAPS_LORA_LOADER
+from .nodes.node_lora_loader import NODE_DISPLAY_NAME_MAPPINGS as _NAMES_LORA_LOADER
 from .nodes.node_sizes import NODE_CLASS_MAPPINGS as _MAPS_SIZES
 from .nodes.node_sizes import NODE_DISPLAY_NAME_MAPPINGS as _NAMES_SIZES
+from .nodes.node_text_join import NODE_CLASS_MAPPINGS as _MAPS_TEXT_JOIN
+from .nodes.node_text_join import NODE_DISPLAY_NAME_MAPPINGS as _NAMES_TEXT_JOIN
 
 # development mode for loading additional refrence nodes
 dev_mode = False
@@ -186,7 +190,9 @@ NODE_CLASS_MAPPINGS = {
     **_MAPS_RUN_LOG,
     **_MAPS_SAVE_IMAGE,
     **_MAPS_KREA_LORA_CONVERT,
+    **_MAPS_LORA_LOADER,
     **_MAPS_SIZES,
+    **_MAPS_TEXT_JOIN,
 }
 
 # combine all node display name mappings
@@ -249,7 +255,9 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     **_NAMES_RUN_LOG,
     **_NAMES_SAVE_IMAGE,
     **_NAMES_KREA_LORA_CONVERT,
+    **_NAMES_LORA_LOADER,
     **_NAMES_SIZES,
+    **_NAMES_TEXT_JOIN,
 }
 
 # web directory for loading js files
