@@ -49,62 +49,8 @@ function cleanName(n) {
   return String(n == null ? "" : n).trim().replace(NAME_RE, "");
 }
 
-function migrateLegacyWildcards(src) {
-  if (!src || !Array.isArray(src.tags)) return src;
-  
-  const groups = new Map(); // catPrefix -> Array of tag texts
-  const normalTags = [];
-  const migratedCats = new Set();
-  
-  for (const t of src.tags) {
-    if (!t) continue;
-    const hasUnderscore = t.name && t.name.includes("_");
-    const isWildcardCat = t.cat && (t.cat.toLowerCase() === "wildcards" || (t.cat.toLowerCase() !== "styles" && t.cat.toLowerCase() !== "lighting" && t.cat.toLowerCase() !== "camera"));
-    
-    if (hasUnderscore && isWildcardCat) {
-      const parts = t.name.split("_");
-      const catPrefix = parts[0];
-      const key = catPrefix.toLowerCase();
-      if (!groups.has(key)) {
-        groups.set(key, { cat: "Wildcards", name: catPrefix, lines: [] });
-      }
-      groups.get(key).lines.push(t.text);
-      migratedCats.add(t.cat.toLowerCase());
-    } else {
-      normalTags.push(t);
-    }
-  }
-  
-  if (groups.size === 0) return src;
-  
-  const newTags = [];
-  for (const [key, info] of groups.entries()) {
-    const textContent = info.lines.filter(l => l && l.trim()).join("\n");
-    if (textContent) {
-      newTags.push({
-        name: info.name.toLowerCase(),
-        cat: "Wildcards",
-        text: textContent
-      });
-    }
-  }
-  
-  const oldCats = Array.isArray(src.categories) ? src.categories : [];
-  const nextCats = oldCats.filter(c => c && !migratedCats.has(c.toLowerCase()));
-  if (!nextCats.map(c => c.toLowerCase()).includes("wildcards")) {
-    nextCats.push("Wildcards");
-  }
-  
-  return {
-    version: src.version || 1,
-    categories: nextCats,
-    tags: newTags.concat(normalTags)
-  };
-}
-
 // Coerce any parsed blob into the canonical shape, deduping tag names.
 function normalize(raw) {
-  raw = migrateLegacyWildcards(raw);
   const out = { version: 1, categories: [], tags: [] };
   const src = raw && typeof raw === "object" ? raw : {};
   const cats = Array.isArray(src.categories) ? src.categories : [];
