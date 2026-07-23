@@ -87,17 +87,53 @@ app.registerExtension({
       return o;
     };
 
-    // Configure (workflow load / undo restore)
-    const _origConfigure = nodeType.prototype.onConfigure;
-    nodeType.prototype.onConfigure = function (info) {
+    // Configure gate (MUST wrap `configure`, NOT the `onConfigure` hook).
+    // LiteGraph calls the onConfigure HOOK at the very END of configure(), long
+    // after it has restored node.inputs and replayed onConnectionsChange for
+    // every slot. Verified live (2026-07-23): by the time our onConfigure hook
+    // ran, the node already carried all 32 Python-def slots AND a row per slot,
+    // because every replayed event reached handleConnect, whose
+    // grow-on-trailing-connect logic cascaded the list to the MAX_INPUTS cap.
+    // So `_pixMsConfiguring` (Pattern #11 / Vue Compat #17) never actually
+    // covered the replay it was written for - normalizeSlots just cleaned up
+    // immediately afterwards, hiding it. Once the copy/paste fix stopped that
+    // cleanup from discarding saved rows, 28 junk rows survived into the
+    // clipboard and a pasted node lost a row name. Wrapping `configure` raises
+    // the flag BEFORE the replay, so handleConnect never sees it.
+    const _origConfigureFn = nodeType.prototype.configure;
+    nodeType.prototype.configure = function () {
       this._pixMsConfiguring = true;
       try {
-        const r = _origConfigure?.apply(this, arguments);
-        restoreFromProperties(this);
-        return r;
+        return _origConfigureFn?.apply(this, arguments);
       } finally {
         this._pixMsConfiguring = false;
+        // Paste / Ctrl+D duplicate / alt-drag clone all run through
+        // LGraphCanvas._deserializeItems, which adds + configures every node
+        // FIRST and reconnects all the links afterwards - later than this
+        // finally block, but still inside the SAME tick. Those replayed
+        // connects have to grow the row list back (clone() nulled every link,
+        // so configure left us with a single row), but they must not reset each
+        // row's on/off pill to the mode default. Keep a flag up across that
+        // burst; handleConnect reads it. A 0ms timer drops it the moment the
+        // tick ends, so a real user wire right after still takes the default.
+        this._pixMsRestoring = true;
+        clearTimeout(this._pixMsRestoreTimer);
+        this._pixMsRestoreTimer = setTimeout(() => {
+          this._pixMsRestoring = false;
+          this._pixMsRestoreTimer = null;
+        }, 0);
       }
+    };
+
+    // Configure hook - runs INSIDE configure, with the gate above still up, so
+    // the removeInput calls in restoreFromProperties are gated too. Do NOT
+    // set/clear _pixMsConfiguring here as well: this hook runs partway through
+    // configure, so clearing it here would drop the gate early.
+    const _origConfigure = nodeType.prototype.onConfigure;
+    nodeType.prototype.onConfigure = function (info) {
+      const r = _origConfigure?.apply(this, arguments);
+      restoreFromProperties(this);
+      return r;
     };
 
     // Connection changes - gated on BOTH the per-node configure flag AND
@@ -215,6 +251,11 @@ app.registerExtension({
       if (this._pixMsHover) hideTooltip();
       restoreAllOnRemove(this);
       cancelEditorForNode(this);
+      if (this._pixMsRestoreTimer) {
+        clearTimeout(this._pixMsRestoreTimer);
+        this._pixMsRestoreTimer = null;
+        this._pixMsRestoring = false;
+      }
       if (this._pendingDisconnects?.size) {
         for (const timerId of this._pendingDisconnects.values()) {
           clearTimeout(timerId);

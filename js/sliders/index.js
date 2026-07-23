@@ -4,13 +4,45 @@ import { isGraphLoading } from "../shared/graph_loading.mjs";
 import { registerNodeHelp } from "../shared/help.mjs";
 import {
   ACCENT_SETTING, BRAND, MAX_SLIDERS,
-  readState, normalizeSliders, syncOutputs, addSlider, resolveAutoType,
+  readState, normalizeSliders, syncOutputs, addSlider, resolveAutoType, resetRowOnDisconnect,
+  comboOptionsOf, randomSeed,
 } from "./core.mjs";
+
+// A Control Panel can only drive widget-style value inputs (numbers, on/off,
+// dropdowns, seeds, text) - never structural pipes (MODEL, LATENT, ...).
+function isValueTarget(node, link) {
+  const target = node.graph?.getNodeById?.(link.target_id);
+  const inp = target?.inputs?.[link.target_slot];
+  const t = String(inp?.type || "").toUpperCase();
+  if (t === "INT" || t === "FLOAT" || t === "BOOLEAN" || t === "COMBO" || t === "STRING") return true;
+  // "*" or no type = a pass-through / any input (Reroute, Set, Preview) - a valid,
+  // common routing target, so never sever it.
+  if (t === "*" || t === "") return true;
+  return !!comboOptionsOf(target, inp?.widget?.name || inp?.name);
+}
+
+// A small self-contained toast (no dependency on ComfyUI's toast API, which varies).
+function showPanelToast(msg) {
+  let t = document.getElementById("pix-sld-toast");
+  if (!t) {
+    t = document.createElement("div");
+    t.id = "pix-sld-toast";
+    t.style.cssText =
+      "position:fixed;left:50%;bottom:64px;transform:translateX(-50%);z-index:11000;background:#1d1d1d;" +
+      "border:1px solid #f66744;border-radius:8px;color:#fff;font:13px 'Segoe UI',sans-serif;padding:10px 16px;" +
+      "box-shadow:0 8px 30px rgba(0,0,0,0.5);max-width:80vw;text-align:center;pointer-events:none;opacity:0;transition:opacity .2s;";
+    document.body.appendChild(t);
+  }
+  t.textContent = msg;
+  t.style.opacity = "1";
+  clearTimeout(t._hideT);
+  t._hideT = setTimeout(() => { t.style.opacity = "0"; }, 3500);
+}
 import {
   injectCSS, syncRowWidgets, renderAll, alignOutputsLegacy, watchAlign, unwatchAlign, scheduleAlign,
-  ROW_H, ROW_GAP, ADD_H, MIN_W, DEFAULT_W,
+  closeComboPopup, ROW_H, ROW_GAP, ADD_H, MIN_W, DEFAULT_W,
 } from "./ui.mjs";
-import { openSlidersPanel, closeSlidersPanelFor } from "./settings.mjs";
+import { openSlidersPanel, closeSlidersPanelFor, rebuildSlidersPanelFor } from "./settings.mjs";
 
 // Sliders Pixaroma - a panel of sliders that drives numbers across the workflow.
 //
@@ -69,10 +101,10 @@ app.registerExtension({
   settings: [
     {
       id: ACCENT_SETTING,
-      name: "Default slider colour (hex)",
+      name: "Default control colour (hex)",
       type: "text",
       defaultValue: BRAND,
-      tooltip: "The colour new Sliders nodes paint with, e.g. #f66744. Each node can override it in its own settings.",
+      tooltip: "The colour new Control Panel nodes paint with, e.g. #f66744. Each node can override it in its own settings.",
       category: ["👑 Pixaroma", "Sliders"],
       // Repaint every node that FOLLOWS the default (accent unset), so changing
       // it is visible immediately instead of at the next interaction.
@@ -99,15 +131,18 @@ app.registerExtension({
       _created?.apply(this, arguments);
       readState(this);
       syncOutputs(this);
-      refresh(this);
 
-      // Pin the rows to the top of the body. WITHOUT this, _arrangeWidgets
+      // Pin the rows to the top of the body - set BEFORE the first refresh
+      // (matching onConfigure) so no synchronous legacy layout pass can compute
+      // widget.y from the old slot-bound formula. WITHOUT this, _arrangeWidgets
       // starts the widgets below the measured slot bounds - and since we park
       // each output ON a row, the slot bounds then depend on widget.y, which
-      // depends on the slot bounds... a feedback loop that walks the node
-      // taller on every frame (measured: 62 -> 102px and climbing). This is the
-      // field litegraph itself points at for custom slot layouts.
+      // depends on the slot bounds... a feedback loop that walks the node taller
+      // on every frame (measured: 62 -> 102px and climbing). This is the field
+      // litegraph itself points at for custom slot layouts.
       this.widgets_start_y = 2;
+
+      refresh(this);
 
       // Legacy reserves a slot row per output; our dots live on the rows, so we
       // own the size. MIN_W (not the live width) keeps the drag-min honest -
@@ -117,10 +152,13 @@ app.registerExtension({
         this.computeSize = function () { return [MIN_W, bodyHeight(this)]; };
       }
 
-      if (!this.size || this.size[0] < MIN_W) {
-        this.size[0] = DEFAULT_W;
-        this.size[1] = bodyHeight(this) + (isVueNodes() ? 52 : 0);
-      }
+      // Always snap a FRESH node to its content height. (Gating this on width let
+      // ComfyUI's default size through whenever its default width was >= MIN_W,
+      // leaving a giant empty body - user-reported.) configure() restores a saved
+      // size immediately after onNodeCreated, so saved / duplicated nodes keep theirs.
+      if (!Array.isArray(this.size)) this.size = [DEFAULT_W, DEFAULT_W];
+      this.size[0] = DEFAULT_W;
+      this.size[1] = bodyHeight(this) + (isVueNodes() ? 52 : 0);
 
       queueMicrotask(() => {
         normalizeSliders(this);
@@ -156,8 +194,63 @@ app.registerExtension({
     // the link replay on load must never rewrite a saved type.
     const _conn = nodeType.prototype.onConnectionsChange;
     nodeType.prototype.onConnectionsChange = function (type, slotIndex, isConnected, link) {
-      if (type === 2 /* OUTPUT */ && isConnected && !this._pixSldConfiguring && !isGraphLoading()) {
-        if (resolveAutoType(this, slotIndex, link)) refresh(this);
+      if (type === 2 /* OUTPUT */ && !this._pixSldConfiguring && !isGraphLoading()) {
+        if (isConnected) {
+          if (resolveAutoType(this, slotIndex, link)) {
+            refresh(this);
+            rebuildSlidersPanelFor(this);   // the row just became wired: relock its type in the open panel
+          } else if (link && !isValueTarget(this, link)) {
+            // Refuse a wire to an input the panel can't drive (MODEL, LATENT,
+            // CONDITIONING, ...); drop it on the next tick and tell the user.
+            const self = this, lk = link;
+            setTimeout(() => {
+              if (!self.graph || isGraphLoading()) return;   // node gone / a load replay - leave it
+              try {
+                const tgt = self.graph.getNodeById?.(lk.target_id);
+                const inp = tgt?.inputs?.[lk.target_slot];
+                // Only sever if that slot STILL holds the exact link we refused - a
+                // fast rewire / undo could have put a VALID wire there meanwhile.
+                if (tgt && inp && inp.link === lk.id) {
+                  tgt.disconnectInput(lk.target_slot);
+                  self.setDirtyCanvas?.(true, true);
+                  showPanelToast("A Control Panel drives numbers, on/off switches, and dropdowns - not that kind of input.");
+                }
+              } catch {}
+            }, 0);
+          } else {
+            // A valid connection that did not re-type the row (re-wired to the
+            // SAME kind, or a "*" pass-through): re-narrow the freed output slot
+            // and repaint (it may have shown as an auto slider while unplugged).
+            syncOutputs(this);
+            refresh(this);
+            rebuildSlidersPanelFor(this);
+          }
+        } else if (!this._pixSldRemovingRow) {
+          // Unplugged BY THE USER (not our own removeOutput during a row delete,
+          // whose stale slotIndex would reset whatever row shifted into it).
+          // A number slider drops back to auto so it can be re-wired to a boolean
+          // (and become a switch) or a different number. LiteGraph clears
+          // output.links AFTER this callback returns, so defer the check one tick
+          // until the slot's remaining connections have settled.
+          // Capture the input we were just unplugged from (LiteGraph hands us the
+          // removed link here) so a replug to the SAME input keeps the value while
+          // a re-wire to a DIFFERENT input re-adopts it (pattern #19).
+          const self = this;
+          const prevTarget = link ? { id: link.target_id, slot: link.target_slot } : null;
+          // The reported slotIndex is UNRELIABLE on a disconnect: disconnectInput
+          // and removeLink (both real unwire paths) report the origin output as
+          // slot 0 no matter which row was actually unwired - only disconnectOutput
+          // reports it correctly. The link object carries the true origin_slot, so
+          // trust that. Then capture the ROW object (not the index) so a later row
+          // delete can't retarget the deferred reset onto a shifted-in row.
+          const outSlot = (link && Number.isInteger(link.origin_slot)) ? link.origin_slot : slotIndex;
+          const row = readState(this).sliders[outSlot] || null;
+          setTimeout(() => {
+            if (!self.graph || isGraphLoading()) return;
+            if (resetRowOnDisconnect(self, row, prevTarget)) refresh(self);
+            rebuildSlidersPanelFor(self);   // the row dropped to auto: unlock its type in the open panel
+          }, 0);
+        }
       }
       return _conn?.apply(this, arguments);
     };
@@ -195,6 +288,7 @@ app.registerExtension({
     const _removed = nodeType.prototype.onRemoved;
     nodeType.prototype.onRemoved = function () {
       closeSlidersPanelFor(this);
+      closeComboPopup();
       unwatchAlign(this);
       return _removed?.apply(this, arguments);
     };
@@ -206,7 +300,7 @@ app.registerExtension({
     if (node?.comfyClass !== CLASS) return [];
     return [
       {
-        content: "⚙ Slider settings",
+        content: "⚙ Control settings",
         callback: () => openSlidersPanel(node, () => { refresh(node); fitNode(node); }),
       },
     ];
@@ -217,14 +311,16 @@ app.registerExtension({
 // INJECT ONLY - never prune here (Export (API) serialises this same output).
 function buildIndex() {
   const index = new Map();
+  const seen = new Set();
   const visit = (graph) => {
-    if (!graph) return;
+    if (!graph || seen.has(graph)) return;   // guard against a subgraph-reference cycle (would stack-overflow)
+    seen.add(graph);
     const nodes = graph._nodes || graph.nodes || [];
     for (const n of nodes) {
       if (!n) continue;
       if (n.comfyClass === CLASS || n.type === CLASS) index.set(String(n.id), n);
       const inner = n.subgraph || n.graph || n._graph;
-      if (inner && inner !== graph) visit(inner);
+      if (inner) visit(inner);
     }
   };
   visit(app.graph);
@@ -252,13 +348,34 @@ app.graphToPrompt = async function (...args) {
         const node = findNode(index, id);
         if (!node) continue;
         const st = readState(node);
+        let seedRolled = false;
         entry.inputs = entry.inputs || {};
         entry.inputs[HIDDEN_INPUT] = JSON.stringify({
           version: 1,
-          sliders: st.sliders.slice(0, MAX_SLIDERS).map((s) => ({
-            type: s.type, value: s.value,
-          })),
+          // Only what changes the OUTPUT goes in here - a toggle also sends its
+          // adopted kind (out). The state words / default / dropdown options are
+          // display-only and are deliberately left out, so renaming never re-runs.
+          sliders: st.sliders.slice(0, MAX_SLIDERS).map((s, i) => {
+            if (s.type === "toggle") return { type: "toggle", value: s.value ? 1 : 0, out: s.out || "auto" };
+            if (s.type === "seed") {
+              // Random mode rolls a fresh seed each run; the rolled value lives in
+              // a RUNTIME field (never node.properties) so a run can't dirty the
+              // saved workflow - only shown on the node face.
+              // Clamp to the seed contract (0 .. 1e12) - matches ensureSeed, in
+              // case a value slipped past normalize (e.g. an external script wrote
+              // node.properties directly). Python clamps magnitude but not sign.
+              let v = Math.max(0, Math.min(Math.floor(Number(s.value) || 0), 1e12));
+              if (s.mode === "random") {
+                v = randomSeed();
+                (node._pixSeedRun = node._pixSeedRun || {})[i] = v;
+                seedRolled = true;
+              }
+              return { type: "seed", value: v };
+            }
+            return { type: s.type, value: s.value };
+          }),
         });
+        if (seedRolled) queueMicrotask(() => { try { renderAll(node); } catch {} });
       }
     }
   } catch (e) {
@@ -268,38 +385,43 @@ app.graphToPrompt = async function (...args) {
 };
 
 registerNodeHelp(CLASS, {
-  title: "Sliders Pixaroma",
-  tagline: "One panel of sliders that drives numbers all over your workflow.",
+  title: "Control Panel Pixaroma",
+  tagline: "Every dial and switch you care about, gathered into one panel that drives your whole workflow.",
   sections: [
     {
       heading: "What it does",
       body:
-        "Add a slider, name it, give it a range, then wire its output to any number input: steps, cfg, " +
-        "denoise, a LoRA strength, a width. Instead of hunting through the graph for the value you want " +
-        "to tweak, you keep every dial you care about in one place.",
+        "Gather every dial, switch and setting you care about into one node and wire each straight to where it " +
+        "belongs, instead of hunting through the graph. Add a control, name it, then connect its output to any " +
+        "input. Each control becomes whatever you plug it into, and changes to match if you re-wire it elsewhere.",
     },
     {
-      heading: "Using a slider",
-      bullets: [
-        "Drag across a slider to set it. Hold Shift while dragging for fine control.",
-        "Double-click a slider to type an exact value.",
-        "Each slider has its own output dot, sitting on its own row.",
+      heading: "The kinds of control",
+      defs: [
+        ["Slider", "For a number: steps, cfg, denoise, a LoRA strength, a width. Drag it (hold Shift for fine control) or double-click to type. Whole number or decimal is decided by the input you plug it into."],
+        ["Switch", "For a true / false setting. Click to flip it. Sends true / false, or 1 / 0 for a number input. You can rename its two states and set which one it starts in."],
+        ["Dropdown", "For a picker: sampler, scheduler, checkpoint, VAE, a LoRA name. It learns the whole list from the input; in the settings you tick which options to show, so it only offers the ones you actually use."],
+        ["Seed", "For a seed input. R randomizes it on every run, N rolls a new fixed one, or click the number to type an exact seed."],
+        ["Text", "For words: a prompt, a filename, a style tag. Type straight into it on the node."],
       ],
     },
     {
-      heading: "Whole numbers or decimals",
+      heading: "It matches whatever you plug it into",
       body:
-        "A new slider is set to Auto. The first input you connect it to decides: plug it into steps and it " +
-        "sends whole numbers, plug it into denoise and it sends decimals. That way it can never send the " +
-        "wrong kind of number. You can also set it by hand in the settings.",
+        "A fresh control is blank until you connect it. Wire it to a number and it is a slider, to a true / false " +
+        "and it is a switch, to a picker and it is a dropdown, to a seed and it is a seed, to a text box and it is " +
+        "a text field. Unplug it and wire it somewhere else and it changes to match. It will not connect to things " +
+        "it cannot drive, like a model or an image - it tells you if you try.",
     },
     {
       heading: "Settings",
       body:
-        "Right-click the node for the settings panel. There you can add and remove sliders, rename them, " +
-        "set each one's range and step, and pick the colour the sliders paint with. That colour is per node, " +
-        "and you can save it as the default for every new Sliders node you add.",
+        "Right-click the node for the settings panel: add and remove controls, rename them, set a slider's range, " +
+        "choose which options a dropdown shows, and pick the colour the node paints with (per node, and you can save " +
+        "it as the default for every new Control Panel node). Reset values sends the sliders to the middle of their " +
+        "range and the switches and dropdowns to their default, leaving seeds and text as they are. Once a control " +
+        "is wired its type is fixed to match that input, so unplug it if you want to change the type.",
     },
   ],
-  footer: "Up to 16 sliders per node. Add as many panels as you like.",
+  footer: "Up to 16 controls per node - sliders, switches, dropdowns, seeds and text, mixed freely.",
 });

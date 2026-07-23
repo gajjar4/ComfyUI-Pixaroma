@@ -36,24 +36,33 @@ class PixaromaSliders:
     RETURN_TYPES = tuple([ANY] * MAX_SLIDERS)
     RETURN_NAMES = tuple("value_%d" % (i + 1) for i in range(MAX_SLIDERS))
     OUTPUT_TOOLTIPS = tuple(
-        "The current value of slider %d." % (i + 1) for i in range(MAX_SLIDERS)
+        "The value of control %d." % (i + 1) for i in range(MAX_SLIDERS)
     )
     FUNCTION = "run"
     CATEGORY = "👑 Pixaroma/🔢 Values"
     DESCRIPTION = (
-        "A panel of sliders that feeds numbers to the rest of the workflow. Add a slider, "
-        "name it, give it a range, then wire its output to any number input - steps, cfg, "
-        "denoise, a LoRA strength. Each slider is Auto until you connect it: the first input "
-        "you plug it into decides whether it sends a whole number or a decimal, so it cannot "
-        "send the wrong kind. Right-click the node for the settings, where you set the ranges, "
-        "add or remove sliders, and pick the slider colour."
+        "A control panel that gathers the dials, switches and settings you care about into one "
+        "node and wires each straight to where it belongs. Add a control, name it, then connect "
+        "its output to any input. Each control becomes whatever you plug it into: a slider for a "
+        "number (steps, cfg, denoise, a LoRA strength), a switch for a true/false setting, a "
+        "dropdown for a picker (sampler, scheduler, checkpoint) that you can trim to just the "
+        "options you use, a seed with randomize, or a text field for a prompt. Re-wire a control "
+        "and it changes to match. Right-click the node for the settings. Find it by searching for "
+        "control panel, slider, switch, toggle, dropdown, combo, seed, or text."
     )
 
     @staticmethod
     def _value_of(slider):
-        """One slider dict -> the number Python should emit."""
+        """One control dict -> the value Python should emit."""
         if not isinstance(slider, dict):
             return 0
+        kind = str(slider.get("type") or "auto").lower()
+
+        # A dropdown or a text field emits its string directly (no numeric parse).
+        if kind in ("combo", "text"):
+            v = slider.get("value")
+            return v if isinstance(v, str) else ("" if v is None else str(v))
+
         try:
             # OverflowError matters: a bare 400-digit integer in the JSON parses
             # as an arbitrary-precision Python int, and float() then raises.
@@ -66,7 +75,15 @@ class PixaromaSliders:
         if not math.isfinite(value):
             value = 0.0
         value = max(-1e12, min(1e12, value))
-        if str(slider.get("type") or "auto").lower() == "int":
+
+        if kind == "toggle":
+            # A switch stores 0 / 1 in value; it emits a boolean, or 1 / 0 when
+            # it has adopted an INT target ("out"). "auto"/"bool" -> boolean.
+            on = bool(round(value))
+            if str(slider.get("out") or "auto").lower() == "int":
+                return 1 if on else 0
+            return on
+        if kind in ("int", "seed"):
             return int(round(value))
         return float(value)
 
@@ -92,4 +109,4 @@ class PixaromaSliders:
 
 
 NODE_CLASS_MAPPINGS = {"PixaromaSliders": PixaromaSliders}
-NODE_DISPLAY_NAME_MAPPINGS = {"PixaromaSliders": "Sliders Pixaroma"}
+NODE_DISPLAY_NAME_MAPPINGS = {"PixaromaSliders": "Control Panel Pixaroma"}

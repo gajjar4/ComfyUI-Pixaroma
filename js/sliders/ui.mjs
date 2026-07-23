@@ -20,7 +20,7 @@
 //             return to the top-right corner and the node keeps working.
 
 import { isVueNodes, applyAdaptiveCanvasOnly } from "../shared/nodes2.mjs";
-import { readState, accentOf, clampValue, decimalsOf, rangeOf } from "./core.mjs";
+import { readState, accentOf, clampValue, decimalsOf, rangeOf, comboVisible, randomSeed, MAX_SLIDERS } from "./core.mjs";
 
 export const ROW_H = 23;    // height of one slider row
 export const ROW_GAP = 6;   // gap between rows (matches the Vue widgets grid gap-y-1 + our own)
@@ -70,6 +70,109 @@ export function injectCSS() {
     .pix-sld-base .nm { color:rgba(255,255,255,0.72); }
     .pix-sld-base .nu { color:var(--acc,#f66744); }
     .pix-sld-over .nm, .pix-sld-over .nu { color:#fff; }
+
+    /* ── Toggle (switch) row - style A: an iOS-style slide switch ────────────
+       A toggle is just another kind of row: same height, same output dot. The
+       track is the same translucent dent the slider uses, so a recoloured node
+       still reads, and the ON state fills with the node's accent. */
+    .pix-sld-tog {
+      display:flex; align-items:center; gap:8px; width:100%; height:${ROW_H}px; overflow:hidden;
+      box-sizing:border-box; padding:0 8px; border-radius:5px;
+      background:rgba(255,255,255,0.045); border:1px solid rgba(255,255,255,0.12);
+      cursor:pointer; user-select:none;
+    }
+    .pix-sld-tog:hover { border-color:var(--acc,#f66744); }
+    .pix-sld-tog .tnm {
+      flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+      font:11.5px 'Segoe UI',-apple-system,sans-serif; color:rgba(255,255,255,0.72);
+    }
+    .pix-sld-tog[data-on="1"] .tnm { color:#f2f2f2; }
+    .pix-sld-tog .tst {
+      flex:none; font:9.5px 'Segoe UI',sans-serif; font-weight:600; letter-spacing:.03em;
+      color:rgba(255,255,255,0.42); max-width:70px; white-space:nowrap; overflow:hidden;
+      text-overflow:ellipsis; text-align:right;
+    }
+    .pix-sld-tog[data-on="1"] .tst { color:var(--acc,#f66744); }
+    .pix-sld-tsw {
+      position:relative; flex:none; width:32px; height:16px; border-radius:8px;
+      background:rgba(0,0,0,0.30); border:1px solid rgba(255,255,255,0.16);
+      transition:background .15s, border-color .15s;
+    }
+    .pix-sld-tsw::after {
+      content:""; position:absolute; top:1px; left:2px; width:12px; height:12px; border-radius:50%;
+      background:#cfcfcf; transition:transform .15s, background .15s;
+    }
+    .pix-sld-tog[data-on="1"] .pix-sld-tsw { background:var(--acc,#f66744); border-color:var(--acc,#f66744); }
+    .pix-sld-tog[data-on="1"] .pix-sld-tsw::after { transform:translateX(14px); background:#fff; }
+    @media (prefers-reduced-motion:reduce){ .pix-sld-tsw,.pix-sld-tsw::after{transition:none;} }
+
+    /* ── Dropdown (combo) row - the Pixaroma dark picker, never a native select.
+       Value with prev/next arrows; click the value for the full list. */
+    .pix-sld-combo {
+      display:flex; align-items:center; gap:5px; width:100%; height:${ROW_H}px; overflow:hidden;
+      box-sizing:border-box; padding:0 6px 0 11px; border-radius:5px;
+      background:rgba(255,255,255,0.045); border:1px solid rgba(255,255,255,0.12); user-select:none;
+    }
+    .pix-sld-combo:hover { border-color:var(--acc,#f66744); }
+    .pix-sld-combo .cnm {
+      flex:1; min-width:0; font:11.5px 'Segoe UI',sans-serif; color:rgba(255,255,255,0.72);
+      white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+    }
+    .pix-sld-cnav { flex:none; width:13px; text-align:center; color:var(--acc,#f66744); font-size:10px; cursor:pointer; }
+    .pix-sld-cnav:hover { color:#fff; }
+    /* the value element carries class "cval" (not "pix-sld-cval") - scope these
+       via the parent so they actually match (a bare .pix-sld-cval never did, so
+       a long option used to overflow the row with no caret + no ellipsis). */
+    .pix-sld-combo .cval {
+      flex:0 1 auto; min-width:0; max-width:145px; display:flex; align-items:center; gap:5px; cursor:pointer;
+      font:11.5px 'Segoe UI',sans-serif; font-weight:600; color:#fff;
+    }
+    .pix-sld-combo .cval .ct { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .pix-sld-combo .cval::after { content:"▾"; font-size:9px; color:rgba(255,255,255,0.5); flex:none; }
+    .pix-sld-combo.empty .cnm { color:rgba(255,255,255,0.4); }
+    .pix-sld-combo.empty .cval { color:rgba(255,255,255,0.4); font-weight:400; font-style:italic; }
+    .pix-sld-combo.empty .pix-sld-cnav { color:rgba(255,255,255,0.22); cursor:default; }
+
+    .pix-sld-cpop {
+      position:fixed; z-index:10030; background:#1d1d1d; border:1px solid #3a3a3a; border-radius:7px;
+      box-shadow:0 14px 40px rgba(0,0,0,0.55); padding:4px; max-height:280px; overflow-y:auto;
+      min-width:150px; font:12px 'Segoe UI',sans-serif;
+    }
+    .pix-sld-copt { padding:5px 10px; border-radius:4px; color:#d8d8d8; cursor:pointer; white-space:nowrap; }
+    .pix-sld-copt:hover { background:#2a2a2a; }
+    .pix-sld-copt.on { color:#fff; background:var(--acc,#f66744); }
+
+    /* ── Seed row - a number with Randomize (R) + New-seed (N) buttons ─────── */
+    .pix-sld-seed {
+      display:flex; align-items:center; gap:6px; width:100%; height:${ROW_H}px; overflow:hidden;
+      box-sizing:border-box; padding:0 6px 0 11px; border-radius:5px;
+      background:rgba(255,255,255,0.045); border:1px solid rgba(255,255,255,0.12); user-select:none;
+    }
+    .pix-sld-seed:hover { border-color:var(--acc,#f66744); }
+    .pix-sld-seed .snm { flex:1; min-width:0; font:11.5px 'Segoe UI',sans-serif; color:rgba(255,255,255,0.72); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .pix-sld-seed .sv { flex:0 1 auto; min-width:0; max-width:120px; font:11.5px 'Segoe UI',sans-serif; font-weight:600; color:#fff; font-variant-numeric:tabular-nums; cursor:text; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .pix-sld-seed.random .sv { color:rgba(255,255,255,0.5); font-style:italic; }
+    .pix-sld-sbtn { flex:none; min-width:18px; height:16px; padding:0 4px; border-radius:4px; border:1px solid rgba(255,255,255,0.18);
+      display:grid; place-items:center; font:9.5px 'Segoe UI',sans-serif; font-weight:700; color:rgba(255,255,255,0.6); cursor:pointer; }
+    .pix-sld-sbtn:hover { border-color:var(--acc,#f66744); color:#fff; }
+    .pix-sld-seed.random .sr { background:var(--acc,#f66744); border-color:var(--acc,#f66744); color:#fff; }
+    .pix-sld-sedit { display:none; flex:none; width:112px; background:#1d1d1d; border:1px solid var(--acc,#f66744); border-radius:4px;
+      color:#e8e8e8; font:11.5px 'Segoe UI',sans-serif; text-align:right; padding:1px 6px; outline:none; font-variant-numeric:tabular-nums; }
+    .pix-sld-seed.editing .sv { display:none; }
+    .pix-sld-seed.editing .pix-sld-sedit { display:block; }
+
+    /* ── Text row - a single-line field for a prompt / filename / tag ──────── */
+    .pix-sld-text {
+      display:flex; align-items:center; gap:8px; width:100%; height:${ROW_H}px; overflow:hidden;
+      box-sizing:border-box; padding:0 8px 0 11px; border-radius:5px;
+      background:rgba(255,255,255,0.045); border:1px solid rgba(255,255,255,0.12);
+    }
+    .pix-sld-text:hover, .pix-sld-text:focus-within { border-color:var(--acc,#f66744); }
+    .pix-sld-text .txnm { flex:none; max-width:45%; font:11.5px 'Segoe UI',sans-serif;
+      color:rgba(255,255,255,0.72); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .pix-sld-txin { flex:1; min-width:0; background:transparent; border:0; outline:none; color:#fff;
+      font:11.5px 'Segoe UI',sans-serif; text-align:left; padding:0; }
+    .pix-sld-txin::placeholder { color:rgba(255,255,255,0.32); font-style:italic; }
 
     /* Type an exact value (double-click the row). */
     .pix-sld-edit {
@@ -130,7 +233,43 @@ function makeRowEl(node, index) {
   edit.spellcheck = false;
 
   sl.append(fill, base, over, edit);
-  row.appendChild(sl);
+
+  // The toggle control shares the row. Only one of the two (slider / toggle) is
+  // ever displayed - paintRow decides from the row's type - so a row can switch
+  // between a slider and a switch with no widget churn.
+  const tog = document.createElement("div");
+  tog.className = "pix-sld-tog";
+  tog.style.display = "none";
+  tog.innerHTML = '<span class="tnm"></span><span class="tst"></span><span class="pix-sld-tsw"></span>';
+
+  // The dropdown control shares the row too (only one of slider/toggle/combo shows).
+  const combo = document.createElement("div");
+  combo.className = "pix-sld-combo";
+  combo.style.display = "none";
+  combo.innerHTML =
+    '<span class="cnm"></span>' +
+    '<span class="pix-sld-cnav" data-dir="-1">◀</span>' +
+    '<span class="cval"><span class="ct"></span></span>' +
+    '<span class="pix-sld-cnav" data-dir="1">▶</span>';
+
+  // The seed control shares the row too.
+  const seed = document.createElement("div");
+  seed.className = "pix-sld-seed";
+  seed.style.display = "none";
+  seed.innerHTML =
+    '<span class="snm"></span>' +
+    '<span class="sv"></span>' +
+    '<input class="pix-sld-sedit" type="text" spellcheck="false">' +
+    '<span class="pix-sld-sbtn sr" title="Randomize the seed on every run">R</span>' +
+    '<span class="pix-sld-sbtn sn" title="Roll a new fixed seed now">N</span>';
+
+  // The text control shares the row too.
+  const text = document.createElement("div");
+  text.className = "pix-sld-text";
+  text.style.display = "none";
+  text.innerHTML = '<span class="txnm"></span><input class="pix-sld-txin" type="text" spellcheck="false">';
+
+  row.append(sl, tog, combo, seed, text);
 
   const slider = () => readState(node).sliders[index];
 
@@ -209,7 +348,179 @@ function makeRowEl(node, index) {
   edit.addEventListener("blur", () => closeEdit(true));
   edit.addEventListener("pointerdown", (e) => e.stopPropagation());
 
+  // Toggle: a click anywhere on the row flips it. pointerdown is swallowed so it
+  // never starts a node drag (same guard the slider uses).
+  tog.addEventListener("pointerdown", (e) => e.stopPropagation());
+  tog.addEventListener("click", (e) => {
+    e.stopPropagation();
+    const s = slider();
+    if (!s || s.type !== "toggle") return;
+    s.value = s.value ? 0 : 1;
+    paintRow(node, index);
+    node.graph?.setDirtyCanvas?.(true, true);
+  });
+
+  // Combo: arrows cycle the visible options; clicking the value opens the list.
+  combo.addEventListener("pointerdown", (e) => e.stopPropagation());
+  combo.querySelectorAll(".pix-sld-cnav").forEach((nav) => {
+    nav.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const s = slider();
+      if (!s || s.type !== "combo") return;
+      const vis = comboVisible(s);
+      if (!vis.length) return;
+      const dir = Number(nav.getAttribute("data-dir")) || 1;
+      let i = vis.indexOf(s.value);
+      if (i < 0) i = 0;
+      s.value = vis[(i + dir + vis.length) % vis.length];
+      paintRow(node, index);
+      node.graph?.setDirtyCanvas?.(true, true);
+    });
+  });
+  combo.querySelector(".cval").addEventListener("click", (e) => {
+    e.stopPropagation();
+    const s = slider();
+    if (!s || s.type !== "combo") return;
+    if (!comboVisible(s).length) return;
+    openComboPopup(node, index, combo.querySelector(".cval"));
+  });
+
+  // Seed: R toggles randomize-each-run; N rolls a new fixed seed; click the
+  // number to type an exact one.
+  seed.addEventListener("pointerdown", (e) => e.stopPropagation());
+  seed.querySelector(".sr").addEventListener("click", (e) => {
+    e.stopPropagation();
+    const s = slider();
+    if (!s || s.type !== "seed") return;
+    const goingFixed = s.mode === "random";   // R is turning randomize OFF
+    s.mode = s.mode === "random" ? "fixed" : "random";
+    // Lock in the seed that JUST RAN (the last rolled value shown on the face),
+    // not the older stored one - matches ComfyUI's native randomize -> fixed.
+    if (goingFixed) {
+      const rolled = node._pixSeedRun?.[index];
+      if (Number.isFinite(rolled)) { s.value = rolled; if (node._pixSeedRun) delete node._pixSeedRun[index]; }
+    }
+    paintRow(node, index);
+    node.graph?.setDirtyCanvas?.(true, true);
+  });
+  seed.querySelector(".sn").addEventListener("click", (e) => {
+    e.stopPropagation();
+    const s = slider();
+    if (!s || s.type !== "seed") return;
+    s.value = randomSeed();
+    s.mode = "fixed";
+    if (node._pixSeedRun) delete node._pixSeedRun[index];
+    paintRow(node, index);
+    node.graph?.setDirtyCanvas?.(true, true);
+  });
+  const sedit = seed.querySelector(".pix-sld-sedit");
+  seed.querySelector(".sv").addEventListener("click", (e) => {
+    e.stopPropagation();
+    const s = slider();
+    if (!s || s.type !== "seed") return;
+    sedit.value = String(s.value);
+    seed.classList.add("editing");
+    sedit.focus();
+    sedit.select();
+  });
+  const commitSeed = (apply) => {
+    if (!seed.classList.contains("editing")) return;
+    if (apply) {
+      const v = parseInt(sedit.value, 10);
+      const s = slider();
+      if (s && Number.isFinite(v) && v >= 0) {
+        // Cap at Python's own value clamp (1e12) - same as ensureSeed - so the
+        // face shows exactly the number that runs (an uncapped 13-digit seed
+        // displayed one value while Python clamped to another), and reopening the
+        // saved workflow doesn't re-clamp it and flag the file "modified".
+        s.value = Math.min(Math.floor(v), 1e12);
+        s.mode = "fixed";
+        if (node._pixSeedRun) delete node._pixSeedRun[index];
+      }
+    }
+    seed.classList.remove("editing");
+    paintRow(node, index);
+    node.graph?.setDirtyCanvas?.(true, true);
+  };
+  sedit.addEventListener("keydown", (e) => {
+    e.stopPropagation();
+    if (e.key === "Enter") { e.preventDefault(); commitSeed(true); }
+    else if (e.key === "Escape") { e.preventDefault(); commitSeed(false); }
+  });
+  sedit.addEventListener("blur", () => commitSeed(true));
+  sedit.addEventListener("pointerdown", (e) => e.stopPropagation());
+
+  // Text: type into the field; the field IS the value.
+  const txin = text.querySelector(".pix-sld-txin");
+  text.addEventListener("pointerdown", (e) => e.stopPropagation());
+  txin.addEventListener("pointerdown", (e) => e.stopPropagation());
+  txin.addEventListener("keydown", (e) => e.stopPropagation());   // keep typing out of canvas shortcuts
+  txin.addEventListener("input", () => {
+    const s = slider();
+    if (s && s.type === "text") s.value = txin.value;
+  });
+  txin.addEventListener("change", () => {
+    const s = slider();
+    if (s && s.type === "text") s.value = txin.value;
+    node.graph?.setDirtyCanvas?.(true, true);
+  });
+
   return row;
+}
+
+// ── Dropdown option popup ────────────────────────────────────────────────────
+let _comboPopup = null;
+function _comboOutside(e) { if (_comboPopup && !_comboPopup.contains(e.target)) closeComboPopup(); }
+function _comboEsc(e) { if (e.key === "Escape" && _comboPopup) { e.stopPropagation(); closeComboPopup(); } }
+
+export function closeComboPopup() {
+  if (_comboPopup) { try { _comboPopup.remove(); } catch {} _comboPopup = null; }
+  document.removeEventListener("pointerdown", _comboOutside, true);
+  document.removeEventListener("wheel", _comboOutside, true);   // wheel OUTSIDE closes; inside scrolls
+  document.removeEventListener("keydown", _comboEsc, true);
+}
+
+function openComboPopup(node, index, anchorEl) {
+  closeComboPopup();
+  const s = readState(node).sliders[index];
+  if (!s) return;
+  const vis = comboVisible(s);
+  if (!vis.length) return;
+
+  const pop = document.createElement("div");
+  pop.className = "pix-sld-cpop";
+  pop.style.setProperty("--acc", accentOf(node));
+  vis.forEach((opt) => {
+    const item = document.createElement("div");
+    item.className = "pix-sld-copt" + (opt === s.value ? " on" : "");
+    item.textContent = opt;
+    item.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const ss = readState(node).sliders[index];
+      // Guard the type: a sibling row may have been deleted while this popup was
+      // open, shifting a different row into `index` - never stamp an option string
+      // into a non-combo row (it would break that row's Number() math).
+      if (ss && ss.type === "combo") { ss.value = opt; paintRow(node, index); node.graph?.setDirtyCanvas?.(true, true); }
+      closeComboPopup();
+    });
+    pop.appendChild(item);
+  });
+  document.body.appendChild(pop);
+
+  const r = anchorEl.getBoundingClientRect();
+  pop.style.left = Math.max(8, Math.min(r.left, window.innerWidth - pop.offsetWidth - 8)) + "px";
+  let top = r.bottom + 4;
+  if (top + pop.offsetHeight > window.innerHeight - 8) top = r.top - pop.offsetHeight - 4;
+  pop.style.top = Math.max(8, top) + "px";
+  pop.querySelector(".pix-sld-copt.on")?.scrollIntoView({ block: "nearest" });
+
+  _comboPopup = pop;
+  // wheel handler gates on !contains, so scrolling INSIDE the list never closes it.
+  setTimeout(() => {
+    document.addEventListener("pointerdown", _comboOutside, true);
+    document.addEventListener("wheel", _comboOutside, true);
+    document.addEventListener("keydown", _comboEsc, true);
+  }, 0);
 }
 
 // Repaint one row from state (cheap: called on every drag frame).
@@ -219,15 +530,110 @@ export function paintRow(node, index) {
   const s = readState(node).sliders[index];
   if (!el || !s) return;
 
+  const sl = el.querySelector(".pix-sld-sl");
+  const tog = el.querySelector(".pix-sld-tog");
+  const combo = el.querySelector(".pix-sld-combo");
+  const seed = el.querySelector(".pix-sld-seed");
+  const text = el.querySelector(".pix-sld-text");
+  const acc = accentOf(node);
+
+  // ── Toggle row ──
+  if (s.type === "toggle") {
+    if (sl) sl.style.display = "none";
+    if (combo) combo.style.display = "none";
+    if (seed) seed.style.display = "none";
+    if (text) text.style.display = "none";
+    if (tog) {
+      tog.style.display = "flex";
+      const on = Number(s.value) ? 1 : 0;
+      tog.setAttribute("data-on", String(on));
+      tog.style.setProperty("--acc", acc);
+      tog.querySelector(".tnm").textContent = s.name || `Value ${index + 1}`;
+      tog.querySelector(".tst").textContent = on ? (s.onLabel || "On") : (s.offLabel || "Off");
+      tog.title = `${s.name || `Value ${index + 1}`}  (click to switch ${on ? "off" : "on"})`;
+    }
+    return;
+  }
+
+  // ── Dropdown (combo) row ──
+  if (s.type === "combo") {
+    if (sl) sl.style.display = "none";
+    if (tog) tog.style.display = "none";
+    if (seed) seed.style.display = "none";
+    if (text) text.style.display = "none";
+    if (combo) {
+      combo.style.display = "flex";
+      combo.style.setProperty("--acc", acc);
+      const vis = comboVisible(s);
+      const empty = !vis.length;
+      combo.classList.toggle("empty", empty);
+      combo.querySelector(".cnm").textContent = s.name || `Value ${index + 1}`;
+      combo.querySelector(".cval .ct").textContent = empty ? "connect a picker" : (s.value || vis[0] || "");
+      combo.title = empty
+        ? "Wire this to a dropdown input (sampler, scheduler, checkpoint, ...) to fill it"
+        : `${s.name || `Value ${index + 1}`}: ${s.value}`;
+    }
+    return;
+  }
+
+  // ── Seed row ──
+  if (s.type === "seed") {
+    if (sl) sl.style.display = "none";
+    if (tog) tog.style.display = "none";
+    if (combo) combo.style.display = "none";
+    if (text) text.style.display = "none";
+    if (seed) {
+      seed.style.display = "flex";
+      seed.style.setProperty("--acc", acc);
+      const random = s.mode === "random";
+      seed.classList.toggle("random", random);
+      seed.querySelector(".snm").textContent = s.name || `Value ${index + 1}`;
+      const runVal = node._pixSeedRun?.[index];
+      seed.querySelector(".sv").textContent = random
+        ? (Number.isFinite(runVal) ? String(runVal) : "random")
+        : String(s.value);
+      seed.title = random
+        ? `${s.name || "Seed"}: a new random seed every run (R on). N rolls a fixed one.`
+        : `${s.name || "Seed"}: ${s.value}  (R = randomize each run, N = new seed)`;
+    }
+    return;
+  }
+
+  // ── Text row ──
+  if (s.type === "text") {
+    if (sl) sl.style.display = "none";
+    if (tog) tog.style.display = "none";
+    if (combo) combo.style.display = "none";
+    if (seed) seed.style.display = "none";
+    if (text) {
+      text.style.display = "flex";
+      text.style.setProperty("--acc", acc);
+      text.querySelector(".txnm").textContent = s.name || `Value ${index + 1}`;
+      const txin = text.querySelector(".pix-sld-txin");
+      txin.placeholder = "type text";
+      // never clobber what the user is currently typing
+      if (document.activeElement !== txin) txin.value = typeof s.value === "string" ? s.value : "";
+      text.title = `${s.name || `Value ${index + 1}`}: text`;
+    }
+    return;
+  }
+
+  // ── Slider row ──
+  if (tog) tog.style.display = "none";
+  if (combo) combo.style.display = "none";
+  if (seed) seed.style.display = "none";
+  if (text) text.style.display = "none";
+  if (sl) sl.style.display = "block";
+
   const [min, max] = rangeOf(s);   // a user may have typed Min 100 / Max 0
   const span = (max - min) || 1;
   const p = Math.min(100, Math.max(0, ((Number(s.value) - min) / span) * 100));
   const dec = decimalsOf(s);
-  const txt = Number(s.value).toFixed(dec);
+  let txt = Number(s.value).toFixed(dec);
+  if (/^-0(\.0+)?$/.test(txt)) txt = txt.slice(1);   // float drift can land on -0; show 0, not "-0.00"
 
-  const sl = el.querySelector(".pix-sld-sl");
   sl.style.setProperty("--p", p + "%");
-  sl.style.setProperty("--acc", accentOf(node));
+  sl.style.setProperty("--acc", acc);
   el.querySelector(".pix-sld-fill").style.width = p + "%";
   el.querySelectorAll(".pix-sld-lay").forEach((lay) => {
     lay.querySelector(".nm").textContent = s.name || `Value ${index + 1}`;
@@ -240,6 +646,10 @@ export function paintRow(node, index) {
 export function syncRowWidgets(node, onAdd) {
   const st = readState(node);
   const rows = node._pixSldRows || (node._pixSldRows = []);
+
+  // A shrink (a row was deleted) shifts every index below it; any open node-face
+  // option popup captured a now-stale index, so close it before the rows change.
+  if (rows.length > st.sliders.length) closeComboPopup();
 
   while (rows.length > st.sliders.length) {
     const w = rows.pop();
@@ -266,7 +676,7 @@ export function syncRowWidgets(node, onAdd) {
   if (!node._pixSldAdd) {
     const el = document.createElement("div");
     el.className = "pix-sld-add";
-    el.textContent = "+ Add slider";
+    el.textContent = "+ Add control";
     el.addEventListener("pointerdown", (e) => e.stopPropagation());
     el.addEventListener("click", (e) => { e.stopPropagation(); onAdd?.(); });
     const w = node.addDOMWidget(ADD_NAME, ROW_TYPE, el, {
@@ -292,9 +702,9 @@ export function renderAll(node) {
   for (let i = 0; i < (node._pixSldRows?.length || 0); i++) paintRow(node, i);
   const addEl = node._pixSldAdd?.element;
   if (addEl) {
-    const full = st.sliders.length >= 16;
+    const full = st.sliders.length >= MAX_SLIDERS;
     addEl.classList.toggle("full", full);
-    addEl.textContent = full ? "16 sliders max" : "+ Add slider";
+    addEl.textContent = full ? `${MAX_SLIDERS} controls max` : "+ Add control";
     addEl.style.setProperty("--acc", accentOf(node));
   }
   scheduleAlign(node);
