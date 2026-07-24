@@ -100,9 +100,10 @@ function injectCSS() {
        category is unknown/empty. Colour only - same glyph width so the caret can't drift. */
     .pix-prm-wild { color:#b98cff; }
     .pix-prm-wild.bad { color:#ff4d4d; }
-    /* #lists: teal - the third random kind, clearly not the orange @tag or the violet
-       *wildcard. Red when the tag is unknown or has no usable lines. Colour only. */
-    .pix-prm-list { color:#57d1c9; }
+    /* #lists share the *wildcard VIOLET on purpose: violet means "this rolls again on
+       every run", orange means "a fixed tag", red means "broken". No new colour is
+       introduced for a third kind. Red when the tag is unknown or has no usable lines. */
+    .pix-prm-list { color:#b98cff; }
     .pix-prm-list.bad { color:#ff4d4d; }
     /* preview GROWS with the node (flex, no fixed cap) so a big node shows more.
        LIGHTER gray (not the dark #1d1d1d of the editable inputs) so it reads as a
@@ -144,7 +145,7 @@ function injectCSS() {
     .pix-prm-ac-i.sel, .pix-prm-ac-i:hover { background:#3a2a24; }
     .pix-prm-ac-n { font:12px monospace; color:var(--acc, ${BRAND}); }
     .pix-prm-ac-i.wild .pix-prm-ac-n { color:#b98cff; }
-    .pix-prm-ac-i.list .pix-prm-ac-n { color:#57d1c9; }
+    .pix-prm-ac-i.list .pix-prm-ac-n { color:#b98cff; }
     .pix-prm-ac-d { font-size:10.5px; color:#767676; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:320px; }
     .pix-prm-ac-empty { padding:9px 11px; color:#767676; font-size:11.5px; }
   `;
@@ -168,13 +169,13 @@ const PROMPT_HELP = {
         "Two ways to let a slot change by itself. Both roll again every time you press Run.",
       defs: [
         ["`*category`", "a random TAG from that category. `*Styles` becomes a different saved Style each run. Type `*` for a list of your categories. Only single-word names (letters, numbers, `-` or `_`) can be used this way; a category with a space in its name still works everywhere else."],
-        ["`#name`", "a random LINE from one tag. Make a tag, switch it to List in the library, and put one option per line (cat, dog, mouse). Then `#animals` becomes one of them. Type `#` for a list of your lists."],
+        ["`#name`", "a random LINE from one tag. Make a tag, set its switch to `List` in the library, and put one option per line (cat, dog, mouse). Then `#animals` becomes one of them. Type `#` for a list of your lists."],
       ],
     },
     {
       heading: "Reading the colours",
       body:
-        "A working `*category` glows violet and a working `#list` glows teal; an unknown or empty one glows red so you spot a typo.\n\n" +
+        "Anything that rolls glows violet, so `*category` and `#list` share that colour; a plain `@tag` stays orange, and an unknown or empty one glows red so you spot a typo.\n\n" +
         "`Show expanded` shows them as `[random: Styles]` and `[random line: animals]`, because the real pick only happens when you run. Wire a Show Text Pixaroma to the output to see exactly what was chosen. Tip: with a fixed seed the picture only changes when the pick changes, so use a random seed if you want a new image every run.",
     },
     {
@@ -194,7 +195,7 @@ const PROMPT_HELP = {
       heading: "The tag library",
       body:
         "The `Tags` button opens the fullscreen library: categories down the left, tags on the right. Add, rename, move between categories, or delete. New tags appear at the top.\n\n" +
-        "Every card is either a `Snippet` (the whole text is used) or a `List` (one option per line, one picked at random). Click the button on the card to switch. A List card shows how many options it holds, and its `Insert` drops `#name` into your prompt instead of `@name`.\n\n" +
+        "Every card has a `Text` / `List` switch at the bottom. `Text` is one piece of writing that `@name` drops in whole; `List` is one option per line that `#name` rolls between. A List card shows how many options it holds, and its `Insert` drops `#name` into your prompt instead of `@name`.\n\n" +
         "Your library is saved in ComfyUI's own settings, so it is private to you and survives updating the plugin. It is never saved into a workflow. Share it on purpose with `Export` and `Import`: Export lets you save everything or just one category, and Import shows you what is in the file so you can bring in only the categories you want (then keep both, replace, or skip when a name already exists).",
     },
     {
@@ -435,7 +436,7 @@ function openAC(node, ta, start, q, mode) {
   const sym = mode === "wild" ? "*" : mode === "list" ? "#" : "@";
 
   if (mode === "list") {
-    // #lists offer the tags MARKED as a list (the Snippet / List switch in the
+    // #lists offer the tags MARKED as a list (the Text / List switch in the
     // library), with the number of options they roll from - straight out of listOf so
     // the count is exactly the pool. Picking inserts #name.
     const lists = getTags()
@@ -452,7 +453,7 @@ function openAC(node, ta, start, q, mode) {
     } else {
       const h = document.createElement("div");
       h.className = "pix-prm-ac-h";
-      h.innerHTML = `<span class="cd" style="background:#57d1c9"></span>random line from a list`;
+      h.innerHTML = `<span class="cd" style="background:#b98cff"></span>random line from a list`;
       el.appendChild(h);
       for (const t of lists) {
         const idx = flat.length;

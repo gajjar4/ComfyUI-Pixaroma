@@ -144,15 +144,18 @@ function injectCSS() {
     .pix-prled-ic { width:32px; height:30px; border-radius:5px; border:1px solid #4a4a4a; background:transparent; color:#a6a6a6; cursor:pointer; display:flex; align-items:center; justify-content:center; font-size:14px; }
     .pix-prled-ic:hover { border-color:var(--acc); color:#fff; }
     .pix-prled-ic.del:hover { background:#e2554a; border-color:#e2554a; color:#fff; }
-    /* Snippet / List switch (card footer + create form). Teal when it is a List, the
-       same colour the #name token glows in the prompt box. */
-    .pix-prled-kind { flex:none; height:30px; padding:0 10px; border-radius:5px; border:1px solid #4a4a4a; background:transparent;
-      color:#a6a6a6; cursor:pointer; font:11.5px 'Segoe UI',sans-serif; display:inline-flex; align-items:center; gap:6px; white-space:nowrap; }
-    .pix-prled-kind:hover { border-color:var(--acc); color:#fff; }
-    .pix-prled-kind.on { border-color:#57d1c9; color:#57d1c9; }
-    .pix-prled-kind.on:hover { background:#57d1c9; border-color:#57d1c9; color:#10201f; }
-    .pix-prled-card.islist { border-color:#33514f; }
-    .pix-prled-create .pix-prled-kind { height:36px; }
+    /* Text / List switch (card footer + create form). BOTH choices stay visible so it
+       is obvious you can pick either; the active one is the accent (a single toggling
+       button hid the alternative, and a second accent colour is not wanted). */
+    .pix-prled-kindsw { flex:none; display:inline-flex; height:30px; border:1px solid #4a4a4a; border-radius:5px; overflow:hidden; }
+    .pix-prled-kindsw:hover { border-color:var(--acc); }
+    .pix-prled-kindsw button { background:transparent; border:0; color:#a6a6a6; padding:0 9px; cursor:pointer;
+      font:11.5px 'Segoe UI',sans-serif; display:inline-flex; align-items:center; white-space:nowrap; }
+    .pix-prled-kindsw button:hover { background:rgba(255,255,255,.07); color:#fff; }
+    .pix-prled-kindsw button.on, .pix-prled-kindsw button.on:hover { background:var(--acc); color:#fff; }
+    .pix-prled-card.islist { border-color:color-mix(in srgb, var(--acc) 42%, #333); }
+    .pix-prled-card .cfoot { flex-wrap:wrap; row-gap:6px; }
+    .pix-prled-create .pix-prled-kindsw { height:36px; }
     /* import preview: which categories from the file to bring in */
     .pix-prled-pick { display:flex; flex-direction:column; gap:6px; max-height:42vh; overflow-y:auto; padding:2px 16px 8px; }
     .pix-prled-pick .row { display:flex; align-items:center; gap:10px; background:#262626; border:1px solid #333;
@@ -174,7 +177,9 @@ function injectCSS() {
     .pix-prled-menu .msep { height:1px; background:#2a2a2a; margin:4px 2px; }
     .pix-prled-foot { display:flex; align-items:center; gap:9px; padding:10px 16px; border-top:1px solid #0e0e0e; background:#161616; }
     .pix-prled-foot .push { margin-left:auto; }
-    .pix-prled-menu { position:fixed; z-index:10050; background:#1d1d1d; border:1px solid #4a4a4a; border-radius:7px; padding:5px; box-shadow:0 12px 30px rgba(0,0,0,.6); min-width:170px; }
+    /* max-height + scroll so a library with many categories can't push the menu (this
+       one AND the category picker) off the top or bottom of the screen. */
+    .pix-prled-menu { position:fixed; z-index:10050; background:#1d1d1d; border:1px solid #4a4a4a; border-radius:7px; padding:5px; box-shadow:0 12px 30px rgba(0,0,0,.6); min-width:170px; max-height:min(60vh,520px); overflow-y:auto; }
     .pix-prled-menu .mi { display:flex; align-items:center; gap:9px; padding:7px 10px; border-radius:5px; cursor:pointer; font:12.5px 'Segoe UI',sans-serif; color:#cfcfcf; }
     .pix-prled-menu .mi:hover { background:rgba(255,255,255,.06); color:#fff; }
     .pix-prled-menu .mi .cd { width:10px; height:10px; border-radius:50%; }
@@ -257,6 +262,29 @@ document.addEventListener("mousedown", (e) => {
 }, true);
 
 // ── render ─────────────────────────────────────────────────────────────
+// The Text / List switch, shared by the cards and the create form. Both segments are
+// always on screen so the choice is visible without clicking anything; `paint(isList,
+// count)` sets the active one and, for a List, shows how many options it holds.
+function makeKindSwitch(onPick) {
+  const sw = document.createElement("div");
+  sw.className = "pix-prled-kindsw";
+  const bText = document.createElement("button"); bText.type = "button"; bText.textContent = "Text";
+  bText.title = "Text: one piece of text, and @name drops in all of it";
+  const bList = document.createElement("button"); bList.type = "button"; bList.textContent = "List";
+  bList.title = "List: one option per line, and #name picks one at random every run";
+  sw.append(bText, bList);
+  bText.addEventListener("click", (e) => { e.stopPropagation(); onPick(false); });
+  bList.addEventListener("click", (e) => { e.stopPropagation(); onPick(true); });
+  return {
+    el: sw,
+    paint(isList, count) {
+      bText.classList.toggle("on", !isList);
+      bList.classList.toggle("on", !!isList);
+      bList.textContent = isList && count != null ? `List · ${count}` : "List";
+    },
+  };
+}
+
 function makeCard(tag) {
   const card = document.createElement("div");
   card.className = "pix-prled-card";
@@ -296,32 +324,26 @@ function makeCard(tag) {
     const l = ins.querySelector(".lbl"); if (l) l.textContent = "Inserted ✓";
     setTimeout(() => { ins.classList.remove("ok"); const ll = ins.querySelector(".lbl"); if (ll) ll.textContent = "Insert"; }, 850);
   });
-  // Snippet <-> List. The stored kind is cosmetic + convenience (the SYMBOL in the
+  // Text <-> List. The stored kind is cosmetic + convenience (the SYMBOL in the
   // prompt is what actually decides at expand time), so flipping it can never break
   // an existing prompt: @name keeps giving the whole block either way.
-  const kindBtn = document.createElement("button");
-  kindBtn.className = "pix-prled-kind";
+  const kindSw = makeKindSwitch((toList) => {
+    if (toList) tag.kind = "list"; else delete tag.kind;
+    commit(); paintKind();
+  });
   function paintKind() {
     const list = isListTag(tag);
     card.classList.toggle("islist", list);
-    kindBtn.classList.toggle("on", list);
-    kindBtn.innerHTML = list ? `<span>☰</span>List · ${tagLines(tag.text).length}` : `<span>¶</span>Snippet`;
-    kindBtn.title = list
-      ? "List: one option per line. #" + tag.name + " picks one at random each run. Click to make it a plain snippet."
-      : "Snippet: @" + tag.name + " uses the whole text. Click to make it a List (one option per line, picked at random).";
+    kindSw.paint(list, tagLines(tag.text).length);
     tx.placeholder = list ? "one option per line" : "what it expands to - the full prompt text";
     ins.title = list ? "Insert #" + tag.name + " into your prompt (a random line each run)" : "Insert @" + tag.name + " into your prompt";
   }
-  kindBtn.addEventListener("click", () => {
-    if (isListTag(tag)) delete tag.kind; else tag.kind = "list";
-    commit(); paintKind();
-  });
   paintKind();
   const del = document.createElement("button");
   del.className = "pix-prled-ic del"; del.title = "Delete tag";
   del.innerHTML = `<span class="pix-prled-svg" style="-webkit-mask-image:url(${ICON_BASE}delete.svg);mask-image:url(${ICON_BASE}delete.svg)"></span>`;
   del.addEventListener("click", () => { const i = _data.tags.indexOf(tag); if (i > -1) _data.tags.splice(i, 1); commit(); render(); });
-  foot.append(ins, kindBtn, del);
+  foot.append(ins, kindSw.el, del);
   card.append(top, tx, foot);
   return card;
 }
@@ -407,25 +429,21 @@ function buildCreateForm() {
   // A <textarea> (not <input>) so a multi-line "save selection as a tag" keeps its
   // line breaks (a text input strips newlines on assignment).
   const tx = document.createElement("textarea"); tx.className = "ctx"; tx.spellcheck = false; tx.rows = 1;
-  // Snippet / List for the tag about to be created. Lives on the draft so it survives
-  // a re-render, and follows the text (2+ lines = a List) until the user picks for
+  // Text / List for the tag about to be created. Lives on the draft so it survives a
+  // re-render, and follows the text (2+ lines = a List) until the user picks for
   // themselves - after that their choice sticks.
-  const kindBtn = document.createElement("button"); kindBtn.className = "pix-prled-kind";
-  const paintKind = () => {
-    const list = _createDraft.kind === "list";
-    kindBtn.classList.toggle("on", list);
-    kindBtn.innerHTML = list ? `<span>☰</span>List` : `<span>¶</span>Snippet`;
-    kindBtn.title = list
-      ? "List: one option per line, picked at random each run by #name. Click for a plain snippet."
-      : "Snippet: the whole text is used by @name. Click to make it a List (one option per line).";
-    tx.placeholder = list ? "one option per line" : "what it expands to - the full prompt text";
-  };
-  kindBtn.addEventListener("click", (e) => {
-    e.stopPropagation();
-    _createDraft.kind = _createDraft.kind === "list" ? "text" : "list";
+  const kindSw = makeKindSwitch((toList) => {
+    _createDraft.kind = toList ? "list" : "text";
     _createDraft.kindTouched = true;
     paintKind();
   });
+  const paintKind = () => {
+    const list = _createDraft.kind === "list";
+    kindSw.paint(list, null);
+    tx.placeholder = list ? "one option per line - press Enter for the next one" : "what it expands to - the full prompt text";
+    // A list needs room to type several lines; a snippet stays on the one-line row.
+    tx.style.height = list ? "76px" : "36px";
+  };
   // Seed from the in-progress draft so name + text survive a re-render (sidebar
   // category click / search), then keep the draft in sync as the user types.
   nm.value = _createDraft.name; tx.value = _createDraft.text;
@@ -445,6 +463,7 @@ function buildCreateForm() {
   paintCat();
   catBtn.addEventListener("click", (e) => { e.stopPropagation(); openCategoryMenu(catBtn, (c) => { createCat = c; paintCat(); }); });
   const btn = document.createElement("button"); btn.className = "cbtn"; btn.textContent = "Create tag";
+  btn.title = "Add this tag to the library (Ctrl+Enter)";
   const doCreate = () => {
     const name = sanitizeName(nm.value);
     if (!name) { nm.focus(); return; }
@@ -462,9 +481,17 @@ function buildCreateForm() {
   };
   btn.addEventListener("click", doCreate);
   nm.addEventListener("keydown", (e) => { e.stopPropagation(); if (e.key === "Enter") { e.preventDefault(); doCreate(); } });
-  // Enter creates the tag; Shift+Enter inserts a newline (the text can be multi-line).
-  tx.addEventListener("keydown", (e) => { e.stopPropagation(); if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); doCreate(); } });
-  form.append(nm, tx, catBtn, kindBtn, btn);
+  // In LIST mode Enter must start the next option (typing a list is the whole point),
+  // so only Ctrl/Cmd+Enter creates. In Text mode Enter still creates and Shift+Enter
+  // adds a line, which is what a one-line snippet wants.
+  tx.addEventListener("keydown", (e) => {
+    e.stopPropagation();
+    if (e.key !== "Enter") return;
+    if (e.ctrlKey || e.metaKey) { e.preventDefault(); doCreate(); return; }
+    if (_createDraft.kind === "list" || e.shiftKey) return;  // let the newline through
+    e.preventDefault(); doCreate();
+  });
+  form.append(nm, tx, catBtn, kindSw.el, btn);
   return form;
 }
 function buildGrid() {
@@ -626,8 +653,11 @@ function showImportModal(parsed) {
   const conf = parsed.conflicts.slice(0, 40).map((n) => "@" + n).join(" · ");
   modal.innerHTML =
     `<div class="pix-prled-mcard"><div class="mh">Import tags</div>` +
-    `<div class="mb">Importing <b>${total} tag${total === 1 ? "" : "s"}</b>. <b>${parsed.conflicts.length}</b> have names you already use:` +
-    `<div class="conf">${esc(conf)}</div>How should the clashes be handled?</div>` +
+    `<div class="mb">Importing <b>${total} tag${total === 1 ? "" : "s"}</b>. ` +
+    (parsed.conflicts.length === 1
+      ? `<b>1</b> has a name you already use:`
+      : `<b>${parsed.conflicts.length}</b> have names you already use:`) +
+    `<div class="conf">${esc(conf)}</div>How should ${parsed.conflicts.length === 1 ? "it" : "the clashes"} be handled?</div>` +
     `<div class="pix-prled-opts">` +
     `<div class="pix-prled-opt rec" data-mode="both"><span class="oic">＋</span><span class="t">Keep both<small>Renames the imported one (e.g. @${esc(parsed.conflicts[0])}-2) so nothing is lost</small></span><span class="rtag">recommended</span></div>` +
     `<div class="pix-prled-opt" data-mode="replace"><span class="oic">⟳</span><span class="t">Replace mine<small>Overwrite my tag's text with the imported one</small></span></div>` +
@@ -655,7 +685,7 @@ function showLibraryHelp() {
     `<p><b>What it is.</b> Your personal, reusable prompt snippets. Type a short <b>@name</b> in a Prompt node and it becomes the full text at run time, so the box stays short. Your library is saved on your machine, stays private to you, and survives updating the plugin - it is never stored inside a workflow.</p>` +
     `<p><b>Create a tag.</b> Fill in the name and the full prompt text along the top, pick a category, and press <b>Create tag</b>. New tags appear at the front.</p>` +
     `<p><b>Edit a tag.</b> Click a card's name or its text and change it - your edits save on their own.</p>` +
-    `<p><b>Snippet or List.</b> Every card has a switch at the bottom. A <b>Snippet</b> is one chunk of text and <b>@name</b> drops in all of it. A <b>List</b> holds one option per line (cat, dog, mouse) and <b>#name</b> drops in a random one, fresh every run. Flip the switch any time: it changes what the card is for, never what your saved prompts do.</p>` +
+    `<p><b>Text or List.</b> Every card has a switch at the bottom with both choices on it. <b>Text</b> is one piece of writing and <b>@name</b> drops in all of it. <b>List</b> holds one option per line (cat, dog, mouse) and <b>#name</b> drops in a random one, fresh every run. Flip the switch any time: it changes what the card is for, never what your saved prompts do. While the create box at the top is set to List, Enter starts the next option and Ctrl+Enter adds the tag.</p>` +
     `<p><b>Categories.</b> Make them in the left sidebar. Click a card's coloured pill to move that tag to another category. Rename or delete a category from the sidebar (its tags just become Uncategorized). Typing <b>*category</b> in a prompt picks a random tag from it each run.</p>` +
     `<p><b>Use a tag.</b> Type <b>@</b> (or <b>#</b> for lists, <b>*</b> for categories) in the prompt box for a searchable list, or press <b>Insert</b> on a card to drop it straight into your prompt.</p>` +
     `<p><b>Share.</b> <b>Export</b> saves your tags to a file: everything, or just one category. <b>Import</b> shows you what is in a file so you can pick which categories to bring in, and if a name already exists you choose keep both, replace, or skip.</p>` +
