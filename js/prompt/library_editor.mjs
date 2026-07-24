@@ -186,6 +186,7 @@ function injectCSS() {
     .pix-prled-create .pix-prled-kindsw { height:36px; }
     /* how a list / category picks: its own row, so the position has room to be shown */
     .pix-prled-moderow { display:flex; align-items:center; gap:7px; min-width:0; }
+    .pix-prled-moderow .cap { flex:none; color:#767676; font:600 9.5px 'Segoe UI',sans-serif; letter-spacing:.09em; text-transform:uppercase; }
     .pix-prled-mode { flex:none; height:26px; padding:0 9px; border-radius:5px; border:1px solid #4a4a4a; background:transparent;
       color:#a6a6a6; cursor:pointer; font:11.5px 'Segoe UI',sans-serif; display:inline-flex; align-items:center; gap:6px; white-space:nowrap; }
     .pix-prled-mode:hover { border-color:var(--acc); color:#fff; }
@@ -365,6 +366,9 @@ function openModeMenu(anchor, current, onPick) {
 function makeModeRow({ getMode, setMode, key, len, what }) {
   const row = document.createElement("div");
   row.className = "pix-prled-moderow";
+  // Without a caption the bare "Random ▾" reads as decoration and gets missed.
+  const cap = document.createElement("span");
+  cap.className = "cap"; cap.textContent = "Picks";
   const btn = document.createElement("button");
   btn.className = "pix-prled-mode";
   const pos = document.createElement("span");
@@ -377,8 +381,9 @@ function makeModeRow({ getMode, setMode, key, len, what }) {
     btn.innerHTML = `<span>${MODE_LABEL[m]}</span><span class="car">▾</span>`;
     btn.title = `How this ${what} picks: ${MODE_LABEL[m]} - ${MODE_HINT[m]}`;
     row.classList.toggle("on", m !== "random");
-    const info = cursorInfo(key(), len(), m);
-    pos.textContent = info || "";
+    // On Random there is no position to show, so say what Random DOES - that is the
+    // line that tells you the control is worth clicking.
+    pos.textContent = cursorInfo(key(), len(), m) || MODE_HINT[m];
     rst.title = `Start this ${what} over`;
   };
   btn.addEventListener("click", (e) => {
@@ -391,7 +396,7 @@ function makeModeRow({ getMode, setMode, key, len, what }) {
     paint();
     toast("info", `Started that ${what} over`);
   });
-  row.append(btn, pos, rst);
+  row.append(cap, btn, pos, rst);
   paint();
   return { el: row, paint };
 }
