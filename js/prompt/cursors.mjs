@@ -80,6 +80,21 @@ if (typeof window !== "undefined" && typeof window.addEventListener === "functio
   window.addEventListener("pagehide", () => { try { flushCursors(); } catch { /* ignore */ } });
 }
 
+// A stored deck must be DISTINCT in-range indices. Filtering the bad entries out
+// would happily deal a corrupt deck like [0,0,1] - a repeat inside ONE deck, the one
+// thing this mode promises never to do - so a deck that fails is thrown away whole.
+// Shared with cursorInfo so the count it SHOWS can never describe a deck that
+// nextIndex is about to discard and reshuffle.
+function validBag(bag, n) {
+  if (!Array.isArray(bag)) return false;
+  const seen = new Set();
+  for (const x of bag) {
+    if (!Number.isInteger(x) || x < 0 || x >= n || seen.has(x)) return false;
+    seen.add(x);
+  }
+  return true;
+}
+
 function shuffled(n) {
   const a = Array.from({ length: n }, (_, i) => i);
   for (let i = n - 1; i > 0; i--) {
@@ -114,16 +129,7 @@ export function nextIndex(key, len, mode) {
   // (the old behaviour) would happily deal a corrupt deck like [0,0,1] - a repeat
   // inside one deck, which is the one thing this mode promises never to do - so a
   // deck that fails the check is thrown away and reshuffled instead.
-  let bag = null;
-  if (st && Array.isArray(st.bag)) {
-    const seen = new Set();
-    let ok = true;
-    for (const x of st.bag) {
-      if (!Number.isInteger(x) || x < 0 || x >= n || seen.has(x)) { ok = false; break; }
-      seen.add(x);
-    }
-    if (ok) bag = st.bag.slice();
-  }
+  let bag = validBag(st && st.bag, n) ? st.bag.slice() : null;
   const last = st && Number.isInteger(st.last) ? st.last : -1;
   if (!bag || !bag.length) {
     bag = shuffled(n);
@@ -159,7 +165,8 @@ export function cursorInfo(key, len, mode) {
     const i = Number.isInteger(st.i) ? ((st.i % n) + n) % n : 0;
     return `next ${i + 1} of ${n}`;
   }
-  const left = Array.isArray(st.bag) ? st.bag.length : 0;
+  // A deck nextIndex would reject must not be reported as if it were live.
+  const left = validBag(st.bag, n) ? st.bag.length : 0;
   return `${left || n} left in the deck`;
 }
 

@@ -1196,8 +1196,13 @@ function findPromptNode(index, promptId) {
   if (!tail) return null;
   let hit = null, seen = 0;
   for (const [key, node] of index) {
-    const keyTail = key.includes(":") ? key.slice(key.lastIndexOf(":") + 1) : key;
-    if (keyTail === tail) { hit = node; seen++; if (seen > 1) return null; }
+    // Only NESTED candidates. A key with no colon is a top-level node, and matching
+    // the tail of a subgraph id against one is exactly the mix-up this guard exists
+    // to stop: root ids and subgraph inner ids are independent counters, so "5:3"
+    // could otherwise land on the unrelated top-level node 3.
+    const cut = key.lastIndexOf(":");
+    if (cut < 0) continue;
+    if (key.slice(cut + 1) === tail) { hit = node; seen++; if (seen > 1) return null; }
   }
   return seen === 1 ? hit : null;
 }

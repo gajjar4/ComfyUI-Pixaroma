@@ -20,6 +20,7 @@ import {
 } from "./cursors.mjs";
 
 const PAL = ["#e0894b", "#5aa9e6", "#8e7bd6", "#5fbf8f", "#d76b98", "#c9a24b", "#6fb3b8"];
+const MAX_IMPORT_BYTES = 8 * 1024 * 1024;
 const ICON_BASE = "/pixaroma/assets/icons/ui/";
 
 let _overlay = null;
@@ -842,6 +843,12 @@ function pickImportFile() {
     const file = inp.files && inp.files[0];
     inp.remove();
     if (!file) return;
+    // A tag library is text; a real one is kilobytes. Reading a huge file straight
+    // into JSON.parse can exhaust the tab's memory before any of our own checks run.
+    if (file.size > MAX_IMPORT_BYTES) {
+      toast("warn", "That file is too big to be a tag library (over 8 MB).");
+      return;
+    }
     const reader = new FileReader();
     reader.onload = () => startImport(String(reader.result || ""));
     reader.onerror = () => toast("warn", "Could not read that file");

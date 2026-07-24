@@ -140,10 +140,19 @@ function normalize(raw) {
   }
   // Side repair (also the one-time migration for a library written before sides
   // existed): an UNDECLARED category holding nothing but lists is a List category.
+  // Bucket the tags ONCE - re-filtering every tag per category made normalize
+  // O(categories x tags), and normalize runs on every load AND every single edit.
+  const tagsByCat = new Map();
+  for (const t of out.tags) {
+    if (!t.cat) continue;
+    const k = lc(t.cat);
+    const arr = tagsByCat.get(k);
+    if (arr) arr.push(t); else tagsByCat.set(k, [t]);
+  }
   for (const c of out.categories) {
     if (listKeys.has(lc(c))) continue;
-    const inCat = out.tags.filter((t) => lc(t.cat) === lc(c));
-    if (inCat.length && inCat.every((t) => t.kind === "list")) listKeys.add(lc(c));
+    const inCat = tagsByCat.get(lc(c));
+    if (inCat && inCat.length && inCat.every((t) => t.kind === "list")) listKeys.add(lc(c));
   }
   // A category belongs to ONE side, so a tag whose kind disagrees with it moves to
   // its own bucket. The TAG's kind wins - never silently retype someone's list.
@@ -376,12 +385,23 @@ export function parseImport(jsonStr) {
   // picker and into the keep-both / replace / skip step.
   if (raw && Array.isArray(raw.tags)) {
     const seen = new Set();
+    // Resume each base name from the suffix it reached last time. Restarting the
+    // search at -2 for every entry is O(n^2): a file with 50k tags all named "foo"
+    // walks ~1.25 BILLION iterations on the UI thread, freezing the tab before the
+    // import dialog even appears. Resuming makes it amortised O(1) per tag.
+    const nextSuffix = new Map();
     raw.tags = raw.tags.map((t) => {
       if (!t || typeof t !== "object") return t;
       const base = cleanName(t.name);
       if (!base) return t;
-      let name = base, i = 2;
-      while (seen.has(name.toLowerCase())) name = base + "-" + i++;
+      const baseKey = base.toLowerCase();
+      let name = base;
+      if (seen.has(baseKey)) {
+        let i = nextSuffix.get(baseKey) || 2;
+        while (seen.has((base + "-" + i).toLowerCase())) i++;
+        name = base + "-" + i;
+        nextSuffix.set(baseKey, i + 1);
+      }
       seen.add(name.toLowerCase());
       return name === t.name ? t : { ...t, name };
     });
