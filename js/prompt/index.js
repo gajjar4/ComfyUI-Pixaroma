@@ -8,7 +8,8 @@ import {
   getTags, getCategories, findTag, subscribe, tagLines, isListTag, isListCat, catOf,
   tagMode, catMode, TEXT_BUCKET, LIST_BUCKET,
 } from "./library.mjs";
-import { nextIndex, listKey, catKey } from "./cursors.mjs";
+import { nextIndex, listKey, catKey, commitPicks } from "./cursors.mjs";
+import { api } from "/scripts/api.js";
 import { expandAll, hasTags, hasWilds, hasLists, scanTokens, prevCodePoint } from "./expand.mjs";
 import { openLibraryEditor, closeLibraryEditorFor } from "./library_editor.mjs";
 import { openPromptSettings, closePromptSettingsFor, accentOf, getDefaultOrder } from "./settings.mjs";
@@ -241,10 +242,18 @@ function toast(severity, msg) {
   else console.warn("[Pixaroma.Prompt]", msg);
 }
 function flashBtnText(btn, label) {
-  const orig = btn.textContent;
+  // Re-entry must not capture the FLASH label as the thing to restore: double-clicking
+  // Copy all used to leave the button reading "Copied" for the rest of the session,
+  // because the second call's timer wrote back what the first call had put there.
+  if (btn._pixFlashTimer) clearTimeout(btn._pixFlashTimer);
+  else btn._pixFlashOrig = btn.textContent;
   btn.textContent = label;
   btn.classList.add("is-flashing");
-  setTimeout(() => { btn.textContent = orig; btn.classList.remove("is-flashing"); }, 700);
+  btn._pixFlashTimer = setTimeout(() => {
+    btn.textContent = btn._pixFlashOrig;
+    btn.classList.remove("is-flashing");
+    btn._pixFlashTimer = null;
+  }, 700);
 }
 function escapeHTML(s) {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -369,10 +378,13 @@ function makeDropdown(value, options, onChange) {
     document.body.appendChild(pop);
     _ddPop = pop;
     const r = btn.getBoundingClientRect();
-    pop.style.left = Math.min(r.left, window.innerWidth - pop.offsetWidth - 8) + "px";
+    // Clamp on BOTH axes, like every other popup in this node: a node panned against
+    // the left edge pushed this one off-screen, and in a short viewport a 7-row list
+    // could clear neither above nor below.
+    pop.style.left = Math.max(8, Math.min(r.left, window.innerWidth - pop.offsetWidth - 8)) + "px";
     const below = window.innerHeight - r.bottom;
-    if (below < pop.offsetHeight + 8 && r.top > below) pop.style.top = (r.top - pop.offsetHeight - 4) + "px";
-    else pop.style.top = (r.bottom + 4) + "px";
+    const top = (below < pop.offsetHeight + 8 && r.top > below) ? r.top - pop.offsetHeight - 4 : r.bottom + 4;
+    pop.style.top = Math.max(8, Math.min(top, window.innerHeight - pop.offsetHeight - 8)) + "px";
     _ddOutside = (ev) => { if (!pop.contains(ev.target) && !btn.contains(ev.target)) closeDD(); };
     setTimeout(() => {
       // pointerdown (capture) also fires when you start dragging the node or panning
@@ -875,8 +887,11 @@ function wireEvents(node, root) {
     if (_ac && _acEl && _acEl.style.display === "block") {
       // Ctrl/Cmd+Enter always runs the workflow (close the list, let it bubble).
       if ((e.ctrlKey || e.metaKey) && e.key === "Enter") { closeAC(); return; }
-      if (e.key === "ArrowDown") { e.preventDefault(); _ac.sel = Math.min(_ac.sel + 1, _ac.items.length - 1); updateACSel(); return; }
-      if (e.key === "ArrowUp") { e.preventDefault(); _ac.sel = Math.max(_ac.sel - 1, 0); updateACSel(); return; }
+      // Only steal the arrows when there is actually a list to move through - with an
+      // empty popup ("No list matches...") they must still move the caret between the
+      // lines of a multi-line prompt.
+      if (e.key === "ArrowDown" && _ac.items.length) { e.preventDefault(); _ac.sel = Math.min(_ac.sel + 1, _ac.items.length - 1); updateACSel(); return; }
+      if (e.key === "ArrowUp" && _ac.items.length) { e.preventDefault(); _ac.sel = Math.max(_ac.sel - 1, 0); updateACSel(); return; }
       if ((e.key === "Enter" || e.key === "Tab") && _ac.items.length) { e.preventDefault(); e.stopPropagation(); pickAC(_ac.items[_ac.sel]); return; }
       if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); closeAC(); return; }
     }
@@ -1211,11 +1226,27 @@ function findPromptNode(index, promptId) {
 // URL, a hot reload). Wrapping twice would roll every random slot TWICE per queue, so
 // an "In order" list would silently skip every other entry and a shuffle deck would
 // drain at double rate. Same flag convention as the other Pixaroma nodes.
+// A pick is only SPENT when a queue is actually accepted. graphToPrompt runs for
+// Workflow > Export, for workflow sharing and for several Save buttons too, and it
+// also runs for a queue that then fails validation - none of those should move an
+// "In order" list on. Until this fires, the same pick is handed out again.
+if (!app._pixPromptQueuePatched && api && typeof api.queuePrompt === "function") {
+  app._pixPromptQueuePatched = true;
+  const _origQueuePrompt = api.queuePrompt.bind(api);
+  api.queuePrompt = async function (...args) {
+    const res = await _origQueuePrompt(...args);   // throws on a rejected queue -> pick kept
+    try { commitPicks(); } catch (err) { console.error("Pixaroma.Prompt: commitPicks failed", err); }
+    return res;
+  };
+}
+
 if (!app._pixPromptToPromptPatched) {
 app._pixPromptToPromptPatched = true;
-const _origGraphToPrompt = app.graphToPrompt;
+const _origGraphToPrompt = app.graphToPrompt.bind(app);
 app.graphToPrompt = async function (...args) {
-  const result = await _origGraphToPrompt.apply(this, args);
+  // Bound to app above, so a future detached call (someone doing
+  // `const f = app.graphToPrompt; f()`) cannot lose `this` inside our wrapper.
+  const result = await _origGraphToPrompt(...args);
   try {
     const prompt = result?.output;
     if (prompt && typeof prompt === "object") {
@@ -1229,7 +1260,10 @@ app.graphToPrompt = async function (...args) {
           if (!node) {
             // Fabricating an empty prompt here would silently drop what the user typed.
             // Leave the entry alone (Python falls back to its own default) and SAY so.
+            // Python then falls back to its own default, i.e. the typed prompt is
+            // dropped and only a wired input survives - too destructive to be silent.
             console.warn("Pixaroma.Prompt: could not match prompt node", key, "- leaving its PromptState alone");
+            toast("warn", "A Prompt Pixaroma node could not be matched, so its typed prompt was not sent.");
             continue;
           }
           const st = readState(node);

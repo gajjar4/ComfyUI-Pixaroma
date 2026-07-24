@@ -104,12 +104,38 @@ function shuffled(n) {
   return a;
 }
 
+// Picks made but not yet spent on a run. `app.graphToPrompt` is NOT a queue: ComfyUI
+// calls it for Workflow > Export, for workflow sharing, and several Pixaroma Save
+// buttons call it too. Advancing on every call meant pressing Save silently ate the
+// next entry, so an "In order" list skipped it forever - and a run that failed
+// validation burned one as well.
+// Holding the pick here also makes EVERY node in one prompt build agree: two Prompt
+// nodes using the same #list get the same line (which is what "they move through it
+// together" means), and a parked, unwired node can no longer steal picks from the one
+// you are actually using.
+// Cleared by commitPicks() once a queue has genuinely been accepted.
+const _pending = new Map();   // key -> { i, n, mode }
+export function commitPicks() {
+  if (_pending.size) { _pending.clear(); flushCursors(); }
+}
+
 // The index to use NOW, advancing the cursor. `len` is the current pool size, so a
-// list that was edited to a different length starts its sequence over.
+// list that was edited to a different length starts its sequence over. A pick already
+// made and not yet spent on a run is REUSED (see _pending above) - the mode and pool
+// size must still match, or the pick no longer means anything.
 export function nextIndex(key, len, mode) {
   const n = Math.floor(len);
   if (!(n > 0)) return -1;
   const m = cleanMode(mode);
+  const held = _pending.get(key);
+  if (held && held.n === n && held.mode === m) return held.i;
+  const i = rollIndex(key, n, m);
+  if (i >= 0) _pending.set(key, { i, n, mode: m });
+  return i;
+}
+
+// The actual draw. Only ever called by nextIndex, once per key per run.
+function rollIndex(key, n, m) {
   if (m === "random" || n === 1) return Math.floor(Math.random() * n);
   const map = all();
   // Nowhere to remember a position (settings not ready). Fall back to a plain random
@@ -172,6 +198,7 @@ export function cursorInfo(key, len, mode) {
 
 // Start this list / category over (the deck reshuffles, the counter returns to 1).
 export function resetCursor(key) {
+  _pending.delete(key);          // a held pick belongs to the old sequence
   const map = all();
   if (map && map[key]) { delete map[key]; touch(); }
 }
@@ -181,6 +208,8 @@ export function resetCursor(key) {
 // must not linger in storage forever).
 export function renameCursor(fromKey, toKey) {
   if (fromKey === toKey) return;
+  const held = _pending.get(fromKey);
+  if (held) { _pending.set(toKey, held); _pending.delete(fromKey); }
   const map = all();
   if (!map || !map[fromKey]) return;
   map[toKey] = map[fromKey];

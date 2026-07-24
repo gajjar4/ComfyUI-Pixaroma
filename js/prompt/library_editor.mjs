@@ -10,7 +10,7 @@ import { app } from "/scripts/app.js";
 import { installGraphUndoGuard } from "../shared/graph_undo_guard.mjs";
 import { BRAND } from "../shared/utils.mjs";
 import {
-  getLibrary, commitLibrary, flushLibrary, exportLibraryJSON, parseImport, applyImport,
+  getLibrary, reloadLibrary, isSameAsStored, commitLibrary, flushLibrary, exportLibraryJSON, parseImport, applyImport,
   importCategories, subsetImport, isListTag, tagLines, catOf, sideOfCat, tagMode, catMode,
   TEXT_BUCKET, LIST_BUCKET, NAME_RE,
 } from "./library.mjs";
@@ -39,7 +39,11 @@ let _accent = BRAND;
 // following the text once the user clicks the switch (kindTouched).
 function newDraft(text) {
   const t = text || "";
-  return { name: "", text: t, kind: tagLines(t).length > 1 ? "list" : "text", kindTouched: false };
+  // `cat` lives on the draft for the same reason name/text do: renderContent rebuilds
+  // the form on every search keystroke and every sidebar click, and a chosen category
+  // held only in a local would silently snap back to the bucket - so a tag you filed
+  // under Lighting was created in Text with no warning. null = follow the sidebar.
+  return { name: "", text: t, cat: null, kind: tagLines(t).length > 1 ? "list" : "text", kindTouched: false };
 }
 let _createDraft = newDraft();
 
@@ -134,12 +138,19 @@ function injectCSS() {
     .pix-prled-newcat .pix-prled-btn { width:100%; justify-content:center; }
     .pix-prled-content { flex:1; display:flex; flex-direction:column; min-width:0; background:#212121; }
     .pix-prled-chead { display:flex; align-items:center; gap:10px; padding:12px 16px; border-bottom:1px solid #171717; }
-    .pix-prled-chead .h { display:flex; align-items:center; gap:9px; font-size:15px; color:#fff; font-weight:500; }
+    /* min-width:0 + ellipsis, or a long category name shoves the Picks control and
+       its start-over button past the right edge where they cannot be clicked
+       (category names are free text - no length cap, no sanitising). */
+    .pix-prled-chead .h { display:flex; align-items:center; gap:9px; font-size:15px; color:#fff; font-weight:500; min-width:0; overflow:hidden; }
+    .pix-prled-chead .h > span:not(.cd) { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
     .pix-prled-chead .h .cd { width:12px; height:12px; border-radius:50%; }
     .pix-prled-chead .h .c { color:#767676; font-weight:400; font-size:12.5px; }
     /* the CREATE form: fill name + text in one place and hit Create (no hunting for
        a button on the far side of the editor) */
-    .pix-prled-create { display:flex; align-items:center; gap:8px; padding:11px 16px; background:#1e1e1e; border-bottom:1px solid #171717; }
+    /* wrap + a capped category pill, so a long category name cannot push the
+       Create tag button off the row on a smaller window */
+    .pix-prled-create { display:flex; align-items:center; flex-wrap:wrap; row-gap:8px; gap:8px; padding:11px 16px; background:#1e1e1e; border-bottom:1px solid #171717; }
+    .pix-prled-create .ccat { max-width:220px; }
     .pix-prled-create input, .pix-prled-create textarea { background:#151515; border:1px solid #3a3a3a; border-radius:5px; color:#e6e6e6; font:12.5px monospace; padding:8px 9px; outline:none; height:36px; box-sizing:border-box; }
     .pix-prled-create input:focus, .pix-prled-create textarea:focus { border-color:var(--acc); }
     .pix-prled-create .cnm { width:170px; flex:none; color:var(--acc); }
@@ -440,12 +451,21 @@ function makeCard(tag) {
     // concurrent Run would miss it) and could persist the loss on an abrupt quit.
     // The blur handler recovers an invalid name to a unique one.
     const dup = _data.tags.some((o) => o !== tag && o.name.toLowerCase() === tag.name.toLowerCase());
-    if (tag.name && !dup) commit();
+    if (tag.name && !dup) {
+      // The store is renamed on THIS keystroke, so the position has to move now too.
+      // Deferring it to blur left a window where a run looked up the new name, found
+      // nothing and started a fresh sequence, which blur then overwrote.
+      if (nameAtFocus.v && nameAtFocus.v !== tag.name) {
+        try { renameCursor(listKey(nameAtFocus.v), listKey(tag.name)); } catch { /* ignore */ }
+        nameAtFocus.v = tag.name;
+      }
+      commit();
+    }
     paintKind(); // the kind button's tooltip quotes the tag name
   });
-  // The name settles on blur, so carry the Shuffle/In-order position across then -
-  // doing it per keystroke would churn storage, and not doing it at all silently
-  // restarts the sequence and strands the old key forever.
+  // Tracks the name the position is currently filed under, so a rename can carry it
+  // (see the input + blur handlers). Storage writes are debounced, so moving it per
+  // keystroke costs nothing.
   const nameAtFocus = { v: tag.name };
   nm.addEventListener("focus", () => { nameAtFocus.v = tag.name; });
   nm.addEventListener("blur", () => {
@@ -514,7 +534,14 @@ function makeCard(tag) {
   const del = document.createElement("button");
   del.className = "pix-prled-ic del"; del.title = "Delete tag";
   del.innerHTML = `<span class="pix-prled-svg" style="-webkit-mask-image:url(${ICON_BASE}delete.svg);mask-image:url(${ICON_BASE}delete.svg)"></span>`;
-  del.addEventListener("click", () => { const i = _data.tags.indexOf(tag); if (i > -1) _data.tags.splice(i, 1); commit(); render(); });
+  del.addEventListener("click", () => {
+    const i = _data.tags.indexOf(tag);
+    if (i > -1) _data.tags.splice(i, 1);
+    // Drop its position too, or a NEW list later given the same name inherits the
+    // dead one's half-drained deck (deleteCat already does this for a category).
+    try { resetCursor(listKey(tag.name)); } catch { /* ignore */ }
+    commit(); render();
+  });
   foot.append(ins, kindSw.el, del);
   card.append(top, tx, modeRow.el, foot);
   return card;
@@ -599,24 +626,31 @@ function startRenameCat(row, cat) {
   inp.addEventListener("click", (e) => e.stopPropagation());
   const commitRename = () => {
     const v = inp.value.trim();
-    if (v && v.toLowerCase() !== cat.toLowerCase() && !isReservedName(v) && !_data.categories.some((c) => c.toLowerCase() === v.toLowerCase())) {
-      const idx = _data.categories.indexOf(cat);
-      if (idx > -1) _data.categories[idx] = v;
-      const li = _data.listCats.indexOf(cat);   // keep it on the same side
-      if (li > -1) _data.listCats[li] = v;
-      if (_data.catModes && _data.catModes[cat]) {   // and keep how it picks
-        _data.catModes[v] = _data.catModes[cat];
-        delete _data.catModes[cat];
-      }
-      // ...and where it had got to. A rename is not a change of contents.
-      try { renameCursor(catKey(cat), catKey(v)); } catch { /* ignore */ }
-      for (const t of _data.tags) if (t.cat === cat) t.cat = v;
-      if (_curCat === cat) _curCat = v;
-      commit();
+    // Nothing changed: put the label back in place instead of calling render().
+    // A full render on blur destroyed whatever you were mousedown-ing on, so the
+    // click never landed and the sidebar / a card button had to be clicked twice.
+    if (!v || v.toLowerCase() === cat.toLowerCase() || isReservedName(v) ||
+        _data.categories.some((c) => c.toLowerCase() === v.toLowerCase())) {
+      if (inp.isConnected) inp.replaceWith(nmSpan);
+      return;
     }
-    render();
+    const idx = _data.categories.indexOf(cat);
+    if (idx > -1) _data.categories[idx] = v;
+    const li = _data.listCats.indexOf(cat);   // keep it on the same side
+    if (li > -1) _data.listCats[li] = v;
+    if (_data.catModes && _data.catModes[cat]) {   // and keep how it picks
+      _data.catModes[v] = _data.catModes[cat];
+      delete _data.catModes[cat];
+    }
+    // ...and where it had got to. A rename is not a change of contents.
+    try { renameCursor(catKey(cat), catKey(v)); } catch { /* ignore */ }
+    for (const t of _data.tags) if (t.cat === cat) t.cat = v;
+    if (_curCat === cat) _curCat = v;
+    commit();
+    render();   // the name really changed, so the sidebar and the header must follow
   };
-  inp.addEventListener("keydown", (e) => { e.stopPropagation(); if (e.key === "Enter") commitRename(); if (e.key === "Escape") render(); });
+  const cancelRename = () => { if (inp.isConnected) inp.replaceWith(nmSpan); };
+  inp.addEventListener("keydown", (e) => { e.stopPropagation(); if (e.key === "Enter") commitRename(); if (e.key === "Escape") cancelRename(); });
   inp.addEventListener("blur", commitRename);
 }
 function deleteCat(cat) {
@@ -641,7 +675,14 @@ function buildCreateForm() {
   const sidebarSide = _curCat === "All" ? null : sideOf(_curCat);
   if (sidebarSide && !_createDraft.kindTouched) _createDraft.kind = sidebarSide;
   const sideNow = () => (_createDraft.kind === "list" ? "list" : "text");
-  let createCat = isRealCat(_curCat) && sideOf(_curCat) === sideNow() ? _curCat : "";
+  // A category the user PICKED wins over the sidebar, and survives a re-render; it is
+  // dropped only if it cannot hold the kind being created, or no longer exists.
+  const picked = _createDraft.cat;
+  const pickedUsable = picked != null &&
+    (picked === "" || (_data.categories.some((c) => c === picked) && sideOf(picked) === sideNow()));
+  let createCat = pickedUsable ? picked
+    : (isRealCat(_curCat) && sideOf(_curCat) === sideNow() ? _curCat : "");
+  if (!pickedUsable) _createDraft.cat = null;
   const form = document.createElement("div");
   form.className = "pix-prled-create";
   const nm = document.createElement("input"); nm.className = "cnm"; nm.placeholder = "new tag name"; nm.spellcheck = false;
@@ -663,7 +704,7 @@ function buildCreateForm() {
     // A list needs room to type several lines; a text tag stays on the one-line row.
     tx.style.height = list ? "76px" : "36px";
     // The chosen category only holds one side, so drop it when the kind flips away.
-    if (createCat && sideOf(createCat) !== sideNow()) createCat = "";
+    if (createCat && sideOf(createCat) !== sideNow()) { createCat = ""; _createDraft.cat = null; }
     paintCat();
   };
   // Seed from the in-progress draft so name + text survive a re-render (sidebar
@@ -688,7 +729,7 @@ function buildCreateForm() {
   paintKind();
   catBtn.addEventListener("click", (e) => {
     e.stopPropagation();
-    openCategoryMenu(catBtn, (c) => { createCat = c; paintCat(); }, sideNow());
+    openCategoryMenu(catBtn, (c) => { createCat = c; _createDraft.cat = c; paintCat(); }, sideNow());
   });
   const btn = document.createElement("button"); btn.className = "cbtn"; btn.textContent = "Create tag";
   btn.title = "Add this tag to the library (Ctrl+Enter)";
@@ -920,7 +961,10 @@ function applyLibraryImport(parsed, mode) {
   const res = applyImport(parsed, mode);
   _data = clone(getLibrary());
   render();
-  toast("info", `Imported ${res.added} tag${res.added === 1 ? "" : "s"}.`);
+  const bits = [];
+  if (res.added) bits.push(`${res.added} tag${res.added === 1 ? "" : "s"} added`);
+  if (res.replaced) bits.push(`${res.replaced} replaced`);
+  toast("info", bits.length ? "Imported: " + bits.join(", ") + "." : "Nothing was imported.");
 }
 function showImportModal(parsed) {
   if (!_overlay) return;
@@ -981,7 +1025,10 @@ export function openLibraryEditor(node, opts) {
   injectCSS();
   _node = node; _opts = opts || {}; _accent = _opts.accent || BRAND;
   _createDraft = newDraft((_opts.prefill || "").trim());
-  _data = clone(getLibrary());
+  // Re-read from storage, never the in-memory cache: another tab / window may have
+  // edited the library since this page loaded, and the close path writes this working
+  // copy back wholesale.
+  _data = clone(reloadLibrary());
   _curCat = "All"; _search = "";
 
   const ov = document.createElement("div");
@@ -1036,7 +1083,7 @@ function onKey(e) {
   const active = document.activeElement;
   if (active && _overlay && _overlay.contains(active)) {
     if (active.classList.contains("catinput")) {   // renaming a category: cancel it
-      render();
+      active.blur();                                // its own Escape path puts the label back
       e.stopPropagation();
       return;
     }
@@ -1048,6 +1095,15 @@ function onKey(e) {
     }
     const form = _overlay.querySelector(".pix-prled-create");
     if (form && form.contains(active) && (_createDraft.name || _createDraft.text)) {
+      active.blur();
+      e.stopPropagation();
+      return;
+    }
+    // Any other field in the editor - a card's name or its text, which is where
+    // people actually spend their time, and where Escape is also the reflex for
+    // dismissing the browser's own autofill list. Give up the field, not the editor.
+    const t = active.tagName;
+    if (t === "INPUT" || t === "TEXTAREA") {
       active.blur();
       e.stopPropagation();
       return;
@@ -1066,8 +1122,14 @@ export function closeLibraryEditor() {
   // empty name is dropped by normalize (the tag would be lost otherwise).
   if (_data) {
     for (const t of _data.tags) { const u = uniqueNameExcept(t.name, t); if (u !== t.name) t.name = u; }
-    try { commitLibrary(_data); } catch { /* ignore */ }
+    // Only WRITE the working copy back when it actually differs from what is stored.
+    // Committing unconditionally meant merely opening and closing the editor stamped
+    // this tab's snapshot over the library, silently undoing another tab's edits.
+    try { if (!isSameAsStored(_data)) commitLibrary(_data); } catch { /* ignore */ }
   }
+  // The flush is UNCONDITIONAL: in-editor edits commit through a 350ms debounce, so
+  // skipping it would lose the last one if the tab is closed straight after. It pushes
+  // out what the library module already holds, not this working copy.
   try { flushLibrary(); } catch { /* ignore */ }
   try { flushCursors(); } catch { /* ignore */ }   // write any Start-over straight away
   try { _undoGuardOff?.(); } catch { /* ignore */ }

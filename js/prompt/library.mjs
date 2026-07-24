@@ -30,7 +30,7 @@
 // can never be real categories.
 
 import { app } from "/scripts/app.js";
-import { cleanMode, DEFAULT_MODE } from "./cursors.mjs";
+import { cleanMode, DEFAULT_MODE, resetCursor, listKey } from "./cursors.mjs";
 
 const LIBRARY_SETTING = "Pixaroma.Prompt.Library";
 export const NAME_RE = /[^a-zA-Z0-9_\-]/g;
@@ -205,6 +205,22 @@ export function getLibrary() {
     _data = normalize({});
   }
   return _data;
+}
+
+// Drop the cache so the next getLibrary() re-reads the setting from the server.
+// The library is shared by every tab / window pointing at this ComfyUI, and each one
+// caches it forever, so a second tab's edits are invisible here. Call this before
+// taking a working copy (the editor does, on open) - otherwise the editor could open
+// on a stale snapshot and write it straight back over the other tab's work.
+export function reloadLibrary() { _data = null; return getLibrary(); }
+
+// Would committing `data` actually change anything? Both sides are normalized first,
+// so key order and dropped defaults cannot make an identical library look different
+// (a raw JSON.stringify of a working copy always differs - `clone` and `normalize`
+// order their keys differently).
+export function isSameAsStored(data) {
+  try { return JSON.stringify(normalize(data)) === JSON.stringify(getLibrary()); }
+  catch { return false; }
 }
 
 export function getTags() { return getLibrary().tags; }
@@ -429,13 +445,21 @@ export function applyImport(parsed, mode) {
     return n;
   };
   const toAdd = [];
+  const replaced = [];
   for (const inc of parsed.data.tags) {
     const key = inc.name.toLowerCase();
     if (!byKey.has(key)) {
       const t = { ...inc };
       toAdd.push(t); byKey.set(key, t);
     } else if (mode === "replace") {
-      byKey.get(key).text = inc.text;
+      // Replace the WHOLE tag, not just its text. Copying only `text` left a List
+      // imported over a Text tag still marked Text, so `*Category` pasted all of its
+      // lines at once instead of rolling one - a visibly wrong output, not a UI wart.
+      const t = byKey.get(key);
+      t.text = inc.text;
+      if (inc.kind === "list") t.kind = "list"; else delete t.kind;
+      if (inc.mode) t.mode = inc.mode; else delete t.mode;
+      replaced.push(t.name);
     } else if (mode === "both") {
       const nn = uniqueIn(inc.name);
       const t = { ...inc, name: nn };
@@ -473,5 +497,8 @@ export function applyImport(parsed, mode) {
     if (!mine) next.catModes[k] = v;
   }
   setLibrary(next);
-  return { added: toAdd.length };
+  // A replaced tag's contents are wholly different now, so its old position means
+  // nothing - carrying it over would resume someone else's deck.
+  for (const name of replaced) { try { resetCursor(listKey(name)); } catch { /* ignore */ } }
+  return { added: toAdd.length, replaced: replaced.length };
 }
