@@ -30,6 +30,7 @@
 // can never be real categories.
 
 import { app } from "/scripts/app.js";
+import { cleanMode } from "./cursors.mjs";
 
 const LIBRARY_SETTING = "Pixaroma.Prompt.Library";
 export const NAME_RE = /[^a-zA-Z0-9_\-]/g;
@@ -113,8 +114,11 @@ function normalize(raw) {
     }
     const rec = { name, cat, text: typeof t.text === "string" ? t.text : "" };
     // Only "list" is stored; anything else (missing, "text", junk) stays absent so a
-    // plain text library round-trips byte-identical.
+    // plain text library round-trips byte-identical. Same for mode: "random" is the
+    // default and is never written.
     if (kind === "list") rec.kind = "list";
+    const mode = cleanMode(t.mode);
+    if (kind === "list" && mode !== "random") rec.mode = mode;
     out.tags.push(rec);
   }
   // Reconcile every tag's category to the canonical (case-matching) entry in the
@@ -143,6 +147,18 @@ function normalize(raw) {
     if (side !== (t.kind === "list" ? "list" : "text")) t.cat = "";
   }
   out.listCats = out.categories.filter((c) => listKeys.has(lc(c)));
+  // How each category picks (for its *wildcard). Keyed by the CANONICAL name so a
+  // rename / case-variant can't orphan it; "random" is the default and is dropped.
+  const srcModes = src.catModes && typeof src.catModes === "object" ? src.catModes : {};
+  const byKey = new Map(out.categories.map((c) => [lc(c), c]));
+  byKey.set(lc(TEXT_BUCKET), TEXT_BUCKET);
+  byKey.set(lc(LIST_BUCKET), LIST_BUCKET);
+  out.catModes = {};
+  for (const [k, v] of Object.entries(srcModes)) {
+    const canon = byKey.get(lc(k));
+    const m = cleanMode(v);
+    if (canon && m !== "random") out.catModes[canon] = m;
+  }
   return out;
 }
 
@@ -222,6 +238,13 @@ export function sideOfCat(name, data) {
 }
 export function isListCat(name, data) { return sideOfCat(name, data) === "list"; }
 
+// How a list / a category picks: "random" | "shuffle" | "order" (see cursors.mjs).
+export function tagMode(t) { return cleanMode(t && t.mode); }
+export function catMode(name, data) {
+  const d = data || getLibrary();
+  return cleanMode((d.catModes || {})[name] || (d.catModes || {})[String(name)]);
+}
+
 export function findTag(name) {
   const k = String(name).toLowerCase();
   for (const t of getTags()) if (t.name.toLowerCase() === k) return t;
@@ -285,7 +308,9 @@ export function exportLibraryJSON(cat) {
   // own kind puts them back in the right bucket on import.
   const categories = lib.categories.filter((c) => lc(c) === lc(cat));
   const listCats = categories.filter((c) => isListCat(c, lib));
-  return JSON.stringify({ version: 1, categories, listCats, tags }, null, 2);
+  const catModes = {};
+  for (const c of categories) if ((lib.catModes || {})[c]) catModes[c] = lib.catModes[c];
+  return JSON.stringify({ version: 1, categories, listCats, catModes, tags }, null, 2);
 }
 
 // The buckets a parsed import file contains, in file order, with counts - what the
@@ -310,9 +335,11 @@ export function subsetImport(parsed, names) {
   const tags = (parsed?.data?.tags || []).filter((t) => keep.has(lc(catOf(t))));
   const categories = (parsed?.data?.categories || []).filter((c) => keep.has(lc(c)));
   const listCats = (parsed?.data?.listCats || []).filter((c) => keep.has(lc(c)));
+  const catModes = {};
+  for (const [k, v] of Object.entries(parsed?.data?.catModes || {})) if (keep.has(lc(k))) catModes[k] = v;
   const have = new Set(getTags().map((t) => lc(t.name)));
   const conflicts = tags.filter((t) => have.has(lc(t.name))).map((t) => t.name);
-  return { data: { version: 1, categories, listCats, tags }, conflicts };
+  return { data: { version: 1, categories, listCats, catModes, tags }, conflicts };
 }
 
 // Parse an imported blob into a normalized library WITHOUT applying it. Returns
@@ -323,7 +350,7 @@ export function parseImport(jsonStr) {
   // Accept the full shape, a bare tags array, or { tags:[...] } / { library:[...] }.
   if (Array.isArray(raw)) raw = { tags: raw };
   else if (raw && !Array.isArray(raw.tags)) {
-    raw = { categories: raw.categories, listCats: raw.listCats, tags: raw.tags || raw.library || raw.snippets || raw.prompts };
+    raw = { categories: raw.categories, listCats: raw.listCats, catModes: raw.catModes, tags: raw.tags || raw.library || raw.snippets || raw.prompts };
   }
   const data = normalize(raw);
   if (!data.tags.length) return { error: "No tags found in that file." };
@@ -366,6 +393,7 @@ export function applyImport(parsed, mode) {
     version: 1,
     categories: [...cur.categories],
     listCats: [...(cur.listCats || [])],
+    catModes: { ...(cur.catModes || {}) },
     tags: toAdd.concat(tags), // newest (imported) on top
   };
   const catHave = new Set(next.categories.map((c) => lc(c)));
@@ -379,6 +407,10 @@ export function applyImport(parsed, mode) {
     if (c && !listHave.has(lc(c)) && !cur.categories.some((x) => lc(x) === lc(c))) {
       listHave.add(lc(c)); next.listCats.push(c);
     }
+  }
+  // Same rule for how a category picks: mine wins, theirs only fills a gap.
+  for (const [k, v] of Object.entries(parsed.data.catModes || {})) {
+    if (k && !cur.categories.some((x) => lc(x) === lc(k))) next.catModes[k] = v;
   }
   setLibrary(next);
   return { added: toAdd.length };

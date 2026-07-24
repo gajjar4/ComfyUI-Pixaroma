@@ -5,8 +5,9 @@ import {
 } from "../shared/index.mjs";
 import {
   getTags, getCategories, findTag, subscribe, tagLines, isListTag, isListCat, catOf,
-  TEXT_BUCKET, LIST_BUCKET,
+  tagMode, catMode, TEXT_BUCKET, LIST_BUCKET,
 } from "./library.mjs";
+import { nextIndex, listKey, catKey } from "./cursors.mjs";
 import { expandAll, hasTags, hasWilds, hasLists, scanTokens } from "./expand.mjs";
 import { openLibraryEditor, closeLibraryEditorFor } from "./library_editor.mjs";
 import { openPromptSettings, closePromptSettingsFor, accentOf, getDefaultOrder } from "./settings.mjs";
@@ -176,10 +177,26 @@ const PROMPT_HELP = {
       ],
     },
     {
+      heading: "Random, Shuffle or In order",
+      body:
+        "True random repeats itself: with three options you might get 1, 1, 3, 2, 1. So every list and every category can pick a different way, set on its own card or on the category header in the library:",
+      defs: [
+        ["Random", "any one, every time. Fine for big lists, but the same one can come up twice in a row."],
+        ["Shuffle", "like dealing a shuffled deck: every option comes up once before any repeat, then it reshuffles. Still a surprise, no clumping. This is usually the one you want."],
+        ["In order", "1, 2, 3 and around again. For working through a set deliberately."],
+      ],
+    },
+    {
+      heading: "Where it is up to",
+      body:
+        "Shuffle and In order remember their place between runs and even after you close ComfyUI. The card shows it (`next 3 of 12`, or how many are left in the deck) and the `↺` button next to it starts that list over.\n\n" +
+        "The position belongs to the list itself, so two Prompt nodes using the same `#list` move through it together. It is stored on your machine, never inside a workflow, so sharing a workflow shares nothing about where you were.",
+    },
+    {
       heading: "Reading the colours",
       body:
         "Anything that rolls glows violet, so `*category` and `#list` share that colour; a plain `@tag` stays orange, and an unknown or empty one glows red so you spot a typo.\n\n" +
-        "`Show expanded` shows them as `[random: Styles]` and `[random line: animals]`, because the real pick only happens when you run. Wire a Show Text Pixaroma to the output to see exactly what was chosen. Tip: with a fixed seed the picture only changes when the pick changes, so use a random seed if you want a new image every run.",
+        "`Show expanded` names the mode instead of guessing the pick: `[random: Styles]`, `[shuffled line: animals]`, `[next line: poses]`. The real choice only happens when you run, so wire a Show Text Pixaroma to the output to see exactly what was used. Tip: with a fixed seed the picture only changes when the pick changes, so use a random seed if you want a new image every run.",
     },
     {
       heading: "Save text as a tag",
@@ -253,24 +270,33 @@ function wildCat(name) {
   const pool = getTags().filter((t) => catOf(t).toLowerCase() === canonical.toLowerCase() && typeof t.text === "string");
   return pool.length ? { canonical, pool } : null;
 }
-// RUN resolver: a fresh random tag's text (Math.random at queue time -> new each run).
-// When the pick lands on a LIST tag its lines are the options, so roll one of those
-// too (a category of lists composes: pick a list, then pick a line).
+// The word the preview shows for a mode ("[random: Styles]" / "[next: Styles]").
+const MODE_WORD = { random: "random", shuffle: "shuffled", order: "next" };
+
+// RUN resolver: the next tag from that category at queue time, per the category's
+// mode (random / shuffle / in order - cursors.mjs owns the position). When the pick
+// lands on a LIST tag its lines are the options, so pick one of those too, using
+// THAT list's own mode (a category of lists composes: pick a list, then a line).
 function pickWild(name) {
   const w = wildCat(name);
   if (!w) return null;
-  const t = w.pool[Math.floor(Math.random() * w.pool.length)];
+  const i = nextIndex(catKey(w.canonical), w.pool.length, catMode(w.canonical));
+  const t = w.pool[i < 0 ? 0 : i];
   if (isListTag(t)) {
     const lines = tagLines(t.text);
-    if (lines.length) return lines[Math.floor(Math.random() * lines.length)];
+    if (lines.length) {
+      const j = nextIndex(listKey(t.name), lines.length, tagMode(t));
+      return lines[j < 0 ? 0 : j];
+    }
   }
   return t.text;
 }
 // PREVIEW resolver: a STABLE placeholder (the real pick happens at run time, so the
-// preview must not flicker a different sample on every keystroke).
+// preview must not flicker a different sample on every keystroke) that still names
+// the mode, so you can see how a slot behaves without opening the library.
 function previewWild(name) {
   const w = wildCat(name);
-  return w ? `[random: ${w.canonical}]` : null;
+  return w ? `[${MODE_WORD[catMode(w.canonical)]}: ${w.canonical}]` : null;
 }
 
 // ── #list resolution (a random LINE from one tag) ───────────────────────────
@@ -286,15 +312,17 @@ function listOf(name) {
   const lines = tagLines(t.text);
   return lines.length ? { tag: t, lines } : null;
 }
-// RUN resolver: a fresh random line at queue time.
+// RUN resolver: the next line at queue time, per this list's own mode.
 function pickList(name) {
   const l = listOf(name);
-  return l ? l.lines[Math.floor(Math.random() * l.lines.length)] : null;
+  if (!l) return null;
+  const i = nextIndex(listKey(l.tag.name), l.lines.length, tagMode(l.tag));
+  return l.lines[i < 0 ? 0 : i];
 }
 // PREVIEW resolver: a STABLE placeholder, same reasoning as previewWild.
 function previewList(name) {
   const l = listOf(name);
-  return l ? `[random line: ${l.tag.name}]` : null;
+  return l ? `[${MODE_WORD[tagMode(l.tag)]} line: ${l.tag.name}]` : null;
 }
 // Both random resolvers for the PREVIEW / the RUN, so every call site stays in step.
 const PREVIEW_RESOLVERS = { resolveWild: previewWild, resolveList: previewList };

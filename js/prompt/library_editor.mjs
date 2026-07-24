@@ -11,9 +11,10 @@ import { installGraphUndoGuard } from "../shared/graph_undo_guard.mjs";
 import { BRAND } from "../shared/utils.mjs";
 import {
   getLibrary, commitLibrary, flushLibrary, exportLibraryJSON, parseImport, applyImport,
-  importCategories, subsetImport, isListTag, tagLines, catOf, sideOfCat,
+  importCategories, subsetImport, isListTag, tagLines, catOf, sideOfCat, tagMode, catMode,
   TEXT_BUCKET, LIST_BUCKET, NAME_RE,
 } from "./library.mjs";
+import { MODES, MODE_LABEL, listKey, catKey, cursorInfo, resetCursor, flushCursors } from "./cursors.mjs";
 
 const PAL = ["#e0894b", "#5aa9e6", "#8e7bd6", "#5fbf8f", "#d76b98", "#c9a24b", "#6fb3b8"];
 const ICON_BASE = "/pixaroma/assets/icons/ui/";
@@ -39,7 +40,13 @@ function newDraft(text) {
 let _createDraft = newDraft();
 
 function clone(d) {
-  return { version: 1, categories: [...d.categories], listCats: [...(d.listCats || [])], tags: d.tags.map((t) => ({ ...t })) };
+  return {
+    version: 1,
+    categories: [...d.categories],
+    listCats: [...(d.listCats || [])],
+    catModes: { ...(d.catModes || {}) },
+    tags: d.tags.map((t) => ({ ...t })),
+  };
 }
 function esc(s) { return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
 function sanitizeName(n) { return String(n || "").replace(NAME_RE, ""); }
@@ -177,6 +184,23 @@ function injectCSS() {
     .pix-prled-card.islist { border-color:color-mix(in srgb, var(--acc) 42%, #333); }
     .pix-prled-card .cfoot { flex-wrap:wrap; row-gap:6px; }
     .pix-prled-create .pix-prled-kindsw { height:36px; }
+    /* how a list / category picks: its own row, so the position has room to be shown */
+    .pix-prled-moderow { display:flex; align-items:center; gap:7px; min-width:0; }
+    .pix-prled-mode { flex:none; height:26px; padding:0 9px; border-radius:5px; border:1px solid #4a4a4a; background:transparent;
+      color:#a6a6a6; cursor:pointer; font:11.5px 'Segoe UI',sans-serif; display:inline-flex; align-items:center; gap:6px; white-space:nowrap; }
+    .pix-prled-mode:hover { border-color:var(--acc); color:#fff; }
+    .pix-prled-mode.set { border-color:var(--acc); color:var(--acc); }
+    .pix-prled-mode .car { font-size:9px; opacity:.85; }
+    .pix-prled-moderow .pos { flex:1; min-width:0; text-align:right; color:#767676; font-size:11px;
+      overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .pix-prled-moderow .rst { flex:none; width:24px; height:24px; border-radius:5px; border:1px solid #4a4a4a;
+      background:transparent; color:#a6a6a6; cursor:pointer; font-size:12px; line-height:1; display:none;
+      align-items:center; justify-content:center; }
+    .pix-prled-moderow.on .rst { display:flex; }
+    .pix-prled-moderow .rst:hover { border-color:var(--acc); color:#fff; }
+    .pix-prled-menu .mi.on { color:var(--acc); }
+    .pix-prled-chead .pix-prled-moderow { margin-left:auto; flex:0 0 auto; }
+    .pix-prled-chead .pix-prled-moderow .pos { flex:0 0 auto; }
     /* import preview: which categories from the file to bring in */
     .pix-prled-pick { display:flex; flex-direction:column; gap:6px; max-height:42vh; overflow-y:auto; padding:2px 16px 8px; }
     .pix-prled-pick .row { display:flex; align-items:center; gap:10px; background:#262626; border:1px solid #333;
@@ -310,6 +334,68 @@ function makeKindSwitch(onPick) {
   };
 }
 
+// Pick how a list / category chooses: Random, Shuffle (all of them before any
+// repeat) or In order. Reuses the dark menu, so Escape + outside-click close it.
+const MODE_HINT = {
+  random: "any one, every time",
+  shuffle: "all of them before any repeat",
+  order: "1, 2, 3 and around again",
+};
+function openModeMenu(anchor, current, onPick) {
+  hideCatMenu();
+  const menu = document.createElement("div");
+  menu.className = "pix-prled-menu";
+  menu.style.minWidth = "240px";
+  for (const m of MODES) {
+    const mi = document.createElement("div");
+    mi.className = "mi mrow" + (m === current ? " on" : "");
+    mi.innerHTML = `<span class="nm">${MODE_LABEL[m]}</span><span class="cnt">${MODE_HINT[m]}</span>`;
+    mi.addEventListener("click", () => { hideCatMenu(); onPick(m); });
+    menu.appendChild(mi);
+  }
+  _overlay.appendChild(menu);
+  const r = anchor.getBoundingClientRect();
+  menu.style.left = Math.max(8, Math.min(r.left, window.innerWidth - menu.offsetWidth - 8)) + "px";
+  const below = window.innerHeight - r.bottom;
+  menu.style.top = (below < menu.offsetHeight + 8 ? Math.max(8, r.top - menu.offsetHeight - 6) : r.bottom + 4) + "px";
+  _catMenu = menu;
+}
+// The "Random ▾ · next 3 of 12 · ↺" row shared by a List card and a category header.
+// getMode/setMode read+write wherever the mode lives; key/len drive the position text.
+function makeModeRow({ getMode, setMode, key, len, what }) {
+  const row = document.createElement("div");
+  row.className = "pix-prled-moderow";
+  const btn = document.createElement("button");
+  btn.className = "pix-prled-mode";
+  const pos = document.createElement("span");
+  pos.className = "pos";
+  const rst = document.createElement("button");
+  rst.className = "rst"; rst.textContent = "↺";
+  const paint = () => {
+    const m = getMode();
+    btn.classList.toggle("set", m !== "random");
+    btn.innerHTML = `<span>${MODE_LABEL[m]}</span><span class="car">▾</span>`;
+    btn.title = `How this ${what} picks: ${MODE_LABEL[m]} - ${MODE_HINT[m]}`;
+    row.classList.toggle("on", m !== "random");
+    const info = cursorInfo(key(), len(), m);
+    pos.textContent = info || "";
+    rst.title = `Start this ${what} over`;
+  };
+  btn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    openModeMenu(btn, getMode(), (m) => { setMode(m); commit(); paint(); });
+  });
+  rst.addEventListener("click", (e) => {
+    e.stopPropagation();
+    resetCursor(key());
+    paint();
+    toast("info", `Started that ${what} over`);
+  });
+  row.append(btn, pos, rst);
+  paint();
+  return { el: row, paint };
+}
+
 function makeCard(tag) {
   const card = document.createElement("div");
   card.className = "pix-prled-card";
@@ -363,12 +449,22 @@ function makeCard(tag) {
     render();   // it may have left the category being shown
     if (moved) toast("info", `@${tag.name} moved to ${bucketOf(toList ? "list" : "text")}`);
   });
+  // Only a List picks between things, so only a List needs a mode row.
+  const modeRow = makeModeRow({
+    getMode: () => tagMode(tag),
+    setMode: (m) => { if (m === "random") delete tag.mode; else tag.mode = m; },
+    key: () => listKey(tag.name),
+    len: () => tagLines(tag.text).length,
+    what: "list",
+  });
   function paintKind() {
     const list = isListTag(tag);
     card.classList.toggle("islist", list);
     kindSw.paint(list, tagLines(tag.text).length);
     tx.placeholder = list ? "one option per line" : "what it expands to - the full prompt text";
-    ins.title = list ? "Insert #" + tag.name + " into your prompt (a random line each run)" : "Insert @" + tag.name + " into your prompt";
+    ins.title = list ? "Insert #" + tag.name + " into your prompt (one of its options each run)" : "Insert @" + tag.name + " into your prompt";
+    modeRow.el.style.display = list ? "flex" : "none";
+    if (list) modeRow.paint();
   }
   paintKind();
   const del = document.createElement("button");
@@ -376,7 +472,7 @@ function makeCard(tag) {
   del.innerHTML = `<span class="pix-prled-svg" style="-webkit-mask-image:url(${ICON_BASE}delete.svg);mask-image:url(${ICON_BASE}delete.svg)"></span>`;
   del.addEventListener("click", () => { const i = _data.tags.indexOf(tag); if (i > -1) _data.tags.splice(i, 1); commit(); render(); });
   foot.append(ins, kindSw.el, del);
-  card.append(top, tx, foot);
+  card.append(top, tx, modeRow.el, foot);
   return card;
 }
 
@@ -452,6 +548,10 @@ function startRenameCat(row, cat) {
       if (idx > -1) _data.categories[idx] = v;
       const li = _data.listCats.indexOf(cat);   // keep it on the same side
       if (li > -1) _data.listCats[li] = v;
+      if (_data.catModes && _data.catModes[cat]) {   // and keep how it picks
+        _data.catModes[v] = _data.catModes[cat];
+        delete _data.catModes[cat];
+      }
       for (const t of _data.tags) if (t.cat === cat) t.cat = v;
       if (_curCat === cat) _curCat = v;
       commit();
@@ -466,6 +566,7 @@ function deleteCat(cat) {
   if (idx > -1) _data.categories.splice(idx, 1);
   const li = _data.listCats.indexOf(cat);
   if (li > -1) _data.listCats.splice(li, 1);
+  if (_data.catModes) delete _data.catModes[cat];
   for (const t of _data.tags) if (t.cat === cat) t.cat = "";   // -> that tag's own bucket
   if (_curCat === cat) _curCat = "All";
   commit(); render();
@@ -591,6 +692,21 @@ function renderContent(content) {
       `<span class="c">· ${n} ${word}${n === 1 ? "" : "s"}</span>`;
   }
   head.append(h);
+  // How *thisCategory picks one of its tags. Not shown under "All tags" (there is no
+  // *All to configure).
+  if (_curCat !== "All") {
+    const cat = _curCat;
+    head.appendChild(makeModeRow({
+      getMode: () => catMode(cat, _data),
+      setMode: (m) => {
+        _data.catModes = _data.catModes || {};
+        if (m === "random") delete _data.catModes[cat]; else _data.catModes[cat] = m;
+      },
+      key: () => catKey(cat),
+      len: () => tagsIn(cat).length,
+      what: "category",
+    }).el);
+  }
   content.append(head, buildCreateForm(), buildGrid());
 }
 function render() {
@@ -765,6 +881,7 @@ function showLibraryHelp() {
     `<p><b>Edit a tag.</b> Click a card's name or its text and change it - your edits save on their own.</p>` +
     `<p><b>Text or List.</b> Every card has a switch at the bottom with both choices on it. <b>Text</b> is one piece of writing and <b>@name</b> drops in all of it. <b>List</b> holds one option per line (cat, dog, mouse) and <b>#name</b> drops in a random one, fresh every run. Flip the switch any time: it changes what the card is for, never what your saved prompts do. While the create box at the top is set to List, Enter starts the next option and Ctrl+Enter adds the tag.</p>` +
     `<p><b>Categories.</b> Make them in the left sidebar. Click a card's coloured pill to move that tag to another category. Rename or delete a category from the sidebar (its tags just become Uncategorized). Typing <b>*category</b> in a prompt picks a random tag from it each run.</p>` +
+    `<p><b>Random, Shuffle or In order.</b> A List card and a category header each have a picker for how they choose. <b>Random</b> is any one every time, so the same one can come up twice. <b>Shuffle</b> deals a shuffled deck, so every option comes up once before any repeat: usually the one you want. <b>In order</b> goes 1, 2, 3 and around again. The last two remember their place between runs (the card shows it) and the <b>↺</b> button starts that list over.</p>` +
     `<p><b>Use a tag.</b> Type <b>@</b> (or <b>#</b> for lists, <b>*</b> for categories) in the prompt box for a searchable list, or press <b>Insert</b> on a card to drop it straight into your prompt.</p>` +
     `<p><b>Share.</b> <b>Export</b> saves your tags to a file: everything, or just one category. <b>Import</b> shows you what is in a file so you can pick which categories to bring in, and if a name already exists you choose keep both, replace, or skip.</p>` +
     `</div>` +
@@ -843,6 +960,7 @@ export function closeLibraryEditor() {
     try { commitLibrary(_data); } catch { /* ignore */ }
   }
   try { flushLibrary(); } catch { /* ignore */ }
+  try { flushCursors(); } catch { /* ignore */ }   // write any Start-over straight away
   try { _undoGuardOff?.(); } catch { /* ignore */ }
   _undoGuardOff = null;
   if (_overlay) { try { _overlay.remove(); } catch { /* ignore */ } }
