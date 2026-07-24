@@ -3,8 +3,8 @@ import {
   BRAND, applyAdaptiveCanvasOnly, registerNodeHelp, closeHelpPopup, isVueNodes,
   installResizeFloor, installCanvasZoomPassthrough,
 } from "../shared/index.mjs";
-import { getTags, getCategories, findTag, subscribe, UNCATEGORIZED } from "./library.mjs";
-import { expandAll, hasTags, hasWilds, scanTokens } from "./expand.mjs";
+import { getTags, getCategories, findTag, subscribe, UNCATEGORIZED, tagLines, isListTag } from "./library.mjs";
+import { expandAll, hasTags, hasWilds, hasLists, scanTokens } from "./expand.mjs";
 import { openLibraryEditor, closeLibraryEditorFor } from "./library_editor.mjs";
 import { openPromptSettings, closePromptSettingsFor, accentOf, getDefaultOrder } from "./settings.mjs";
 
@@ -100,6 +100,10 @@ function injectCSS() {
        category is unknown/empty. Colour only - same glyph width so the caret can't drift. */
     .pix-prm-wild { color:#b98cff; }
     .pix-prm-wild.bad { color:#ff4d4d; }
+    /* #lists: teal - the third random kind, clearly not the orange @tag or the violet
+       *wildcard. Red when the tag is unknown or has no usable lines. Colour only. */
+    .pix-prm-list { color:#57d1c9; }
+    .pix-prm-list.bad { color:#ff4d4d; }
     /* preview GROWS with the node (flex, no fixed cap) so a big node shows more.
        LIGHTER gray (not the dark #1d1d1d of the editable inputs) so it reads as a
        read-only preview, not another input box - the green text stays readable. */
@@ -140,6 +144,7 @@ function injectCSS() {
     .pix-prm-ac-i.sel, .pix-prm-ac-i:hover { background:#3a2a24; }
     .pix-prm-ac-n { font:12px monospace; color:var(--acc, ${BRAND}); }
     .pix-prm-ac-i.wild .pix-prm-ac-n { color:#b98cff; }
+    .pix-prm-ac-i.list .pix-prm-ac-n { color:#57d1c9; }
     .pix-prm-ac-d { font-size:10.5px; color:#767676; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:320px; }
     .pix-prm-ac-empty { padding:9px 11px; color:#767676; font-size:11.5px; }
   `;
@@ -149,7 +154,7 @@ function injectCSS() {
 // ── Help ─────────────────────────────────────────────────────────────────
 const PROMPT_HELP = {
   title: "Prompt Pixaroma",
-  tagline: "A prompt box with reusable @tags and an optional text input you can join with.",
+  tagline: "A prompt box with reusable @tags, random slots, and an optional text input you can join with.",
   sections: [
     {
       heading: "Writing a prompt",
@@ -158,14 +163,23 @@ const PROMPT_HELP = {
         "Known tags glow in your accent colour; an unknown `@tag` glows red so you spot a typo. At run time each `@tag` is swapped for its full text, so the box stays short. `Show expanded` previews exactly what will be sent.",
     },
     {
-      heading: "Random slots (wildcards)",
+      heading: "Random each run",
       body:
-        "Type `*` then a category name to drop in a RANDOM tag from that category - a fresh one every time you run. For example `*Styles` becomes a different saved Style each run. Type `*` to get a list of your categories (only single-word names - letters, numbers, `-` or `_` - can be used with `*`; a category with a space in its name still works everywhere else).\n\n" +
-        "A working `*category` glows violet; an unknown or empty one glows red. `Show expanded` shows it as `[random: Styles]` because the real pick only happens when you run - wire a Show Text Pixaroma to the output to see exactly what was chosen. Tip: with a fixed seed the picture only changes when the pick changes, so use a random seed if you want a new image every run.",
+        "Two ways to let a slot change by itself. Both roll again every time you press Run.",
+      defs: [
+        ["`*category`", "a random TAG from that category. `*Styles` becomes a different saved Style each run. Type `*` for a list of your categories. Only single-word names (letters, numbers, `-` or `_`) can be used this way; a category with a space in its name still works everywhere else."],
+        ["`#name`", "a random LINE from one tag. Make a tag, switch it to List in the library, and put one option per line (cat, dog, mouse). Then `#animals` becomes one of them. Type `#` for a list of your lists."],
+      ],
+    },
+    {
+      heading: "Reading the colours",
+      body:
+        "A working `*category` glows violet and a working `#list` glows teal; an unknown or empty one glows red so you spot a typo.\n\n" +
+        "`Show expanded` shows them as `[random: Styles]` and `[random line: animals]`, because the real pick only happens when you run. Wire a Show Text Pixaroma to the output to see exactly what was chosen. Tip: with a fixed seed the picture only changes when the pick changes, so use a random seed if you want a new image every run.",
     },
     {
       heading: "Save text as a tag",
-      body: "Right-click the prompt box for `Copy` and `Save as tag`. Select some text first to act on just that part, or right-click with nothing selected to use the whole prompt. `Save as tag` opens the library with the text already filled in, so you just name it and pick a category.",
+      body: "Right-click the prompt box for `Copy` and `Save as tag`. Select some text first to act on just that part, or right-click with nothing selected to use the whole prompt. `Save as tag` opens the library with the text already filled in, so you just name it and pick a category. If the text you saved has several lines it starts as a `List`, ready to roll one line at a time.",
     },
     {
       heading: "The text input and output",
@@ -180,7 +194,8 @@ const PROMPT_HELP = {
       heading: "The tag library",
       body:
         "The `Tags` button opens the fullscreen library: categories down the left, tags on the right. Add, rename, move between categories, or delete. New tags appear at the top.\n\n" +
-        "Your library is saved in ComfyUI's own settings, so it is private to you and survives updating the plugin - it is never saved into a workflow. Share it on purpose with `Export` / `Import` (Import lets you keep both, replace, or skip when a name already exists).",
+        "Every card is either a `Snippet` (the whole text is used) or a `List` (one option per line, one picked at random). Click the button on the card to switch. A List card shows how many options it holds, and its `Insert` drops `#name` into your prompt instead of `@name`.\n\n" +
+        "Your library is saved in ComfyUI's own settings, so it is private to you and survives updating the plugin. It is never saved into a workflow. Share it on purpose with `Export` and `Import`: Export lets you save everything or just one category, and Import shows you what is in the file so you can bring in only the categories you want (then keep both, replace, or skip when a name already exists).",
     },
     {
       heading: "Gear settings",
@@ -188,7 +203,10 @@ const PROMPT_HELP = {
     },
     {
       heading: "Good to know",
-      body: "A tag expands to plain text (one level, no tag-inside-a-tag), and a *wildcard drops in one tag's text (also one level). A workflow run without a browser (pure API) cannot expand @tags, roll *wildcards, or read your library - type into a plain Text node for those, or wire the text input.",
+      body:
+        "Everything expands one level: a tag becomes plain text, a `*wildcard` drops in one tag's text, and a `#list` drops in one line. A tag inside a tag is left as it is.\n\n" +
+        "The symbol always decides what happens, so nothing can go wrong if you mix them: `@` on a List gives you the whole block, and `#` on a normal tag rolls one of its lines.\n\n" +
+        "A workflow run without a browser (pure API) cannot expand `@tags`, roll `*wildcards` or `#lists`, or read your library. Type into a plain Text node for those, or wire the text input.",
     },
   ],
 };
@@ -231,9 +249,17 @@ function wildCat(name) {
   return pool.length ? { canonical, pool } : null;
 }
 // RUN resolver: a fresh random tag's text (Math.random at queue time -> new each run).
+// When the pick lands on a LIST tag its lines are the options, so roll one of those
+// too (a category of lists composes: pick a list, then pick a line).
 function pickWild(name) {
   const w = wildCat(name);
-  return w ? w.pool[Math.floor(Math.random() * w.pool.length)].text : null;
+  if (!w) return null;
+  const t = w.pool[Math.floor(Math.random() * w.pool.length)];
+  if (isListTag(t)) {
+    const lines = tagLines(t.text);
+    if (lines.length) return lines[Math.floor(Math.random() * lines.length)];
+  }
+  return t.text;
 }
 // PREVIEW resolver: a STABLE placeholder (the real pick happens at run time, so the
 // preview must not flicker a different sample on every keystroke).
@@ -241,6 +267,33 @@ function previewWild(name) {
   const w = wildCat(name);
   return w ? `[random: ${w.canonical}]` : null;
 }
+
+// ── #list resolution (a random LINE from one tag) ───────────────────────────
+// The SINGLE source of "is this #list live", shared by the highlight, the preview,
+// the run and the autocomplete count so they can never disagree. The SYMBOL is the
+// authority, not the tag's stored kind: #name rolls a line from whatever that tag
+// holds (a one-line snippet just returns itself), and @name still gives the whole
+// text - so no combination can error. Returns {tag, lines} or null (unknown name /
+// no usable lines -> the #token is left literal).
+function listOf(name) {
+  const t = findTag(name);
+  if (!t || typeof t.text !== "string") return null;
+  const lines = tagLines(t.text);
+  return lines.length ? { tag: t, lines } : null;
+}
+// RUN resolver: a fresh random line at queue time.
+function pickList(name) {
+  const l = listOf(name);
+  return l ? l.lines[Math.floor(Math.random() * l.lines.length)] : null;
+}
+// PREVIEW resolver: a STABLE placeholder, same reasoning as previewWild.
+function previewList(name) {
+  const l = listOf(name);
+  return l ? `[random line: ${l.tag.name}]` : null;
+}
+// Both random resolvers for the PREVIEW / the RUN, so every call site stays in step.
+const PREVIEW_RESOLVERS = { resolveWild: previewWild, resolveList: previewList };
+const RUN_RESOLVERS = { resolveWild: pickWild, resolveList: pickList };
 
 // A dark custom dropdown (never a native white <select> - house rule). Returns
 // { el, set(value) }. `options` is [{value,label}]; onChange(value) fires on pick.
@@ -311,6 +364,7 @@ const SEP_OPTIONS = [
 // ── @-autocomplete (single body-level popup) ───────────────────────────────
 const TAG_TOKEN_RE = /@([a-zA-Z0-9_\-]*)$/;
 const WILD_TOKEN_RE = /\*([a-zA-Z0-9_\-]*)$/;
+const LIST_TOKEN_RE = /#([a-zA-Z0-9_\-]*)$/;
 let _acEl = null;
 let _ac = null; // { node, ta, start, items, sel }
 
@@ -361,6 +415,15 @@ function maybeAC(node, ta) {
     openAC(node, ta, start, mw[1].toLowerCase(), "wild");
     return;
   }
+  // #list autocomplete - same boundary (a "#" glued to a word isn't a token).
+  const ml = LIST_TOKEN_RE.exec(upto);
+  if (ml) {
+    const start = pos - ml[0].length;
+    const prev = start > 0 ? ta.value[start - 1] : "";
+    if (prev && /[\p{L}\p{N}\p{M}_#]/u.test(prev)) { closeAC(); return; }
+    openAC(node, ta, start, ml[1].toLowerCase(), "list");
+    return;
+  }
   closeAC();
 }
 function openAC(node, ta, start, q, mode) {
@@ -369,9 +432,41 @@ function openAC(node, ta, start, q, mode) {
   el.style.setProperty("--acc", accentOf(node));
   el.innerHTML = "";
   const flat = [];
-  const sym = mode === "wild" ? "*" : "@";
+  const sym = mode === "wild" ? "*" : mode === "list" ? "#" : "@";
 
-  if (mode === "wild") {
+  if (mode === "list") {
+    // #lists offer the tags MARKED as a list (the Snippet / List switch in the
+    // library), with the number of options they roll from - straight out of listOf so
+    // the count is exactly the pool. Picking inserts #name.
+    const lists = getTags()
+      .filter((t) => isListTag(t) && t.name.toLowerCase().includes(q))
+      .map((t) => ({ name: t.name, lines: listOf(t.name)?.lines || [] }))
+      .filter((t) => t.lines.length > 0);
+    if (!lists.length) {
+      const e = document.createElement("div");
+      e.className = "pix-prm-ac-empty";
+      e.textContent = q
+        ? `No list matches "#${q}".`
+        : "No lists yet. Open Tags, then switch a tag to List and put one option per line.";
+      el.appendChild(e);
+    } else {
+      const h = document.createElement("div");
+      h.className = "pix-prm-ac-h";
+      h.innerHTML = `<span class="cd" style="background:#57d1c9"></span>random line from a list`;
+      el.appendChild(h);
+      for (const t of lists) {
+        const idx = flat.length;
+        flat.push({ name: t.name });
+        const d = document.createElement("div");
+        d.className = "pix-prm-ac-i list" + (idx === 0 ? " sel" : "");
+        d.dataset.i = String(idx);
+        d.innerHTML = `<div class="pix-prm-ac-n">#${escapeHTML(t.name)}</div>` +
+          `<div class="pix-prm-ac-d">${t.lines.length} option${t.lines.length === 1 ? "" : "s"} · ${escapeHTML(t.lines.slice(0, 3).join(" · "))}</div>`;
+        d.addEventListener("mousedown", (e) => { e.preventDefault(); pickAC(flat[idx]); });
+        el.appendChild(d);
+      }
+    }
+  } else if (mode === "wild") {
     // *wildcards list only categories that (a) can be TYPED as one *token - the token
     // grammar is [A-Za-z0-9_-]+, but a category name may contain spaces/symbols a
     // *token can't capture (offering "Sci Fi" would insert *Sci Fi and leave garbage);
@@ -429,7 +524,11 @@ function openAC(node, ta, start, q, mode) {
           const d = document.createElement("div");
           d.className = "pix-prm-ac-i" + (idx === 0 ? " sel" : "");
           d.dataset.i = String(idx);
-          d.innerHTML = `<div class="pix-prm-ac-n">@${escapeHTML(t.name)}</div><div class="pix-prm-ac-d">${escapeHTML(t.text)}</div>`;
+          // A List tag is offered here too (@ gives the WHOLE block), flagged so it is
+          // obvious that #name is the one that rolls a single line.
+          const opts = isListTag(t) ? tagLines(t.text).length : 0;
+          const desc = opts ? `list of ${opts} · @ inserts them all, #${t.name} rolls one` : t.text;
+          d.innerHTML = `<div class="pix-prm-ac-n">@${escapeHTML(t.name)}</div><div class="pix-prm-ac-d">${escapeHTML(desc)}</div>`;
           d.addEventListener("mousedown", (e) => { e.preventDefault(); pickAC(flat[idx]); });
           el.appendChild(d);
         }
@@ -458,13 +557,13 @@ function updateACSel() {
 // previous @tag, so inserts never produce "@a@b" (which reads badly and is
 // awkward to edit). See expand.mjs - chained tags DO expand, but a space is cleaner.
 function tagSep(before) {
-  return (before && /[\p{L}\p{N}\p{M}_@*]$/u.test(before)) ? " " : "";
+  return (before && /[\p{L}\p{N}\p{M}_@*#]$/u.test(before)) ? " " : "";
 }
 // A trailing space after an inserted tag (unless the next char already separates
 // it), so typing more text continues as a SEPARATE word instead of extending the
 // tag name (@goldenhour + "asdas" -> "@goldenhour asdas", not "@goldenhourasdas").
 function tagTrail(after) {
-  return (!after || /^[\p{L}\p{N}\p{M}_@*]/u.test(after)) ? " " : "";
+  return (!after || /^[\p{L}\p{N}\p{M}_@*#]/u.test(after)) ? " " : "";
 }
 function pickAC(item) {
   if (!_ac) return;
@@ -513,8 +612,8 @@ function buildRoot(node) {
   backdrop.className = "pix-prm-backdrop";
   const ta = document.createElement("textarea");
   ta.className = "pix-prm-ta";
-  ta.placeholder = "your prompt - @ inserts a tag, * a random from a category";
-  ta.title = "Type your prompt. @name inserts a tag, *category picks a random tag each run. Ctrl+Enter runs the workflow.";
+  ta.placeholder = "your prompt - @ a tag, * a random tag, # a random line";
+  ta.title = "Type your prompt. @name inserts a tag, *category picks a random tag each run, #name picks a random line from a list. Ctrl+Enter runs the workflow.";
   ta.spellcheck = false;
   tawrap.append(backdrop, ta);
 
@@ -579,7 +678,7 @@ function readNodeText(src, depth) {
   const cls = src.comfyClass || src.type;
   if (cls === "PixaromaPrompt") {
     const t = src.properties?.promptState?.text;
-    return typeof t === "string" ? expandAll(t, { resolveWild: previewWild }).out : null; // its own typed text, tags + wildcards shown
+    return typeof t === "string" ? expandAll(t, PREVIEW_RESOLVERS).out : null; // its own typed text, tags + random slots shown
   }
   const readW = (names) => {
     for (const name of names) {
@@ -609,9 +708,12 @@ function renderBackdrop(node) {
     if (h.kind === "tag") {
       const known = !!findTag(h.name);
       html += `<span class="pix-prm-chip${known ? "" : " bad"}">${escapeHTML(h.raw)}</span>`;
-    } else {
+    } else if (h.kind === "wild") {
       const known = !!wildCat(h.name);
       html += `<span class="pix-prm-wild${known ? "" : " bad"}">${escapeHTML(h.raw)}</span>`;
+    } else {
+      const known = !!listOf(h.name);
+      html += `<span class="pix-prm-list${known ? "" : " bad"}">${escapeHTML(h.raw)}</span>`;
     }
     i = h.end;
   }
@@ -629,9 +731,9 @@ function renderExpand(node) {
   const st = readState(node);
   const wired = isWired(node);
   const v = els.ta.value;
-  if (!st.showExpanded || (!hasTags(v) && !hasWilds(v) && !wired)) { els.expand.style.display = "none"; return; }
+  if (!st.showExpanded || (!hasTags(v) && !hasWilds(v) && !hasLists(v) && !wired)) { els.expand.style.display = "none"; return; }
   els.expand.style.display = "block";
-  const mine = expandAll(v, { resolveWild: previewWild }).out;
+  const mine = expandAll(v, PREVIEW_RESOLVERS).out;
   if (!wired) {
     els.expand.innerHTML = `<span class="mine">${escapeHTML(mine)}</span>`;
     return;
@@ -840,18 +942,21 @@ function openLibraryFor(node, prefill) {
   openLibraryEditor(node, {
     accent: accentOf(node),
     prefill: prefill || "",
-    onInsert: (name) => {
+    // `sym` is "#" for a List tag (roll one line) and "@" for a snippet - the editor
+    // decides from the card's own kind so Insert always drops in the useful form.
+    onInsert: (name, sym) => {
       if (!els) return;
+      const s = sym === "#" ? "#" : "@";
       const ta = els.ta;
       const p = ta.selectionStart;
       const before = ta.value.slice(0, p);
       const after = ta.value.slice(p);
-      const ins = tagSep(before) + "@" + name + tagTrail(after);
+      const ins = tagSep(before) + s + name + tagTrail(after);
       ta.value = before + ins + after;
       ta.selectionStart = ta.selectionEnd = p + ins.length;
       writeState(node, { text: ta.value });
       refreshBody(node);
-      toast("info", "Inserted @" + name + " into the prompt");
+      toast("info", "Inserted " + s + name + " into the prompt");
     },
   });
 }
@@ -1035,10 +1140,11 @@ app.graphToPrompt = async function (...args) {
           if (!index) index = buildPromptNodeIndex();
           const node = findPromptNode(index, key);
           const st = node ? readState(node) : { text: "", order: "mine", sep: ", " };
-          // Roll every *wildcard to a random tag NOW (queue time), so each run gets a
-          // fresh pick; @tags expand deterministically. A different pick changes this
-          // string -> the cache key changes -> re-run (no nonce needed, invariant #3).
-          const expanded = expandAll(st.text, { resolveWild: pickWild }).out;
+          // Roll every *wildcard (a random tag) and every #list (a random line) NOW, at
+          // queue time, so each run gets a fresh pick; @tags expand deterministically. A
+          // different pick changes this string -> the cache key changes -> re-run (no
+          // nonce needed, invariant #3).
+          const expanded = expandAll(st.text, RUN_RESOLVERS).out;
           entry.inputs = entry.inputs || {};
           // Cosmetic keys (accent, showExpanded) are DELIBERATELY excluded so a colour
           // pick can't change the run's cache key (project note on injected state).

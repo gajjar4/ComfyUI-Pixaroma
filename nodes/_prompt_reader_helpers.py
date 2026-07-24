@@ -192,8 +192,9 @@ _PROMPT_PACK_CLASS = "PixaromaPromptPack"
 # `prompts` input back to the upstream Multi and indexes rowTexts.
 _PROMPT_FROM_LIST_CLASS = "PixaromaPromptFromList"
 
-# Prompt Pixaroma: a prompt box whose typed text (with @tags ALREADY expanded at
-# submit time by js/prompt/index.js's graphToPrompt hook) lives in the hidden
+# Prompt Pixaroma: a prompt box whose typed text (with @tags ALREADY expanded and
+# every *category / #list random slot ALREADY rolled at submit time by
+# js/prompt/index.js's graphToPrompt hook) lives in the hidden
 # PromptState STRING input {"text": str, "order": "mine"|"wired", "sep": str},
 # plus an OPTIONAL wired `text_in` it JOINS with. The walker reads PromptState AND
 # follows text_in, combining exactly like nodes/node_prompt.py run().
@@ -469,7 +470,8 @@ def _pix_prompt_parse_state(inputs: dict):
     """Parse a PixaromaPrompt's hidden PromptState into (mine, order, sep).
 
     Mirrors nodes/node_prompt.py _parse_state: `mine` is the typed prompt with
-    @tags ALREADY expanded (baked at submit time), `order` is "mine"|"wired",
+    @tags expanded and every *category / #list random slot rolled (baked at
+    submit time, so this is exactly the text that made the image), `order` is "mine"|"wired",
     `sep` the join separator. Defaults on any malformed / missing state.
     """
     raw = inputs.get("PromptState")

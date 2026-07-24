@@ -1,39 +1,40 @@
-// Prompt Pixaroma - @tag -> snippet-text expansion AND *category -> random-tag
-// wildcards (one level, no nesting).
+// Prompt Pixaroma - @tag -> snippet-text expansion, *category -> random-tag
+// wildcards, and #list -> one random LINE of a tag (one level, no nesting).
 //
 // Used by BOTH the node body (live "Show expanded" preview + coloured highlighting)
 // and the app.graphToPrompt hook (the real swap at queue time). Keep it pure so the
-// two never disagree. The RANDOMNESS for *wildcards does NOT live here - the caller
-// passes a resolveWild() callback (a random pick at run time, a stable placeholder
-// in the preview), so expand.mjs stays deterministic + testable.
+// two never disagree. The RANDOMNESS does NOT live here - the caller passes
+// resolveWild() / resolveList() callbacks (a random pick at run time, a stable
+// placeholder in the preview), so expand.mjs stays deterministic + testable.
 
 import { getTags } from "./library.mjs";
 
-// @name = a saved tag; *name = a random-from-category wildcard. name = letters /
-// digits / _ / - .
-const TOKEN_RE = /([@*])([a-zA-Z0-9_\-]+)/g;
+// @name = a saved tag; *name = a random-from-category wildcard; #name = a random
+// LINE from that tag's text. name = letters / digits / _ / - .
+const TOKEN_RE = /([@*#])([a-zA-Z0-9_\-]+)/g;
+const KIND_BY_SYM = { "@": "tag", "*": "wild", "#": "list" };
 
-// Left-to-right scan for @tag and *wild tokens. A token counts when it's at the
-// very start, after a NON-word char (space, comma, ...), OR immediately after
-// another token (a chain like @a@b / @a*b). This lets adjacent tokens work while
+// Left-to-right scan for @tag, *wild and #list tokens. A token counts when it's at
+// the very start, after a NON-word char (space, comma, ...), OR immediately after a
+// SAME-KIND token (a chain like @a@b / #a#b). This lets adjacent tokens work while
 // leaving an email's "user@name" (and arithmetic like "2*2") alone - their symbol
 // sits after a word char with no preceding token. Returns
-// [{kind:'tag'|'wild', sym, name, start, end, raw}]. Shared by scanTags / scanWilds
-// / expandAll AND the node's highlight backdrop so all of them agree on exactly
-// which tokens count.
+// [{kind:'tag'|'wild'|'list', sym, name, start, end, raw}]. Shared by scanTags /
+// scanWilds / scanLists / expandAll AND the node's highlight backdrop so all of them
+// agree on exactly which tokens count.
 export function scanTokens(text) {
   const out = [];
-  if (typeof text !== "string" || !/[@*]/.test(text)) return out;
+  if (typeof text !== "string" || !/[@*#]/.test(text)) return out;
   TOKEN_RE.lastIndex = 0;
   let m, lastEnd = -1, lastKind = null;
   while ((m = TOKEN_RE.exec(text))) {
     const at = m.index;
-    const kind = m[1] === "@" ? "tag" : "wild";
+    const kind = KIND_BY_SYM[m[1]];
     const prev = at > 0 ? text[at - 1] : "";
     // Unicode-aware: a letter/number/combining-mark/_ before the symbol (incl.
     // accented / CJK, precomposed OR decomposed) means it's an email local part or
     // arithmetic, not a token - UNLESS it chains off a SAME-KIND token immediately
-    // before it (@a@b, *a*b). Cross-kind is deliberately NOT chained: an unknown
+    // before it (@a@b, *a*b, #a#b). Cross-kind is deliberately NOT chained: an unknown
     // *wildcard must never promote a following @tag into expanding (or vice-versa) -
     // that would silently rewrite the prompt. Adjacency like @tag*Cat just needs a space.
     const chains = at === lastEnd && kind === lastKind;
@@ -52,21 +53,27 @@ export function scanTokens(text) {
 export function scanTags(text) { return scanTokens(text).filter((t) => t.kind === "tag"); }
 // *wildcards only.
 export function scanWilds(text) { return scanTokens(text).filter((t) => t.kind === "wild"); }
+// #lists only.
+export function scanLists(text) { return scanTokens(text).filter((t) => t.kind === "list"); }
 
-// Expand @tags AND resolve *wildcards. `resolveWild(name)` returns the replacement
-// string, or null/undefined to leave the *token literal (unknown / empty category);
-// omit it to leave every *wildcard literal (pure @tag expansion). The caller owns
-// the randomness. Returns { out, knownTags, unknownTags, knownWilds, unknownWilds }.
+// Expand @tags AND resolve *wildcards / #lists. `resolveWild(name)` and
+// `resolveList(name)` return the replacement string, or null/undefined to leave that
+// token literal (unknown name, empty category, no usable lines); omit them to leave
+// every random token literal (pure @tag expansion). The caller owns the randomness.
+// Returns { out, knownTags, unknownTags, knownWilds, unknownWilds, knownLists, unknownLists }.
 export function expandAll(text, opts = {}) {
-  const { tags, resolveWild } = opts;
-  if (typeof text !== "string" || !/[@*]/.test(text)) {
-    return { out: typeof text === "string" ? text : "", knownTags: [], unknownTags: [], knownWilds: [], unknownWilds: [] };
+  const { tags, resolveWild, resolveList } = opts;
+  if (typeof text !== "string" || !/[@*#]/.test(text)) {
+    return {
+      out: typeof text === "string" ? text : "",
+      knownTags: [], unknownTags: [], knownWilds: [], unknownWilds: [], knownLists: [], unknownLists: [],
+    };
   }
   const list = tags || getTags();
   const map = new Map();
   for (const t of list) map.set(t.name.toLowerCase(), t.text);
   const toks = scanTokens(text);
-  const knownTags = [], unknownTags = [], knownWilds = [], unknownWilds = [];
+  const knownTags = [], unknownTags = [], knownWilds = [], unknownWilds = [], knownLists = [], unknownLists = [];
   let out = "";
   let i = 0;
   for (const h of toks) {
@@ -75,21 +82,25 @@ export function expandAll(text, opts = {}) {
       const v = map.get(h.name.toLowerCase());
       if (v != null) { out += v; knownTags.push(h.name); }
       else { out += h.raw; unknownTags.push(h.name); } // unknown tag left literal
-    } else {
+    } else if (h.kind === "wild") {
       const rep = typeof resolveWild === "function" ? resolveWild(h.name) : null;
       if (rep != null) { out += rep; knownWilds.push(h.name); }
       else { out += h.raw; unknownWilds.push(h.name); } // unknown / empty category left literal
+    } else {
+      const rep = typeof resolveList === "function" ? resolveList(h.name) : null;
+      if (rep != null) { out += rep; knownLists.push(h.name); }
+      else { out += h.raw; unknownLists.push(h.name); } // unknown tag / no usable lines left literal
     }
     i = h.end;
   }
   out += text.slice(i);
-  return { out, knownTags, unknownTags, knownWilds, unknownWilds };
+  return { out, knownTags, unknownTags, knownWilds, unknownWilds, knownLists, unknownLists };
 }
 
 // Expand @tags only (deterministic). Kept as the single @-only path; delegates to
 // expandAll with no wildcard resolver. Returns { out, unknown, known }.
 export function expandTags(text, tags) {
-  const r = expandAll(text, { tags, resolveWild: null });
+  const r = expandAll(text, { tags, resolveWild: null, resolveList: null });
   return { out: r.out, unknown: r.unknownTags, known: r.knownTags };
 }
 
@@ -102,4 +113,9 @@ export function hasTags(text) {
 export function hasWilds(text) {
   if (typeof text !== "string" || text.indexOf("*") === -1) return false;
   return scanWilds(text).length > 0;
+}
+// Does this text reference at least one #list?
+export function hasLists(text) {
+  if (typeof text !== "string" || text.indexOf("#") === -1) return false;
+  return scanLists(text).length > 0;
 }

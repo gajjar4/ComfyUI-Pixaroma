@@ -14,6 +14,11 @@
 //
 // tags are kept newest-first (new ones are unshifted on). categories are ordered
 // and may be empty; "Uncategorized" is the implicit bucket for a tag with no cat.
+//
+// A tag also carries an OPTIONAL kind:"list" - one option per line, rolled to a
+// single line by a #name token (see expand.mjs). The key is written ONLY when it is
+// "list", so an existing library / an old export file needs no migration and is
+// never rewritten just to add a default.
 
 import { app } from "/scripts/app.js";
 
@@ -75,7 +80,11 @@ function normalize(raw) {
     seenTag.add(key);
     let cat = String(t.cat || "").trim();
     if (cat.toLowerCase() === UNCATEGORIZED.toLowerCase()) cat = "";
-    out.tags.push({ name, cat, text: typeof t.text === "string" ? t.text : "" });
+    const rec = { name, cat, text: typeof t.text === "string" ? t.text : "" };
+    // Only "list" is stored; anything else (missing, "text", junk) stays absent so a
+    // plain snippet library round-trips byte-identical.
+    if (t.kind === "list") rec.kind = "list";
+    out.tags.push(rec);
   }
   // Reconcile every tag's category to the canonical (case-matching) entry in the
   // list; a category a tag references but the list forgot is added - so the editor
@@ -138,6 +147,24 @@ export function getCategories() {
   return out;
 }
 
+// Is this tag meant to be rolled one line at a time? (Cosmetic + convenience only:
+// the SYMBOL decides what actually happens at expand time, so a mismatch can never
+// error - see .claude/patterns/prompt.md #25.)
+export function isListTag(t) { return !!t && t.kind === "list"; }
+
+// THE splitter for a list tag's options: one per line, trimmed, blanks dropped.
+// Shared by the run pick, the preview, the highlight and the autocomplete count so
+// none of them can disagree about whether a #list is live.
+export function tagLines(text) {
+  if (typeof text !== "string") return [];
+  const out = [];
+  for (const raw of text.split(/\r?\n/)) { const s = raw.trim(); if (s) out.push(s); }
+  return out;
+}
+
+// The bucket label a tag belongs to ("" -> "Uncategorized").
+export function catOf(t) { return (t && t.cat) || UNCATEGORIZED; }
+
 export function findTag(name) {
   const k = String(name).toLowerCase();
   for (const t of getTags()) if (t.name.toLowerCase() === k) return t;
@@ -189,8 +216,42 @@ export function flushLibrary() {
 
 export function subscribe(fn) { _subs.add(fn); return () => _subs.delete(fn); }
 
-export function exportLibraryJSON() {
-  return JSON.stringify(getLibrary(), null, 2);
+// Serialize the library for a file. `cat` omitted / null = everything; otherwise
+// only that one bucket (pass UNCATEGORIZED for the uncategorized tags). A scoped
+// export still carries its category entry so the tags land back in the right place.
+export function exportLibraryJSON(cat) {
+  const lib = getLibrary();
+  if (cat == null) return JSON.stringify(lib, null, 2);
+  const key = String(cat).toLowerCase();
+  const tags = lib.tags.filter((t) => catOf(t).toLowerCase() === key);
+  const categories = lib.categories.filter((c) => c.toLowerCase() === key);
+  return JSON.stringify({ version: 1, categories, tags }, null, 2);
+}
+
+// The buckets a parsed import file contains, in file order, with counts - what the
+// import preview lists so the user can bring in only the categories they want.
+export function importCategories(parsed) {
+  const out = [];
+  const seen = new Map();
+  for (const t of (parsed?.data?.tags || [])) {
+    const c = catOf(t);
+    const k = c.toLowerCase();
+    if (!seen.has(k)) { seen.set(k, { name: c, count: 0 }); out.push(seen.get(k)); }
+    seen.get(k).count += 1;
+  }
+  return out;
+}
+
+// Narrow a parsed import to the chosen buckets and RECOMPUTE the clashes against the
+// live library, so the keep-both / replace / skip step only ever sees tags that are
+// actually coming in. Same { data, conflicts } shape parseImport returns.
+export function subsetImport(parsed, names) {
+  const keep = new Set((names || []).map((n) => String(n).toLowerCase()));
+  const tags = (parsed?.data?.tags || []).filter((t) => keep.has(catOf(t).toLowerCase()));
+  const categories = (parsed?.data?.categories || []).filter((c) => keep.has(String(c).toLowerCase()));
+  const have = new Set(getTags().map((t) => t.name.toLowerCase()));
+  const conflicts = tags.filter((t) => have.has(t.name.toLowerCase())).map((t) => t.name);
+  return { data: { version: 1, categories, tags }, conflicts };
 }
 
 // Parse an imported blob into a normalized library WITHOUT applying it. Returns

@@ -11,6 +11,7 @@ import { installGraphUndoGuard } from "../shared/graph_undo_guard.mjs";
 import { BRAND } from "../shared/utils.mjs";
 import {
   getLibrary, commitLibrary, flushLibrary, exportLibraryJSON, parseImport, applyImport,
+  importCategories, subsetImport, isListTag, tagLines,
   UNCATEGORIZED, NAME_RE,
 } from "./library.mjs";
 
@@ -28,8 +29,14 @@ let _catMenu = null;
 let _accent = BRAND;
 // In-progress create-form values, kept alive across re-renders (clicking a sidebar
 // category or typing in search rebuilds the form) so a typed OR prefilled name/text
-// is never lost. Cleared on Create and on close.
-let _createDraft = { name: "", text: "" };
+// is never lost. Cleared on Create and on close. `kind` starts as a List when the
+// text has 2+ lines (a saved multi-line selection is almost always a list) and stops
+// following the text once the user clicks the switch (kindTouched).
+function newDraft(text) {
+  const t = text || "";
+  return { name: "", text: t, kind: tagLines(t).length > 1 ? "list" : "text", kindTouched: false };
+}
+let _createDraft = newDraft();
 
 function clone(d) { return { version: 1, categories: [...d.categories], tags: d.tags.map((t) => ({ ...t })) }; }
 function esc(s) { return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
@@ -137,6 +144,34 @@ function injectCSS() {
     .pix-prled-ic { width:32px; height:30px; border-radius:5px; border:1px solid #4a4a4a; background:transparent; color:#a6a6a6; cursor:pointer; display:flex; align-items:center; justify-content:center; font-size:14px; }
     .pix-prled-ic:hover { border-color:var(--acc); color:#fff; }
     .pix-prled-ic.del:hover { background:#e2554a; border-color:#e2554a; color:#fff; }
+    /* Snippet / List switch (card footer + create form). Teal when it is a List, the
+       same colour the #name token glows in the prompt box. */
+    .pix-prled-kind { flex:none; height:30px; padding:0 10px; border-radius:5px; border:1px solid #4a4a4a; background:transparent;
+      color:#a6a6a6; cursor:pointer; font:11.5px 'Segoe UI',sans-serif; display:inline-flex; align-items:center; gap:6px; white-space:nowrap; }
+    .pix-prled-kind:hover { border-color:var(--acc); color:#fff; }
+    .pix-prled-kind.on { border-color:#57d1c9; color:#57d1c9; }
+    .pix-prled-kind.on:hover { background:#57d1c9; border-color:#57d1c9; color:#10201f; }
+    .pix-prled-card.islist { border-color:#33514f; }
+    .pix-prled-create .pix-prled-kind { height:36px; }
+    /* import preview: which categories from the file to bring in */
+    .pix-prled-pick { display:flex; flex-direction:column; gap:6px; max-height:42vh; overflow-y:auto; padding:2px 16px 8px; }
+    .pix-prled-pick .row { display:flex; align-items:center; gap:10px; background:#262626; border:1px solid #333;
+      border-radius:8px; padding:9px 12px; cursor:pointer; }
+    .pix-prled-pick .row:hover { border-color:var(--acc); }
+    .pix-prled-pick .row input { accent-color:var(--acc); width:15px; height:15px; cursor:pointer; flex:none; }
+    .pix-prled-pick .row .cd { width:10px; height:10px; border-radius:50%; flex:none; }
+    .pix-prled-pick .row .nm { flex:1; min-width:0; color:#fff; font:13px 'Segoe UI',sans-serif; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .pix-prled-pick .row .cnt { color:#a6a6a6; font-size:11.5px; flex:none; }
+    .pix-prled-mfoot { display:flex; align-items:center; gap:9px; padding:2px 16px 16px; }
+    .pix-prled-mfoot .push { margin-left:auto; }
+    .pix-prled-mlink { background:none; border:0; color:var(--acc); font:12px 'Segoe UI',sans-serif; cursor:pointer; padding:2px 4px; }
+    .pix-prled-mlink:hover { text-decoration:underline; }
+    .pix-prled-menu .mrow { display:flex; align-items:center; gap:9px; }
+    .pix-prled-menu .mrow .nm { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .pix-prled-menu .mrow .cnt { color:#767676; font-size:11px; flex:none; }
+    .pix-prled-menu .mi.dim { opacity:.45; cursor:default; }
+    .pix-prled-menu .mi.dim:hover { background:none; color:#cfcfcf; }
+    .pix-prled-menu .msep { height:1px; background:#2a2a2a; margin:4px 2px; }
     .pix-prled-foot { display:flex; align-items:center; gap:9px; padding:10px 16px; border-top:1px solid #0e0e0e; background:#161616; }
     .pix-prled-foot .push { margin-left:auto; }
     .pix-prled-menu { position:fixed; z-index:10050; background:#1d1d1d; border:1px solid #4a4a4a; border-radius:7px; padding:5px; box-shadow:0 12px 30px rgba(0,0,0,.6); min-width:170px; }
@@ -236,6 +271,7 @@ function makeCard(tag) {
     // The blur handler recovers an invalid name to a unique one.
     const dup = _data.tags.some((o) => o !== tag && o.name.toLowerCase() === tag.name.toLowerCase());
     if (tag.name && !dup) commit();
+    paintKind(); // the kind button's tooltip quotes the tag name
   });
   nm.addEventListener("blur", () => { const u = uniqueNameExcept(nm.value, tag); if (u !== tag.name) { tag.name = u; nm.value = u; } commit(); });
   nm.addEventListener("keydown", (e) => e.stopPropagation());
@@ -247,23 +283,45 @@ function makeCard(tag) {
   top.append(nm, pill);
   const tx = document.createElement("textarea");
   tx.className = "ctx"; tx.value = tag.text; tx.spellcheck = false; tx.rows = 3;
-  tx.addEventListener("input", () => { tag.text = tx.value; commit(); });
+  tx.addEventListener("input", () => { tag.text = tx.value; commit(); paintKind(); });
   tx.addEventListener("keydown", (e) => e.stopPropagation());
   const foot = document.createElement("div"); foot.className = "cfoot";
   const ins = document.createElement("button");
-  ins.className = "pix-prled-insert"; ins.title = "Insert this tag into your prompt";
+  ins.className = "pix-prled-insert";
   ins.innerHTML = `<span class="lbl">Insert</span>`;
   ins.addEventListener("click", () => {
-    _opts?.onInsert?.(tag.name);
+    // A List card inserts #name (rolls one line); a snippet inserts @name.
+    _opts?.onInsert?.(tag.name, isListTag(tag) ? "#" : "@");
     ins.classList.add("ok");
     const l = ins.querySelector(".lbl"); if (l) l.textContent = "Inserted ✓";
     setTimeout(() => { ins.classList.remove("ok"); const ll = ins.querySelector(".lbl"); if (ll) ll.textContent = "Insert"; }, 850);
   });
+  // Snippet <-> List. The stored kind is cosmetic + convenience (the SYMBOL in the
+  // prompt is what actually decides at expand time), so flipping it can never break
+  // an existing prompt: @name keeps giving the whole block either way.
+  const kindBtn = document.createElement("button");
+  kindBtn.className = "pix-prled-kind";
+  function paintKind() {
+    const list = isListTag(tag);
+    card.classList.toggle("islist", list);
+    kindBtn.classList.toggle("on", list);
+    kindBtn.innerHTML = list ? `<span>☰</span>List · ${tagLines(tag.text).length}` : `<span>¶</span>Snippet`;
+    kindBtn.title = list
+      ? "List: one option per line. #" + tag.name + " picks one at random each run. Click to make it a plain snippet."
+      : "Snippet: @" + tag.name + " uses the whole text. Click to make it a List (one option per line, picked at random).";
+    tx.placeholder = list ? "one option per line" : "what it expands to - the full prompt text";
+    ins.title = list ? "Insert #" + tag.name + " into your prompt (a random line each run)" : "Insert @" + tag.name + " into your prompt";
+  }
+  kindBtn.addEventListener("click", () => {
+    if (isListTag(tag)) delete tag.kind; else tag.kind = "list";
+    commit(); paintKind();
+  });
+  paintKind();
   const del = document.createElement("button");
   del.className = "pix-prled-ic del"; del.title = "Delete tag";
   del.innerHTML = `<span class="pix-prled-svg" style="-webkit-mask-image:url(${ICON_BASE}delete.svg);mask-image:url(${ICON_BASE}delete.svg)"></span>`;
   del.addEventListener("click", () => { const i = _data.tags.indexOf(tag); if (i > -1) _data.tags.splice(i, 1); commit(); render(); });
-  foot.append(ins, del);
+  foot.append(ins, kindBtn, del);
   card.append(top, tx, foot);
   return card;
 }
@@ -348,12 +406,37 @@ function buildCreateForm() {
   const nm = document.createElement("input"); nm.className = "cnm"; nm.placeholder = "new tag name"; nm.spellcheck = false;
   // A <textarea> (not <input>) so a multi-line "save selection as a tag" keeps its
   // line breaks (a text input strips newlines on assignment).
-  const tx = document.createElement("textarea"); tx.className = "ctx"; tx.placeholder = "what it expands to - the full prompt text"; tx.spellcheck = false; tx.rows = 1;
+  const tx = document.createElement("textarea"); tx.className = "ctx"; tx.spellcheck = false; tx.rows = 1;
+  // Snippet / List for the tag about to be created. Lives on the draft so it survives
+  // a re-render, and follows the text (2+ lines = a List) until the user picks for
+  // themselves - after that their choice sticks.
+  const kindBtn = document.createElement("button"); kindBtn.className = "pix-prled-kind";
+  const paintKind = () => {
+    const list = _createDraft.kind === "list";
+    kindBtn.classList.toggle("on", list);
+    kindBtn.innerHTML = list ? `<span>☰</span>List` : `<span>¶</span>Snippet`;
+    kindBtn.title = list
+      ? "List: one option per line, picked at random each run by #name. Click for a plain snippet."
+      : "Snippet: the whole text is used by @name. Click to make it a List (one option per line).";
+    tx.placeholder = list ? "one option per line" : "what it expands to - the full prompt text";
+  };
+  kindBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    _createDraft.kind = _createDraft.kind === "list" ? "text" : "list";
+    _createDraft.kindTouched = true;
+    paintKind();
+  });
   // Seed from the in-progress draft so name + text survive a re-render (sidebar
   // category click / search), then keep the draft in sync as the user types.
   nm.value = _createDraft.name; tx.value = _createDraft.text;
+  paintKind();
   nm.addEventListener("input", () => { _createDraft.name = nm.value; });
-  tx.addEventListener("input", () => { _createDraft.text = tx.value; });
+  tx.addEventListener("input", () => {
+    _createDraft.text = tx.value;
+    if (_createDraft.kindTouched) return;
+    const k = tagLines(tx.value).length > 1 ? "list" : "text";
+    if (k !== _createDraft.kind) { _createDraft.kind = k; paintKind(); }
+  });
   const catBtn = document.createElement("button"); catBtn.className = "pix-prled-pill ccat"; catBtn.title = "Category for the new tag - click to change";
   const paintCat = () => {
     const label = createCat || UNCATEGORIZED;
@@ -366,19 +449,22 @@ function buildCreateForm() {
     const name = sanitizeName(nm.value);
     if (!name) { nm.focus(); return; }
     const uniq = uniqueNameExcept(name, null);
-    _data.tags.unshift({ name: uniq, cat: createCat, text: tx.value });
-    _createDraft = { name: "", text: "" }; // tag saved -> next render's form is empty
+    const isList = _createDraft.kind === "list";
+    const rec = { name: uniq, cat: createCat, text: tx.value };
+    if (isList) rec.kind = "list";   // only ever written for a List (library normalize)
+    _data.tags.unshift(rec);
+    _createDraft = newDraft();       // tag saved -> next render's form is empty
     commit();
     render();
     const nf = _overlay && _overlay.querySelector(".pix-prled-create .cnm");
     if (nf) nf.focus();
-    toast("success", "Created tag @" + uniq);
+    toast("success", "Created tag " + (isList ? "#" : "@") + uniq);
   };
   btn.addEventListener("click", doCreate);
   nm.addEventListener("keydown", (e) => { e.stopPropagation(); if (e.key === "Enter") { e.preventDefault(); doCreate(); } });
   // Enter creates the tag; Shift+Enter inserts a newline (the text can be multi-line).
   tx.addEventListener("keydown", (e) => { e.stopPropagation(); if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); doCreate(); } });
-  form.append(nm, tx, catBtn, btn);
+  form.append(nm, tx, catBtn, kindBtn, btn);
   return form;
 }
 function buildGrid() {
@@ -415,15 +501,52 @@ function render() {
 }
 
 // ── import / export ────────────────────────────────────────────────────
-function doExport() {
+// Write the library (or one category of it) to a file. `cat` null = everything.
+function exportScope(cat) {
   try {
-    const blob = new Blob([exportLibraryJSON()], { type: "application/json" });
+    const count = cat == null ? _data.tags.length : tagsIn(cat).length;
+    const blob = new Blob([exportLibraryJSON(cat)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
-    a.href = url; a.download = "prompt-tags.json";
+    a.href = url;
+    a.download = cat == null ? "prompt-tags.json" : `prompt-tags-${String(cat).replace(/[^a-zA-Z0-9_\-]+/g, "-")}.json`;
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
-  } catch (err) { console.error("Pixaroma.Prompt export failed", err); }
+    toast("info", cat == null
+      ? `Exported ${count} tag${count === 1 ? "" : "s"}.`
+      : `Exported ${count} tag${count === 1 ? "" : "s"} from ${cat}.`);
+  } catch (err) {
+    console.error("Pixaroma.Prompt export failed", err);
+    toast("warn", "Could not write that file");
+  }
+}
+// Everything, or just one category - one click each (reuses the dark menu chrome, so
+// Escape / an outside click close it like the category picker).
+function openExportMenu(anchor) {
+  hideCatMenu();
+  const menu = document.createElement("div");
+  menu.className = "pix-prled-menu";
+  const add = (label, color, count, cat) => {
+    const mi = document.createElement("div");
+    mi.className = "mi mrow" + (count ? "" : " dim");
+    mi.innerHTML = (color ? `<span class="cd" style="background:${color}"></span>` : `<span style="width:10px"></span>`) +
+      `<span class="nm">${esc(label)}</span><span class="cnt">${count} tag${count === 1 ? "" : "s"}</span>`;
+    if (count) mi.addEventListener("click", () => { hideCatMenu(); exportScope(cat); });
+    menu.appendChild(mi);
+  };
+  add("Everything", "", _data.tags.length, null);
+  if (_data.categories.length || hasUncat()) {
+    menu.appendChild(Object.assign(document.createElement("div"), { className: "msep" }));
+  }
+  for (const c of _data.categories) add(c, colorOf(c), tagsIn(c).length, c);
+  if (hasUncat()) add(UNCATEGORIZED, colorOf(UNCATEGORIZED), tagsIn(UNCATEGORIZED).length, UNCATEGORIZED);
+  _overlay.appendChild(menu);
+  // The button sits in the footer, so open UPWARD when there isn't room below.
+  const r = anchor.getBoundingClientRect();
+  menu.style.left = Math.max(8, Math.min(r.left, window.innerWidth - menu.offsetWidth - 8)) + "px";
+  const below = window.innerHeight - r.bottom;
+  menu.style.top = (below < menu.offsetHeight + 8 ? Math.max(8, r.top - menu.offsetHeight - 6) : r.bottom + 4) + "px";
+  _catMenu = menu;
 }
 function pickImportFile() {
   const inp = document.createElement("input");
@@ -443,8 +566,52 @@ function startImport(text) {
   flushLibrary(); // so parseImport sees exactly our working library
   const parsed = parseImport(text);
   if (parsed.error) { toast("warn", parsed.error); return; }
-  if (!parsed.conflicts.length) { applyLibraryImport(parsed, "both"); return; }
-  showImportModal(parsed);
+  showImportPick(parsed);
+}
+// Step 1 of an import: show what is IN the file, by category, so only the wanted
+// buckets come in. Always shown (importing is rare and seeing the contents first is
+// the point); the clash step after it only appears if the chosen tags actually clash.
+function showImportPick(parsed) {
+  const cats = importCategories(parsed);
+  const total = parsed.data.tags.length;
+  const modal = document.createElement("div");
+  modal.className = "pix-prled-modal";
+  modal.innerHTML =
+    `<div class="pix-prled-mcard"><div class="mh">Import tags</div>` +
+    `<div class="mb">This file has <b>${total} tag${total === 1 ? "" : "s"}</b> in ` +
+    `<b>${cats.length} categor${cats.length === 1 ? "y" : "ies"}</b>. Tick what you want to bring in.</div>` +
+    `<div class="pix-prled-pick"></div>` +
+    `<div class="pix-prled-mfoot">` +
+    `<button class="pix-prled-mlink pk-all">All</button>` +
+    `<button class="pix-prled-mlink pk-none">None</button>` +
+    `<button class="pix-prled-btn push pk-cancel">Cancel</button>` +
+    `<button class="pix-prled-btn pri pk-go">Import</button>` +
+    `</div></div>`;
+  const pick = modal.querySelector(".pix-prled-pick");
+  for (const c of cats) {
+    // A <label> row so a click anywhere on it toggles the box natively (no JS toggle
+    // that could double-fire when the box itself is clicked).
+    const row = document.createElement("label");
+    row.className = "row";
+    row.dataset.cat = c.name;
+    row.innerHTML = `<input type="checkbox" checked><span class="cd" style="background:${colorOf(c.name)}"></span>` +
+      `<span class="nm">${esc(c.name)}</span><span class="cnt">${c.count} tag${c.count === 1 ? "" : "s"}</span>`;
+    pick.appendChild(row);
+  }
+  const boxes = () => [...pick.querySelectorAll(".row")];
+  modal.querySelector(".pk-all").addEventListener("click", () => boxes().forEach((r) => { r.querySelector("input").checked = true; }));
+  modal.querySelector(".pk-none").addEventListener("click", () => boxes().forEach((r) => { r.querySelector("input").checked = false; }));
+  modal.querySelector(".pk-cancel").addEventListener("click", () => modal.remove());
+  modal.querySelector(".pk-go").addEventListener("click", () => {
+    const names = boxes().filter((r) => r.querySelector("input").checked).map((r) => r.dataset.cat);
+    const sub = subsetImport(parsed, names);
+    if (!sub.data.tags.length) { toast("info", "Nothing selected to import."); return; }
+    modal.remove();
+    if (!sub.conflicts.length) { applyLibraryImport(sub, "both"); return; }
+    showImportModal(sub);
+  });
+  modal.addEventListener("mousedown", (e) => { if (e.target === modal) modal.remove(); });
+  _overlay.appendChild(modal);
 }
 function applyLibraryImport(parsed, mode) {
   const res = applyImport(parsed, mode);
@@ -488,9 +655,10 @@ function showLibraryHelp() {
     `<p><b>What it is.</b> Your personal, reusable prompt snippets. Type a short <b>@name</b> in a Prompt node and it becomes the full text at run time, so the box stays short. Your library is saved on your machine, stays private to you, and survives updating the plugin - it is never stored inside a workflow.</p>` +
     `<p><b>Create a tag.</b> Fill in the name and the full prompt text along the top, pick a category, and press <b>Create tag</b>. New tags appear at the front.</p>` +
     `<p><b>Edit a tag.</b> Click a card's name or its text and change it - your edits save on their own.</p>` +
-    `<p><b>Categories.</b> Make them in the left sidebar. Click a card's coloured pill to move that tag to another category. Rename or delete a category from the sidebar (its tags just become Uncategorized).</p>` +
-    `<p><b>Use a tag.</b> Type <b>@</b> in the prompt box for a searchable list, or press <b>Insert</b> on a card to drop it straight into your prompt.</p>` +
-    `<p><b>Share.</b> <b>Export library</b> saves your tags to a file you can share. <b>Import</b> brings a file in - if a name already exists you choose keep both, replace, or skip.</p>` +
+    `<p><b>Snippet or List.</b> Every card has a switch at the bottom. A <b>Snippet</b> is one chunk of text and <b>@name</b> drops in all of it. A <b>List</b> holds one option per line (cat, dog, mouse) and <b>#name</b> drops in a random one, fresh every run. Flip the switch any time: it changes what the card is for, never what your saved prompts do.</p>` +
+    `<p><b>Categories.</b> Make them in the left sidebar. Click a card's coloured pill to move that tag to another category. Rename or delete a category from the sidebar (its tags just become Uncategorized). Typing <b>*category</b> in a prompt picks a random tag from it each run.</p>` +
+    `<p><b>Use a tag.</b> Type <b>@</b> (or <b>#</b> for lists, <b>*</b> for categories) in the prompt box for a searchable list, or press <b>Insert</b> on a card to drop it straight into your prompt.</p>` +
+    `<p><b>Share.</b> <b>Export</b> saves your tags to a file: everything, or just one category. <b>Import</b> shows you what is in a file so you can pick which categories to bring in, and if a name already exists you choose keep both, replace, or skip.</p>` +
     `</div>` +
     `<div class="pix-prled-help-foot"><button class="pix-prled-btn pri hgot">Got it</button></div>` +
     `</div>`;
@@ -504,7 +672,7 @@ export function openLibraryEditor(node, opts) {
   closeLibraryEditor();
   injectCSS();
   _node = node; _opts = opts || {}; _accent = _opts.accent || BRAND;
-  _createDraft = { name: "", text: (_opts.prefill || "").trim() };
+  _createDraft = newDraft((_opts.prefill || "").trim());
   _data = clone(getLibrary());
   _curCat = "All"; _search = "";
 
@@ -519,8 +687,8 @@ export function openLibraryEditor(node, opts) {
     `<span class="help" title="How the tag library works"><span class="pix-prled-svg" style="-webkit-mask-image:url(${ICON_BASE}help.svg);mask-image:url(${ICON_BASE}help.svg)"></span></span>` +
     `<span class="x" title="Close">✕</span></div>` +
     `<div class="pix-prled-main"><div class="pix-prled-side"></div><div class="pix-prled-content"></div></div>` +
-    `<div class="pix-prled-foot"><button class="pix-prled-btn imp-export"><span>⭳</span> Export library</button>` +
-    `<button class="pix-prled-btn imp-import"><span>⭱</span> Import</button>` +
+    `<div class="pix-prled-foot"><button class="pix-prled-btn imp-export" title="Save your tags to a file: everything, or just one category"><span>⭳</span> Export ▾</button>` +
+    `<button class="pix-prled-btn imp-import" title="Bring tags in from a file - you choose which categories"><span>⭱</span> Import</button>` +
     `<button class="pix-prled-btn push imp-done">Done</button></div>`;
   document.body.appendChild(ov);
   _overlay = ov;
@@ -531,7 +699,7 @@ export function openLibraryEditor(node, opts) {
   ov.querySelector(".x").addEventListener("click", closeLibraryEditor);
   ov.querySelector(".help").addEventListener("click", showLibraryHelp);
   ov.querySelector(".imp-done").addEventListener("click", closeLibraryEditor);
-  ov.querySelector(".imp-export").addEventListener("click", doExport);
+  ov.querySelector(".imp-export").addEventListener("click", (e) => openExportMenu(e.currentTarget));
   ov.querySelector(".imp-import").addEventListener("click", pickImportFile);
 
   render();
@@ -570,6 +738,6 @@ export function closeLibraryEditor() {
   try { _undoGuardOff?.(); } catch { /* ignore */ }
   _undoGuardOff = null;
   if (_overlay) { try { _overlay.remove(); } catch { /* ignore */ } }
-  _overlay = null; _node = null; _opts = null; _data = null; _createDraft = { name: "", text: "" };
+  _overlay = null; _node = null; _opts = null; _data = null; _createDraft = newDraft();
 }
 export function closeLibraryEditorFor(node) { if (_node === node) closeLibraryEditor(); }
