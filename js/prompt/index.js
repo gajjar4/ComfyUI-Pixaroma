@@ -8,7 +8,7 @@ import {
   tagMode, catMode, TEXT_BUCKET, LIST_BUCKET,
 } from "./library.mjs";
 import { nextIndex, listKey, catKey } from "./cursors.mjs";
-import { expandAll, hasTags, hasWilds, hasLists, scanTokens } from "./expand.mjs";
+import { expandAll, hasTags, hasWilds, hasLists, scanTokens, prevCodePoint } from "./expand.mjs";
 import { openLibraryEditor, closeLibraryEditorFor } from "./library_editor.mjs";
 import { openPromptSettings, closePromptSettingsFor, accentOf, getDefaultOrder } from "./settings.mjs";
 
@@ -177,12 +177,12 @@ const PROMPT_HELP = {
       ],
     },
     {
-      heading: "Random, Shuffle or In order",
+      heading: "Shuffle, Random or In order",
       body:
-        "True random repeats itself: with three options you might get 1, 1, 3, 2, 1. So every list and every category can pick a different way, set on its own card or on the category header in the library:",
+        "Every list and every category has a `Picks` control, on its own card or on the category header in the library:",
       defs: [
-        ["Random", "any one, every time. Fine for big lists, but the same one can come up twice in a row."],
-        ["Shuffle", "like dealing a shuffled deck: every option comes up once before any repeat, then it reshuffles. Still a surprise, no clumping. This is usually the one you want."],
+        ["Shuffle", "the default. Like dealing a shuffled deck: every option comes up once before any repeat, then it reshuffles. A surprise every time, without the same one landing twice in a row."],
+        ["Random", "any one, every time. True random repeats itself, so with three options you might get 1, 1, 3, 2, 1. Use it when you genuinely want that."],
         ["In order", "1, 2, 3 and around again. For working through a set deliberately."],
       ],
     },
@@ -434,7 +434,9 @@ function maybeAC(node, ta) {
   const mt = TAG_TOKEN_RE.exec(upto);
   if (mt) {
     const start = pos - mt[0].length;
-    const prev = start > 0 ? ta.value[start - 1] : "";
+    // Whole code point, not a code unit - see prevCodePoint in expand.mjs. Using
+    // ta.value[start-1] would hand back half of an astral letter and open the list.
+    const prev = prevCodePoint(ta.value, start);
     if (prev && /[\p{L}\p{N}\p{M}_@]/u.test(prev)) { closeAC(); return; }
     openAC(node, ta, start, mt[1].toLowerCase(), "tag");
     return;
@@ -443,7 +445,7 @@ function maybeAC(node, ta) {
   const mw = WILD_TOKEN_RE.exec(upto);
   if (mw) {
     const start = pos - mw[0].length;
-    const prev = start > 0 ? ta.value[start - 1] : "";
+    const prev = prevCodePoint(ta.value, start);
     if (prev && /[\p{L}\p{N}\p{M}_*]/u.test(prev)) { closeAC(); return; }
     openAC(node, ta, start, mw[1].toLowerCase(), "wild");
     return;
@@ -452,7 +454,7 @@ function maybeAC(node, ta) {
   const ml = LIST_TOKEN_RE.exec(upto);
   if (ml) {
     const start = pos - ml[0].length;
-    const prev = start > 0 ? ta.value[start - 1] : "";
+    const prev = prevCodePoint(ta.value, start);
     if (prev && /[\p{L}\p{N}\p{M}_#]/u.test(prev)) { closeAC(); return; }
     openAC(node, ta, start, ml[1].toLowerCase(), "list");
     return;

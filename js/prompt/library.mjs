@@ -30,7 +30,7 @@
 // can never be real categories.
 
 import { app } from "/scripts/app.js";
-import { cleanMode } from "./cursors.mjs";
+import { cleanMode, DEFAULT_MODE } from "./cursors.mjs";
 
 const LIBRARY_SETTING = "Pixaroma.Prompt.Library";
 export const NAME_RE = /[^a-zA-Z0-9_\-]/g;
@@ -114,11 +114,14 @@ function normalize(raw) {
     }
     const rec = { name, cat, text: typeof t.text === "string" ? t.text : "" };
     // Only "list" is stored; anything else (missing, "text", junk) stays absent so a
-    // plain text library round-trips byte-identical. Same for mode: "random" is the
-    // default and is never written.
+    // plain text library round-trips byte-identical. Same for mode: the DEFAULT is
+    // never written, so only a deliberate Random / In order is stored.
     if (kind === "list") rec.kind = "list";
+    // Kept regardless of kind: the editor only offers it on a List, but `#texttag`
+    // rolls a text tag's lines too, and gating on kind meant flipping a list to Text
+    // and back silently lost the mode (the working copy kept it, the store did not).
     const mode = cleanMode(t.mode);
-    if (kind === "list" && mode !== "random") rec.mode = mode;
+    if (mode !== DEFAULT_MODE) rec.mode = mode;
     out.tags.push(rec);
   }
   // Reconcile every tag's category to the canonical (case-matching) entry in the
@@ -148,7 +151,7 @@ function normalize(raw) {
   }
   out.listCats = out.categories.filter((c) => listKeys.has(lc(c)));
   // How each category picks (for its *wildcard). Keyed by the CANONICAL name so a
-  // rename / case-variant can't orphan it; "random" is the default and is dropped.
+  // rename / case-variant can't orphan it; the DEFAULT mode is dropped, not stored.
   const srcModes = src.catModes && typeof src.catModes === "object" ? src.catModes : {};
   const byKey = new Map(out.categories.map((c) => [lc(c), c]));
   byKey.set(lc(TEXT_BUCKET), TEXT_BUCKET);
@@ -157,7 +160,7 @@ function normalize(raw) {
   for (const [k, v] of Object.entries(srcModes)) {
     const canon = byKey.get(lc(k));
     const m = cleanMode(v);
-    if (canon && m !== "random") out.catModes[canon] = m;
+    if (canon && m !== DEFAULT_MODE) out.catModes[canon] = m;
   }
   return out;
 }

@@ -22,6 +22,20 @@ const KIND_BY_SYM = { "@": "tag", "*": "wild", "#": "list" };
 // [{kind:'tag'|'wild'|'list', sym, name, start, end, raw}]. Shared by scanTags /
 // scanWilds / scanLists / expandAll AND the node's highlight backdrop so all of them
 // agree on exactly which tokens count.
+// The character before index `at` as a whole CODE POINT. `text[at-1]` alone is a UTF-16
+// code UNIT, so for a supplementary-plane character (CJK Extension B, math letters, ...)
+// it hands back a lone low surrogate - general category Cs, which \p{L}/\p{N}/\p{M}
+// never match - and a tag glued to such a letter would wrongly expand ("𠀀@tag").
+export function prevCodePoint(text, at) {
+  if (!(at > 0)) return "";
+  const c = text[at - 1];
+  if (at >= 2 && c >= "\uDC00" && c <= "\uDFFF") {
+    const hi = text[at - 2];
+    if (hi >= "\uD800" && hi <= "\uDBFF") return hi + c;   // rejoin the pair
+  }
+  return c;
+}
+
 export function scanTokens(text) {
   const out = [];
   if (typeof text !== "string" || !/[@*#]/.test(text)) return out;
@@ -30,7 +44,7 @@ export function scanTokens(text) {
   while ((m = TOKEN_RE.exec(text))) {
     const at = m.index;
     const kind = KIND_BY_SYM[m[1]];
-    const prev = at > 0 ? text[at - 1] : "";
+    const prev = prevCodePoint(text, at);
     // Unicode-aware: a letter/number/combining-mark/_ before the symbol (incl.
     // accented / CJK, precomposed OR decomposed) means it's an email local part or
     // arithmetic, not a token - UNLESS it chains off a SAME-KIND token immediately

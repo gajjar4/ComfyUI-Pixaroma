@@ -14,7 +14,9 @@ import {
   importCategories, subsetImport, isListTag, tagLines, catOf, sideOfCat, tagMode, catMode,
   TEXT_BUCKET, LIST_BUCKET, NAME_RE,
 } from "./library.mjs";
-import { MODES, MODE_LABEL, listKey, catKey, cursorInfo, resetCursor, flushCursors } from "./cursors.mjs";
+import {
+  MODES, MODE_LABEL, DEFAULT_MODE, hasPosition, listKey, catKey, cursorInfo, resetCursor, flushCursors,
+} from "./cursors.mjs";
 
 const PAL = ["#e0894b", "#5aa9e6", "#8e7bd6", "#5fbf8f", "#d76b98", "#c9a24b", "#6fb3b8"];
 const ICON_BASE = "/pixaroma/assets/icons/ui/";
@@ -377,10 +379,12 @@ function makeModeRow({ getMode, setMode, key, len, what }) {
   rst.className = "rst"; rst.textContent = "↺";
   const paint = () => {
     const m = getMode();
-    btn.classList.toggle("set", m !== "random");
+    // Accent = "not the default", so a list that behaves unusually stands out in the
+    // grid. Whether it has a POSITION is a different question (Random never does).
+    btn.classList.toggle("set", m !== DEFAULT_MODE);
     btn.innerHTML = `<span>${MODE_LABEL[m]}</span><span class="car">▾</span>`;
     btn.title = `How this ${what} picks: ${MODE_LABEL[m]} - ${MODE_HINT[m]}`;
-    row.classList.toggle("on", m !== "random");
+    row.classList.toggle("on", hasPosition(m));
     // On Random there is no position to show, so say what Random DOES - that is the
     // line that tells you the control is worth clicking.
     pos.textContent = cursorInfo(key(), len(), m) || MODE_HINT[m];
@@ -457,7 +461,7 @@ function makeCard(tag) {
   // Only a List picks between things, so only a List needs a mode row.
   const modeRow = makeModeRow({
     getMode: () => tagMode(tag),
-    setMode: (m) => { if (m === "random") delete tag.mode; else tag.mode = m; },
+    setMode: (m) => { if (m === DEFAULT_MODE) delete tag.mode; else tag.mode = m; },
     key: () => listKey(tag.name),
     len: () => tagLines(tag.text).length,
     what: "list",
@@ -705,7 +709,7 @@ function renderContent(content) {
       getMode: () => catMode(cat, _data),
       setMode: (m) => {
         _data.catModes = _data.catModes || {};
-        if (m === "random") delete _data.catModes[cat]; else _data.catModes[cat] = m;
+        if (m === DEFAULT_MODE) delete _data.catModes[cat]; else _data.catModes[cat] = m;
       },
       key: () => catKey(cat),
       len: () => tagsIn(cat).length,
@@ -886,7 +890,7 @@ function showLibraryHelp() {
     `<p><b>Edit a tag.</b> Click a card's name or its text and change it - your edits save on their own.</p>` +
     `<p><b>Text or List.</b> Every card has a switch at the bottom with both choices on it. <b>Text</b> is one piece of writing and <b>@name</b> drops in all of it. <b>List</b> holds one option per line (cat, dog, mouse) and <b>#name</b> drops in a random one, fresh every run. Flip the switch any time: it changes what the card is for, never what your saved prompts do. While the create box at the top is set to List, Enter starts the next option and Ctrl+Enter adds the tag.</p>` +
     `<p><b>Categories.</b> Make them in the left sidebar. Click a card's coloured pill to move that tag to another category. Rename or delete a category from the sidebar (its tags just become Uncategorized). Typing <b>*category</b> in a prompt picks a random tag from it each run.</p>` +
-    `<p><b>Random, Shuffle or In order.</b> A List card and a category header each have a picker for how they choose. <b>Random</b> is any one every time, so the same one can come up twice. <b>Shuffle</b> deals a shuffled deck, so every option comes up once before any repeat: usually the one you want. <b>In order</b> goes 1, 2, 3 and around again. The last two remember their place between runs (the card shows it) and the <b>↺</b> button starts that list over.</p>` +
+    `<p><b>Picks: Shuffle, Random or In order.</b> A List card and a category header each have a <b>Picks</b> control for how they choose. <b>Shuffle</b> is the default: it deals a shuffled deck, so every option comes up once before any repeat. <b>Random</b> is any one every time, so the same one can come up twice in a row. <b>In order</b> goes 1, 2, 3 and around again. Shuffle and In order remember their place between runs (the card shows it) and the <b>↺</b> button starts that list over.</p>` +
     `<p><b>Use a tag.</b> Type <b>@</b> (or <b>#</b> for lists, <b>*</b> for categories) in the prompt box for a searchable list, or press <b>Insert</b> on a card to drop it straight into your prompt.</p>` +
     `<p><b>Share.</b> <b>Export</b> saves your tags to a file: everything, or just one category. <b>Import</b> shows you what is in a file so you can pick which categories to bring in, and if a name already exists you choose keep both, replace, or skip.</p>` +
     `</div>` +
