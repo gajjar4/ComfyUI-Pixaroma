@@ -15,7 +15,8 @@ import {
   TEXT_BUCKET, LIST_BUCKET, NAME_RE,
 } from "./library.mjs";
 import {
-  MODES, MODE_LABEL, DEFAULT_MODE, hasPosition, listKey, catKey, cursorInfo, resetCursor, flushCursors,
+  MODES, MODE_LABEL, DEFAULT_MODE, hasPosition, listKey, catKey, cursorInfo, resetCursor,
+  renameCursor, flushCursors,
 } from "./cursors.mjs";
 
 const PAL = ["#e0894b", "#5aa9e6", "#8e7bd6", "#5fbf8f", "#d76b98", "#c9a24b", "#6fb3b8"];
@@ -289,7 +290,16 @@ function openCategoryMenu(anchor, onPick, side) {
       // If it case-collides with an existing category, use the EXISTING (canonical)
       // one - never assign the tag a wrong-case category that no sidebar row matches.
       const existing = (v && !reserved) ? _data.categories.find((c) => c.toLowerCase() === v.toLowerCase()) : null;
-      if (v && !reserved && !existing) { addCategory(v, sd); commit(); }
+      if (v && !reserved && !existing) {
+        addCategory(v, sd); commit();
+        // Refresh the SIDEBAR only. A full render() would rebuild the create form and
+        // throw away whatever the user has typed into it (which is precisely why this
+        // picker does not re-render), but without this the new category is saved and
+        // yet missing from the sidebar, its counts and the export menu until something
+        // unrelated happens to re-render.
+        const side = _overlay && _overlay.querySelector(".pix-prled-side");
+        if (side) renderSidebar(side);
+      }
       hideCatMenu();
       // An existing name keeps ITS side, so only pick it when the sides agree -
       // otherwise the tag would land in a category that cannot hold it.
@@ -412,7 +422,18 @@ function makeCard(tag) {
   const nm = document.createElement("input");
   nm.className = "cnm"; nm.value = tag.name; nm.spellcheck = false;
   nm.addEventListener("input", () => {
-    tag.name = sanitizeName(nm.value); nm.value = tag.name;
+    const cleaned = sanitizeName(nm.value);
+    if (cleaned !== nm.value) {
+      // Writing the field back moves the caret to the end, so typing an illegal
+      // character mid-name teleported the cursor and the rest of the typing landed in
+      // the wrong place. Put it back where it was, minus what was stripped.
+      const at = nm.selectionStart;
+      const dropped = nm.value.length - cleaned.length;
+      nm.value = cleaned;
+      const p = Math.max(0, (at == null ? cleaned.length : at) - dropped);
+      try { nm.setSelectionRange(p, p); } catch { /* detached / unsupported */ }
+    }
+    tag.name = cleaned;
     // Only persist a VALID name. An empty or duplicate name is dropped by normalize,
     // so committing it would briefly remove the tag from the store + every node (a
     // concurrent Run would miss it) and could persist the loss on an abrupt quit.
@@ -421,7 +442,20 @@ function makeCard(tag) {
     if (tag.name && !dup) commit();
     paintKind(); // the kind button's tooltip quotes the tag name
   });
-  nm.addEventListener("blur", () => { const u = uniqueNameExcept(nm.value, tag); if (u !== tag.name) { tag.name = u; nm.value = u; } commit(); });
+  // The name settles on blur, so carry the Shuffle/In-order position across then -
+  // doing it per keystroke would churn storage, and not doing it at all silently
+  // restarts the sequence and strands the old key forever.
+  const nameAtFocus = { v: tag.name };
+  nm.addEventListener("focus", () => { nameAtFocus.v = tag.name; });
+  nm.addEventListener("blur", () => {
+    const u = uniqueNameExcept(nm.value, tag);
+    if (u !== tag.name) { tag.name = u; nm.value = u; }
+    if (nameAtFocus.v && tag.name && nameAtFocus.v !== tag.name) {
+      try { renameCursor(listKey(nameAtFocus.v), listKey(tag.name)); } catch { /* ignore */ }
+      nameAtFocus.v = tag.name;
+    }
+    commit();
+  });
   nm.addEventListener("keydown", (e) => e.stopPropagation());
   const cc = catOf(tag);
   const pill = document.createElement("button");
@@ -523,18 +557,30 @@ function renderSidebar(sideEl) {
       inp.placeholder = sd === "list" ? "list category name" : "category name";
       inp.style.cssText = "width:100%;margin-top:6px;background:#151515;border:1px solid var(--acc);border-radius:6px;color:#e6e6e6;font:12px monospace;padding:7px 9px;outline:none;";
       btn.style.display = "none"; nc.appendChild(inp); inp.focus();
+      // Giving up on the field must NOT call the global render(). It used to, 120ms
+      // after blur, which tore down the whole editor underneath whatever the user had
+      // moved on to: opening the other side's New-category field, or clicking into a
+      // card name and typing (focus was silently lost, and because render() REMOVES a
+      // focused input rather than blurring it, that card's name-recovery blur handler
+      // never ran, so an empty or duplicate name could be normalized away = tag lost).
+      // Just put the button back; nothing else on screen is affected.
+      const cancel = () => { if (inp.isConnected) inp.remove(); btn.style.display = ""; };
+      inp._pixCancel = cancel;   // so Escape can cancel directly, not via a blur event
       inp.addEventListener("keydown", (e) => {
         e.stopPropagation();
         if (e.key === "Enter") {
           const v = inp.value.trim();
           if (v && !isReservedName(v) && !_data.categories.some((c) => c.toLowerCase() === v.toLowerCase())) {
             addCategory(v, sd); _curCat = v; commit();
+            render();   // a real action: the new category needs a row and a selection
+            return;
           }
-          render();
+          cancel();
+          return;
         }
-        if (e.key === "Escape") render();
+        if (e.key === "Escape") cancel();
       });
-      inp.addEventListener("blur", () => setTimeout(() => { if (inp.isConnected) render(); }, 120));
+      inp.addEventListener("blur", () => setTimeout(cancel, 120));
     });
     nc.appendChild(btn); sideEl.appendChild(nc);
   };
@@ -561,6 +607,8 @@ function startRenameCat(row, cat) {
         _data.catModes[v] = _data.catModes[cat];
         delete _data.catModes[cat];
       }
+      // ...and where it had got to. A rename is not a change of contents.
+      try { renameCursor(catKey(cat), catKey(v)); } catch { /* ignore */ }
       for (const t of _data.tags) if (t.cat === cat) t.cat = v;
       if (_curCat === cat) _curCat = v;
       commit();
@@ -576,6 +624,7 @@ function deleteCat(cat) {
   const li = _data.listCats.indexOf(cat);
   if (li > -1) _data.listCats.splice(li, 1);
   if (_data.catModes) delete _data.catModes[cat];
+  try { resetCursor(catKey(cat)); } catch { /* ignore */ }   // don't strand its position
   for (const t of _data.tags) if (t.cat === cat) t.cat = "";   // -> that tag's own bucket
   if (_curCat === cat) _curCat = "All";
   commit(); render();
@@ -721,6 +770,14 @@ function renderContent(content) {
 function render() {
   if (!_overlay) return;
   hideCatMenu();
+  // A bucket row only exists while a tag sits in it. Re-file or delete the last one
+  // and the selection would point at a row that is no longer drawn: nothing
+  // highlighted, a header reading "Text · 0 tags" with a live Picks control for an
+  // empty bucket, and the create form still forced to that side.
+  if ((_curCat === TEXT_BUCKET || _curCat === LIST_BUCKET) &&
+      !bucketUsed(_curCat === LIST_BUCKET ? "list" : "text")) {
+    _curCat = "All";
+  }
   renderSidebar(_overlay.querySelector(".pix-prled-side"));
   renderContent(_overlay.querySelector(".pix-prled-content"));
 }
@@ -790,9 +847,16 @@ function pickImportFile() {
     reader.onerror = () => toast("warn", "Could not read that file");
     reader.readAsText(file);
   });
+  // Dismissing the OS file dialog fires no "change", so without this the hidden input
+  // stayed in the document for the life of the page - one per cancelled import.
+  inp.addEventListener("cancel", () => inp.remove());
   document.body.appendChild(inp); inp.click();
 }
 function startImport(text) {
+  // The file input lives on document.body and FileReader is async, so the editor can
+  // be closed (Escape / Done / the node deleted) between choosing the file and the
+  // read finishing. Everything below needs _overlay and _data.
+  if (!_overlay || !_data) return;
   flushLibrary(); // so parseImport sees exactly our working library
   const parsed = parseImport(text);
   if (parsed.error) { toast("warn", parsed.error); return; }
@@ -802,6 +866,7 @@ function startImport(text) {
 // buckets come in. Always shown (importing is rare and seeing the contents first is
 // the point); the clash step after it only appears if the chosen tags actually clash.
 function showImportPick(parsed) {
+  if (!_overlay || !_data) return;
   const cats = importCategories(parsed);
   const total = parsed.data.tags.length;
   const modal = document.createElement("div");
@@ -844,12 +909,14 @@ function showImportPick(parsed) {
   _overlay.appendChild(modal);
 }
 function applyLibraryImport(parsed, mode) {
+  if (!_overlay) return;
   const res = applyImport(parsed, mode);
   _data = clone(getLibrary());
   render();
   toast("info", `Imported ${res.added} tag${res.added === 1 ? "" : "s"}.`);
 }
 function showImportModal(parsed) {
+  if (!_overlay) return;
   const modal = document.createElement("div");
   modal.className = "pix-prled-modal";
   const total = parsed.data.tags.length;
@@ -953,6 +1020,32 @@ function onKey(e) {
   if (e.key !== "Escape") return;
   if (_overlay?.querySelector(".pix-prled-modal")) { _overlay.querySelector(".pix-prled-modal").remove(); e.stopPropagation(); return; }
   if (_catMenu) { hideCatMenu(); e.stopPropagation(); return; }
+  // This is a CAPTURE-phase window listener, so it beats every field's own keydown
+  // handler (those are bubble-phase). Escape therefore used to close the WHOLE editor
+  // from inside a text field, which is never what Escape means there: it binned a
+  // half-typed tag (including the text handed over by "Save selection as a tag"), and
+  // the per-field Escape handling in the new-category and rename inputs could never
+  // run at all. Dismiss the FIELD first; a second Escape closes the editor as usual.
+  const active = document.activeElement;
+  if (active && _overlay && _overlay.contains(active)) {
+    if (active.classList.contains("catinput")) {   // renaming a category: cancel it
+      render();
+      e.stopPropagation();
+      return;
+    }
+    if (active.closest(".pix-prled-newcat")) {     // naming a new category: cancel it
+      // Call the field's own cancel rather than leaning on a blur event to do it.
+      if (typeof active._pixCancel === "function") active._pixCancel(); else active.blur();
+      e.stopPropagation();
+      return;
+    }
+    const form = _overlay.querySelector(".pix-prled-create");
+    if (form && form.contains(active) && (_createDraft.name || _createDraft.text)) {
+      active.blur();
+      e.stopPropagation();
+      return;
+    }
+  }
   const s = _overlay?.querySelector(".pix-prled-srch input");
   if (s && document.activeElement === s && s.value) return; // its own handler clears the search first
   e.stopPropagation();

@@ -3,6 +3,7 @@ import {
   BRAND, applyAdaptiveCanvasOnly, registerNodeHelp, closeHelpPopup, isVueNodes,
   installResizeFloor, installCanvasZoomPassthrough,
 } from "../shared/index.mjs";
+import { isGraphLoading } from "../shared/graph_loading.mjs";
 import {
   getTags, getCategories, findTag, subscribe, tagLines, isListTag, isListCat, catOf,
   tagMode, catMode, TEXT_BUCKET, LIST_BUCKET,
@@ -626,6 +627,13 @@ document.addEventListener("mousedown", (e) => {
     if (!_ac || e.target !== _ac.ta) closeAC();
   }
 }, true);
+// The list is position:fixed, so zooming or panning the canvas would leave it stranded
+// at the old screen spot while the node moves under it (the same bug the separator
+// dropdown was fixed for). installCanvasZoomPassthrough forwards wheel events from
+// over the textarea to the canvas, so this fires even with the cursor on the prompt box.
+document.addEventListener("wheel", (e) => {
+  if (_acEl && _acEl.style.display === "block" && !_acEl.contains(e.target)) closeAC();
+}, true);
 
 // ── DOM ────────────────────────────────────────────────────────────────────
 function buildRoot(node) {
@@ -708,10 +716,14 @@ function relabelInputSlot(node) {
 function resolveWiredText(node) {
   const inp = (node.inputs || []).find((i) => i && i.name === "text_in");
   if (!inp || inp.link == null) return null;
-  let link = app.graph.links?.[inp.link];
-  if (!link && typeof app.graph.links?.get === "function") link = app.graph.links.get(inp.link);
+  // Link ids and node ids are PER GRAPH. For a node inside a subgraph, resolving
+  // against the root graph either misses or - worse - finds an unrelated node that
+  // happens to share the id, and the preview then shows a stranger's text.
+  const g = node.graph || app.graph;
+  let link = g.links?.[inp.link];
+  if (!link && typeof g.links?.get === "function") link = g.links.get(inp.link);
   if (!link) return null;
-  const src = app.graph.getNodeById ? app.graph.getNodeById(link.origin_id) : (app.graph._nodes || []).find((n) => n.id === link.origin_id);
+  const src = g.getNodeById ? g.getNodeById(link.origin_id) : (g._nodes || []).find((n) => n.id === link.origin_id);
   return src ? readNodeText(src, 0) : null;
 }
 function readNodeText(src, depth) {
@@ -767,6 +779,15 @@ function renderBackdrop(node) {
   if (text.endsWith("\n")) html += " ";
   els.backdrop.innerHTML = html;
 }
+// EXACT mirror of nodes/node_prompt.py run(): when either side is blank the separator
+// is dropped and the other side stands alone. Without the blank checks a freshly
+// wired node with nothing typed yet previewed ", their text" - a stray separator that
+// the real run never produces. Keep this in lockstep with the Python.
+function joinLikePython(mine, other, order, sep) {
+  if (!String(other).trim()) return mine;
+  if (!String(mine).trim()) return other;
+  return order === "wired" ? (other + sep + mine) : (mine + sep + other);
+}
 function renderExpand(node) {
   const els = node._pixPromptRoot?._els; if (!els) return;
   const st = readState(node);
@@ -782,8 +803,7 @@ function renderExpand(node) {
   const other = resolveWiredText(node);
   if (other != null) {
     // The wired text is readable now -> show the REAL combined result, in order.
-    const combined = st.order === "wired" ? (other + st.sep + mine) : (mine + st.sep + other);
-    els.expand.innerHTML = `<span class="mine">${escapeHTML(combined)}</span>`;
+    els.expand.innerHTML = `<span class="mine">${escapeHTML(joinLikePython(mine, other, st.order, st.sep))}</span>`;
   } else {
     // Wired from something the browser can't read yet (e.g. a model output not run).
     const where = st.order === "wired" ? "before" : "after";
@@ -1030,7 +1050,12 @@ function setupNode(node) {
 
   // Fresh node picks up the global default join order (configure() restores a saved
   // node's own order after this, so this only sticks for genuinely new nodes).
-  if (node.properties?.[STATE_KEY]?.order == null) writeState(node, { order: getDefaultOrder() });
+  // Skipped while a graph is LOADING: a saved node with no promptState key at all
+  // (dropped and saved by a build predating this write) has nothing for configure to
+  // overwrite with, so the write would stick and flag an untouched workflow modified.
+  if (node.properties?.[STATE_KEY]?.order == null && !isGraphLoading()) {
+    writeState(node, { order: getDefaultOrder() });
+  }
 
   const st = readState(node);
   root._els.ta.value = st.text;
@@ -1162,11 +1187,27 @@ function buildPromptNodeIndex() {
 function findPromptNode(index, promptId) {
   const sId = String(promptId);
   if (index.has(sId)) return index.get(sId);
+  // Fallback for a composite subgraph id ("5:3") we could not match exactly. Subgraph
+  // inner ids and root ids are INDEPENDENT counters, so a bare tail can easily belong
+  // to an unrelated top-level node - injecting there would swap one node's whole
+  // prompt into another with no error. Only accept the tail when exactly ONE indexed
+  // node carries it and that node is not a top-level node of its own.
   const tail = sId.includes(":") ? sId.slice(sId.lastIndexOf(":") + 1) : null;
-  if (tail && index.has(tail)) return index.get(tail);
-  return null;
+  if (!tail) return null;
+  let hit = null, seen = 0;
+  for (const [key, node] of index) {
+    const keyTail = key.includes(":") ? key.slice(key.lastIndexOf(":") + 1) : key;
+    if (keyTail === tail) { hit = node; seen++; if (seen > 1) return null; }
+  }
+  return seen === 1 ? hit : null;
 }
 
+// Guard against a second evaluation of this module (a mixed stamped/unstamped import
+// URL, a hot reload). Wrapping twice would roll every random slot TWICE per queue, so
+// an "In order" list would silently skip every other entry and a shuffle deck would
+// drain at double rate. Same flag convention as the other Pixaroma nodes.
+if (!app._pixPromptToPromptPatched) {
+app._pixPromptToPromptPatched = true;
 const _origGraphToPrompt = app.graphToPrompt;
 app.graphToPrompt = async function (...args) {
   const result = await _origGraphToPrompt.apply(this, args);
@@ -1180,7 +1221,13 @@ app.graphToPrompt = async function (...args) {
           if (!entry || entry.class_type !== "PixaromaPrompt") continue;
           if (!index) index = buildPromptNodeIndex();
           const node = findPromptNode(index, key);
-          const st = node ? readState(node) : { text: "", order: "mine", sep: ", " };
+          if (!node) {
+            // Fabricating an empty prompt here would silently drop what the user typed.
+            // Leave the entry alone (Python falls back to its own default) and SAY so.
+            console.warn("Pixaroma.Prompt: could not match prompt node", key, "- leaving its PromptState alone");
+            continue;
+          }
+          const st = readState(node);
           // Roll every *wildcard (a random tag) and every #list (a random line) NOW, at
           // queue time, so each run gets a fresh pick; @tags expand deterministically. A
           // different pick changes this string -> the cache key changes -> re-run (no
@@ -1201,3 +1248,4 @@ app.graphToPrompt = async function (...args) {
   }
   return result;
 };
+}

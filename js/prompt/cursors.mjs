@@ -168,3 +168,15 @@ export function resetCursor(key) {
   const map = all();
   if (map && map[key]) { delete map[key]; touch(); }
 }
+
+// Carry a position to a new name. Renaming a list / category is not a change of
+// CONTENT, so "next 4 of 12" must not silently become "next 1 of 12" (and the old key
+// must not linger in storage forever).
+export function renameCursor(fromKey, toKey) {
+  if (fromKey === toKey) return;
+  const map = all();
+  if (!map || !map[fromKey]) return;
+  map[toKey] = map[fromKey];
+  delete map[fromKey];
+  touch();
+}

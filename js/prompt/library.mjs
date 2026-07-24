@@ -106,10 +106,13 @@ function normalize(raw) {
     let kind = t.kind === "list" ? "list" : "text";
     if (RESERVED.has(lc(cat))) {
       // A bucket name is not a category. "List" also TELLS us the tag is a list (an
-      // import file may name the bucket instead of setting kind); legacy
-      // "Uncategorized" says nothing about the kind, so the tag's own kind stands.
+      // import file may name the bucket instead of setting kind), and that only ever
+      // ADDS information since an unset kind already means text.
+      // "Text" must NOT do the mirror image: forcing kind="text" there would strip an
+      // explicit kind:"list" and silently turn someone's list into a snippet, which is
+      // exactly what "the tag's kind always wins" forbids. Legacy "Uncategorized"
+      // likewise says nothing about the kind.
       if (lc(cat) === lc(LIST_BUCKET)) kind = "list";
-      else if (lc(cat) === lc(TEXT_BUCKET)) kind = "text";
       cat = "";
     }
     const rec = { name, cat, text: typeof t.text === "string" ? t.text : "" };
@@ -311,8 +314,11 @@ export function exportLibraryJSON(cat) {
   // own kind puts them back in the right bucket on import.
   const categories = lib.categories.filter((c) => lc(c) === lc(cat));
   const listCats = categories.filter((c) => isListCat(c, lib));
+  // A BUCKET carries no category entry, but it CAN have its own Picks mode - look it
+  // up by the scope name itself, not through `categories` (which is empty for a
+  // bucket), or exporting just the Text/List bucket would silently drop its mode.
   const catModes = {};
-  for (const c of categories) if ((lib.catModes || {})[c]) catModes[c] = lib.catModes[c];
+  for (const [k, v] of Object.entries(lib.catModes || {})) if (lc(k) === lc(cat)) catModes[k] = v;
   return JSON.stringify({ version: 1, categories, listCats, catModes, tags }, null, 2);
 }
 
@@ -354,6 +360,25 @@ export function parseImport(jsonStr) {
   if (Array.isArray(raw)) raw = { tags: raw };
   else if (raw && !Array.isArray(raw.tags)) {
     raw = { categories: raw.categories, listCats: raw.listCats, catModes: raw.catModes, tags: raw.tags || raw.library || raw.snippets || raw.prompts };
+  }
+  // Two entries in the SAME FILE can collide only after name-cleaning / case-folding
+  // ("Portrait" vs "portrait"; "ta+g" and "t a g" both clean to "tag"). normalize()
+  // dedups by that key - correct for the live library, but here it would silently
+  // DROP the second entry before conflicts are even computed, so its text is lost
+  // with no warning and the import picker under-reports what the file holds. Make the
+  // incoming names unique among themselves first, so every entry survives into the
+  // picker and into the keep-both / replace / skip step.
+  if (raw && Array.isArray(raw.tags)) {
+    const seen = new Set();
+    raw.tags = raw.tags.map((t) => {
+      if (!t || typeof t !== "object") return t;
+      const base = cleanName(t.name);
+      if (!base) return t;
+      let name = base, i = 2;
+      while (seen.has(name.toLowerCase())) name = base + "-" + i++;
+      seen.add(name.toLowerCase());
+      return name === t.name ? t : { ...t, name };
+    });
   }
   const data = normalize(raw);
   if (!data.tags.length) return { error: "No tags found in that file." };
@@ -411,9 +436,15 @@ export function applyImport(parsed, mode) {
       listHave.add(lc(c)); next.listCats.push(c);
     }
   }
-  // Same rule for how a category picks: mine wins, theirs only fills a gap.
+  // Same rule for how a category picks: mine wins, theirs only fills a gap. Checking
+  // `cur.categories` alone was not enough for the Text/List BUCKETS - they are never
+  // in that list, so an imported bucket mode always overwrote the local one. Test the
+  // mode map itself as well, which covers real categories and buckets alike.
   for (const [k, v] of Object.entries(parsed.data.catModes || {})) {
-    if (k && !cur.categories.some((x) => lc(x) === lc(k))) next.catModes[k] = v;
+    if (!k) continue;
+    const mine = cur.categories.some((x) => lc(x) === lc(k)) ||
+      Object.keys(cur.catModes || {}).some((x) => lc(x) === lc(k));
+    if (!mine) next.catModes[k] = v;
   }
   setLibrary(next);
   return { added: toAdd.length };
