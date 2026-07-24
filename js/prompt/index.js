@@ -3,7 +3,10 @@ import {
   BRAND, applyAdaptiveCanvasOnly, registerNodeHelp, closeHelpPopup, isVueNodes,
   installResizeFloor, installCanvasZoomPassthrough,
 } from "../shared/index.mjs";
-import { getTags, getCategories, findTag, subscribe, UNCATEGORIZED, tagLines, isListTag } from "./library.mjs";
+import {
+  getTags, getCategories, findTag, subscribe, tagLines, isListTag, isListCat, catOf,
+  TEXT_BUCKET, LIST_BUCKET,
+} from "./library.mjs";
 import { expandAll, hasTags, hasWilds, hasLists, scanTokens } from "./expand.mjs";
 import { openLibraryEditor, closeLibraryEditorFor } from "./library_editor.mjs";
 import { openPromptSettings, closePromptSettingsFor, accentOf, getDefaultOrder } from "./settings.mjs";
@@ -196,6 +199,7 @@ const PROMPT_HELP = {
       body:
         "The `Tags` button opens the fullscreen library: categories down the left, tags on the right. Add, rename, move between categories, or delete. New tags appear at the top.\n\n" +
         "Every card has a `Text` / `List` switch at the bottom. `Text` is one piece of writing that `@name` drops in whole; `List` is one option per line that `#name` rolls between. A List card shows how many options it holds, and its `Insert` drops `#name` into your prompt instead of `@name`.\n\n" +
+        "The sidebar keeps the two apart: `Text categories` on top, `List categories` below, each with their own `New category` button. A category belongs to one side, so switching a card to List moves it into the List bucket, ready for you to file it wherever you like. Tags with no category of their own sit in `Text` or `List`. Because of the split, typing `@` only offers your text tags and `#` only offers your lists.\n\n" +
         "Your library is saved in ComfyUI's own settings, so it is private to you and survives updating the plugin. It is never saved into a workflow. Share it on purpose with `Export` and `Import`: Export lets you save everything or just one category, and Import shows you what is in the file so you can bring in only the categories you want (then keep both, replace, or skip when a name already exists).",
     },
     {
@@ -228,9 +232,10 @@ function escapeHTML(s) {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 function catColor(name) {
-  const cats = getCategories();
-  const i = cats.indexOf(name);
-  if (name === UNCATEGORIZED || i < 0) return "#7a7a7a";
+  // The two buckets (Text / List) are not real categories - keep them neutral grey.
+  if (name === TEXT_BUCKET || name === LIST_BUCKET) return "#7a7a7a";
+  const i = getCategories().indexOf(name);
+  if (i < 0) return "#7a7a7a";
   const PAL = ["#e0894b", "#5aa9e6", "#8e7bd6", "#5fbf8f", "#d76b98", "#c9a24b", "#6fb3b8"];
   return PAL[i % PAL.length];
 }
@@ -242,11 +247,10 @@ function catColor(name) {
 function wildCat(name) {
   const canonical = getCategories().find((c) => c && c.toLowerCase() === String(name).toLowerCase());
   if (!canonical) return null;
-  // Match the "Uncategorized" bucket too: an uncategorized tag is stored with cat ""
-  // (library normalize), while getCategories() surfaces it as the label "Uncategorized"
-  // - so fall the empty cat back to that label before comparing. Only string-text tags
-  // can be rolled (a corrupted import could carry a non-string text).
-  const pool = getTags().filter((t) => (t.cat || UNCATEGORIZED).toLowerCase() === canonical.toLowerCase() && typeof t.text === "string");
+  // catOf() matches the two buckets too: a tag with no category is stored with cat ""
+  // while getCategories() surfaces it under "Text" / "List" depending on its kind.
+  // Only string-text tags can be rolled (a corrupted import could carry a non-string).
+  const pool = getTags().filter((t) => catOf(t).toLowerCase() === canonical.toLowerCase() && typeof t.text === "string");
   return pool.length ? { canonical, pool } : null;
 }
 // RUN resolver: a fresh random tag's text (Math.random at queue time -> new each run).
@@ -436,12 +440,12 @@ function openAC(node, ta, start, q, mode) {
   const sym = mode === "wild" ? "*" : mode === "list" ? "#" : "@";
 
   if (mode === "list") {
-    // #lists offer the tags MARKED as a list (the Text / List switch in the
-    // library), with the number of options they roll from - straight out of listOf so
-    // the count is exactly the pool. Picking inserts #name.
+    // #lists offer ONLY the tags on the List side (the Text / List switch in the
+    // library), grouped by their List category, with the number of options they roll
+    // from - straight out of listOf so the count is exactly the pool. Inserts #name.
     const lists = getTags()
       .filter((t) => isListTag(t) && t.name.toLowerCase().includes(q))
-      .map((t) => ({ name: t.name, lines: listOf(t.name)?.lines || [] }))
+      .map((t) => ({ name: t.name, cat: catOf(t), lines: listOf(t.name)?.lines || [] }))
       .filter((t) => t.lines.length > 0);
     if (!lists.length) {
       const e = document.createElement("div");
@@ -451,20 +455,24 @@ function openAC(node, ta, start, q, mode) {
         : "No lists yet. Open Tags, then switch a tag to List and put one option per line.";
       el.appendChild(e);
     } else {
-      const h = document.createElement("div");
-      h.className = "pix-prm-ac-h";
-      h.innerHTML = `<span class="cd" style="background:#b98cff"></span>random line from a list`;
-      el.appendChild(h);
-      for (const t of lists) {
-        const idx = flat.length;
-        flat.push({ name: t.name });
-        const d = document.createElement("div");
-        d.className = "pix-prm-ac-i list" + (idx === 0 ? " sel" : "");
-        d.dataset.i = String(idx);
-        d.innerHTML = `<div class="pix-prm-ac-n">#${escapeHTML(t.name)}</div>` +
-          `<div class="pix-prm-ac-d">${t.lines.length} option${t.lines.length === 1 ? "" : "s"} · ${escapeHTML(t.lines.slice(0, 3).join(" · "))}</div>`;
-        d.addEventListener("mousedown", (e) => { e.preventDefault(); pickAC(flat[idx]); });
-        el.appendChild(d);
+      const byCat = new Map();
+      for (const t of lists) { if (!byCat.has(t.cat)) byCat.set(t.cat, []); byCat.get(t.cat).push(t); }
+      for (const c of getCategories("list").filter((c) => byCat.has(c))) {
+        const h = document.createElement("div");
+        h.className = "pix-prm-ac-h";
+        h.innerHTML = `<span class="cd" style="background:${catColor(c)}"></span>${escapeHTML(c)}`;
+        el.appendChild(h);
+        for (const t of byCat.get(c)) {
+          const idx = flat.length;
+          flat.push({ name: t.name });
+          const d = document.createElement("div");
+          d.className = "pix-prm-ac-i list" + (idx === 0 ? " sel" : "");
+          d.dataset.i = String(idx);
+          d.innerHTML = `<div class="pix-prm-ac-n">#${escapeHTML(t.name)}</div>` +
+            `<div class="pix-prm-ac-d">${t.lines.length} option${t.lines.length === 1 ? "" : "s"} · ${escapeHTML(t.lines.slice(0, 3).join(" · "))}</div>`;
+          d.addEventListener("mousedown", (e) => { e.preventDefault(); pickAC(flat[idx]); });
+          el.appendChild(d);
+        }
       }
     }
   } else if (mode === "wild") {
@@ -475,7 +483,7 @@ function openAC(node, ta, start, q, mode) {
     // number shown is exactly the pool it rolls from. Picking inserts *Category.
     const cats = getCategories()
       .filter((c) => c && c.toLowerCase().includes(q) && /^[a-zA-Z0-9_\-]+$/.test(c))
-      .map((c) => ({ name: c, count: (wildCat(c)?.pool.length) || 0 }))
+      .map((c) => ({ name: c, count: (wildCat(c)?.pool.length) || 0, list: isListCat(c) }))
       .filter((c) => c.count > 0);
     if (!cats.length) {
       const e = document.createElement("div");
@@ -493,25 +501,31 @@ function openAC(node, ta, start, q, mode) {
         const d = document.createElement("div");
         d.className = "pix-prm-ac-i wild" + (idx === 0 ? " sel" : "");
         d.dataset.i = String(idx);
-        d.innerHTML = `<div class="pix-prm-ac-n">*${escapeHTML(c.name)}</div><div class="pix-prm-ac-d">${c.count} tag${c.count === 1 ? "" : "s"} · random each run</div>`;
+        // A List category composes: *Cat picks one of its lists, then one of its lines.
+        const desc = c.list
+          ? `${c.count} list${c.count === 1 ? "" : "s"} · a random line from one of them`
+          : `${c.count} tag${c.count === 1 ? "" : "s"} · random each run`;
+        d.innerHTML = `<div class="pix-prm-ac-n">*${escapeHTML(c.name)}</div><div class="pix-prm-ac-d">${desc}</div>`;
         d.addEventListener("mousedown", (e) => { e.preventDefault(); pickAC(flat[idx]); });
         el.appendChild(d);
       }
     }
   } else {
-    // @tags, grouped by category.
-    const tags = getTags().filter((t) => t.name.toLowerCase().includes(q));
+    // @tags: ONLY the Text side, grouped by category. A List belongs to #, so
+    // offering it here would just be noise (typing @listname still works - the symbol
+    // is always the authority - it is simply not advertised).
+    const tags = getTags().filter((t) => !isListTag(t) && t.name.toLowerCase().includes(q));
     const byCat = new Map();
     for (const t of tags) {
-      const c = t.cat || UNCATEGORIZED;
+      const c = catOf(t);
       if (!byCat.has(c)) byCat.set(c, []);
       byCat.get(c).push(t);
     }
-    const order = getCategories().filter((c) => byCat.has(c));
+    const order = getCategories("text").filter((c) => byCat.has(c));
     if (!tags.length) {
       const e = document.createElement("div");
       e.className = "pix-prm-ac-empty";
-      e.textContent = q ? `No tag matches "@${q}". Open Tags to add one.` : "No tags yet. Open Tags to add one.";
+      e.textContent = q ? `No text tag matches "@${q}". Type # for your lists, or open Tags to add one.` : "No tags yet. Open Tags to add one.";
       el.appendChild(e);
     } else {
       for (const c of order) {
@@ -525,11 +539,7 @@ function openAC(node, ta, start, q, mode) {
           const d = document.createElement("div");
           d.className = "pix-prm-ac-i" + (idx === 0 ? " sel" : "");
           d.dataset.i = String(idx);
-          // A List tag is offered here too (@ gives the WHOLE block), flagged so it is
-          // obvious that #name is the one that rolls a single line.
-          const opts = isListTag(t) ? tagLines(t.text).length : 0;
-          const desc = opts ? `list of ${opts} · @ inserts them all, #${t.name} rolls one` : t.text;
-          d.innerHTML = `<div class="pix-prm-ac-n">@${escapeHTML(t.name)}</div><div class="pix-prm-ac-d">${escapeHTML(desc)}</div>`;
+          d.innerHTML = `<div class="pix-prm-ac-n">@${escapeHTML(t.name)}</div><div class="pix-prm-ac-d">${escapeHTML(t.text)}</div>`;
           d.addEventListener("mousedown", (e) => { e.preventDefault(); pickAC(flat[idx]); });
           el.appendChild(d);
         }

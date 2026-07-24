@@ -11,8 +11,8 @@ import { installGraphUndoGuard } from "../shared/graph_undo_guard.mjs";
 import { BRAND } from "../shared/utils.mjs";
 import {
   getLibrary, commitLibrary, flushLibrary, exportLibraryJSON, parseImport, applyImport,
-  importCategories, subsetImport, isListTag, tagLines,
-  UNCATEGORIZED, NAME_RE,
+  importCategories, subsetImport, isListTag, tagLines, catOf, sideOfCat,
+  TEXT_BUCKET, LIST_BUCKET, NAME_RE,
 } from "./library.mjs";
 
 const PAL = ["#e0894b", "#5aa9e6", "#8e7bd6", "#5fbf8f", "#d76b98", "#c9a24b", "#6fb3b8"];
@@ -38,16 +38,37 @@ function newDraft(text) {
 }
 let _createDraft = newDraft();
 
-function clone(d) { return { version: 1, categories: [...d.categories], tags: d.tags.map((t) => ({ ...t })) }; }
+function clone(d) {
+  return { version: 1, categories: [...d.categories], listCats: [...(d.listCats || [])], tags: d.tags.map((t) => ({ ...t })) };
+}
 function esc(s) { return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
 function sanitizeName(n) { return String(n || "").replace(NAME_RE, ""); }
 function colorOf(cat) {
-  if (!cat || cat === UNCATEGORIZED) return "#7a7a7a";
+  // The two buckets are not real categories - neutral grey, like the old Uncategorized.
+  if (!cat || cat === TEXT_BUCKET || cat === LIST_BUCKET) return "#7a7a7a";
   const i = _data.categories.indexOf(cat);
   return PAL[(i < 0 ? 0 : i) % PAL.length];
 }
-function tagsIn(cat) { return _data.tags.filter((t) => (t.cat || UNCATEGORIZED) === cat); }
-function hasUncat() { return _data.tags.some((t) => !t.cat); }
+function tagsIn(cat) { return _data.tags.filter((t) => catOf(t) === cat); }
+// Which side a name sits on, against the WORKING copy (not the persisted library).
+function sideOf(cat) { return sideOfCat(cat, _data); }
+// Real categories on one side, in order.
+function catsOnSide(side) { return _data.categories.filter((c) => sideOf(c) === side); }
+// A side's bucket is listed only when a tag actually sits in it.
+function bucketUsed(side) {
+  return _data.tags.some((t) => !t.cat && (isListTag(t) ? "list" : "text") === side);
+}
+const bucketOf = (side) => (side === "list" ? LIST_BUCKET : TEXT_BUCKET);
+// "Text" / "List" (and the legacy "Uncategorized") name buckets, never categories.
+function isReservedName(v) {
+  const k = String(v || "").trim().toLowerCase();
+  return k === TEXT_BUCKET.toLowerCase() || k === LIST_BUCKET.toLowerCase() || k === "uncategorized";
+}
+// Add a category on a side (the List side is recorded in listCats).
+function addCategory(name, side) {
+  _data.categories.push(name);
+  if (side === "list") _data.listCats.push(name);
+}
 function uniqueNameExcept(base, exceptTag) {
   let n = sanitizeName(base) || "tag";
   const taken = (x) => { const k = x.toLowerCase(); return _data.tags.some((t) => t !== exceptTag && t.name.toLowerCase() === k); };
@@ -175,6 +196,7 @@ function injectCSS() {
     .pix-prled-menu .mi.dim { opacity:.45; cursor:default; }
     .pix-prled-menu .mi.dim:hover { background:none; color:#cfcfcf; }
     .pix-prled-menu .msep { height:1px; background:#2a2a2a; margin:4px 2px; }
+    .pix-prled-menu .mhead { padding:4px 10px 5px; font:600 9.5px 'Segoe UI',sans-serif; letter-spacing:.09em; text-transform:uppercase; color:#767676; }
     .pix-prled-foot { display:flex; align-items:center; gap:9px; padding:10px 16px; border-top:1px solid #0e0e0e; background:#161616; }
     .pix-prled-foot .push { margin-left:auto; }
     /* max-height + scroll so a library with many categories can't push the menu (this
@@ -209,24 +231,24 @@ function injectCSS() {
 
 function hideCatMenu() { if (_catMenu) { _catMenu.remove(); _catMenu = null; } }
 
-// Generic category picker: lists every category + Uncategorized + a New-category
-// row, and calls onPick(catValue) ("" = Uncategorized). Does NOT re-render - the
-// caller decides (so the create form keeps its typed name/text when picking).
-function openCategoryMenu(anchor, onPick) {
+// Category picker for ONE side: that side's categories + its bucket + a New-category
+// row (which creates on that side), calling onPick(catValue) ("" = the bucket).
+// Does NOT re-render - the caller decides (so the create form keeps its typed values).
+function openCategoryMenu(anchor, onPick, side) {
   hideCatMenu();
+  const sd = side === "list" ? "list" : "text";
   const menu = document.createElement("div");
   menu.className = "pix-prled-menu";
-  const cats = [..._data.categories, UNCATEGORIZED];
-  for (const c of cats) {
+  for (const c of [...catsOnSide(sd), bucketOf(sd)]) {
     const mi = document.createElement("div");
     mi.className = "mi";
     mi.innerHTML = `<span class="cd" style="background:${colorOf(c)}"></span>${esc(c)}`;
-    mi.addEventListener("click", () => { hideCatMenu(); onPick(c === UNCATEGORIZED ? "" : c); });
+    mi.addEventListener("click", () => { hideCatMenu(); onPick(c === bucketOf(sd) ? "" : c); });
     menu.appendChild(mi);
   }
   const nc = document.createElement("div");
   nc.className = "mi newc";
-  nc.innerHTML = `<span>＋</span> New category`;
+  nc.innerHTML = `<span>＋</span> New ${sd === "list" ? "list " : ""}category`;
   const inp = document.createElement("input");
   inp.placeholder = "name"; inp.style.display = "none";
   nc.addEventListener("click", () => { inp.style.display = "block"; inp.focus(); });
@@ -234,15 +256,17 @@ function openCategoryMenu(anchor, onPick) {
     e.stopPropagation();
     if (e.key === "Enter") {
       const v = inp.value.trim();
-      // The reserved bucket is NOT a real category: typing it just files the tag as
-      // Uncategorized (never push it -> a phantom duplicate sidebar row).
-      const reserved = v && v.toLowerCase() === UNCATEGORIZED.toLowerCase();
+      // A bucket name is NOT a real category: typing it just files the tag in that
+      // bucket (never push it -> a phantom duplicate sidebar row).
+      const reserved = v && isReservedName(v);
       // If it case-collides with an existing category, use the EXISTING (canonical)
       // one - never assign the tag a wrong-case category that no sidebar row matches.
       const existing = (v && !reserved) ? _data.categories.find((c) => c.toLowerCase() === v.toLowerCase()) : null;
-      if (v && !reserved && !existing) { _data.categories.push(v); commit(); }
+      if (v && !reserved && !existing) { addCategory(v, sd); commit(); }
       hideCatMenu();
-      if (v) onPick(reserved ? "" : (existing || v));
+      // An existing name keeps ITS side, so only pick it when the sides agree -
+      // otherwise the tag would land in a category that cannot hold it.
+      if (v) onPick(reserved || (existing && sideOf(existing) !== sd) ? "" : (existing || v));
     }
     if (e.key === "Escape") hideCatMenu();
   });
@@ -253,9 +277,10 @@ function openCategoryMenu(anchor, onPick) {
   menu.style.top = Math.min(r.bottom + 4, window.innerHeight - menu.offsetHeight - 8) + "px";
   _catMenu = menu;
 }
-// Moving an existing tag between categories: persist + re-render.
+// Moving an existing tag between categories: only its OWN side is offered, since a
+// category holds one kind. Persist + re-render.
 function openCatMenu(tag, anchor) {
-  openCategoryMenu(anchor, (c) => { tag.cat = c; commit(); render(); });
+  openCategoryMenu(anchor, (c) => { tag.cat = c; commit(); render(); }, isListTag(tag) ? "list" : "text");
 }
 document.addEventListener("mousedown", (e) => {
   if (_catMenu && !_catMenu.contains(e.target) && !e.target.closest(".pix-prled-pill")) hideCatMenu();
@@ -303,7 +328,7 @@ function makeCard(tag) {
   });
   nm.addEventListener("blur", () => { const u = uniqueNameExcept(nm.value, tag); if (u !== tag.name) { tag.name = u; nm.value = u; } commit(); });
   nm.addEventListener("keydown", (e) => e.stopPropagation());
-  const cc = tag.cat || UNCATEGORIZED;
+  const cc = catOf(tag);
   const pill = document.createElement("button");
   pill.className = "pix-prled-pill"; pill.title = "Move to another category";
   pill.innerHTML = `<span class="cd" style="background:${colorOf(cc)}"></span><span>${esc(cc)}</span>`;
@@ -328,8 +353,15 @@ function makeCard(tag) {
   // prompt is what actually decides at expand time), so flipping it can never break
   // an existing prompt: @name keeps giving the whole block either way.
   const kindSw = makeKindSwitch((toList) => {
+    if (isListTag(tag) === !!toList) return;
     if (toList) tag.kind = "list"; else delete tag.kind;
-    commit(); paintKind();
+    // A category belongs to ONE side, so a flipped tag cannot stay in it: send it to
+    // its new side's bucket, where the user can file it from the category pill.
+    const moved = tag.cat && sideOf(tag.cat) !== (toList ? "list" : "text");
+    if (moved) tag.cat = "";
+    commit();
+    render();   // it may have left the category being shown
+    if (moved) toast("info", `@${tag.name} moved to ${bucketOf(toList ? "list" : "text")}`);
   });
   function paintKind() {
     const list = isListTag(tag);
@@ -348,15 +380,14 @@ function makeCard(tag) {
   return card;
 }
 
-function renderSidebar(side) {
-  side.innerHTML = "";
-  side.appendChild(Object.assign(document.createElement("div"), { className: "lbl", textContent: "Categories" }));
+function renderSidebar(sideEl) {
+  sideEl.innerHTML = "";
   const mkCat = (label, color, count, key, renamable) => {
     const r = document.createElement("div");
     r.className = "pix-prled-cat" + (_curCat === key ? " on" : "");
     r.innerHTML = (color ? `<span class="cd" style="background:${color}"></span>` : `<span style="width:11px"></span>`) +
       `<span class="nm">${esc(label)}</span>` +
-      (renamable ? `<span class="act ren" title="Rename">✎</span><span class="act rem" title="Delete category (tags become Uncategorized)">✕</span>` : "") +
+      (renamable ? `<span class="act ren" title="Rename">✎</span><span class="act rem" title="Delete category (its tags move to the bucket)">✕</span>` : "") +
       `<span class="cnt">${count}</span>`;
     r.addEventListener("click", (e) => {
       if (e.target.classList.contains("ren")) { startRenameCat(r, key); return; }
@@ -365,27 +396,45 @@ function renderSidebar(side) {
     });
     return r;
   };
-  side.appendChild(mkCat("All tags", "", _data.tags.length, "All", false));
-  for (const c of _data.categories) side.appendChild(mkCat(c, colorOf(c), tagsIn(c).length, c, true));
-  if (hasUncat()) side.appendChild(mkCat(UNCATEGORIZED, colorOf(UNCATEGORIZED), tagsIn(UNCATEGORIZED).length, UNCATEGORIZED, false));
+  sideEl.appendChild(mkCat("All tags", "", _data.tags.length, "All", false));
 
-  const nc = document.createElement("div");
-  nc.className = "pix-prled-newcat";
-  const b = document.createElement("button");
-  b.className = "pix-prled-btn"; b.innerHTML = `<span>＋</span> New category`;
-  b.addEventListener("click", () => {
-    const inp = document.createElement("input");
-    inp.placeholder = "category name";
-    inp.style.cssText = "width:100%;margin-top:6px;background:#151515;border:1px solid var(--acc);border-radius:6px;color:#e6e6e6;font:12px monospace;padding:7px 9px;outline:none;";
-    b.style.display = "none"; nc.appendChild(inp); inp.focus();
-    inp.addEventListener("keydown", (e) => {
-      e.stopPropagation();
-      if (e.key === "Enter") { const v = inp.value.trim(); if (v && v.toLowerCase() !== UNCATEGORIZED.toLowerCase() && !_data.categories.some((c) => c.toLowerCase() === v.toLowerCase())) { _data.categories.push(v); _curCat = v; commit(); } render(); }
-      if (e.key === "Escape") render();
+  // One block per side. A category belongs to exactly one of them, so the lists never
+  // mix in with the text snippets - each block also gets its own New category button.
+  const block = (sd, heading) => {
+    sideEl.appendChild(Object.assign(document.createElement("div"), { className: "lbl", textContent: heading }));
+    if (bucketUsed(sd)) {
+      const b = bucketOf(sd);
+      sideEl.appendChild(mkCat(b, colorOf(b), tagsIn(b).length, b, false));
+    }
+    for (const c of catsOnSide(sd)) sideEl.appendChild(mkCat(c, colorOf(c), tagsIn(c).length, c, true));
+    const nc = document.createElement("div");
+    nc.className = "pix-prled-newcat";
+    const btn = document.createElement("button");
+    btn.className = "pix-prled-btn";
+    btn.innerHTML = `<span>＋</span> New category`;
+    btn.title = sd === "list" ? "A category that holds lists" : "A category that holds text tags";
+    btn.addEventListener("click", () => {
+      const inp = document.createElement("input");
+      inp.placeholder = sd === "list" ? "list category name" : "category name";
+      inp.style.cssText = "width:100%;margin-top:6px;background:#151515;border:1px solid var(--acc);border-radius:6px;color:#e6e6e6;font:12px monospace;padding:7px 9px;outline:none;";
+      btn.style.display = "none"; nc.appendChild(inp); inp.focus();
+      inp.addEventListener("keydown", (e) => {
+        e.stopPropagation();
+        if (e.key === "Enter") {
+          const v = inp.value.trim();
+          if (v && !isReservedName(v) && !_data.categories.some((c) => c.toLowerCase() === v.toLowerCase())) {
+            addCategory(v, sd); _curCat = v; commit();
+          }
+          render();
+        }
+        if (e.key === "Escape") render();
+      });
+      inp.addEventListener("blur", () => setTimeout(() => { if (inp.isConnected) render(); }, 120));
     });
-    inp.addEventListener("blur", () => setTimeout(() => { if (inp.isConnected) render(); }, 120));
-  });
-  nc.appendChild(b); side.appendChild(nc);
+    nc.appendChild(btn); sideEl.appendChild(nc);
+  };
+  block("text", "Text categories");
+  block("list", "List categories");
 }
 function startRenameCat(row, cat) {
   const nmSpan = row.querySelector(".nm");
@@ -398,9 +447,11 @@ function startRenameCat(row, cat) {
   inp.addEventListener("click", (e) => e.stopPropagation());
   const commitRename = () => {
     const v = inp.value.trim();
-    if (v && v.toLowerCase() !== cat.toLowerCase() && v.toLowerCase() !== UNCATEGORIZED.toLowerCase() && !_data.categories.some((c) => c.toLowerCase() === v.toLowerCase())) {
+    if (v && v.toLowerCase() !== cat.toLowerCase() && !isReservedName(v) && !_data.categories.some((c) => c.toLowerCase() === v.toLowerCase())) {
       const idx = _data.categories.indexOf(cat);
       if (idx > -1) _data.categories[idx] = v;
+      const li = _data.listCats.indexOf(cat);   // keep it on the same side
+      if (li > -1) _data.listCats[li] = v;
       for (const t of _data.tags) if (t.cat === cat) t.cat = v;
       if (_curCat === cat) _curCat = v;
       commit();
@@ -413,7 +464,9 @@ function startRenameCat(row, cat) {
 function deleteCat(cat) {
   const idx = _data.categories.indexOf(cat);
   if (idx > -1) _data.categories.splice(idx, 1);
-  for (const t of _data.tags) if (t.cat === cat) t.cat = "";
+  const li = _data.listCats.indexOf(cat);
+  if (li > -1) _data.listCats.splice(li, 1);
+  for (const t of _data.tags) if (t.cat === cat) t.cat = "";   // -> that tag's own bucket
   if (_curCat === cat) _curCat = "All";
   commit(); render();
 }
@@ -421,8 +474,14 @@ function deleteCat(cat) {
 // hit Create - no bouncing to a button on the far side of the editor. New tags
 // land in the currently-selected category (Uncategorized when "All" is selected).
 function buildCreateForm() {
-  // Default to the selected sidebar category; the user can change it right here.
-  let createCat = (_curCat !== "All" && _curCat !== UNCATEGORIZED) ? _curCat : ""; // "" = Uncategorized
+  // Whichever side the sidebar is showing decides what you are about to make: open a
+  // List category and the form is ready for a list. "All tags" has no side, and once
+  // the user works the switch themselves their choice sticks.
+  const isRealCat = (c) => c !== "All" && c !== TEXT_BUCKET && c !== LIST_BUCKET;
+  const sidebarSide = _curCat === "All" ? null : sideOf(_curCat);
+  if (sidebarSide && !_createDraft.kindTouched) _createDraft.kind = sidebarSide;
+  const sideNow = () => (_createDraft.kind === "list" ? "list" : "text");
+  let createCat = isRealCat(_curCat) && sideOf(_curCat) === sideNow() ? _curCat : "";
   const form = document.createElement("div");
   form.className = "pix-prled-create";
   const nm = document.createElement("input"); nm.className = "cnm"; nm.placeholder = "new tag name"; nm.spellcheck = false;
@@ -441,27 +500,36 @@ function buildCreateForm() {
     const list = _createDraft.kind === "list";
     kindSw.paint(list, null);
     tx.placeholder = list ? "one option per line - press Enter for the next one" : "what it expands to - the full prompt text";
-    // A list needs room to type several lines; a snippet stays on the one-line row.
+    // A list needs room to type several lines; a text tag stays on the one-line row.
     tx.style.height = list ? "76px" : "36px";
+    // The chosen category only holds one side, so drop it when the kind flips away.
+    if (createCat && sideOf(createCat) !== sideNow()) createCat = "";
+    paintCat();
   };
   // Seed from the in-progress draft so name + text survive a re-render (sidebar
   // category click / search), then keep the draft in sync as the user types.
   nm.value = _createDraft.name; tx.value = _createDraft.text;
-  paintKind();
   nm.addEventListener("input", () => { _createDraft.name = nm.value; });
   tx.addEventListener("input", () => {
     _createDraft.text = tx.value;
-    if (_createDraft.kindTouched) return;
+    // Guess from the text ONLY under "All tags", where nothing else says which side
+    // this belongs to. Inside a category the side is already settled, so typing one
+    // line in a List category must not throw the tag back to Text.
+    if (_createDraft.kindTouched || sidebarSide) return;
     const k = tagLines(tx.value).length > 1 ? "list" : "text";
     if (k !== _createDraft.kind) { _createDraft.kind = k; paintKind(); }
   });
   const catBtn = document.createElement("button"); catBtn.className = "pix-prled-pill ccat"; catBtn.title = "Category for the new tag - click to change";
   const paintCat = () => {
-    const label = createCat || UNCATEGORIZED;
+    const label = createCat || bucketOf(sideNow());
     catBtn.innerHTML = `<span class="cd" style="background:${colorOf(label)}"></span><span>${esc(label)}</span><span class="car">▾</span>`;
   };
-  paintCat();
-  catBtn.addEventListener("click", (e) => { e.stopPropagation(); openCategoryMenu(catBtn, (c) => { createCat = c; paintCat(); }); });
+  // Only now that paintCat exists (paintKind calls it) can the first paint run.
+  paintKind();
+  catBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    openCategoryMenu(catBtn, (c) => { createCat = c; paintCat(); }, sideNow());
+  });
   const btn = document.createElement("button"); btn.className = "cbtn"; btn.textContent = "Create tag";
   btn.title = "Add this tag to the library (Ctrl+Enter)";
   const doCreate = () => {
@@ -499,7 +567,7 @@ function buildGrid() {
   grid.className = "pix-prled-grid";
   const q = _search.toLowerCase();
   const rows = _data.tags.filter((t) =>
-    (_curCat === "All" || (t.cat || UNCATEGORIZED) === _curCat) &&
+    (_curCat === "All" || catOf(t) === _curCat) &&
     (!q || t.name.toLowerCase().includes(q) || t.text.toLowerCase().includes(q)));
   if (!rows.length) {
     const e = document.createElement("div");
@@ -516,7 +584,12 @@ function renderContent(content) {
   const h = document.createElement("div");
   h.className = "h";
   if (_curCat === "All") h.innerHTML = `<span>All tags</span><span class="c">· ${_data.tags.length}</span>`;
-  else h.innerHTML = `<span class="cd" style="background:${colorOf(_curCat)}"></span><span>${esc(_curCat)}</span><span class="c">· ${tagsIn(_curCat).length} tags</span>`;
+  else {
+    const n = tagsIn(_curCat).length;
+    const word = sideOf(_curCat) === "list" ? "list" : "tag";
+    h.innerHTML = `<span class="cd" style="background:${colorOf(_curCat)}"></span><span>${esc(_curCat)}</span>` +
+      `<span class="c">· ${n} ${word}${n === 1 ? "" : "s"}</span>`;
+  }
   head.append(h);
   content.append(head, buildCreateForm(), buildGrid());
 }
@@ -562,11 +635,16 @@ function openExportMenu(anchor) {
     menu.appendChild(mi);
   };
   add("Everything", "", _data.tags.length, null);
-  if (_data.categories.length || hasUncat()) {
+  // Same two blocks as the sidebar, so the menu reads like the library looks.
+  const block = (sd, heading) => {
+    const names = [...(bucketUsed(sd) ? [bucketOf(sd)] : []), ...catsOnSide(sd)];
+    if (!names.length) return;
     menu.appendChild(Object.assign(document.createElement("div"), { className: "msep" }));
-  }
-  for (const c of _data.categories) add(c, colorOf(c), tagsIn(c).length, c);
-  if (hasUncat()) add(UNCATEGORIZED, colorOf(UNCATEGORIZED), tagsIn(UNCATEGORIZED).length, UNCATEGORIZED);
+    menu.appendChild(Object.assign(document.createElement("div"), { className: "mhead", textContent: heading }));
+    for (const c of names) add(c, colorOf(c), tagsIn(c).length, c);
+  };
+  block("text", "Text categories");
+  block("list", "List categories");
   _overlay.appendChild(menu);
   // The button sits in the footer, so open UPWARD when there isn't room below.
   const r = anchor.getBoundingClientRect();

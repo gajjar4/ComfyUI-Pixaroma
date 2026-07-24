@@ -13,25 +13,43 @@
 //     Same mechanism Seed history + Node Colors favorites use.
 //
 // tags are kept newest-first (new ones are unshifted on). categories are ordered
-// and may be empty; "Uncategorized" is the implicit bucket for a tag with no cat.
+// and may be empty.
 //
-// A tag also carries an OPTIONAL kind:"list" - one option per line, rolled to a
-// single line by a #name token (see expand.mjs). The key is written ONLY when it is
-// "list", so an existing library / an old export file needs no migration and is
-// never rewritten just to add a default.
+// A tag carries an OPTIONAL kind:"list" - one option per line, rolled to a single
+// line by a #name token (see expand.mjs). The key is written ONLY when it is "list",
+// so an existing library / an old export file needs no migration and is never
+// rewritten just to add a default.
+//
+// EVERY CATEGORY BELONGS TO ONE SIDE: a Text category or a List category. `listCats`
+// names the List ones (a subset of `categories`, which stays the full ordered list so
+// an older Pixaroma reading a newer file still sees every category). A tag whose kind
+// disagrees with its category's side is moved to its own bucket by normalize - the
+// TAG's kind always wins, so a list can never be silently turned into plain text.
+// "Text" and "List" are the two implicit buckets for a tag with no category (they
+// replaced the single "Uncategorized" bucket); like it, they are reserved names and
+// can never be real categories.
 
 import { app } from "/scripts/app.js";
 
 const LIBRARY_SETTING = "Pixaroma.Prompt.Library";
 export const NAME_RE = /[^a-zA-Z0-9_\-]/g;
+// The two implicit buckets for a tag with no category, one per side.
+export const TEXT_BUCKET = "Text";
+export const LIST_BUCKET = "List";
+// The single pre-2026-07-24 bucket. Still recognised on read so an existing library
+// (or an old export file) folds into the new buckets; never written or shown again.
 export const UNCATEGORIZED = "Uncategorized";
+const RESERVED = new Set([TEXT_BUCKET, LIST_BUCKET, UNCATEGORIZED].map((s) => s.toLowerCase()));
+const lc = (s) => String(s == null ? "" : s).toLowerCase();
 
 // Seeded ONCE, the first time this browser opens a Prompt node (setting never
 // written). Gives a new user a working template; every seed is editable/deletable.
 const SEED = {
   version: 1,
-  categories: ["Styles", "Lighting", "Camera"],
+  categories: ["Styles", "Lighting", "Camera", "Subjects"],
+  listCats: ["Subjects"],   // so a new user sees what a List category is for
   tags: [
+    { name: "animal", cat: "Subjects", kind: "list", text: "a red fox\na snow leopard\na barn owl\na koi carp" },
     { name: "oilpainting", cat: "Styles", text: "oil painting, thick impasto brush strokes, dramatic Rembrandt lighting, rich canvas texture, fine-art masterpiece" },
     { name: "watercolor", cat: "Styles", text: "loose watercolor wash, soft bleeding edges, paper texture, gentle pigment" },
     { name: "cyberpunk", cat: "Styles", text: "cyberpunk city, neon signs, rain-slick streets, volumetric fog, blade-runner mood" },
@@ -55,48 +73,76 @@ function cleanName(n) {
 
 // Coerce any parsed blob into the canonical shape, deduping tag names.
 function normalize(raw) {
-  const out = { version: 1, categories: [], tags: [] };
+  const out = { version: 1, categories: [], listCats: [], tags: [] };
   const src = raw && typeof raw === "object" ? raw : {};
-  const cats = Array.isArray(src.categories) ? src.categories : [];
   const seenCat = new Set();
-  for (const c of cats) {
+  const addCat = (c) => {
     const name = String(c || "").trim();
-    // Reserved bucket is case-INSENSITIVE: a user-typed "uncategorized" must not
-    // survive as a separate category that then merges with the synthetic bucket.
-    if (!name || name.toLowerCase() === UNCATEGORIZED.toLowerCase()) continue;
-    const key = name.toLowerCase();
-    if (seenCat.has(key)) continue;
-    seenCat.add(key);
+    // Reserved names are case-INSENSITIVE: a user-typed "list" must not survive as a
+    // separate category that then merges with the synthetic bucket of the same name.
+    if (!name || RESERVED.has(lc(name)) || seenCat.has(lc(name))) return;
+    seenCat.add(lc(name));
     out.categories.push(name);
+  };
+  for (const c of (Array.isArray(src.categories) ? src.categories : [])) addCat(c);
+  // Declared List-side categories. A name here that the categories array forgot is
+  // still a real category, so add it (an export of only the list side has no
+  // `categories` overlap to rely on).
+  const listKeys = new Set();
+  for (const c of (Array.isArray(src.listCats) ? src.listCats : [])) {
+    const name = String(c || "").trim();
+    if (!name || RESERVED.has(lc(name))) continue;
+    listKeys.add(lc(name));
+    addCat(name);
   }
-  const tags = Array.isArray(src.tags) ? src.tags : [];
   const seenTag = new Set();
-  for (const t of tags) {
+  for (const t of (Array.isArray(src.tags) ? src.tags : [])) {
     if (!t) continue;
     const name = cleanName(t.name);
-    if (!name) continue;
-    const key = name.toLowerCase();
-    if (seenTag.has(key)) continue;
-    seenTag.add(key);
+    if (!name || seenTag.has(lc(name))) continue;
+    seenTag.add(lc(name));
     let cat = String(t.cat || "").trim();
-    if (cat.toLowerCase() === UNCATEGORIZED.toLowerCase()) cat = "";
+    let kind = t.kind === "list" ? "list" : "text";
+    if (RESERVED.has(lc(cat))) {
+      // A bucket name is not a category. "List" also TELLS us the tag is a list (an
+      // import file may name the bucket instead of setting kind); legacy
+      // "Uncategorized" says nothing about the kind, so the tag's own kind stands.
+      if (lc(cat) === lc(LIST_BUCKET)) kind = "list";
+      else if (lc(cat) === lc(TEXT_BUCKET)) kind = "text";
+      cat = "";
+    }
     const rec = { name, cat, text: typeof t.text === "string" ? t.text : "" };
     // Only "list" is stored; anything else (missing, "text", junk) stays absent so a
-    // plain snippet library round-trips byte-identical.
-    if (t.kind === "list") rec.kind = "list";
+    // plain text library round-trips byte-identical.
+    if (kind === "list") rec.kind = "list";
     out.tags.push(rec);
   }
   // Reconcile every tag's category to the canonical (case-matching) entry in the
   // list; a category a tag references but the list forgot is added - so the editor
   // sidebar (exact match) and the node's category list never disagree, and a
   // case-variant ("styles" vs "Styles") can't orphan a tag.
-  const catByKey = new Map(out.categories.map((c) => [c.toLowerCase(), c]));
+  const catByKey = new Map(out.categories.map((c) => [lc(c), c]));
   for (const t of out.tags) {
     if (!t.cat) continue;
-    const canon = catByKey.get(t.cat.toLowerCase());
+    const canon = catByKey.get(lc(t.cat));
     if (canon) t.cat = canon;
-    else { out.categories.push(t.cat); catByKey.set(t.cat.toLowerCase(), t.cat); }
+    else { out.categories.push(t.cat); catByKey.set(lc(t.cat), t.cat); seenCat.add(lc(t.cat)); }
   }
+  // Side repair (also the one-time migration for a library written before sides
+  // existed): an UNDECLARED category holding nothing but lists is a List category.
+  for (const c of out.categories) {
+    if (listKeys.has(lc(c))) continue;
+    const inCat = out.tags.filter((t) => lc(t.cat) === lc(c));
+    if (inCat.length && inCat.every((t) => t.kind === "list")) listKeys.add(lc(c));
+  }
+  // A category belongs to ONE side, so a tag whose kind disagrees with it moves to
+  // its own bucket. The TAG's kind wins - never silently retype someone's list.
+  for (const t of out.tags) {
+    if (!t.cat) continue;
+    const side = listKeys.has(lc(t.cat)) ? "list" : "text";
+    if (side !== (t.kind === "list" ? "list" : "text")) t.cat = "";
+  }
+  out.listCats = out.categories.filter((c) => listKeys.has(lc(c)));
   return out;
 }
 
@@ -132,19 +178,20 @@ export function getLibrary() {
 
 export function getTags() { return getLibrary().tags; }
 
-// Ordered category names PLUS any category a tag references but the list forgot,
-// so the UI never hides a tag. "Uncategorized" is appended only when something uses it.
-export function getCategories() {
+// Ordered category names. `side` ("text" | "list") filters to one side; omit for
+// both. The side's bucket is appended when a tag actually sits in it. (normalize
+// guarantees every referenced category is already in the list.)
+export function getCategories(side) {
   const data = getLibrary();
-  const out = [...data.categories];
-  const have = new Set(out.map((c) => c.toLowerCase()));
-  let hasUncat = false;
-  for (const t of data.tags) {
-    if (!t.cat) { hasUncat = true; continue; }
-    if (!have.has(t.cat.toLowerCase())) { have.add(t.cat.toLowerCase()); out.push(t.cat); }
-  }
-  if (hasUncat && !have.has(UNCATEGORIZED.toLowerCase())) out.push(UNCATEGORIZED);
+  const out = data.categories.filter((c) => !side || sideOfCat(c, data) === side);
+  if (side !== "list" && data.tags.some((t) => !t.cat && !isListTag(t))) out.push(TEXT_BUCKET);
+  if (side !== "text" && data.tags.some((t) => !t.cat && isListTag(t))) out.push(LIST_BUCKET);
   return out;
+}
+// The tags that show under a category name (a real one or a bucket).
+export function tagsInCat(name, data) {
+  const d = data || getLibrary();
+  return d.tags.filter((t) => lc(catOf(t)) === lc(name));
 }
 
 // Is this tag meant to be rolled one line at a time? (Cosmetic + convenience only:
@@ -162,8 +209,18 @@ export function tagLines(text) {
   return out;
 }
 
-// The bucket label a tag belongs to ("" -> "Uncategorized").
-export function catOf(t) { return (t && t.cat) || UNCATEGORIZED; }
+// The category a tag shows under: its own, else the bucket for its side.
+export function catOf(t) { return (t && t.cat) || (isListTag(t) ? LIST_BUCKET : TEXT_BUCKET); }
+
+// Which side a category name sits on. The two buckets answer for themselves; an
+// unknown name is a Text category (the default side).
+export function sideOfCat(name, data) {
+  if (lc(name) === lc(LIST_BUCKET)) return "list";
+  if (lc(name) === lc(TEXT_BUCKET)) return "text";
+  const d = data || getLibrary();
+  return (d.listCats || []).some((c) => lc(c) === lc(name)) ? "list" : "text";
+}
+export function isListCat(name, data) { return sideOfCat(name, data) === "list"; }
 
 export function findTag(name) {
   const k = String(name).toLowerCase();
@@ -217,15 +274,18 @@ export function flushLibrary() {
 export function subscribe(fn) { _subs.add(fn); return () => _subs.delete(fn); }
 
 // Serialize the library for a file. `cat` omitted / null = everything; otherwise
-// only that one bucket (pass UNCATEGORIZED for the uncategorized tags). A scoped
+// only that one bucket (pass TEXT_BUCKET / LIST_BUCKET for the tags with no category
+// of their own). A scoped
 // export still carries its category entry so the tags land back in the right place.
 export function exportLibraryJSON(cat) {
   const lib = getLibrary();
   if (cat == null) return JSON.stringify(lib, null, 2);
-  const key = String(cat).toLowerCase();
-  const tags = lib.tags.filter((t) => catOf(t).toLowerCase() === key);
-  const categories = lib.categories.filter((c) => c.toLowerCase() === key);
-  return JSON.stringify({ version: 1, categories, tags }, null, 2);
+  const tags = tagsInCat(cat, lib);
+  // A bucket is not a real category, so it contributes no category entry - the tags'
+  // own kind puts them back in the right bucket on import.
+  const categories = lib.categories.filter((c) => lc(c) === lc(cat));
+  const listCats = categories.filter((c) => isListCat(c, lib));
+  return JSON.stringify({ version: 1, categories, listCats, tags }, null, 2);
 }
 
 // The buckets a parsed import file contains, in file order, with counts - what the
@@ -246,12 +306,13 @@ export function importCategories(parsed) {
 // live library, so the keep-both / replace / skip step only ever sees tags that are
 // actually coming in. Same { data, conflicts } shape parseImport returns.
 export function subsetImport(parsed, names) {
-  const keep = new Set((names || []).map((n) => String(n).toLowerCase()));
-  const tags = (parsed?.data?.tags || []).filter((t) => keep.has(catOf(t).toLowerCase()));
-  const categories = (parsed?.data?.categories || []).filter((c) => keep.has(String(c).toLowerCase()));
-  const have = new Set(getTags().map((t) => t.name.toLowerCase()));
-  const conflicts = tags.filter((t) => have.has(t.name.toLowerCase())).map((t) => t.name);
-  return { data: { version: 1, categories, tags }, conflicts };
+  const keep = new Set((names || []).map((n) => lc(n)));
+  const tags = (parsed?.data?.tags || []).filter((t) => keep.has(lc(catOf(t))));
+  const categories = (parsed?.data?.categories || []).filter((c) => keep.has(lc(c)));
+  const listCats = (parsed?.data?.listCats || []).filter((c) => keep.has(lc(c)));
+  const have = new Set(getTags().map((t) => lc(t.name)));
+  const conflicts = tags.filter((t) => have.has(lc(t.name))).map((t) => t.name);
+  return { data: { version: 1, categories, listCats, tags }, conflicts };
 }
 
 // Parse an imported blob into a normalized library WITHOUT applying it. Returns
@@ -262,7 +323,7 @@ export function parseImport(jsonStr) {
   // Accept the full shape, a bare tags array, or { tags:[...] } / { library:[...] }.
   if (Array.isArray(raw)) raw = { tags: raw };
   else if (raw && !Array.isArray(raw.tags)) {
-    raw = { categories: raw.categories, tags: raw.tags || raw.library || raw.snippets || raw.prompts };
+    raw = { categories: raw.categories, listCats: raw.listCats, tags: raw.tags || raw.library || raw.snippets || raw.prompts };
   }
   const data = normalize(raw);
   if (!data.tags.length) return { error: "No tags found in that file." };
@@ -304,11 +365,20 @@ export function applyImport(parsed, mode) {
   const next = {
     version: 1,
     categories: [...cur.categories],
+    listCats: [...(cur.listCats || [])],
     tags: toAdd.concat(tags), // newest (imported) on top
   };
-  const catHave = new Set(next.categories.map((c) => c.toLowerCase()));
+  const catHave = new Set(next.categories.map((c) => lc(c)));
   for (const c of parsed.data.categories) {
-    if (c && !catHave.has(c.toLowerCase())) { catHave.add(c.toLowerCase()); next.categories.push(c); }
+    if (c && !catHave.has(lc(c))) { catHave.add(lc(c)); next.categories.push(c); }
+  }
+  // An incoming List category keeps its side. A name I ALREADY have keeps MY side -
+  // my library wins on a clash, exactly as it does for a tag's text.
+  const listHave = new Set(next.listCats.map((c) => lc(c)));
+  for (const c of (parsed.data.listCats || [])) {
+    if (c && !listHave.has(lc(c)) && !cur.categories.some((x) => lc(x) === lc(c))) {
+      listHave.add(lc(c)); next.listCats.push(c);
+    }
   }
   setLibrary(next);
   return { added: toAdd.length };
