@@ -248,7 +248,13 @@ export function isListCat(name, data) { return sideOfCat(name, data) === "list";
 export function tagMode(t) { return cleanMode(t && t.mode); }
 export function catMode(name, data) {
   const d = data || getLibrary();
-  return cleanMode((d.catModes || {})[name] || (d.catModes || {})[String(name)]);
+  const m = d.catModes || {};
+  // OWN properties only: a category named "toString" / "constructor" would otherwise
+  // read an inherited function off Object.prototype. cleanMode would fall back to the
+  // default anyway, but reading inherited junk is the kind of thing that turns into a
+  // real bug the moment this map grows a second use.
+  const own = Object.prototype.hasOwnProperty;
+  return cleanMode(own.call(m, name) ? m[name] : (own.call(m, String(name)) ? m[String(name)] : undefined));
 }
 
 export function findTag(name) {
