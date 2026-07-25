@@ -16,6 +16,7 @@ import { app } from "/scripts/app.js";
 import { widgetOf, accentOf } from "./core.mjs";
 import { applyAdaptiveCanvasOnly, isVueNodes } from "../shared/nodes2.mjs";
 import { installResizeFloor } from "../shared/resize_floor.mjs";
+import { installCanvasZoomPassthrough } from "../shared/canvas_zoom.mjs";
 
 export const ROW_H = 23;
 export const ROW_GAP = 6;
@@ -319,6 +320,10 @@ export function installSliders(node) {
     // down during a node RESIZE). offsetHeight at arm-time is the natural height,
     // so the pin causes zero growth yet still blocks collapse on drag-small.
     node._pixOpsFloorOffs.push(installResizeFloor(wrap, (root) => root.offsetHeight || ROW_H));
+    // Wheel over a slider row must still zoom the canvas (Classic; no-ops in Nodes
+    // 2.0). One widget per row, so install per row. Sliders drag on pointer
+    // events, so this never competes with the drag.
+    installCanvasZoomPassthrough(wrap);
   }
   bindInputDots(node);
   paintRows(node);

@@ -7,7 +7,7 @@
 // (Vue Compat #9). Info panel, gear panel, dropdown, and row menu live in siblings.
 
 import { app } from "/scripts/app.js";
-import { hideJsonWidget, applyAdaptiveCanvasOnly } from "../shared/index.mjs";
+import { hideJsonWidget, applyAdaptiveCanvasOnly, installCanvasZoomPassthrough } from "../shared/index.mjs";
 import { isVueNodes } from "../shared/nodes2.mjs";
 import { isGraphLoading } from "../shared/graph_loading.mjs";
 import { registerNodeHelp } from "../shared/help.mjs";
@@ -78,6 +78,10 @@ function setupNode(node) {
   });
   widget.computeLayoutSize = () => ({ minHeight: widgetH(node), minWidth: 1 });
   applyAdaptiveCanvasOnly(widget);
+  // Wheel over the LoRA list must still zoom the canvas (Classic; no-ops in Nodes
+  // 2.0). The chips list keeps its own scroll - the helper yields to a scrollable
+  // region that still has room to scroll.
+  installCanvasZoomPassthrough(root);
 
   node._pixLlRoot = root;
   node._pixLlInner = inner;

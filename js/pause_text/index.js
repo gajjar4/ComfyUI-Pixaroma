@@ -2,6 +2,7 @@ import { app } from "/scripts/app.js";
 import { api } from "/scripts/api.js";
 import { applyAdaptiveCanvasOnly, isVueNodes } from "../shared/nodes2.mjs";
 import { installResizeFloor } from "../shared/resize_floor.mjs";
+import { installCanvasZoomPassthrough } from "../shared/canvas_zoom.mjs";
 import {
   getState, setGate, setText, setModelText, revertText, STATE_PROP,
 } from "./state.mjs";
@@ -243,6 +244,10 @@ function setupNode(node) {
     getMinHeight: () => nodeMinH(isVueNodes()),
   });
   applyAdaptiveCanvasOnly(widget);
+  // Wheel over the body must still zoom the canvas (Classic; no-ops in Nodes 2.0).
+  // The text box keeps its own scroll: the helper yields to a scrollable region
+  // that still has room to scroll in the wheel's direction.
+  installCanvasZoomPassthrough(root);
 
   // Pin a content floor WHILE a resize handle is dragged (Nodes 2.0; a no-op in
   // Classic, which floors via getMinHeight + the onResize clamp). Stops the node

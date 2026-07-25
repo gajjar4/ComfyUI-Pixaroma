@@ -7,7 +7,7 @@
 // (Vue Compat #9). The settings panel (gear / right-click) lives in settings.mjs.
 
 import { app } from "/scripts/app.js";
-import { hideJsonWidget, applyAdaptiveCanvasOnly } from "../shared/index.mjs";
+import { hideJsonWidget, applyAdaptiveCanvasOnly, installCanvasZoomPassthrough } from "../shared/index.mjs";
 import { isVueNodes } from "../shared/nodes2.mjs";
 import { isGraphLoading } from "../shared/graph_loading.mjs";
 import { registerNodeHelp } from "../shared/help.mjs";
@@ -272,6 +272,8 @@ function setupNode(node) {
   });
   widget.computeLayoutSize = () => ({ minHeight: contentWidgetH(node), minWidth: 1 });
   applyAdaptiveCanvasOnly(widget);
+  // Wheel over the panel must still zoom the canvas (Classic; no-ops in Nodes 2.0).
+  installCanvasZoomPassthrough(root);
 
   // Fresh default size (configure() overrides this for a loaded node, convention #9).
   node.size = [NODE_W, fitNodeH(node)];

@@ -16,6 +16,25 @@
 import { app } from "/scripts/app.js";
 import { isVueNodes } from "./nodes2.mjs";
 
+// User setting: what the wheel does when the cursor is over a SCROLLABLE field
+// inside a node (a long prompt textarea, a list). Registered in
+// js/canvas_zoom/index.js; the two option strings are duplicated there and MUST
+// stay in lockstep.
+export const WHEEL_SETTING_ID = "Pixaroma.CanvasZoom.WheelOverFields";
+export const WHEEL_SCROLL = "Scroll the field";   // default = the old behaviour
+export const WHEEL_ZOOM = "Zoom the canvas";
+
+// Read LIVE, not cached: changing the setting then takes effect immediately with
+// no page reload, and a cache can never go stale if a future ComfyUI stops firing
+// onChange. The cost is nil - this runs only while the cursor is over a Pixaroma
+// node body, and a settings lookup is nothing next to the full-canvas repaint a
+// zoom triggers. Any failure falls back to the default (scroll the field).
+function wheelZoomsOverFields() {
+  try {
+    return app?.ui?.settings?.getSettingValue(WHEEL_SETTING_ID) === WHEEL_ZOOM;
+  } catch { return false; }
+}
+
 // True when an element between `target` and `root` (inclusive) is scrollable AND
 // still has room to scroll in the wheel's direction - i.e. the wheel should
 // scroll THAT element, not zoom the canvas.
@@ -56,7 +75,9 @@ export function installCanvasZoomPassthrough(root) {
   if (!root || typeof root.addEventListener !== "function") return () => {};
   const onWheel = (e) => {
     if (isVueNodes()) return;                  // Nodes 2.0 forwards to the canvas itself
-    if (scrollRegionWantsWheel(e.target, root, e.deltaX, e.deltaY)) return;
+    // "Zoom the canvas" makes the wheel zoom everywhere on the node, including
+    // over a scrollable field (that field is then scrolled with its scrollbar).
+    if (!wheelZoomsOverFields() && scrollRegionWantsWheel(e.target, root, e.deltaX, e.deltaY)) return;
     const canvasEl = app?.canvas?.canvas;      // read lazily; the canvas can be recreated
     if (!canvasEl) return;
     e.preventDefault();                        // needs a non-passive listener (below)

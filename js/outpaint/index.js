@@ -20,6 +20,7 @@ import { app } from "/scripts/app.js";
 import { api } from "/scripts/api.js";
 import { applyAdaptiveCanvasOnly, canvasBackingScale, installZoomRepaint, isVueNodes } from "../shared/nodes2.mjs";
 import { isGraphLoading } from "../shared/graph_loading.mjs";
+import { installCanvasZoomPassthrough } from "../shared/canvas_zoom.mjs";
 import {
   ACCENT_SETTING, BRAND, DEFAULT_STATE, MAX_PAD, STATE_PROP,
   anchorAxis, finalSize, limitsOf, padsForState, ratiosOf, readState, remapAnchor, writeState,
@@ -1063,6 +1064,9 @@ function setupNode(node) {
   });
   w.computeLayoutSize = () => ({ minHeight: measureFloor(node), minWidth: 1 });
   applyAdaptiveCanvasOnly(w);
+  // Wheel over the preview must still zoom the canvas (Classic; no-ops in Nodes
+  // 2.0). Independent of the green-edge drag, which is pointer-driven.
+  installCanvasZoomPassthrough(root);
 
   // Fresh nodes only, and SYNCHRONOUS: configure() runs after onNodeCreated and
   // restores a loaded node's saved size over this. A microtask would run after

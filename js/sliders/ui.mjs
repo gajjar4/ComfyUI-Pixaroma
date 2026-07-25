@@ -20,6 +20,7 @@
 //             return to the top-right corner and the node keeps working.
 
 import { isVueNodes, applyAdaptiveCanvasOnly } from "../shared/nodes2.mjs";
+import { installCanvasZoomPassthrough } from "../shared/canvas_zoom.mjs";
 import { readState, accentOf, clampValue, decimalsOf, rangeOf, comboVisible, randomSeed, MAX_SLIDERS } from "./core.mjs";
 
 export const ROW_H = 23;    // height of one slider row
@@ -669,6 +670,10 @@ export function syncRowWidgets(node, onAdd) {
     w.computeSize = () => [node.size[0], ROW_H];   // fixed height in legacy
     w.computeLayoutSize = undefined;              // min-content row in Nodes 2.0
     applyAdaptiveCanvasOnly(w);
+    // Wheel over a control row must still zoom the canvas (Classic; no-ops in
+    // Nodes 2.0). One widget per row, so install per row. Controls drag on
+    // pointer events, so this never competes with a slider drag.
+    installCanvasZoomPassthrough(el);
     rows.push(w);
   }
 
@@ -687,6 +692,7 @@ export function syncRowWidgets(node, onAdd) {
     w.computeSize = () => [node.size[0], ADD_H];
     w.computeLayoutSize = undefined;
     applyAdaptiveCanvasOnly(w);
+    installCanvasZoomPassthrough(el);
     node._pixSldAdd = w;
   } else if (node.widgets) {
     const i = node.widgets.indexOf(node._pixSldAdd);

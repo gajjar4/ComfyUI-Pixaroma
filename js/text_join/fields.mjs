@@ -16,7 +16,7 @@
 
 import { app } from "/scripts/app.js";
 import { widgetOf, BRAND, readState, labelFor } from "./core.mjs";
-import { applyAdaptiveCanvasOnly, isVueNodes, installResizeFloor } from "../shared/index.mjs";
+import { applyAdaptiveCanvasOnly, isVueNodes, installResizeFloor, installCanvasZoomPassthrough } from "../shared/index.mjs";
 
 export const MIN_FIELD_H = 56;     // smallest a single field box can shrink to
 const DEF_FIELD_H = 84;            // comfortable default per field on a fresh node
@@ -342,6 +342,10 @@ export function installFields(node) {
     node._pixTjWraps.push(wrap);
     node._pixTjRowWidgets[cfg.name] = w;
     node._pixTjFloorOffs.push(installResizeFloor(wrap, () => MIN_FIELD_H));
+    // Wheel over a field must still zoom the canvas (Classic; no-ops in Nodes
+    // 2.0). One widget per row, so install per row. A textarea with more text
+    // than fits keeps its own scroll - the helper yields to it.
+    installCanvasZoomPassthrough(wrap);
     seedField(node, wrap);
   });
 
