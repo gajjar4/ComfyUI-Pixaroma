@@ -333,6 +333,18 @@ def file_sha256(path):
     return h.hexdigest()
 
 
+def _thumb_url(url):
+    """Civitai image URLs carry a transform segment; the API hands back
+    `/original=true/`, i.e. the FULL-RESOLUTION image. We paint it into a 64px
+    box, so requesting the original meant pulling ~1.5 MB (measured) for a
+    thumbnail that needs ~55 KB - slow enough on a modest connection that the
+    panel looks broken while it loads. Swap in a width transform; 256 keeps it
+    crisp on a high-DPI screen. Any other URL shape is returned untouched."""
+    if not isinstance(url, str):
+        return url
+    return url.replace("/original=true/", "/width=256/", 1)
+
+
 def parse_civitai_modelversion(obj):
     """Pull the fields we care about from a Civitai model-version response:
     {name?, type?, base_model?, triggers?, thumbnail?}. Prefers the first
@@ -368,10 +380,10 @@ def parse_civitai_modelversion(obj):
             nsfw = im.get("nsfw")
             level = im.get("nsfwLevel")
             if nsfw in (None, False, "None", "Soft") and level in (None, 0, 1, 2):
-                out["thumbnail"] = im["url"]
+                out["thumbnail"] = _thumb_url(im["url"])
                 break
         if "thumbnail" not in out and fallback:
-            out["thumbnail"] = fallback
+            out["thumbnail"] = _thumb_url(fallback)
     return out
 
 

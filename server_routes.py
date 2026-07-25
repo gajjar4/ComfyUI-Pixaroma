@@ -1497,23 +1497,52 @@ async def api_xy_plot_restyle(request):
 def _is_path_under(child: str, *parents: str) -> bool:
     """Return True iff `child` is inside ANY of the given parent directories.
 
-    Uses os.path.commonpath so symlink games and ../../ tricks can't escape.
-    Both sides are realpath-ed so case / separator differences on Windows
-    don't slip through.
+    Each parent is tested TWICE, and either match accepts:
+
+      (a) LITERAL, via os.path.abspath. abspath collapses "..", so ../../ traversal
+          still cannot escape the root - but a folder that is a SYMLINK / Windows
+          JUNCTION to another drive still matches.
+      (b) RESOLVED, via os.path.realpath, so a parent handed to us through a
+          symlinked alias still matches its real location.
+
+    (a) exists because realpath-only was REJECTING files ComfyUI itself loads
+    fine: splitting models across disks by junctioning a subfolder (a very common
+    setup, e.g. models\\loras\\sd15 -> another drive) makes realpath(child) land on
+    a DIFFERENT DRIVE than realpath(parent), and os.path.commonpath then raises
+    ValueError("Paths don't have the same drive"). We caught that and failed
+    closed, so every LoRA behind such a junction reported "LoRA not found" - no
+    info, no thumbnail, no Civitai lookup - while the same file loaded and
+    generated normally. Same for Prompt Reader / Save Image / XY Plot, which share
+    this helper. Reproduced with a real cross-drive junction, 2026-07-25.
+
+    What (a) newly accepts is a symlink placed INSIDE the root that points outside
+    it. Creating one requires local write access to the models folder, i.e. the
+    box is already owned - and it is exactly the legitimate split-disk setup. A
+    REMOTE caller still cannot escape, because the name it supplies is normalised
+    by abspath before the comparison.
     """
     if not child:
         return False
     try:
-        child_real = os.path.realpath(child)
-    except OSError:
+        child_abs = os.path.abspath(child)
+    except (OSError, ValueError):
         return False
+    try:
+        child_real = os.path.realpath(child)
+    except (OSError, ValueError):
+        child_real = child_abs
     for p in parents:
-        try:
-            parent_real = os.path.realpath(p)
-            if os.path.commonpath([child_real, parent_real]) == parent_real:
-                return True
-        except (OSError, ValueError):
+        if not p:
             continue
+        for c, resolve in ((child_abs, os.path.abspath), (child_real, os.path.realpath)):
+            try:
+                parent = resolve(p)
+                if os.path.commonpath([c, parent]) == parent:
+                    return True
+            except (OSError, ValueError):
+                # ValueError = different drives (cross-drive junction, or simply an
+                # unrelated root). Not a match; try the next form / parent.
+                continue
     return False
 
 
@@ -2002,6 +2031,15 @@ def _lora_dirs():
         return []
 
 
+# Civitai API hosts, tried in order. `.com` is the real home; `.red` serves the
+# IDENTICAL API on separate DNS, so it is a useful backup when a network or ISP
+# blocks civitai.com by name (verified 2026-07-25: byte-identical response). It is
+# only ever reached after `.com` has already failed. `.green` is deliberately NOT
+# here - its API 301-redirects straight back to civitai.com, so it is a redundant
+# hop, not an independent route.
+_CIVITAI_HOSTS = ("civitai.com", "civitai.red")
+
+
 def _resolve_lora_path(name):
     """Resolve a LoRA filename (as listed, incl. any subfolder) to a real path that
     is guaranteed to live inside a configured loras directory, or None."""
@@ -2083,27 +2121,45 @@ async def api_lora_civitai(request):
     except Exception as exc:
         return web.json_response({"ok": False, "reason": "offline",
                                   "message": "Could not read the file: {}".format(exc)})
-    url = "https://civitai.com/api/v1/model-versions/by-hash/{}".format(sha)
     try:
         import aiohttp
-        timeout = aiohttp.ClientTimeout(total=12)
-        async with aiohttp.ClientSession(timeout=timeout) as session:
-            async with session.get(url, headers={"User-Agent": "ComfyUI-Pixaroma"}) as resp:
-                if resp.status == 404:
-                    return web.json_response({"ok": True, "found": False, "reason": "notfound"})
-                if resp.status != 200:
-                    return web.json_response({"ok": False, "reason": "offline",
-                                              "message": "Civitai returned {}.".format(resp.status)})
-                # Cap the body so a malfunctioning endpoint can't spike memory (a real
-                # model-version response is tens of KB).
-                body = await resp.content.read(4 * 1024 * 1024 + 1)
-                if len(body) > 4 * 1024 * 1024:
-                    return web.json_response({"ok": False, "reason": "offline",
-                                              "message": "Civitai response too large."})
-                data = json.loads(body)
     except Exception:
         return web.json_response({"ok": False, "reason": "offline",
                                   "message": "Could not reach Civitai."})
+    # 30s, not 12s: Civitai's API is regularly slow under load, and a lookup that
+    # gives up early reads to the user as "it doesn't work", especially on a slow
+    # link. The hash is already computed by this point, so this budget is purely
+    # the HTTP round trip.
+    timeout = aiohttp.ClientTimeout(total=30, connect=10)
+    data = None
+    last_note = "Could not reach Civitai."
+    for host in _CIVITAI_HOSTS:
+        url = "https://{}/api/v1/model-versions/by-hash/{}".format(host, sha)
+        try:
+            async with aiohttp.ClientSession(timeout=timeout) as session:
+                async with session.get(url, headers={"User-Agent": "ComfyUI-Pixaroma"}) as resp:
+                    if resp.status == 404:
+                        # Definitive: this exact file is not on Civitai. Do NOT try the
+                        # backup host - it serves the same catalogue and would only add
+                        # a pointless second round trip.
+                        return web.json_response({"ok": True, "found": False, "reason": "notfound"})
+                    if resp.status != 200:
+                        # Rate limit / maintenance / gateway error: transient, so fall
+                        # through to the backup host before giving up.
+                        last_note = "Civitai returned {}.".format(resp.status)
+                        continue
+                    # Cap the body so a malfunctioning endpoint can't spike memory (a real
+                    # model-version response is tens of KB).
+                    body = await resp.content.read(4 * 1024 * 1024 + 1)
+                    if len(body) > 4 * 1024 * 1024:
+                        return web.json_response({"ok": False, "reason": "offline",
+                                                  "message": "Civitai response too large."})
+                    data = json.loads(body)
+                    break
+        except Exception:
+            continue
+    if data is None:
+        return web.json_response({"ok": False, "reason": "offline", "message": last_note})
     parsed = _lora_parse_civitai(data)
     if not parsed.get("triggers") and not parsed.get("name"):
         return web.json_response({"ok": True, "found": False, "reason": "notfound"})
