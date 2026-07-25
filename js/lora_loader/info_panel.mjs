@@ -131,6 +131,11 @@ function place(panel, node) {
 // re-place would yank a panel the user had moved. This only corrects an edge that
 // has actually gone out of view.
 function clampIntoView(panel) {
+  // No-op until the panel has actually been placed. renderBody() runs once BEFORE
+  // the first place(), when style.left/top are still empty - without this guard
+  // parseFloat("") would read 0 and pin the panel to the top-left corner, which is
+  // the very flash this pass removed.
+  if (!panel.style.left || !panel.style.top) return;
   const pad = 8;
   const pw = panel.offsetWidth, ph = panel.offsetHeight;
   const left = parseFloat(panel.style.left) || 0;
@@ -392,6 +397,11 @@ export async function openInfoPanel(node, id, refresh) {
       foot.appendChild(del);
     }
     panel.appendChild(foot);
+    // Every re-render can change the panel's height (ticking a word, adding a
+    // custom one, switching the File/Civitai view, a lookup landing). Clamping
+    // here covers all of them from one place instead of per call site, so the
+    // footer can never end up pushed off the bottom of the screen.
+    clampIntoView(panel);
   }
 
   function civStrip() {
@@ -422,15 +432,14 @@ export async function openInfoPanel(node, id, refresh) {
       // refresh offline info so the source badge / cached ids reflect the new sidecar,
       // then repaint (the panel may have been closed meanwhile - guard on isConnected).
       loraInfo(name, true).then((j) => {
-        if (j.ok && j.info && panel.isConnected) { info = j.info; renderBody(); clampIntoView(panel); }
+        if (j.ok && j.info && panel.isConnected) { info = j.info; renderBody(); }
       });
     } else if (res.reason === "notfound") {
       civ = { state: "nofind" };
     } else {
       civ = { state: "offline", message: res.message };
     }
-    renderBody();
-    clampIntoView(panel);   // the status strip + extra chips make the panel taller
+    renderBody();   // renderBody re-clamps: the status strip makes the panel taller
   }
 
   async function runDeleteCivitai() {
@@ -443,7 +452,6 @@ export async function openInfoPanel(node, id, refresh) {
     if (!panel.isConnected) return;
     if (fresh.ok && fresh.info) info = fresh.info;
     renderBody();
-    clampIntoView(panel);
   }
 
   // Initial paint from cache, then the real offline read. Place TWICE: once now,

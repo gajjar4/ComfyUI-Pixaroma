@@ -134,7 +134,12 @@ app.registerExtension({
     // Legacy only, for exactly the reason spelled out on onResize above.
     const _origDrawFg = nodeType.prototype.onDrawForeground;
     nodeType.prototype.onDrawForeground = function (ctx) {
-      if (!isVueNodes() && this.size[0] < MIN_W) this.size[0] = MIN_W;
+      // MUST also be gated on isGraphLoading(): this is the only width clamp that
+      // can run on the LOAD path (onConfigure's fitToContent already bails during a
+      // load), and node.size is serialized - so a node saved narrower than MIN_W in
+      // Nodes 2.0 and reopened in Classic would be rewritten on the first frame and
+      // flag an untouched workflow "modified" (Vue Compat #18).
+      if (!isVueNodes() && !isGraphLoading() && this.size[0] < MIN_W) this.size[0] = MIN_W;
       return _origDrawFg?.apply(this, arguments);
     };
 
