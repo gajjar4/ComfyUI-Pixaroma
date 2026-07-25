@@ -67,7 +67,14 @@ class PixaromaLoraLoader:
         cached = self._cache.get(path)
         if cached is not None:
             return cached
-        lora, meta = comfy.utils.load_torch_file(path, safe_load=True, return_metadata=True)
+        try:
+            lora, meta = comfy.utils.load_torch_file(path, safe_load=True, return_metadata=True)
+        except TypeError:
+            # Older ComfyUI has no return_metadata parameter. Without this fallback
+            # EVERY row raised TypeError, the caller swallowed it, and the node
+            # silently handed back the untouched model with no trigger words and no
+            # visible error - the LoRA simply never applied.
+            lora, meta = comfy.utils.load_torch_file(path, safe_load=True), None
         self._cache[path] = (lora, meta)
         return (lora, meta)
 
@@ -105,9 +112,14 @@ class PixaromaLoraLoader:
                 continue
             try:
                 lora, meta = self._get_lora(path)
-                model, clip = comfy.sd.load_lora_for_models(
-                    model, clip, lora, sm, sc, lora_metadata=meta
-                )
+                try:
+                    model, clip = comfy.sd.load_lora_for_models(
+                        model, clip, lora, sm, sc, lora_metadata=meta
+                    )
+                except TypeError:
+                    # Older ComfyUI: no lora_metadata parameter. Retry without it so
+                    # the LoRA still applies instead of silently doing nothing.
+                    model, clip = comfy.sd.load_lora_for_models(model, clip, lora, sm, sc)
                 used_paths.add(path)
                 applied += 1
                 resolved.append(entry)  # actually applied -> its triggers count

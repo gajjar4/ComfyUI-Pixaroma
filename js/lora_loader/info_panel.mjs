@@ -5,6 +5,7 @@
 
 import { readState, patchLora, accentOf, BRAND } from "./core.mjs";
 import { loraInfo, thumbUrl, civitaiLookup, invalidateInfo, deleteCivitai } from "./api.mjs";
+import { getNodeRect } from "./settings.mjs";
 
 let _panel = null;
 let _cleanup = null;
@@ -106,12 +107,36 @@ function el(tag, cls, text) {
   return e;
 }
 
-function nodeRect(node) {
-  if (node?.id != null) {
-    const e = document.querySelector(`[data-node-id="${node.id}"]`);
-    if (e) return e.getBoundingClientRect();
-  }
-  return null;
+// Position the panel beside its node. MUST be called BEFORE the first await, or
+// the panel paints at the viewport's top-left for as long as the fetch takes:
+// `.pix-ll-info-p` is position:fixed with no left/top, so until this runs it sits
+// at 0,0. With a cached LoRA the await resolves in a microtask and no frame ever
+// paints, which is why the flash only showed after picking a NEW LoRA from the
+// dropdown (a real network round trip). Same idiom as the dropdown, which places
+// before its await and has never flashed.
+function place(panel, node) {
+  const r = getNodeRect(node);   // shared with the settings panel: has the Classic fallback
+  const pad = 8, gap = 12;
+  const pw = panel.offsetWidth, ph = panel.offsetHeight;
+  let left = r ? r.right + gap : (window.innerWidth - pw) / 2;
+  if (left + pw > window.innerWidth - pad) left = r ? Math.max(pad, r.left - gap - pw) : left;
+  let top = r ? r.top : (window.innerHeight - ph) / 2;
+  top = Math.max(pad, Math.min(top, window.innerHeight - ph - pad));
+  panel.style.left = Math.max(pad, left) + "px";
+  panel.style.top = top + "px";
+}
+
+// Nudge a panel back on-screen after it GREW (a Civitai lookup adds a status strip
+// and more chips). Deliberately NOT a re-place: the header is draggable, so a full
+// re-place would yank a panel the user had moved. This only corrects an edge that
+// has actually gone out of view.
+function clampIntoView(panel) {
+  const pad = 8;
+  const pw = panel.offsetWidth, ph = panel.offsetHeight;
+  const left = parseFloat(panel.style.left) || 0;
+  const top = parseFloat(panel.style.top) || 0;
+  panel.style.left = Math.max(pad, Math.min(left, window.innerWidth - pw - pad)) + "px";
+  panel.style.top = Math.max(pad, Math.min(top, window.innerHeight - ph - pad)) + "px";
 }
 
 export async function openInfoPanel(node, id, refresh) {
@@ -397,7 +422,7 @@ export async function openInfoPanel(node, id, refresh) {
       // refresh offline info so the source badge / cached ids reflect the new sidecar,
       // then repaint (the panel may have been closed meanwhile - guard on isConnected).
       loraInfo(name, true).then((j) => {
-        if (j.ok && j.info && panel.isConnected) { info = j.info; renderBody(); }
+        if (j.ok && j.info && panel.isConnected) { info = j.info; renderBody(); clampIntoView(panel); }
       });
     } else if (res.reason === "notfound") {
       civ = { state: "nofind" };
@@ -405,6 +430,7 @@ export async function openInfoPanel(node, id, refresh) {
       civ = { state: "offline", message: res.message };
     }
     renderBody();
+    clampIntoView(panel);   // the status strip + extra chips make the panel taller
   }
 
   async function runDeleteCivitai() {
@@ -417,25 +443,21 @@ export async function openInfoPanel(node, id, refresh) {
     if (!panel.isConnected) return;
     if (fresh.ok && fresh.info) info = fresh.info;
     renderBody();
+    clampIntoView(panel);
   }
 
-  // initial paint from cache, then the real offline read
+  // Initial paint from cache, then the real offline read. Place TWICE: once now,
+  // so the panel is never visible at 0,0 while the fetch is in flight, and again
+  // once the content is final so it sits correctly against its true height.
   renderBody();
+  place(panel, node);
   const first = await loraInfo(name);
   if (!panel.isConnected) return;
   if (first.ok && first.info) info = first.info;
   renderBody();
+  place(panel, node);
 
-  // place beside the node, drag by the header, close on outside / Esc
-  const r = nodeRect(node);
-  const pad = 8, gap = 12;
-  const pw = panel.offsetWidth, ph = panel.offsetHeight;
-  let left = r ? r.right + gap : (window.innerWidth - pw) / 2;
-  if (left + pw > window.innerWidth - pad) left = r ? Math.max(pad, r.left - gap - pw) : left;
-  let top = r ? r.top : (window.innerHeight - ph) / 2;
-  top = Math.max(pad, Math.min(top, window.innerHeight - ph - pad));
-  panel.style.left = Math.max(pad, left) + "px";
-  panel.style.top = top + "px";
+  // drag by the header, close on outside / Esc
   dragBy(panel);
 
   const onDown = (e) => { if (!panel.contains(e.target) && !e.target.closest?.(".pix-ll-dd")) closeInfoPanel(); };

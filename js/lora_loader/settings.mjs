@@ -58,7 +58,9 @@ function injectCSS() {
   document.head.appendChild(s);
 }
 
-function getNodeRect(node) {
+// Exported so the info panel places itself with the SAME geometry, including the
+// Classic fallback below (the [data-node-id] element only exists in Nodes 2.0).
+export function getNodeRect(node) {
   if (node?.id != null) {
     const e = document.querySelector(`[data-node-id="${node.id}"]`);
     if (e) return e.getBoundingClientRect();

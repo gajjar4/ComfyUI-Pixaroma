@@ -1497,52 +1497,67 @@ async def api_xy_plot_restyle(request):
 def _is_path_under(child: str, *parents: str) -> bool:
     """Return True iff `child` is inside ANY of the given parent directories.
 
-    Each parent is tested TWICE, and either match accepts:
+    STRICT realpath-on-both-sides is the primary and usually the ONLY test, so
+    ordinary paths behave exactly as they always have. A LEXICAL (abspath) test
+    runs as a fallback for one narrow case: when the strict comparison could not
+    even be made because the two sides resolved onto DIFFERENT DRIVES.
 
-      (a) LITERAL, via os.path.abspath. abspath collapses "..", so ../../ traversal
-          still cannot escape the root - but a folder that is a SYMLINK / Windows
-          JUNCTION to another drive still matches.
-      (b) RESOLVED, via os.path.realpath, so a parent handed to us through a
-          symlinked alias still matches its real location.
+    That case is real and was a live bug (2026-07-25): splitting models across
+    disks by junctioning a subfolder (e.g. models\\loras\\sd15 -> another drive) makes
+    realpath(child) land on another drive than realpath(parent), os.path.commonpath
+    raises ValueError("Paths don't have the same drive"), and we failed closed - so
+    every LoRA behind such a junction reported "LoRA not found" (no info, no
+    thumbnail, no Civitai lookup) while the very same file loaded and generated
+    normally. This helper is SHARED, so Prompt Reader / Save Image / XY Plot had
+    the same blind spot.
 
-    (a) exists because realpath-only was REJECTING files ComfyUI itself loads
-    fine: splitting models across disks by junctioning a subfolder (a very common
-    setup, e.g. models\\loras\\sd15 -> another drive) makes realpath(child) land on
-    a DIFFERENT DRIVE than realpath(parent), and os.path.commonpath then raises
-    ValueError("Paths don't have the same drive"). We caught that and failed
-    closed, so every LoRA behind such a junction reported "LoRA not found" - no
-    info, no thumbnail, no Civitai lookup - while the same file loaded and
-    generated normally. Same for Prompt Reader / Save Image / XY Plot, which share
-    this helper. Reproduced with a real cross-drive junction, 2026-07-25.
-
-    What (a) newly accepts is a symlink placed INSIDE the root that points outside
-    it. Creating one requires local write access to the models folder, i.e. the
-    box is already owned - and it is exactly the legitimate split-disk setup. A
-    REMOTE caller still cannot escape, because the name it supplies is normalised
-    by abspath before the comparison.
+    Gating the lexical branch behind the cross-drive outcome is deliberate and
+    load-bearing: a same-drive symlink that escapes a root is still refused,
+    exactly as before, so the accepted surface grows ONLY by "a symlink pointing
+    at another disk" - which is precisely the setup we must support. abspath
+    collapses "..", so ../../ traversal can never escape either branch, and a
+    remote caller only ever supplies the name, never the root.
     """
-    if not child:
+    if not child or not isinstance(child, str):
         return False
     try:
         child_abs = os.path.abspath(child)
-    except (OSError, ValueError):
-        return False
-    try:
         child_real = os.path.realpath(child)
-    except (OSError, ValueError):
-        child_real = child_abs
+    except (OSError, ValueError, TypeError):
+        return False
     for p in parents:
-        if not p:
+        if not p or not isinstance(p, str):
             continue
-        for c, resolve in ((child_abs, os.path.abspath), (child_real, os.path.realpath)):
-            try:
-                parent = resolve(p)
-                if os.path.commonpath([c, parent]) == parent:
-                    return True
-            except (OSError, ValueError):
-                # ValueError = different drives (cross-drive junction, or simply an
-                # unrelated root). Not a match; try the next form / parent.
-                continue
+        # 1) STRICT: realpath on both sides. This is the original behaviour and
+        #    stays the ONLY test for every ordinary path, so nothing is widened.
+        cross_drive = False
+        try:
+            parent_real = os.path.realpath(p)
+            if os.path.commonpath([child_real, parent_real]) == parent_real:
+                return True
+        except ValueError:
+            # "Paths don't have the same drive" - either an unrelated root, or the
+            # junction case below. Only this outcome unlocks the lexical fallback.
+            cross_drive = True
+        except (OSError, TypeError):
+            continue
+        # 2) LEXICAL fallback, ONLY when the strict test was defeated by a
+        #    cross-drive resolution - i.e. a junction/symlink pointing at another
+        #    disk, the split-models-across-drives setup. abspath collapses "..",
+        #    so traversal still cannot escape; normcase makes it case-insensitive
+        #    on Windows (abspath, unlike realpath, does not normalise case).
+        #    Keeping this branch behind `cross_drive` matters: a same-drive symlink
+        #    that escapes a root is still refused, exactly as before.
+        if not cross_drive:
+            continue
+        try:
+            parent_abs = os.path.abspath(p)
+            c = os.path.normcase(child_abs)
+            pa = os.path.normcase(parent_abs)
+            if os.path.commonpath([c, pa]) == pa:
+                return True
+        except (OSError, ValueError, TypeError):
+            continue
     return False
 
 
@@ -2156,12 +2171,27 @@ async def api_lora_civitai(request):
                                                   "message": "Civitai response too large."})
                     data = json.loads(body)
                     break
-        except Exception:
+        except Exception as exc:
+            # Keep WHY it failed: a timeout, a DNS/TLS/proxy refusal and a block
+            # page all used to collapse into one generic line, which defeats the
+            # point of showing the user a reason at all.
+            kind = type(exc).__name__
+            if "Timeout" in kind or "Cancelled" in kind:
+                last_note = "Civitai timed out."
+            elif "JSON" in kind or "Decode" in kind or "Value" in kind:
+                last_note = "Civitai sent an unreadable reply (a login or block page?)."
+            else:
+                last_note = "Could not reach Civitai ({}).".format(kind)
             continue
     if data is None:
         return web.json_response({"ok": False, "reason": "offline", "message": last_note})
     parsed = _lora_parse_civitai(data)
-    if not parsed.get("triggers") and not parsed.get("name"):
+    # Civitai answered 200 with a usable record -> FOUND, even when this version
+    # happens to carry no trainedWords and no model.name (plenty do not; e.g.
+    # COOLKIDS_MERGE_V2.5 has an empty trainedWords list). Requiring those two
+    # threw away genuine hits AND skipped the sidecar write below, so every later
+    # click re-hashed the whole file and re-fetched it.
+    if not parsed:
         return web.json_response({"ok": True, "found": False, "reason": "notfound"})
     await loop.run_in_executor(None, _lora_save_sidecar, path, data)
     return web.json_response({"ok": True, "found": True, "info": parsed})

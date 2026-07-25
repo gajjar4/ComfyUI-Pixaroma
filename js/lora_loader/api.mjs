@@ -40,7 +40,12 @@ export async function loraInfo(name, force = false) {
     try {
       const r = await fetch("/pixaroma/api/lora/info?name=" + encodeURIComponent(name));
       const j = await r.json();
-      _infoCache.set(name, j);
+      // Cache SUCCESS only. A server-reported failure ({ok:false}) used to be
+      // cached like a hit, so a LoRA that was briefly unresolvable (still copying,
+      // a path the server could not verify) showed its error for the rest of the
+      // session even after the cause was gone - plain panel opens are non-forced,
+      // so only F5 cleared it.
+      if (j && j.ok) _infoCache.set(name, j);
       return j;
     } catch (e) {
       return { ok: false, message: "Could not reach the server." }; // not cached -> retry next time

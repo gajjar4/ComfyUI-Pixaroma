@@ -84,7 +84,14 @@ function openRowMenu(node, id, x, y, refresh) {
 
   const onDown = (ev) => { if (!menu.contains(ev.target)) closeRowMenu(); };
   const onKey = (ev) => { if (ev.key === "Escape") closeRowMenu(); };
+  _menu = menu;                       // set BEFORE the timer so the guard below can see it
   setTimeout(() => {
+    // Same guard the other popups use: if this menu was closed or replaced in the
+    // same tick, _menuCleanup has already run its (no-op) removes, so attaching
+    // now would strand capture-phase listeners forever - and a stranded onDown
+    // closes every later row menu on the pointerdown before the click, making its
+    // items unclickable.
+    if (_menu !== menu) return;
     document.addEventListener("pointerdown", onDown, true);
     document.addEventListener("keydown", onKey, true);
   }, 0);
@@ -92,7 +99,6 @@ function openRowMenu(node, id, x, y, refresh) {
     document.removeEventListener("pointerdown", onDown, true);
     document.removeEventListener("keydown", onKey, true);
   };
-  _menu = menu;
 }
 
 function rowIdOf(target) {

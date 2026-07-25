@@ -128,6 +128,16 @@ app.registerExtension({
       if (_origResize) return _origResize.call(this, size);
     };
 
+    // Belt-and-braces for the same clamp (node UI convention #7): onResize does not
+    // fire on every legacy resize path, so a grow-then-shrink cycle could otherwise
+    // leave the node under MIN_W with the row controls clipped past its right edge.
+    // Legacy only, for exactly the reason spelled out on onResize above.
+    const _origDrawFg = nodeType.prototype.onDrawForeground;
+    nodeType.prototype.onDrawForeground = function (ctx) {
+      if (!isVueNodes() && this.size[0] < MIN_W) this.size[0] = MIN_W;
+      return _origDrawFg?.apply(this, arguments);
+    };
+
     const _origRemoved = nodeType.prototype.onRemoved;
     nodeType.prototype.onRemoved = function () {
       closeLoraPanelFor(this);

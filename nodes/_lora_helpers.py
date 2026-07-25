@@ -16,6 +16,7 @@ The design is offline-first:
 import hashlib
 import json
 import os
+import re
 import struct
 
 # Real LoRA headers are tens of KB; cap far above that so a corrupt length field can
@@ -333,16 +334,38 @@ def file_sha256(path):
     return h.hexdigest()
 
 
+_ORIGINAL_SEG_RE = re.compile(r"/original=true(?:,[^/]*)?/")
+
+
+def _is_adult_image(nsfw, level):
+    """True when a Civitai gallery image is flagged adult. `nsfwLevel` is a
+    bitmask (1 PG, 2 PG13, 4 R, 8 X, 16 XXX); the older `nsfw` field is a bool or
+    a word. Used only to keep an explicit image from becoming a node thumbnail,
+    so it errs on the side of refusing. Never raises."""
+    if nsfw in (True, "X", "XXX", "Mature"):
+        return True
+    try:
+        if level is not None and int(level) >= 4:
+            return True
+    except (TypeError, ValueError):
+        pass
+    return False
+
+
 def _thumb_url(url):
     """Civitai image URLs carry a transform segment; the API hands back
     `/original=true/`, i.e. the FULL-RESOLUTION image. We paint it into a 64px
     box, so requesting the original meant pulling ~1.5 MB (measured) for a
     thumbnail that needs ~55 KB - slow enough on a modest connection that the
     panel looks broken while it loads. Swap in a width transform; 256 keeps it
-    crisp on a high-DPI screen. Any other URL shape is returned untouched."""
+    crisp on a high-DPI screen.
+
+    The segment can carry extra comma-separated params (`/original=true,quality=90/`),
+    so match the whole segment rather than the bare literal. Any other URL shape
+    (already width=N, or no transform at all) is returned untouched."""
     if not isinstance(url, str):
         return url
-    return url.replace("/original=true/", "/width=256/", 1)
+    return _ORIGINAL_SEG_RE.sub("/width=256/", url, count=1)
 
 
 def parse_civitai_modelversion(obj):
@@ -375,13 +398,17 @@ def parse_civitai_modelversion(obj):
         for im in imgs:
             if not isinstance(im, dict) or not im.get("url"):
                 continue
-            if fallback is None:
-                fallback = im["url"]
             nsfw = im.get("nsfw")
             level = im.get("nsfwLevel")
             if nsfw in (None, False, "None", "Soft") and level in (None, 0, 1, 2):
                 out["thumbnail"] = _thumb_url(im["url"])
                 break
+            # Fallback candidate: the first image NOT flagged adult. The old code
+            # fell back to images[0] whatever its rating, so a model whose gallery
+            # is entirely explicit put an explicit thumbnail on the user's canvas.
+            # Now such a model simply gets no thumbnail.
+            if fallback is None and not _is_adult_image(nsfw, level):
+                fallback = im["url"]
         if "thumbnail" not in out and fallback:
             out["thumbnail"] = _thumb_url(fallback)
     return out
