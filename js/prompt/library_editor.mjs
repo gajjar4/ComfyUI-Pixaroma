@@ -92,6 +92,69 @@ function uniqueNameExcept(base, exceptTag) {
 }
 function commit() { commitLibrary(_data); }
 
+// ── undo ───────────────────────────────────────────────────────────────
+// Every destructive action snapshots the working copy FIRST. That is what lets a
+// delete be INSTANT: a confirm dialog on every trash click is unbearable when you are
+// tidying up, and people stop reading it by the third one, so it protects nothing.
+// The way back is the strip that appears at the bottom, or Ctrl+Z for as long as the
+// library is open. This undoes LIBRARY edits only - it is not the graph's undo, which
+// is deliberately neutered while the editor is open (installGraphUndoGuard).
+const UNDO_MAX = 30;
+// 8s was not enough: by the time you have read the message and moved the mouse over,
+// the strip has gone and the click lands on the grid behind it (hit live, 2026-07-26).
+// Ctrl+Z still works after it hides, so this is only about the visible offer.
+const UNDO_SHOW_MS = 12000;
+let _undo = [];
+let _undoTimer = null;
+function pushUndo(label) {
+  if (!_data) return;
+  // The selected category rides along: undoing a category delete should put you back
+  // where you were looking, not leave the sidebar pointing at nothing.
+  _undo.push({ data: clone(_data), label, cat: _curCat });
+  if (_undo.length > UNDO_MAX) _undo.shift();
+}
+function clearUndo() { _undo = []; hideUndoStrip(); }
+function hideUndoStrip() {
+  if (_undoTimer) { clearTimeout(_undoTimer); _undoTimer = null; }
+  const b = _overlay && _overlay.querySelector(".pix-prled-undo");
+  if (b) b.remove();
+}
+function showUndoStrip(label) {
+  if (!_overlay) return;
+  hideUndoStrip();
+  const bar = document.createElement("div");
+  bar.className = "pix-prled-undo";
+  bar.innerHTML = `<span class="msg">${esc(label)}</span>` +
+    `<button class="ub" type="button">Undo</button><span class="uk">or Ctrl+Z</span>`;
+  bar.querySelector(".ub").addEventListener("click", () => undoLast());
+  _overlay.appendChild(bar);
+  _undoTimer = setTimeout(hideUndoStrip, UNDO_SHOW_MS);
+}
+function undoLast() {
+  if (!_undo.length || !_data) { toast("info", "Nothing to undo"); return false; }
+  const e = _undo.pop();
+  _data = e.data;
+  // The category that was showing may be back now, or may never have existed - point
+  // at something that is actually drawn (render() handles the two buckets itself).
+  const alive = e.cat === "All" || e.cat === TEXT_BUCKET || e.cat === LIST_BUCKET ||
+    _data.categories.some((c) => c === e.cat);
+  _curCat = alive ? e.cat : "All";
+  commit();
+  render();
+  hideUndoStrip();
+  toast("info", "Undone: " + e.label);
+  return true;
+}
+// Snapshot, mutate, persist, redraw, offer it back - the shape every destructive
+// action in this editor uses, so none of them can forget a step.
+function destructive(label, mutate) {
+  pushUndo(label);
+  mutate();
+  commit();
+  render();
+  showUndoStrip(label);
+}
+
 function injectCSS() {
   if (document.getElementById("pix-prled-css")) return;
   const s = document.createElement("style");
@@ -127,8 +190,15 @@ function injectCSS() {
     .pix-prled-cat .cnt { font-size:11px; color:#767676; }
     .pix-prled-cat.on .cnt { color:rgba(255,255,255,.7); }
     .pix-prled-cat .act { opacity:0; color:#767676; font-size:12px; padding:0 2px; }
+    /* A category's actions used to be two hover-only glyphs, and the result was that
+       nobody found them - the first report about this editor was "you cannot delete a
+       category" when you could. One ⋯ that is ALWAYS on screen (dimmed until the row
+       is hovered) is the fix; do not put these back behind hover. */
+    .pix-prled-cat .act.more { opacity:.6; font-size:14px; line-height:1; padding:1px 5px; border-radius:4px; }
     .pix-prled-cat:hover .act { opacity:1; }
     .pix-prled-cat .act:hover { color:var(--acc); }
+    .pix-prled-cat .act.more:hover { background:rgba(255,255,255,.1); color:#fff; }
+    .pix-prled-cat.on .act.more { opacity:.85; }
     .pix-prled-cat .catinput { flex:1; min-width:0; background:#151515; border:1px solid var(--acc); border-radius:4px; color:#e6e6e6; font:12.5px monospace; padding:4px 6px; outline:none; }
     .pix-prled-newcat { margin-top:6px; padding-top:9px; border-top:1px solid #262626; }
     .pix-prled-btn { background:rgba(255,255,255,.05); border:1px solid #4a4a4a; color:#a6a6a6; border-radius:6px; padding:7px 13px; font:12.5px 'Segoe UI',sans-serif; cursor:pointer; display:inline-flex; gap:6px; align-items:center; transition:.12s; }
@@ -265,6 +335,24 @@ function injectCSS() {
     .pix-prled-help-card .mb p { margin:0 0 11px; }
     .pix-prled-help-card .mb p:last-child { margin-bottom:0; }
     .pix-prled-help-foot { display:flex; justify-content:flex-end; padding:0 16px 16px; }
+    /* Undo strip. A delete happens IMMEDIATELY (asking every time is unbearable when
+       you are tidying up a library) and this offers it straight back. Ctrl+Z keeps
+       working for longer, so the strip is the visible reminder, not the only way back.
+       It is our own DOM because ComfyUI's toast cannot carry a button. */
+    .pix-prled-undo { position:absolute; left:16px; bottom:60px; z-index:10042; display:flex; align-items:center; gap:12px;
+      background:#2a2a2a; border:1px solid #4a4a4a; border-radius:8px; padding:9px 11px 9px 14px;
+      box-shadow:0 10px 26px rgba(0,0,0,.5); font:12.5px 'Segoe UI',sans-serif; color:#d6d6d6; max-width:min(440px,60vw); }
+    .pix-prled-undo .msg { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .pix-prled-undo .ub { flex:none; background:transparent; border:1px solid var(--acc); color:var(--acc);
+      border-radius:5px; padding:4px 12px; font:12px 'Segoe UI',sans-serif; cursor:pointer; }
+    .pix-prled-undo .ub:hover { background:var(--acc); color:#fff; }
+    .pix-prled-undo .uk { flex:none; color:#767676; font-size:11px; }
+    /* A menu row that destroys something must never look like the ordinary ones. */
+    .pix-prled-menu .mi.danger { color:#e2554a; }
+    .pix-prled-menu .mi.danger:hover { background:rgba(226,85,74,.15); color:#ff8d81; }
+    .pix-prled-menu .mi.danger .cnt { color:rgba(226,85,74,.7); }
+    .pix-prled-btn.danger { border-color:#5c3a36; color:#e2554a; }
+    .pix-prled-btn.danger:hover { background:#e2554a; border-color:#e2554a; color:#fff; }
   `;
   document.head.appendChild(s);
 }
@@ -532,15 +620,20 @@ function makeCard(tag) {
   }
   paintKind();
   const del = document.createElement("button");
-  del.className = "pix-prled-ic del"; del.title = "Delete tag";
+  del.className = "pix-prled-ic del"; del.title = "Delete this tag (you can undo)";
   del.innerHTML = `<span class="pix-prled-svg" style="-webkit-mask-image:url(${ICON_BASE}delete.svg);mask-image:url(${ICON_BASE}delete.svg)"></span>`;
+  // No confirm dialog on purpose: one tag is small, and being asked every time makes
+  // clearing out a library miserable. It goes at once and the Undo strip offers it
+  // back (destructive() snapshots first).
   del.addEventListener("click", () => {
-    const i = _data.tags.indexOf(tag);
-    if (i > -1) _data.tags.splice(i, 1);
-    // Drop its position too, or a NEW list later given the same name inherits the
-    // dead one's half-drained deck (deleteCat already does this for a category).
-    try { resetCursor(listKey(tag.name)); } catch { /* ignore */ }
-    commit(); render();
+    const sym = isListTag(tag) ? "#" : "@";
+    destructive(`Deleted ${sym}${tag.name}`, () => {
+      const i = _data.tags.indexOf(tag);
+      if (i > -1) _data.tags.splice(i, 1);
+      // Drop its position too, or a NEW list later given the same name inherits the
+      // dead one's half-drained deck (deleteCat already does this for a category).
+      try { resetCursor(listKey(tag.name)); } catch { /* ignore */ }
+    });
   });
   foot.append(ins, kindSw.el, del);
   card.append(top, tx, modeRow.el, foot);
@@ -549,18 +642,24 @@ function makeCard(tag) {
 
 function renderSidebar(sideEl) {
   sideEl.innerHTML = "";
-  const mkCat = (label, color, count, key, renamable) => {
+  const mkCat = (label, color, count, key, real) => {
     const r = document.createElement("div");
     r.className = "pix-prled-cat" + (_curCat === key ? " on" : "");
     r.innerHTML = (color ? `<span class="cd" style="background:${color}"></span>` : `<span style="width:11px"></span>`) +
       `<span class="nm">${esc(label)}</span>` +
-      (renamable ? `<span class="act ren" title="Rename">✎</span><span class="act rem" title="Delete category (its tags move to the bucket)">✕</span>` : "") +
+      (real ? `<span class="act more" title="Rename, export or delete this category">⋯</span>` : "") +
       `<span class="cnt">${count}</span>`;
     r.addEventListener("click", (e) => {
-      if (e.target.classList.contains("ren")) { startRenameCat(r, key); return; }
-      if (e.target.classList.contains("rem")) { deleteCat(key); return; }
+      if (e.target.classList.contains("more")) { e.stopPropagation(); openCatActions(r, key, e.target); return; }
       _curCat = key; render();
     });
+    // Right-click the row opens the same menu - it is the first place people reach.
+    if (real) {
+      r.addEventListener("contextmenu", (e) => {
+        e.preventDefault(); e.stopPropagation();
+        openCatActions(r, key, r.querySelector(".more") || r);
+      });
+    }
     return r;
   };
   sideEl.appendChild(mkCat("All tags", "", _data.tags.length, "All", false));
@@ -653,16 +752,132 @@ function startRenameCat(row, cat) {
   inp.addEventListener("keydown", (e) => { e.stopPropagation(); if (e.key === "Enter") commitRename(); if (e.key === "Escape") cancelRename(); });
   inp.addEventListener("blur", commitRename);
 }
-function deleteCat(cat) {
+// Everything you can do to a category, in one place that is always on screen. The two
+// deletes are deliberately SEPARATE rows: "drop the folder, keep my tags" and "take
+// the tags with it" are completely different outcomes, and hiding both behind one
+// ambiguous ✕ is how you lose someone's work.
+function openCatActions(row, cat, anchor) {
+  hideCatMenu();
+  const n = tagsIn(cat).length;
+  const word = sideOf(cat) === "list" ? "list" : "tag";
+  const many = (k) => `${k} ${word}${k === 1 ? "" : "s"}`;
+  const menu = document.createElement("div");
+  menu.className = "pix-prled-menu";
+  menu.style.minWidth = "250px";
+  const add = (label, hint, cls, fn) => {
+    const mi = document.createElement("div");
+    mi.className = "mi mrow" + (cls ? " " + cls : "");
+    mi.innerHTML = `<span class="nm">${esc(label)}</span>` + (hint ? `<span class="cnt">${esc(hint)}</span>` : "");
+    if (fn) mi.addEventListener("click", () => { hideCatMenu(); fn(); });
+    menu.appendChild(mi);
+  };
+  add("Rename", "", "", () => startRenameCat(row, cat));
+  add("Export this category", n ? many(n) : "empty", n ? "" : "dim", n ? () => exportScope(cat) : null);
+  menu.appendChild(Object.assign(document.createElement("div"), { className: "msep" }));
+  if (n) {
+    add("Delete category", `keeps the ${many(n)}`, "danger", () => deleteCat(cat));
+    add(`Delete category and its ${word}s`, `${many(n)} deleted`, "danger", () => confirmDeleteCatWithTags(cat));
+  } else {
+    add("Delete category", "it is empty", "danger", () => deleteCat(cat));
+  }
+  _overlay.appendChild(menu);
+  const r = anchor.getBoundingClientRect();
+  menu.style.left = Math.max(8, Math.min(r.left, window.innerWidth - menu.offsetWidth - 8)) + "px";
+  const below = window.innerHeight - r.bottom;
+  menu.style.top = (below < menu.offsetHeight + 8 ? Math.max(8, r.top - menu.offsetHeight - 6) : r.bottom + 4) + "px";
+  _catMenu = menu;
+}
+// The category RECORD itself (its place in the order, its side, how it picks, and
+// where it had got to). Shared by both deletes so they can never drift apart.
+function dropCategoryRecord(cat) {
   const idx = _data.categories.indexOf(cat);
   if (idx > -1) _data.categories.splice(idx, 1);
   const li = _data.listCats.indexOf(cat);
   if (li > -1) _data.listCats.splice(li, 1);
   if (_data.catModes) delete _data.catModes[cat];
   try { resetCursor(catKey(cat)); } catch { /* ignore */ }   // don't strand its position
-  for (const t of _data.tags) if (t.cat === cat) t.cat = "";   // -> that tag's own bucket
-  if (_curCat === cat) _curCat = "All";
-  commit(); render();
+}
+// Drop the category, KEEP its tags (they fall into their own side's bucket).
+function deleteCat(cat) {
+  const n = tagsIn(cat).length;
+  const label = !n ? `Deleted the category ${cat}`
+    : n === 1 ? `Deleted the category ${cat} - its tag was kept`
+      : `Deleted the category ${cat} - its ${n} tags were kept`;
+  destructive(label, () => {
+    dropCategoryRecord(cat);
+    for (const t of _data.tags) if (t.cat === cat) t.cat = "";   // -> that tag's own bucket
+    if (_curCat === cat) _curCat = "All";
+  });
+}
+// Drop the category AND everything filed under it. Always behind confirmDanger.
+function deleteCatWithTags(cat) {
+  const doomed = tagsIn(cat);
+  const n = doomed.length;
+  destructive(`Deleted ${cat} and its ${n} tag${n === 1 ? "" : "s"}`, () => {
+    const gone = new Set(doomed);
+    _data.tags = _data.tags.filter((t) => !gone.has(t));
+    // Each one's position goes too, or a later tag with the same name inherits a
+    // half-drained deck (same rule the single-tag delete follows).
+    for (const t of doomed) { try { resetCursor(listKey(t.name)); } catch { /* ignore */ } }
+    dropCategoryRecord(cat);
+    if (_curCat === cat) _curCat = "All";
+  });
+}
+function confirmDeleteCatWithTags(cat) {
+  const doomed = tagsIn(cat);
+  const n = doomed.length;
+  const word = sideOf(cat) === "list" ? "list" : "tag";
+  confirmDanger({
+    title: `Delete ${cat} and everything in it?`,
+    lead: `This deletes the category <b>${esc(cat)}</b> and the <b>${n} ${word}${n === 1 ? "" : "s"}</b> filed under it:`,
+    listing: doomed.slice(0, 40).map((t) => (isListTag(t) ? "#" : "@") + t.name).join(" · ") +
+      (n > 40 ? ` … and ${n - 40} more` : ""),
+    confirmLabel: `Delete ${n} ${word}${n === 1 ? "" : "s"}`,
+    offerExport: true,
+    exportCat: cat,
+    onConfirm: () => deleteCatWithTags(cat),
+  });
+}
+// Start over with nothing. Tucked behind the footer ⋯ so it can't be hit by accident,
+// and the dialog hands you an export before it will do it.
+function confirmDeleteEverything() {
+  const n = _data.tags.length;
+  const c = _data.categories.length;
+  if (!n && !c) { toast("info", "Your library is already empty."); return; }
+  confirmDanger({
+    title: "Delete your whole tag library?",
+    lead: `This removes <b>${n} tag${n === 1 ? "" : "s"}</b> and <b>${c} categor${c === 1 ? "y" : "ies"}</b>, ` +
+      `leaving you with an empty library. Any @tag, #list or *category already typed into a Prompt node stops working.`,
+    confirmLabel: "Delete everything",
+    offerExport: true,
+    exportCat: null,
+    onConfirm: () => destructive(`Deleted the whole library (${n} tag${n === 1 ? "" : "s"})`, () => {
+      for (const t of _data.tags) { try { resetCursor(listKey(t.name)); } catch { /* ignore */ } }
+      for (const cc of _data.categories) { try { resetCursor(catKey(cc)); } catch { /* ignore */ } }
+      _data.tags = []; _data.categories = []; _data.listCats = []; _data.catModes = {};
+      _curCat = "All"; _search = "";
+    }),
+  });
+}
+// The footer ⋯ - library-wide actions that are not Export or Import.
+function openLibraryMenu(anchor) {
+  hideCatMenu();
+  const menu = document.createElement("div");
+  menu.className = "pix-prled-menu";
+  menu.style.minWidth = "230px";
+  const n = _data.tags.length;
+  const mi = document.createElement("div");
+  mi.className = "mi mrow danger";
+  mi.innerHTML = `<span class="nm">Delete everything…</span><span class="cnt">${n} tag${n === 1 ? "" : "s"}</span>`;
+  mi.addEventListener("click", () => { hideCatMenu(); confirmDeleteEverything(); });
+  menu.appendChild(mi);
+  _overlay.appendChild(menu);
+  // Footer button: open UPWARD when there is no room below.
+  const r = anchor.getBoundingClientRect();
+  menu.style.left = Math.max(8, Math.min(r.left, window.innerWidth - menu.offsetWidth - 8)) + "px";
+  const below = window.innerHeight - r.bottom;
+  menu.style.top = (below < menu.offsetHeight + 8 ? Math.max(8, r.top - menu.offsetHeight - 6) : r.bottom + 4) + "px";
+  _catMenu = menu;
 }
 // A localized create form pinned at the top: fill name + text in one place and
 // hit Create - no bouncing to a button on the far side of the editor. New tags
@@ -958,6 +1173,9 @@ function showImportPick(parsed) {
 }
 function applyLibraryImport(parsed, mode) {
   if (!_overlay) return;
+  // An import - "Replace mine" especially - can overwrite tags you wrote yourself, so
+  // it is snapshotted like any other destructive action.
+  pushUndo("Import");
   const res = applyImport(parsed, mode);
   _data = clone(getLibrary());
   render();
@@ -965,6 +1183,8 @@ function applyLibraryImport(parsed, mode) {
   if (res.added) bits.push(`${res.added} tag${res.added === 1 ? "" : "s"} added`);
   if (res.replaced) bits.push(`${res.replaced} replaced`);
   toast("info", bits.length ? "Imported: " + bits.join(", ") + "." : "Nothing was imported.");
+  // Nothing changed -> no undo entry, or Ctrl+Z would spend a step doing nothing.
+  if (bits.length) showUndoStrip("Imported " + bits.join(", ")); else _undo.pop();
 }
 function showImportModal(parsed) {
   if (!_overlay) return;
@@ -988,6 +1208,35 @@ function showImportModal(parsed) {
   modal.querySelectorAll(".pix-prled-opt").forEach((o) => o.addEventListener("click", () => { const m = o.dataset.mode; modal.remove(); applyLibraryImport(parsed, m); }));
   _overlay.appendChild(modal);
 }
+// A real "are you sure?", used ONLY where one click takes away more than one thing.
+// Anything smaller deletes straight away and offers Undo instead - see pushUndo.
+// `lead` is HTML (so it can bold the count); escape any user value before passing it.
+function confirmDanger({ title, lead, listing, confirmLabel, offerExport, exportCat, onConfirm }) {
+  if (!_overlay) return;
+  const modal = document.createElement("div");
+  modal.className = "pix-prled-modal";
+  modal.innerHTML =
+    `<div class="pix-prled-mcard"><div class="mh">${esc(title)}</div>` +
+    `<div class="mb">${lead}` +
+    (listing ? `<div class="conf">${esc(listing)}</div>` : "") +
+    // Its own block: without a listing above it, this ran straight on from the end of
+    // `lead` with no gap ("...stops working.Undo takes it back").
+    `<div style="margin-top:10px"><b>Undo</b> takes it back while the library is open. ` +
+    `Once you close the library it is gone.</div></div>` +
+    `<div class="pix-prled-mfoot">` +
+    (offerExport ? `<button class="pix-prled-btn dg-exp" type="button">⭳ Export a backup first</button>` : "") +
+    `<button class="pix-prled-btn push dg-cancel" type="button">Cancel</button>` +
+    `<button class="pix-prled-btn danger dg-go" type="button">${esc(confirmLabel)}</button>` +
+    `</div></div>`;
+  // Exporting must NOT close the dialog: the point is to save the file and then still
+  // be sitting in front of the decision.
+  modal.querySelector(".dg-exp")?.addEventListener("click", () => exportScope(exportCat == null ? null : exportCat));
+  modal.querySelector(".dg-cancel").addEventListener("click", () => modal.remove());
+  modal.querySelector(".dg-go").addEventListener("click", () => { modal.remove(); onConfirm(); });
+  modal.addEventListener("mousedown", (e) => { if (e.target === modal) modal.remove(); });
+  _overlay.appendChild(modal);
+}
+
 function toast(sev, msg) {
   const t = app?.extensionManager?.toast;
   if (t?.add) t.add({ severity: sev, summary: "Prompt Pixaroma", detail: msg, life: 2600 });
@@ -1007,7 +1256,8 @@ function showLibraryHelp() {
     `<p><b>Create a tag.</b> Fill in the name and the full prompt text along the top, pick a category, and press <b>Create tag</b>. New tags appear at the front.</p>` +
     `<p><b>Edit a tag.</b> Click a card's name or its text and change it - your edits save on their own.</p>` +
     `<p><b>Text or List.</b> Every card has a switch at the bottom with both choices on it. <b>Text</b> is one piece of writing and <b>@name</b> drops in all of it. <b>List</b> holds one option per line (cat, dog, mouse) and <b>#name</b> drops in a random one, fresh every run. Flip the switch any time: it changes what the card is for, never what your saved prompts do. While the create box at the top is set to List, Enter starts the next option and Ctrl+Enter adds the tag.</p>` +
-    `<p><b>Categories.</b> Make them in the left sidebar. Click a card's coloured pill to move that tag to another category. Rename or delete a category from the sidebar (its tags just become Uncategorized). Typing <b>*category</b> in a prompt picks a random tag from it each run.</p>` +
+    `<p><b>Categories.</b> Make them in the left sidebar. Click a card's coloured pill to move that tag to another category. The <b>⋯</b> on a category row (right-clicking the row does the same) lets you rename it, export just that category, or delete it. Typing <b>*category</b> in a prompt picks a random tag from it each run.</p>` +
+    `<p><b>Deleting, and getting it back.</b> The bin on a card removes that tag straight away, with no dialog to click through, and an <b>Undo</b> strip appears at the bottom of the screen for a few seconds. <b>Ctrl+Z</b> also undoes, for as long as the library stays open. Deleting a category gives you two choices: keep its tags (they move to Text or List) or delete them along with it. The <b>⋯</b> next to Export and Import has <b>Delete everything</b> for starting over. The bigger deletes always offer to save you a backup file first. Once you close the library, undo is finished.</p>` +
     `<p><b>Picks: Shuffle, Random or In order.</b> A List card and a category header each have a <b>Picks</b> control for how they choose. <b>Shuffle</b> is the default: it deals a shuffled deck, so every option comes up once before any repeat. <b>Random</b> is any one every time, so the same one can come up twice in a row. <b>In order</b> goes 1, 2, 3 and around again. Shuffle and In order remember their place between runs (the card shows it) and the <b>↺</b> button starts that list over.</p>` +
     `<p><b>Use a tag.</b> Type <b>@</b> (or <b>#</b> for lists, <b>*</b> for categories) in the prompt box for a searchable list, or press <b>Insert</b> on a card to drop it straight into your prompt.</p>` +
     `<p><b>Share.</b> <b>Export</b> saves your tags to a file: everything, or just one category. <b>Import</b> shows you what is in a file so you can pick which categories to bring in, and if a name already exists you choose keep both, replace, or skip.</p>` +
@@ -1044,6 +1294,7 @@ export function openLibraryEditor(node, opts) {
     `<div class="pix-prled-main"><div class="pix-prled-side"></div><div class="pix-prled-content"></div></div>` +
     `<div class="pix-prled-foot"><button class="pix-prled-btn imp-export" title="Save your tags to a file: everything, or just one category"><span>⭳</span> Export ▾</button>` +
     `<button class="pix-prled-btn imp-import" title="Bring tags in from a file - you choose which categories"><span>⭱</span> Import</button>` +
+    `<button class="pix-prled-btn imp-more" title="More library actions">⋯</button>` +
     `<button class="pix-prled-btn push imp-done">Done</button></div>`;
   document.body.appendChild(ov);
   _overlay = ov;
@@ -1056,6 +1307,7 @@ export function openLibraryEditor(node, opts) {
   ov.querySelector(".imp-done").addEventListener("click", closeLibraryEditor);
   ov.querySelector(".imp-export").addEventListener("click", (e) => openExportMenu(e.currentTarget));
   ov.querySelector(".imp-import").addEventListener("click", pickImportFile);
+  ov.querySelector(".imp-more").addEventListener("click", (e) => openLibraryMenu(e.currentTarget));
 
   render();
   // Coming from "save selection as a tag": the text is already in the create form,
@@ -1071,6 +1323,20 @@ export function openLibraryEditor(node, opts) {
   window.addEventListener("keydown", onKey, true);
 }
 function onKey(e) {
+  // Ctrl/Cmd+Z takes back the last delete / import for as long as the library is open
+  // (the Undo strip only shows for a few seconds, this keeps working after it goes).
+  if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && (e.key === "z" || e.key === "Z")) {
+    // Inside a text field Ctrl+Z means the BROWSER's text undo, and stealing that would
+    // make typing feel broken. Only claim it when the user is not editing.
+    const a = document.activeElement;
+    const editing = a && _overlay && _overlay.contains(a) &&
+      (a.tagName === "INPUT" || a.tagName === "TEXTAREA" || a.isContentEditable);
+    if (editing) return;
+    e.preventDefault();
+    e.stopPropagation();
+    undoLast();
+    return;
+  }
   if (e.key !== "Escape") return;
   if (_overlay?.querySelector(".pix-prled-modal")) { _overlay.querySelector(".pix-prled-modal").remove(); e.stopPropagation(); return; }
   if (_catMenu) { hideCatMenu(); e.stopPropagation(); return; }
@@ -1117,6 +1383,10 @@ function onKey(e) {
 export function closeLibraryEditor() {
   window.removeEventListener("keydown", onKey, true);
   hideCatMenu();
+  // Undo is for THIS editing session: the snapshots are of a working copy that is
+  // about to be written back, and the next open re-reads storage (another tab may
+  // have edited it), so keeping them would let Ctrl+Z restore a stale library.
+  clearUndo();
   // Recover any card left with an empty/duplicate name before persisting - the
   // per-card blur recovery is bypassed when closing via Escape / the X, and an
   // empty name is dropped by normalize (the tag would be lost otherwise).
