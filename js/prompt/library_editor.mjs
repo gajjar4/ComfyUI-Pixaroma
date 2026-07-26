@@ -1428,6 +1428,11 @@ function applyLibraryImport(parsed, mode) {
   if (bits.length || modesChanged) {
     const what = bits.length ? "Imported " + bits.join(", ") : "Imported settings";
     pushUndo(what, pre);          // same wording the strip shows, so "Undone: ..." matches
+    // MUST rebase the signature: this is the only place that pushes an entry outside
+    // destructive(). Without it `_undoSig` still describes the pre-import library, so
+    // the very next commit() - even a no-op one - would see a difference and bin the
+    // import's own undo entry.
+    _undoSig = libSig();
     showUndoStrip(what);
   }
 }
