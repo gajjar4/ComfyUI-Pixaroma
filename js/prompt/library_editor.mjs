@@ -90,7 +90,20 @@ function uniqueNameExcept(base, exceptTag) {
   if (!taken(n)) return n;
   let i = 2; while (taken(n + "-" + i)) i++; return n + "-" + i;
 }
-function commit() { commitLibrary(_data); }
+// >0 while a destructive action (or an undo of one) is being applied, so the commit
+// it makes does not retire the very stack it is maintaining. See commit().
+let _undoDepth = 0;
+function commit() {
+  // ANY ordinary edit retires the undo stack. Undo restores a WHOLE-LIBRARY snapshot,
+  // and only destructive actions take one - so replaying an older snapshot after a
+  // normal edit would silently destroy that edit (delete a tag, then create three, then
+  // Ctrl+Z and the three are gone with no warning). Rather than snapshot every
+  // keystroke, an edit simply ends the offer: clearUndo() also hides the strip, so the
+  // Undo button is never on screen while it would do the wrong thing. A run of deletes
+  // with nothing else in between still undoes one by one.
+  if (!_undoDepth) clearUndo();
+  commitLibrary(_data);
+}
 
 // ── undo ───────────────────────────────────────────────────────────────
 // Every destructive action snapshots the working copy FIRST. That is what lets a
@@ -106,11 +119,17 @@ const UNDO_MAX = 30;
 const UNDO_SHOW_MS = 12000;
 let _undo = [];
 let _undoTimer = null;
-function pushUndo(label) {
-  if (!_data) return;
+// `pre` is an EARLIER snapshot from snapshotNow(), for a gesture whose first half runs
+// before destructive() is reached - "Put them all in a category -> New category" makes
+// the category (and commits) before the move, so snapshotting at move time would leave
+// an orphan empty category behind after an undo.
+function snapshotNow() { return _data ? { data: clone(_data), cat: _curCat } : null; }
+function pushUndo(label, pre) {
+  const snap = pre || snapshotNow();
+  if (!snap) return;
   // The selected category rides along: undoing a category delete should put you back
   // where you were looking, not leave the sidebar pointing at nothing.
-  _undo.push({ data: clone(_data), label, cat: _curCat });
+  _undo.push({ data: snap.data, label, cat: snap.cat });
   if (_undo.length > UNDO_MAX) _undo.shift();
 }
 function clearUndo() { _undo = []; hideUndoStrip(); }
@@ -139,18 +158,23 @@ function undoLast() {
   const alive = e.cat === "All" || e.cat === TEXT_BUCKET || e.cat === LIST_BUCKET ||
     _data.categories.some((c) => c === e.cat);
   _curCat = alive ? e.cat : "All";
-  commit();
+  _undoDepth++;                 // this commit is maintaining the stack, not retiring it
+  try { commit(); } finally { _undoDepth--; }
   render();
   hideUndoStrip();
   toast("info", "Undone: " + e.label);
   return true;
 }
 // Snapshot, mutate, persist, redraw, offer it back - the shape every destructive
-// action in this editor uses, so none of them can forget a step.
-function destructive(label, mutate) {
-  pushUndo(label);
-  mutate();
-  commit();
+// action in this editor uses, so none of them can forget a step. `pre` overrides the
+// snapshot when the gesture started earlier (see pushUndo).
+function destructive(label, mutate, pre) {
+  pushUndo(label, pre);
+  _undoDepth++;                 // ...so commit() below does not clear what we just pushed
+  try {
+    mutate();
+    commit();
+  } finally { _undoDepth--; }
   render();
   showUndoStrip(label);
 }
@@ -205,6 +229,10 @@ function injectCSS() {
        try was to delete one, and nothing happened. Italic + dimmed says "different
        kind of row" at a glance; the tooltip and the ⋯ menu say the rest. */
     .pix-prled-cat.bucket .nm { font-style:italic; color:#9a9a9a; }
+    /* ...but it must still brighten with the rest of the row on hover, or the bucket is
+       the one sidebar label that stays grey while its background and count light up.
+       Needs the same specificity as the .bucket rule to win. */
+    .pix-prled-cat.bucket:hover .nm { color:#fff; }
     .pix-prled-cat.bucket.on .nm { color:#e0e0e0; }
     .pix-prled-cat .catinput { flex:1; min-width:0; background:#151515; border:1px solid var(--acc); border-radius:4px; color:#e6e6e6; font:12.5px monospace; padding:4px 6px; outline:none; }
     .pix-prled-newcat { margin-top:6px; padding-top:9px; border-top:1px solid #262626; }
@@ -347,19 +375,29 @@ function injectCSS() {
        you are tidying up a library) and this offers it straight back. Ctrl+Z keeps
        working for longer, so the strip is the visible reminder, not the only way back.
        It is our own DOM because ComfyUI's toast cannot carry a button. */
+    /* pointer-events:none on the BAR (auto only on the button): it sits over the bottom
+       of the sidebar and the bottom-left card for 12s after every delete, and each new
+       delete restarts that timer - so while bulk tidying, which is exactly what this
+       feature is for, it was permanently eating clicks on rows, the New category button
+       and a card's own controls. Only the Undo button needs to be clickable. */
     .pix-prled-undo { position:absolute; left:16px; bottom:60px; z-index:10042; display:flex; align-items:center; gap:12px;
-      background:#2a2a2a; border:1px solid #4a4a4a; border-radius:8px; padding:9px 11px 9px 14px;
+      pointer-events:none; background:#2a2a2a; border:1px solid #4a4a4a; border-radius:8px; padding:9px 11px 9px 14px;
       box-shadow:0 10px 26px rgba(0,0,0,.5); font:12.5px 'Segoe UI',sans-serif; color:#d6d6d6; max-width:min(440px,60vw); }
     .pix-prled-undo .msg { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-    .pix-prled-undo .ub { flex:none; background:transparent; border:1px solid var(--acc); color:var(--acc);
+    .pix-prled-undo .ub { flex:none; pointer-events:auto; background:transparent; border:1px solid var(--acc); color:var(--acc);
       border-radius:5px; padding:4px 12px; font:12px 'Segoe UI',sans-serif; cursor:pointer; }
     .pix-prled-undo .ub:hover { background:var(--acc); color:#fff; }
     .pix-prled-undo .uk { flex:none; color:#767676; font-size:11px; }
     /* A menu row that destroys something must never look like the ordinary ones. */
     .pix-prled-menu .mi.danger { color:#e2554a; }
     .pix-prled-menu .mi.danger:hover { background:rgba(226,85,74,.15); color:#ff8d81; }
-    .pix-prled-menu .mi.danger .cnt { color:rgba(226,85,74,.7); }
-    .pix-prled-btn.danger { border-color:#5c3a36; color:#e2554a; }
+    /* This hint carries the COUNT of what is about to be lost, so it has to be the
+       readable one - at .7 alpha it composited to about 2.8:1, dimmer than the neutral
+       hint beside it. */
+    .pix-prled-menu .mi.danger .cnt { color:#d98079; }
+    /* The button that carries the consequence must not read WEAKER than the Cancel
+       next to it: a near-invisible border made it the quieter of the two. */
+    .pix-prled-btn.danger { border-color:#e2554a; color:#ff8378; background:rgba(226,85,74,.12); }
     .pix-prled-btn.danger:hover { background:#e2554a; border-color:#e2554a; color:#fff; }
   `;
   document.head.appendChild(s);
@@ -541,13 +579,20 @@ function makeCard(tag) {
       const p = Math.max(0, (at == null ? cleaned.length : at) - dropped);
       try { nm.setSelectionRange(p, p); } catch { /* detached / unsupported */ }
     }
-    tag.name = cleaned;
-    // Only persist a VALID name. An empty or duplicate name is dropped by normalize,
-    // so committing it would briefly remove the tag from the store + every node (a
-    // concurrent Run would miss it) and could persist the loss on an abrupt quit.
-    // The blur handler recovers an invalid name to a unique one.
-    const dup = _data.tags.some((o) => o !== tag && o.name.toLowerCase() === tag.name.toLowerCase());
-    if (tag.name && !dup) {
+    // An invalid name must NEVER reach the working copy, not just never be committed.
+    // It used to be assigned unconditionally and only the commit() was gated, so while
+    // a name field sat empty (or duplicated) the tag was invalid IN `_data` - and the
+    // very next commit() from ANY other control (deleting another tag, editing another
+    // card, renaming a category) pushed `_data` through normalize(), which DROPS an
+    // empty-named tag. The tag and its text vanished from the store and from every
+    // node's highlighting on the spot; closing the editor resurrected it under the
+    // made-up name "tag", so the original name was gone for good. Verified live
+    // 2026-07-26 (store 30 vs grid 31). It also poisoned an undo snapshot, since
+    // pushUndo clones `_data`. The field keeps showing whatever was typed; the model
+    // keeps the last good name until a valid one is typed or blur settles it.
+    const dup = !!cleaned && _data.tags.some((o) => o !== tag && o.name.toLowerCase() === cleaned.toLowerCase());
+    if (cleaned && !dup) {
+      tag.name = cleaned;
       // The store is renamed on THIS keystroke, so the position has to move now too.
       // Deferring it to blur left a window where a run looked up the new name, found
       // nothing and started a fresh sequence, which blur then overwrote.
@@ -565,6 +610,10 @@ function makeCard(tag) {
   const nameAtFocus = { v: tag.name };
   nm.addEventListener("focus", () => { nameAtFocus.v = tag.name; });
   nm.addEventListener("blur", () => {
+    // Left EMPTY: the tag keeps the name it already had, and the field shows it again.
+    // uniqueNameExcept("") invents "tag" (or "tag-2"), which threw away a name the user
+    // never asked to change just because they cleared the box to retype and clicked away.
+    if (!sanitizeName(nm.value)) { nm.value = tag.name; return; }
     const u = uniqueNameExcept(nm.value, tag);
     if (u !== tag.name) { tag.name = u; nm.value = u; }
     if (nameAtFocus.v && tag.name && nameAtFocus.v !== tag.name) {
@@ -675,6 +724,10 @@ function renderSidebar(sideEl) {
     // Right-click the row opens the same menu - it is the first place people reach.
     if (menu) {
       r.addEventListener("contextmenu", (e) => {
+        // Not over the rename field. startRenameCat puts a real <input> INSIDE this row,
+        // and category names are free text people paste into - swallowing the browser's
+        // own menu there took away the only way to paste one.
+        if (e.target.closest("input, textarea")) return;
         e.preventDefault(); e.stopPropagation();
         const anchor = r.querySelector(".more") || r;
         if (bucket) openBucketActions(key, anchor); else openCatActions(r, key, anchor);
@@ -736,6 +789,7 @@ function renderSidebar(sideEl) {
 }
 function startRenameCat(row, cat) {
   const nmSpan = row.querySelector(".nm");
+  if (!nmSpan) return;   // already renaming this row (the label is swapped out)
   const inp = document.createElement("input");
   inp.className = "catinput"; inp.value = cat;
   nmSpan.replaceWith(inp); inp.focus(); inp.select();
@@ -796,7 +850,7 @@ function openCatActions(row, cat, anchor) {
   menu.appendChild(Object.assign(document.createElement("div"), { className: "msep" }));
   if (n) {
     add("Delete category", `keeps the ${many(n)}`, "danger", () => deleteCat(cat));
-    add(`Delete category and its ${word}s`, `${many(n)} deleted`, "danger", () => confirmDeleteCatWithTags(cat));
+    add(`Delete category and its ${n === 1 ? word : word + "s"}`, `${many(n)} deleted`, "danger", () => confirmDeleteCatWithTags(cat));
   } else {
     add("Delete category", "it is empty", "danger", () => deleteCat(cat));
   }
@@ -837,9 +891,17 @@ function openBucketActions(bucket, anchor) {
     menu.appendChild(mi);
   };
   add("Put them all in a category…", many(n), "", () => {
-    // openCategoryMenu replaces this menu with the picker (it calls hideCatMenu
-    // itself), and its "New category" row files them into a brand new one.
-    openCategoryMenu(anchor, (c) => { if (c) moveBucketTags(bucket, c); }, side);
+    // Snapshot BEFORE the picker opens. Its "New category" row creates and commits the
+    // category before handing back, so a snapshot taken at move time would already
+    // contain it and Undo would leave an empty orphan category behind.
+    const pre = snapshotNow();
+    // openCategoryMenu replaces this menu with the picker (it calls hideCatMenu itself).
+    openCategoryMenu(anchor, (c) => {
+      // "" means the picker landed back on the bucket itself, or the typed name was
+      // unusable. Saying nothing made the button look broken.
+      if (!c) { toast("info", `Pick a real category to move ${side === "list" ? "these lists" : "these tags"} into.`); return; }
+      moveBucketTags(bucket, c, pre);
+    }, side);
   });
   add(`Export these ${word}s`, many(n), "", () => exportScope(bucket));
   add(`Delete these ${word}s`, `${many(n)} deleted`, "danger", () => confirmDeleteBucket(bucket));
@@ -852,34 +914,50 @@ function openBucketActions(bucket, anchor) {
 }
 // File every tag sitting in a bucket into a real category, which is the tidy way to
 // make the bucket row go away. Undoable like any other bulk change.
-function moveBucketTags(bucket, cat) {
+function moveBucketTags(bucket, cat, pre) {
   const moving = tagsIn(bucket);
   if (!moving.length) return;
   const word = bucket === LIST_BUCKET ? "list" : "tag";
   destructive(`Moved ${moving.length} ${word}${moving.length === 1 ? "" : "s"} into ${cat}`, () => {
     for (const t of moving) t.cat = cat;
     if (_curCat === bucket) _curCat = cat;   // follow them, the old row is about to go
-  });
+  }, pre);
 }
 function confirmDeleteBucket(bucket) {
-  const doomed = tagsIn(bucket);
-  const n = doomed.length;
+  const shown = tagsIn(bucket);          // for the dialog's own wording only
+  const n = shown.length;
   const word = bucket === LIST_BUCKET ? "list" : "tag";
   confirmDanger({
     title: `Delete the ${n} ${word}${n === 1 ? "" : "s"} with no category?`,
     lead: `<b>${esc(bucket)}</b> is not a category, so there is nothing there to delete on its own. ` +
       `This deletes the ${word}${n === 1 ? "" : "s"} sitting in it:`,
-    listing: doomed.slice(0, 40).map((t) => (isListTag(t) ? "#" : "@") + t.name).join(" · ") +
+    listing: shown.slice(0, 40).map((t) => (isListTag(t) ? "#" : "@") + t.name).join(" · ") +
       (n > 40 ? ` … and ${n - 40} more` : ""),
     confirmLabel: `Delete ${n} ${word}${n === 1 ? "" : "s"}`,
     offerExport: true,
     exportCat: bucket,
-    onConfirm: () => destructive(`Deleted ${n} ${word}${n === 1 ? "" : "s"} from ${bucket}`, () => {
-      const gone = new Set(doomed);
-      _data.tags = _data.tags.filter((t) => !gone.has(t));
-      for (const t of doomed) { try { resetCursor(listKey(t.name)); } catch { /* ignore */ } }
-      if (_curCat === bucket) _curCat = "All";
-    }),
+    onConfirm: () => {
+      // RE-RESOLVE at confirm time. Holding the tag OBJECTS captured when the dialog
+      // was built was a real defect: undoLast() swaps `_data` for a clone() whose tags
+      // are brand new objects, so a delete-by-identity matched nothing while still
+      // reporting "Deleted 3 tags" and burning an undo slot. The sibling
+      // deleteCatWithTags always re-resolved; this path had drifted from it.
+      const doomed = tagsIn(bucket);
+      const k = doomed.length;
+      if (!k) { toast("info", "Nothing left to delete there."); return; }
+      destructive(`Deleted ${k} ${word}${k === 1 ? "" : "s"} from ${bucket}`, () => {
+        const gone = new Set(doomed);
+        _data.tags = _data.tags.filter((t) => !gone.has(t));
+        for (const t of doomed) { try { resetCursor(listKey(t.name)); } catch { /* ignore */ } }
+        // A bucket is a real *wildcard target, so it has a Picks mode and a position of
+        // its own. Every other delete drops both (dropCategoryRecord); this one used to
+        // strand them, so a rebuilt bucket of the same size resumed the dead sequence
+        // and silently inherited the old mode.
+        try { resetCursor(catKey(bucket)); } catch { /* ignore */ }
+        if (_data.catModes) delete _data.catModes[bucket];
+        if (_curCat === bucket) _curCat = "All";
+      });
+    },
   });
 }
 
@@ -896,9 +974,10 @@ function dropCategoryRecord(cat) {
 // Drop the category, KEEP its tags (they fall into their own side's bucket).
 function deleteCat(cat) {
   const n = tagsIn(cat).length;
+  const word = sideOf(cat) === "list" ? "list" : "tag";   // a List category holds lists
   const label = !n ? `Deleted the category ${cat}`
-    : n === 1 ? `Deleted the category ${cat} - its tag was kept`
-      : `Deleted the category ${cat} - its ${n} tags were kept`;
+    : n === 1 ? `Deleted the category ${cat} - its ${word} was kept`
+      : `Deleted the category ${cat} - its ${n} ${word}s were kept`;
   destructive(label, () => {
     dropCategoryRecord(cat);
     for (const t of _data.tags) if (t.cat === cat) t.cat = "";   // -> that tag's own bucket
@@ -909,7 +988,8 @@ function deleteCat(cat) {
 function deleteCatWithTags(cat) {
   const doomed = tagsIn(cat);
   const n = doomed.length;
-  destructive(`Deleted ${cat} and its ${n} tag${n === 1 ? "" : "s"}`, () => {
+  const word = sideOf(cat) === "list" ? "list" : "tag";
+  destructive(`Deleted ${cat} and its ${n} ${word}${n === 1 ? "" : "s"}`, () => {
     const gone = new Set(doomed);
     _data.tags = _data.tags.filter((t) => !gone.has(t));
     // Each one's position goes too, or a later tag with the same name inherits a
@@ -950,8 +1030,16 @@ function confirmDeleteEverything() {
     onConfirm: () => destructive(`Deleted the whole library (${n} tag${n === 1 ? "" : "s"})`, () => {
       for (const t of _data.tags) { try { resetCursor(listKey(t.name)); } catch { /* ignore */ } }
       for (const cc of _data.categories) { try { resetCursor(catKey(cc)); } catch { /* ignore */ } }
+      // The two buckets are *wildcard targets too, so they hold positions of their own
+      // that the loop above (real categories only) would have left behind.
+      for (const b of [TEXT_BUCKET, LIST_BUCKET]) { try { resetCursor(catKey(b)); } catch { /* ignore */ } }
       _data.tags = []; _data.categories = []; _data.listCats = []; _data.catModes = {};
-      _curCat = "All"; _search = "";
+      _curCat = "All";
+      // Clear the search BOX as well, not just the flag - the top bar is not part of
+      // render(), so the field went on showing a filter that was no longer applied.
+      _search = "";
+      const s = _overlay && _overlay.querySelector(".pix-prled-srch input");
+      if (s) s.value = "";
     }),
   });
 }
@@ -1270,8 +1358,10 @@ function showImportPick(parsed) {
 function applyLibraryImport(parsed, mode) {
   if (!_overlay) return;
   // An import - "Replace mine" especially - can overwrite tags you wrote yourself, so
-  // it is snapshotted like any other destructive action.
-  pushUndo("Import");
+  // it is snapshotted like any other destructive action. Taken BEFORE, pushed only if
+  // something actually changed, so a no-op import cannot shift the oldest entry off a
+  // full stack.
+  const pre = snapshotNow();
   const res = applyImport(parsed, mode);
   _data = clone(getLibrary());
   render();
@@ -1280,7 +1370,10 @@ function applyLibraryImport(parsed, mode) {
   if (res.replaced) bits.push(`${res.replaced} replaced`);
   toast("info", bits.length ? "Imported: " + bits.join(", ") + "." : "Nothing was imported.");
   // Nothing changed -> no undo entry, or Ctrl+Z would spend a step doing nothing.
-  if (bits.length) showUndoStrip("Imported " + bits.join(", ")); else _undo.pop();
+  if (bits.length) {
+    pushUndo("Import", pre);
+    showUndoStrip("Imported " + bits.join(", "));
+  }
 }
 function showImportModal(parsed) {
   if (!_overlay) return;
@@ -1353,8 +1446,8 @@ function showLibraryHelp() {
     `<p><b>Edit a tag.</b> Click a card's name or its text and change it - your edits save on their own.</p>` +
     `<p><b>Text or List.</b> Every card has a switch at the bottom with both choices on it. <b>Text</b> is one piece of writing and <b>@name</b> drops in all of it. <b>List</b> holds one option per line (cat, dog, mouse) and <b>#name</b> drops in a random one, fresh every run. Flip the switch any time: it changes what the card is for, never what your saved prompts do. While the create box at the top is set to List, Enter starts the next option and Ctrl+Enter adds the tag.</p>` +
     `<p><b>Categories.</b> Make them in the left sidebar. Click a card's coloured pill to move that tag to another category. The <b>⋯</b> on a category row (right-clicking the row does the same) lets you rename it, export just that category, or delete it. Typing <b>*category</b> in a prompt picks a random tag from it each run.</p>` +
-    `<p><b>The italic Text and List rows are not categories.</b> They are where tags with no category of their own are shown, so there is nothing to rename or delete there. Give those tags a category (their <b>⋯</b> can file them all at once) and the row disappears by itself.</p>` +
-    `<p><b>Deleting, and getting it back.</b> The bin on a card removes that tag straight away, with no dialog to click through, and an <b>Undo</b> strip appears at the bottom of the screen for a few seconds. <b>Ctrl+Z</b> also undoes, for as long as the library stays open. Deleting a category gives you two choices: keep its tags (they move to Text or List) or delete them along with it. The <b>⋯</b> next to Export and Import has <b>Delete everything</b> for starting over. The bigger deletes always offer to save you a backup file first. Once you close the library, undo is finished.</p>` +
+    `<p><b>The italic Text and List rows are not categories.</b> They are where tags with no category of their own are shown, so there is nothing to rename or delete about the row itself. Their <b>⋯</b> can file them all into a category at once (and the row then disappears by itself), export them, or delete them.</p>` +
+    `<p><b>Deleting, and getting it back.</b> The bin on a card removes that tag straight away, with no dialog to click through, and an <b>Undo</b> strip appears at the bottom of the screen for a few seconds. <b>Ctrl+Z</b> undoes as well, and keeps working after the strip goes. Deleting a category gives you two choices: keep its tags (they move to Text or List) or delete them along with it. The <b>⋯</b> next to Export and Import has <b>Delete everything</b> for starting over. Anything that removes a whole group offers to save you a backup file first. Undo stops being available once you make some other change, and once you close the library.</p>` +
     `<p><b>Picks: Shuffle, Random or In order.</b> A List card and a category header each have a <b>Picks</b> control for how they choose. <b>Shuffle</b> is the default: it deals a shuffled deck, so every option comes up once before any repeat. <b>Random</b> is any one every time, so the same one can come up twice in a row. <b>In order</b> goes 1, 2, 3 and around again. Shuffle and In order remember their place between runs (the card shows it) and the <b>↺</b> button starts that list over.</p>` +
     `<p><b>Use a tag.</b> Type <b>@</b> (or <b>#</b> for lists, <b>*</b> for categories) in the prompt box for a searchable list, or press <b>Insert</b> on a card to drop it straight into your prompt.</p>` +
     `<p><b>Share.</b> <b>Export</b> saves your tags to a file: everything, or just one category. <b>Import</b> shows you what is in a file so you can pick which categories to bring in, and if a name already exists you choose keep both, replace, or skip.</p>` +
@@ -1423,6 +1516,11 @@ function onKey(e) {
   // Ctrl/Cmd+Z takes back the last delete / import for as long as the library is open
   // (the Undo strip only shows for a few seconds, this keeps working after it goes).
   if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && (e.key === "z" || e.key === "Z")) {
+    // NOT while a dialog is up. A confirm describes a state ("delete these 3 tags") that
+    // it captured when it opened, so letting the library change underneath it made the
+    // dialog lie and, worse, made the confirmed action a no-op that still reported
+    // success. Escape already refuses to fall through a modal; this must match.
+    if (_overlay?.querySelector(".pix-prled-modal")) { e.preventDefault(); e.stopPropagation(); return; }
     // Inside a text field Ctrl+Z means the BROWSER's text undo, and stealing that would
     // make typing feel broken. Only claim it when the user is not editing.
     const a = document.activeElement;
