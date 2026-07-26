@@ -199,6 +199,13 @@ function injectCSS() {
     .pix-prled-cat .act:hover { color:var(--acc); }
     .pix-prled-cat .act.more:hover { background:rgba(255,255,255,.1); color:#fff; }
     .pix-prled-cat.on .act.more { opacity:.85; }
+    /* The two BUCKET rows (Text / List) are not categories - they are where tags with
+       no category of their own are shown, and they vanish on their own once empty.
+       They used to be drawn identically to a real category, so the obvious thing to
+       try was to delete one, and nothing happened. Italic + dimmed says "different
+       kind of row" at a glance; the tooltip and the ⋯ menu say the rest. */
+    .pix-prled-cat.bucket .nm { font-style:italic; color:#9a9a9a; }
+    .pix-prled-cat.bucket.on .nm { color:#e0e0e0; }
     .pix-prled-cat .catinput { flex:1; min-width:0; background:#151515; border:1px solid var(--acc); border-radius:4px; color:#e6e6e6; font:12.5px monospace; padding:4px 6px; outline:none; }
     .pix-prled-newcat { margin-top:6px; padding-top:9px; border-top:1px solid #262626; }
     .pix-prled-btn { background:rgba(255,255,255,.05); border:1px solid #4a4a4a; color:#a6a6a6; border-radius:6px; padding:7px 13px; font:12.5px 'Segoe UI',sans-serif; cursor:pointer; display:inline-flex; gap:6px; align-items:center; transition:.12s; }
@@ -307,6 +314,7 @@ function injectCSS() {
     .pix-prled-menu .mi.dim:hover { background:none; color:#cfcfcf; }
     .pix-prled-menu .msep { height:1px; background:#2a2a2a; margin:4px 2px; }
     .pix-prled-menu .mhead { padding:4px 10px 5px; font:600 9.5px 'Segoe UI',sans-serif; letter-spacing:.09em; text-transform:uppercase; color:#767676; }
+    .pix-prled-menu .mnote { padding:0 10px 7px; font:11.5px/1.45 'Segoe UI',sans-serif; color:#8f8f8f; white-space:normal; }
     .pix-prled-foot { display:flex; align-items:center; gap:9px; padding:10px 16px; border-top:1px solid #0e0e0e; background:#161616; }
     .pix-prled-foot .push { margin-left:auto; }
     /* max-height + scroll so a library with many categories can't push the menu (this
@@ -642,27 +650,39 @@ function makeCard(tag) {
 
 function renderSidebar(sideEl) {
   sideEl.innerHTML = "";
-  const mkCat = (label, color, count, key, real) => {
+  // `menu`: null (All tags) | "cat" (a real category) | "bucket" (Text / List, the
+  // holding rows for tags with no category - NOT categories, see openBucketActions).
+  const mkCat = (label, color, count, key, menu) => {
+    const bucket = menu === "bucket";
     const r = document.createElement("div");
-    r.className = "pix-prled-cat" + (_curCat === key ? " on" : "");
+    r.className = "pix-prled-cat" + (_curCat === key ? " on" : "") + (bucket ? " bucket" : "");
+    if (bucket) {
+      r.title = `Not a category: it is where ${key === LIST_BUCKET ? "lists" : "tags"} with no category of their own are shown. ` +
+        `It disappears once it is empty.`;
+    }
     r.innerHTML = (color ? `<span class="cd" style="background:${color}"></span>` : `<span style="width:11px"></span>`) +
       `<span class="nm">${esc(label)}</span>` +
-      (real ? `<span class="act more" title="Rename, export or delete this category">⋯</span>` : "") +
+      (menu ? `<span class="act more" title="${bucket ? "What this row is, and what you can do with it" : "Rename, export or delete this category"}">⋯</span>` : "") +
       `<span class="cnt">${count}</span>`;
     r.addEventListener("click", (e) => {
-      if (e.target.classList.contains("more")) { e.stopPropagation(); openCatActions(r, key, e.target); return; }
+      if (e.target.classList.contains("more")) {
+        e.stopPropagation();
+        if (bucket) openBucketActions(key, e.target); else openCatActions(r, key, e.target);
+        return;
+      }
       _curCat = key; render();
     });
     // Right-click the row opens the same menu - it is the first place people reach.
-    if (real) {
+    if (menu) {
       r.addEventListener("contextmenu", (e) => {
         e.preventDefault(); e.stopPropagation();
-        openCatActions(r, key, r.querySelector(".more") || r);
+        const anchor = r.querySelector(".more") || r;
+        if (bucket) openBucketActions(key, anchor); else openCatActions(r, key, anchor);
       });
     }
     return r;
   };
-  sideEl.appendChild(mkCat("All tags", "", _data.tags.length, "All", false));
+  sideEl.appendChild(mkCat("All tags", "", _data.tags.length, "All", null));
 
   // One block per side. A category belongs to exactly one of them, so the lists never
   // mix in with the text snippets - each block also gets its own New category button.
@@ -670,9 +690,9 @@ function renderSidebar(sideEl) {
     sideEl.appendChild(Object.assign(document.createElement("div"), { className: "lbl", textContent: heading }));
     if (bucketUsed(sd)) {
       const b = bucketOf(sd);
-      sideEl.appendChild(mkCat(b, colorOf(b), tagsIn(b).length, b, false));
+      sideEl.appendChild(mkCat(b, colorOf(b), tagsIn(b).length, b, "bucket"));
     }
-    for (const c of catsOnSide(sd)) sideEl.appendChild(mkCat(c, colorOf(c), tagsIn(c).length, c, true));
+    for (const c of catsOnSide(sd)) sideEl.appendChild(mkCat(c, colorOf(c), tagsIn(c).length, c, "cat"));
     const nc = document.createElement("div");
     nc.className = "pix-prled-newcat";
     const btn = document.createElement("button");
@@ -787,6 +807,82 @@ function openCatActions(row, cat, anchor) {
   menu.style.top = (below < menu.offsetHeight + 8 ? Math.max(8, r.top - menu.offsetHeight - 6) : r.bottom + 4) + "px";
   _catMenu = menu;
 }
+// The Text / List BUCKET rows. They are not categories - they are drawn only while a
+// tag with no category of its own exists on that side, and they go away by themselves
+// once that stops being true. So there is nothing to rename and nothing to delete, and
+// the FIRST thing this menu does is say so: a bucket drawn like a category had someone
+// hunting for a delete that could never exist (reported 2026-07-26). What it offers
+// instead are the two things that actually make the row go away.
+function openBucketActions(bucket, anchor) {
+  hideCatMenu();
+  const side = bucket === LIST_BUCKET ? "list" : "text";
+  const n = tagsIn(bucket).length;
+  const word = side === "list" ? "list" : "tag";
+  const many = (k) => `${k} ${word}${k === 1 ? "" : "s"}`;
+  const menu = document.createElement("div");
+  menu.className = "pix-prled-menu";
+  menu.style.minWidth = "285px";
+  menu.appendChild(Object.assign(document.createElement("div"), { className: "mhead", textContent: "This is not a category" }));
+  menu.appendChild(Object.assign(document.createElement("div"), {
+    className: "mnote",
+    textContent: `It is where ${side === "list" ? "lists" : "tags"} with no category of their own are shown. ` +
+      `Give them one and this row disappears on its own.`,
+  }));
+  menu.appendChild(Object.assign(document.createElement("div"), { className: "msep" }));
+  const add = (label, hint, cls, fn) => {
+    const mi = document.createElement("div");
+    mi.className = "mi mrow" + (cls ? " " + cls : "");
+    mi.innerHTML = `<span class="nm">${esc(label)}</span>` + (hint ? `<span class="cnt">${esc(hint)}</span>` : "");
+    mi.addEventListener("click", () => { hideCatMenu(); fn(); });
+    menu.appendChild(mi);
+  };
+  add("Put them all in a category…", many(n), "", () => {
+    // openCategoryMenu replaces this menu with the picker (it calls hideCatMenu
+    // itself), and its "New category" row files them into a brand new one.
+    openCategoryMenu(anchor, (c) => { if (c) moveBucketTags(bucket, c); }, side);
+  });
+  add(`Export these ${word}s`, many(n), "", () => exportScope(bucket));
+  add(`Delete these ${word}s`, `${many(n)} deleted`, "danger", () => confirmDeleteBucket(bucket));
+  _overlay.appendChild(menu);
+  const r = anchor.getBoundingClientRect();
+  menu.style.left = Math.max(8, Math.min(r.left, window.innerWidth - menu.offsetWidth - 8)) + "px";
+  const below = window.innerHeight - r.bottom;
+  menu.style.top = (below < menu.offsetHeight + 8 ? Math.max(8, r.top - menu.offsetHeight - 6) : r.bottom + 4) + "px";
+  _catMenu = menu;
+}
+// File every tag sitting in a bucket into a real category, which is the tidy way to
+// make the bucket row go away. Undoable like any other bulk change.
+function moveBucketTags(bucket, cat) {
+  const moving = tagsIn(bucket);
+  if (!moving.length) return;
+  const word = bucket === LIST_BUCKET ? "list" : "tag";
+  destructive(`Moved ${moving.length} ${word}${moving.length === 1 ? "" : "s"} into ${cat}`, () => {
+    for (const t of moving) t.cat = cat;
+    if (_curCat === bucket) _curCat = cat;   // follow them, the old row is about to go
+  });
+}
+function confirmDeleteBucket(bucket) {
+  const doomed = tagsIn(bucket);
+  const n = doomed.length;
+  const word = bucket === LIST_BUCKET ? "list" : "tag";
+  confirmDanger({
+    title: `Delete the ${n} ${word}${n === 1 ? "" : "s"} with no category?`,
+    lead: `<b>${esc(bucket)}</b> is not a category, so there is nothing there to delete on its own. ` +
+      `This deletes the ${word}${n === 1 ? "" : "s"} sitting in it:`,
+    listing: doomed.slice(0, 40).map((t) => (isListTag(t) ? "#" : "@") + t.name).join(" · ") +
+      (n > 40 ? ` … and ${n - 40} more` : ""),
+    confirmLabel: `Delete ${n} ${word}${n === 1 ? "" : "s"}`,
+    offerExport: true,
+    exportCat: bucket,
+    onConfirm: () => destructive(`Deleted ${n} ${word}${n === 1 ? "" : "s"} from ${bucket}`, () => {
+      const gone = new Set(doomed);
+      _data.tags = _data.tags.filter((t) => !gone.has(t));
+      for (const t of doomed) { try { resetCursor(listKey(t.name)); } catch { /* ignore */ } }
+      if (_curCat === bucket) _curCat = "All";
+    }),
+  });
+}
+
 // The category RECORD itself (its place in the order, its side, how it picks, and
 // where it had got to). Shared by both deletes so they can never drift apart.
 function dropCategoryRecord(cat) {
@@ -1257,6 +1353,7 @@ function showLibraryHelp() {
     `<p><b>Edit a tag.</b> Click a card's name or its text and change it - your edits save on their own.</p>` +
     `<p><b>Text or List.</b> Every card has a switch at the bottom with both choices on it. <b>Text</b> is one piece of writing and <b>@name</b> drops in all of it. <b>List</b> holds one option per line (cat, dog, mouse) and <b>#name</b> drops in a random one, fresh every run. Flip the switch any time: it changes what the card is for, never what your saved prompts do. While the create box at the top is set to List, Enter starts the next option and Ctrl+Enter adds the tag.</p>` +
     `<p><b>Categories.</b> Make them in the left sidebar. Click a card's coloured pill to move that tag to another category. The <b>⋯</b> on a category row (right-clicking the row does the same) lets you rename it, export just that category, or delete it. Typing <b>*category</b> in a prompt picks a random tag from it each run.</p>` +
+    `<p><b>The italic Text and List rows are not categories.</b> They are where tags with no category of their own are shown, so there is nothing to rename or delete there. Give those tags a category (their <b>⋯</b> can file them all at once) and the row disappears by itself.</p>` +
     `<p><b>Deleting, and getting it back.</b> The bin on a card removes that tag straight away, with no dialog to click through, and an <b>Undo</b> strip appears at the bottom of the screen for a few seconds. <b>Ctrl+Z</b> also undoes, for as long as the library stays open. Deleting a category gives you two choices: keep its tags (they move to Text or List) or delete them along with it. The <b>⋯</b> next to Export and Import has <b>Delete everything</b> for starting over. The bigger deletes always offer to save you a backup file first. Once you close the library, undo is finished.</p>` +
     `<p><b>Picks: Shuffle, Random or In order.</b> A List card and a category header each have a <b>Picks</b> control for how they choose. <b>Shuffle</b> is the default: it deals a shuffled deck, so every option comes up once before any repeat. <b>Random</b> is any one every time, so the same one can come up twice in a row. <b>In order</b> goes 1, 2, 3 and around again. Shuffle and In order remember their place between runs (the card shows it) and the <b>↺</b> button starts that list over.</p>` +
     `<p><b>Use a tag.</b> Type <b>@</b> (or <b>#</b> for lists, <b>*</b> for categories) in the prompt box for a searchable list, or press <b>Insert</b> on a card to drop it straight into your prompt.</p>` +
