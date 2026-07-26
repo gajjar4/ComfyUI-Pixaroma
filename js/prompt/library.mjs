@@ -468,7 +468,12 @@ export function parseImport(jsonStr) {
   // (The category check used to sit on the no-tags branch only, so a file with three
   // categories plus two unusable tag names was refused while the same file with zero
   // tags imported fine - the same gate, applied twice with different rules.)
-  if (!data.tags.length && !data.categories.length) {
+  // A tags-less file is only a library if its categories are real NAMES. Accepting any
+  // top-level `categories` array turned any stray JSON into a valid import (an array of
+  // objects came through as a category literally called "[object Object]").
+  const namedCats = Array.isArray(raw?.categories) &&
+    raw.categories.some((c) => typeof c === "string" && c.trim());
+  if (!data.tags.length && !namedCats) {
     return {
       error: dropped
         ? `None of the ${dropped} tag${dropped === 1 ? "" : "s"} in that file can be used. A tag name can only contain letters a to z, numbers, - and _.`

@@ -289,7 +289,8 @@ function injectCSS() {
     .pix-prled-mcard .mh { padding:14px 16px; border-bottom:1px solid #171717; font:500 15px 'Segoe UI',sans-serif; color:#fff; }
     .pix-prled-mcard .mb { padding:14px 16px; color:#a6a6a6; font-size:13px; line-height:1.6; }
     .pix-prled-mcard .mb b { color:#fff; font-weight:500; }
-    .pix-prled-mcard .conf { background:#1a1a1a; border:1px solid #2a2a2a; border-radius:7px; padding:8px 11px; margin:9px 0; font:12px monospace; color:#e0894b; max-height:80px; overflow-y:auto; }
+    .pix-prled-mcard .conf { background:#1a1a1a; border:1px solid #2a2a2a; border-radius:7px; padding:8px 11px; margin:9px 0;
+      font:12px monospace; color:#e0894b; max-height:110px; overflow-y:auto; white-space:pre-wrap; word-break:break-word; }
     .pix-prled-opts { display:flex; flex-direction:column; gap:8px; padding:2px 16px 16px; }
     .pix-prled-opt { display:flex; align-items:center; gap:11px; background:#262626; border:1px solid #333; border-radius:8px; padding:11px 13px; cursor:pointer; transition:.12s; }
     .pix-prled-opt:hover, .pix-prled-opt.rec { border-color:var(--acc); }
@@ -354,8 +355,7 @@ function openCategoryMenu(anchor, onPick, side) {
     inp.style.display = "block";
     inp.focus();
     // The menu was positioned against its pre-growth height, so on a short window the
-    // revealed field could sit below the bottom edge with the user typing blind. This
-    // is the only popup here without the flip-upward logic the others have.
+    // revealed field could sit below the bottom edge with the user typing blind.
     placeMenu(menu, anchor);
   });
   inp.addEventListener("keydown", (e) => {
@@ -539,13 +539,34 @@ function makeCard(tag) {
   // (see the input + blur handlers). Storage writes are debounced, so moving it per
   // keystroke costs nothing.
   const nameAtFocus = { v: tag.name };
-  nm.addEventListener("focus", () => { nameAtFocus.v = tag.name; });
+  // SEPARATE from nameAtFocus, which the input handler moves on every valid keystroke
+  // because it tracks where the sequence position is currently filed. Escape needs the
+  // name as it was when the field was entered, which nothing else may touch.
+  let nameOnEntry = tag.name;
+  nm.addEventListener("focus", () => { nameAtFocus.v = tag.name; nameOnEntry = tag.name; });
   // Escape must ABANDON what was typed. onKey is capture-phase, so without a handle it
   // fell through to the generic `active.blur()`, which runs the blur listener below and
   // COMMITS: typing a name that is already taken and pressing Escape renamed the tag to
   // `thatname-2` - a name nobody typed. Putting the
   // original name back first makes the blur a no-op by its own equality check.
-  nm._pixCancel = () => { nm.value = tag.name; nm.blur(); };
+  nm._pixCancel = () => {
+    // The input handler applies and COMMITS a valid rename on every keystroke, so by
+    // the time Escape arrives `tag.name` is already the typed name. Repainting the
+    // field alone left the rename standing - Escape only reverted the invalid case,
+    // while the sibling category rename reverts properly. Put the model back too.
+    const back = nameOnEntry;
+    if (back && back !== tag.name && !_data.tags.some((o) => o !== tag && o.name.toLowerCase() === back.toLowerCase())) {
+      try { renameCursor(listKey(tag.name), listKey(back)); } catch { /* ignore */ }
+      tag.name = back;
+      nm.value = back;
+      commit();
+      nm.blur();
+      render();          // the card's Insert / bin / switch labels all quote the name
+      return;
+    }
+    nm.value = tag.name;
+    nm.blur();
+  };
   nm.addEventListener("blur", () => {
     // Left EMPTY: the tag keeps the name it already had, and the field shows it again.
     // uniqueNameExcept("") invents "tag" (or "tag-2"), which threw away a name the user
@@ -693,7 +714,16 @@ function renderSidebar(sideEl) {
         if (bucket) openBucketActions(key, e.target); else openCatActions(r, key, e.target);
         return;
       }
-      _curCat = key; render();
+      if (_curCat !== key) {
+        _curCat = key;
+        // Picking a category in the sidebar SAYS what you are about to make, so the
+        // create form must follow it again. `kindTouched` was being carried across a
+        // Create and never cleared, so after making one List tag the form stopped
+        // following the sidebar and every later tag landed in a bucket instead of the
+        // category you had selected. (Third time this exact failure has been fixed.)
+        _createDraft.kindTouched = false;
+      }
+      render();
     });
     // Right-click the row opens the same menu - it is the first place people reach.
     if (menu) {

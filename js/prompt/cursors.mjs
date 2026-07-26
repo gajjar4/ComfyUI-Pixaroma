@@ -131,13 +131,32 @@ const _pending = new Map();   // key -> { i, n, mode, state, build }
 // destroy the hold that this whole mechanism exists for) until a build that actually
 // uses that key is accepted.
 let _build = 0;
-export function beginPickBuild() { _build++; }
-export function commitPicks() {
+// The build id MUST ride on the PROMPT OBJECT, not on a module global. commitPicks runs
+// when the POST resolves, and ANY other graphToPrompt in that window (a Pixaroma Save
+// button, Workflow > Export, another extension) moves a global on - so the commit spent
+// the un-queued build's picks and dropped the accepted run's own. Measured inversion of
+// both halves at once: the run's list repeated while the export's list skipped.
+const _buildOf = new WeakMap();
+export function beginPickBuild(promptObj) {
+  _build++;
+  if (promptObj && typeof promptObj === "object") {
+    try { _buildOf.set(promptObj, _build); } catch { /* not weak-mappable, fall back */ }
+  }
+  return _build;
+}
+// `queued` is the prompt object that was actually POSTed, so the picks spent are
+// exactly the ones that produced it. Without it we can only assume the newest build.
+export function commitPicks(queued) {
   if (!_pending.size) return;
+  let build = _build;
+  if (queued && typeof queued === "object") {
+    const b = _buildOf.get(queued);
+    if (b != null) build = b;
+  }
   const map = all();
   let wrote = false;
   for (const [key, p] of _pending) {
-    if (p.build !== _build) continue;          // rolled by a build that was not queued
+    if (p.build !== build) continue;           // rolled by a build that was not queued
     if (map && p.state) { map[key] = p.state; wrote = true; }
     _pending.delete(key);
   }

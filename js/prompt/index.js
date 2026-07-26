@@ -1241,7 +1241,17 @@ if (!app._pixPromptQueuePatched && api && typeof api.queuePrompt === "function")
   const _origQueuePrompt = api.queuePrompt.bind(api);
   api.queuePrompt = async function (...args) {
     const res = await _origQueuePrompt(...args);   // throws on a rejected queue -> pick kept
-    try { commitPicks(); } catch (err) { console.error("Pixaroma.Prompt: commitPicks failed", err); }
+    try {
+      // Hand the commit the exact prompt object that was POSTed, so it spends THAT
+      // build's picks. Searching the args rather than assuming a position keeps this
+      // working if the signature ever moves. `output` is the object our graphToPrompt
+      // hook stamped.
+      let queued = null;
+      for (const a of args) {
+        if (a && typeof a === "object" && a.output && typeof a.output === "object") { queued = a.output; break; }
+      }
+      commitPicks(queued);
+    } catch (err) { console.error("Pixaroma.Prompt: commitPicks failed", err); }
     return res;
   };
 }
@@ -1256,11 +1266,11 @@ app.graphToPrompt = async function (...args) {
   try {
     const prompt = result?.output;
     if (prompt && typeof prompt === "object") {
-      // Mark a new build. commitPicks only spends picks stamped with the LATEST build,
-      // so a build that is never queued (Export, workflow sharing, a Pixaroma Save
-      // button, a run rejected before it starts) can no longer have its picks spent by
-      // some later, unrelated run.
-      beginPickBuild();
+      // Stamp this build ONTO the prompt object. commitPicks then spends exactly the
+      // picks that produced the prompt that was queued, so a build that is never queued
+      // (Export, workflow sharing, a Pixaroma Save button, a run rejected before it
+      // starts) can neither have its picks spent nor steal a real run's.
+      beginPickBuild(prompt);
       let index = null;
       for (const key of Object.keys(prompt)) {
         try {
