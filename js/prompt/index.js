@@ -8,7 +8,7 @@ import {
   getTags, getCategories, findTag, subscribe, tagLines, isListTag, isListCat, catOf,
   tagMode, catMode, TEXT_BUCKET, LIST_BUCKET,
 } from "./library.mjs";
-import { nextIndex, listKey, catKey, commitPicks } from "./cursors.mjs";
+import { nextIndex, listKey, catKey, commitPicks, beginPickBuild } from "./cursors.mjs";
 import { api } from "/scripts/api.js";
 import { expandAll, hasTags, hasWilds, hasLists, scanTokens, prevCodePoint } from "./expand.mjs";
 import { openLibraryEditor, closeLibraryEditorFor } from "./library_editor.mjs";
@@ -1016,13 +1016,17 @@ function openTextMenu(node, x, y, text, hasSel) {
 // text so the user only types a name + picks a category + Create (the "save
 // selection as a tag" flow). Insert drops the chosen @tag back into the prompt.
 function openLibraryFor(node, prefill) {
-  const els = node._pixPromptRoot?._els;
   openLibraryEditor(node, {
     accent: accentOf(node),
     prefill: prefill || "",
     // `sym` is "#" for a List tag (roll one line) and "@" for a snippet - the editor
     // decides from the card's own kind so Insert always drops in the useful form.
     onInsert: (name, sym) => {
+      // Re-resolve every time, like every other consumer does. Capturing this once at
+      // open meant a Vue teardown/rebuild of the node's DOM widget mid-session (Vue
+      // Compat #5) left Insert writing into a DETACHED textarea and then stamping that
+      // dead element's value into node.properties, reverting the live prompt.
+      const els = node._pixPromptRoot?._els;
       if (!els) return;
       const s = sym === "#" ? "#" : "@";
       const ta = els.ta;
@@ -1252,6 +1256,11 @@ app.graphToPrompt = async function (...args) {
   try {
     const prompt = result?.output;
     if (prompt && typeof prompt === "object") {
+      // Mark a new build. commitPicks only spends picks stamped with the LATEST build,
+      // so a build that is never queued (Export, workflow sharing, a Pixaroma Save
+      // button, a run rejected before it starts) can no longer have its picks spent by
+      // some later, unrelated run.
+      beginPickBuild();
       let index = null;
       for (const key of Object.keys(prompt)) {
         try {

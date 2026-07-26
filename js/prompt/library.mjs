@@ -149,10 +149,20 @@ function normalize(raw) {
     const arr = tagsByCat.get(k);
     if (arr) arr.push(t); else tagsByCat.set(k, [t]);
   }
-  for (const c of out.categories) {
-    if (listKeys.has(lc(c))) continue;
-    const inCat = tagsByCat.get(lc(c));
-    if (inCat && inCat.length && inCat.every((t) => t.kind === "list")) listKeys.add(lc(c));
+  // ONLY for a library/file written before sides existed. `listCats` being present at
+  // all is the marker that sides are already declared - normalize always writes it, so
+  // only a pre-sides blob lacks it. Running the heuristic every time meant a live Text
+  // category could be silently PROMOTED to a List category: import a list over the one
+  // text tag in `Styles` with "Replace mine", and `Styles` jumped to the List block
+  // where text tags can no longer be filed. (With two tags in it the same action
+  // evicted the tag instead, so one operation had two different outcomes.)
+  const sidesDeclared = Array.isArray(src.listCats);
+  if (!sidesDeclared) {
+    for (const c of out.categories) {
+      if (listKeys.has(lc(c))) continue;
+      const inCat = tagsByCat.get(lc(c));
+      if (inCat && inCat.length && inCat.every((t) => t.kind === "list")) listKeys.add(lc(c));
+    }
   }
   // A category belongs to ONE side, so a tag whose kind disagrees with it moves to
   // its own bucket. The TAG's kind wins - never silently retype someone's list.
@@ -453,11 +463,13 @@ export function parseImport(jsonStr) {
   }
   const data = normalize(raw);
   if (!data.tags.length) {
-    return {
-      error: dropped
-        ? `None of the ${dropped} tag${dropped === 1 ? "" : "s"} in that file can be used. A tag name can only contain letters a to z, numbers, - and _.`
-        : "No tags found in that file.",
-    };
+    if (dropped) {
+      return { error: `None of the ${dropped} tag${dropped === 1 ? "" : "s"} in that file can be used. A tag name can only contain letters a to z, numbers, - and _.` };
+    }
+    // A file with categories but no tags is a legitimate backup of an empty-ish
+    // library - exactly what "Export a backup first" hands you before a wipe. Refusing
+    // it made that backup unrestorable.
+    if (!data.categories.length) return { error: "No tags found in that file." };
   }
   const have = new Set(getTags().map((t) => t.name.toLowerCase()));
   const conflicts = data.tags.filter((t) => have.has(t.name.toLowerCase())).map((t) => t.name);

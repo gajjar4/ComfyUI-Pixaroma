@@ -123,13 +123,28 @@ function shuffled(n) {
 // the hold was introduced to fix; it only papered over it while the tab stayed alive.
 // If the tab dies between an accepted queue and this call the advance is lost, so a
 // run REPEATS an option rather than SKIPPING one - the safe direction of the two.
-const _pending = new Map();   // key -> { i, n, mode, state }
+const _pending = new Map();   // key -> { i, n, mode, state, build }
+// Which prompt BUILD each held pick belongs to. Without this, commitPicks spent every
+// pick it was holding, including ones rolled by a build that was never queued - so an
+// Export (or a rejected run) still burned an option, just one accepted run later
+// instead of immediately. A pick from an older build stays HELD (clearing it would
+// destroy the hold that this whole mechanism exists for) until a build that actually
+// uses that key is accepted.
+let _build = 0;
+export function beginPickBuild() { _build++; }
 export function commitPicks() {
   if (!_pending.size) return;
   const map = all();
-  if (map) for (const [key, p] of _pending) { if (p.state) map[key] = p.state; }
-  _pending.clear();
-  if (map) flushCursors();
+  let wrote = false;
+  for (const [key, p] of _pending) {
+    if (p.build !== _build) continue;          // rolled by a build that was not queued
+    if (map && p.state) { map[key] = p.state; wrote = true; }
+    _pending.delete(key);
+  }
+  // Only when something durable actually changed: a run whose lists are all on Random
+  // (state null) has nothing to save, and flushing anyway wrote the settings blob on
+  // every queue of a batch and created the key on installs that never had one.
+  if (wrote) flushCursors();
 }
 
 // The index to use NOW, advancing the cursor. `len` is the current pool size, so a
@@ -141,9 +156,16 @@ export function nextIndex(key, len, mode) {
   if (!(n > 0)) return -1;
   const m = cleanMode(mode);
   const held = _pending.get(key);
-  if (held && held.n === n && held.mode === m) return held.i;
+  if (held && held.n === n && held.mode === m) {
+    // RE-STAMP: this build is using the held pick, so it is this build's to spend.
+    // Without this, a pick first rolled by an un-queued build (an Export) would keep
+    // that build's stamp forever and never commit, so a real run using it would not
+    // advance the sequence at all.
+    held.build = _build;
+    return held.i;
+  }
   const r = rollIndex(key, n, m);
-  if (r.i >= 0) _pending.set(key, { i: r.i, n, mode: m, state: r.state });
+  if (r.i >= 0) _pending.set(key, { i: r.i, n, mode: m, state: r.state, build: _build });
   return r.i;
 }
 

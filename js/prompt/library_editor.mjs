@@ -163,11 +163,15 @@ function hideUndoStrip() {
 }
 function showUndoStrip(label) {
   if (!_overlay) return;
+  // Tear the old bar down FIRST. Returning before this left the PREVIOUS strip mounted
+  // with a label for an action that had since been undone, still holding its original
+  // deadline - so after closing the panel it read "Deleted @b" while its button would
+  // have undone @a.
+  hideUndoStrip();
   // A modal backdrop (z-index 10045) paints OVER the strip (10042), so offering it
   // there is an invisible, unclickable button whose 12s timer runs out while the panel
   // is being read. Reachable via Ctrl+Z with the help panel open.
   if (_overlay.querySelector(".pix-prled-modal")) return;
-  hideUndoStrip();
   const bar = document.createElement("div");
   bar.className = "pix-prled-undo";
   bar.innerHTML = `<span class="msg">${esc(label)}</span>` +
@@ -588,10 +592,7 @@ function openModeMenu(anchor, current, onPick) {
     menu.appendChild(mi);
   }
   _overlay.appendChild(menu);
-  const r = anchor.getBoundingClientRect();
-  menu.style.left = Math.max(8, Math.min(r.left, window.innerWidth - menu.offsetWidth - 8)) + "px";
-  const below = window.innerHeight - r.bottom;
-  menu.style.top = (below < menu.offsetHeight + 8 ? Math.max(8, r.top - menu.offsetHeight - 6) : r.bottom + 4) + "px";
+  placeMenu(menu, anchor);
   _catMenu = menu;
 }
 // The "Random ▾ · next 3 of 12 · ↺" row shared by a List card and a category header.
@@ -684,6 +685,12 @@ function makeCard(tag) {
   // keystroke costs nothing.
   const nameAtFocus = { v: tag.name };
   nm.addEventListener("focus", () => { nameAtFocus.v = tag.name; });
+  // Escape must ABANDON what was typed. onKey is capture-phase, so without a handle it
+  // fell through to the generic `active.blur()`, which runs the blur listener below and
+  // COMMITS: typing a name that is already taken and pressing Escape renamed the tag to
+  // `thatname-2` (a name nobody typed) and retired the undo stack with it. Putting the
+  // original name back first makes the blur a no-op by its own equality check.
+  nm._pixCancel = () => { nm.value = tag.name; nm.blur(); };
   nm.addEventListener("blur", () => {
     // Left EMPTY: the tag keeps the name it already had, and the field shows it again.
     // uniqueNameExcept("") invents "tag" (or "tag-2"), which threw away a name the user
@@ -740,7 +747,7 @@ function makeCard(tag) {
     if (moved) tag.cat = "";
     commit();
     render();   // it may have left the category being shown
-    if (moved) toast("info", `@${tag.name} moved to ${bucketOf(toList ? "list" : "text")}`);
+    if (moved) toast("info", `${toList ? "#" : "@"}${tag.name} moved to ${bucketOf(toList ? "list" : "text")}`);
   });
   // Only a List picks between things, so only a List needs a mode row.
   const modeRow = makeModeRow({
@@ -859,6 +866,16 @@ function renderSidebar(sideEl) {
             render();   // a real action: the new category needs a row and a selection
             return;
           }
+          // Say why instead of just closing - a name that is taken or reserved used to
+          // dismiss the field silently, which reads as a broken button. (The sibling
+          // picker was fixed for this; this one was missed.)
+          if (v) {
+            toast("info", isReservedName(v)
+              ? `"${v}" is a built-in name, so it cannot be a category.`
+              : `You already have a category called "${v}".`);
+            inp.focus();
+            return;
+          }
           cancel();
           return;
         }
@@ -946,10 +963,7 @@ function openCatActions(row, cat, anchor) {
     add("Delete category", "it is empty", "danger", () => deleteCat(cat));
   }
   _overlay.appendChild(menu);
-  const r = anchor.getBoundingClientRect();
-  menu.style.left = Math.max(8, Math.min(r.left, window.innerWidth - menu.offsetWidth - 8)) + "px";
-  const below = window.innerHeight - r.bottom;
-  menu.style.top = (below < menu.offsetHeight + 8 ? Math.max(8, r.top - menu.offsetHeight - 6) : r.bottom + 4) + "px";
+  placeMenu(menu, anchor);
   _catMenu = menu;
 }
 // The Text / List BUCKET rows. They are not categories - they are drawn only while a
@@ -999,10 +1013,7 @@ function openBucketActions(bucket, anchor) {
   add(`Export ${these}`, many(n), "", () => exportScope(bucket));
   add(`Delete ${these}`, `${many(n)} deleted`, "danger", () => confirmDeleteBucket(bucket));
   _overlay.appendChild(menu);
-  const r = anchor.getBoundingClientRect();
-  menu.style.left = Math.max(8, Math.min(r.left, window.innerWidth - menu.offsetWidth - 8)) + "px";
-  const below = window.innerHeight - r.bottom;
-  menu.style.top = (below < menu.offsetHeight + 8 ? Math.max(8, r.top - menu.offsetHeight - 6) : r.bottom + 4) + "px";
+  placeMenu(menu, anchor);
   _catMenu = menu;
 }
 // File every tag sitting in a bucket into a real category, which is the tidy way to
@@ -1013,6 +1024,10 @@ function moveBucketTags(bucket, cat, pre) {
   const word = bucket === LIST_BUCKET ? "list" : "tag";
   destructive(`Moved ${moving.length} ${word}${moving.length === 1 ? "" : "s"} into ${cat}`, () => {
     for (const t of moving) t.cat = cat;
+    // The bucket is emptied by this, so its own *wildcard position means nothing now.
+    // Every other path that empties a bucket drops it; this one was stranding it for a
+    // later bucket of the same size to inherit.
+    try { resetCursor(catKey(bucket)); } catch { /* ignore */ }
     if (_curCat === bucket) _curCat = cat;   // follow them, the old row is about to go
   }, pre);
 }
@@ -1073,7 +1088,14 @@ function deleteCat(cat) {
       : `Deleted the category ${cat} - its ${n} ${word}s were kept`;
   destructive(label, () => {
     dropCategoryRecord(cat);
-    for (const t of _data.tags) if (t.cat === cat) t.cat = "";   // -> that tag's own bucket
+    const landed = new Set();
+    for (const t of _data.tags) {
+      if (t.cat !== cat) continue;
+      t.cat = "";                                        // -> that tag's own bucket
+      landed.add(isListTag(t) ? LIST_BUCKET : TEXT_BUCKET);
+    }
+    // Those buckets just changed size, so their own sequence position is meaningless.
+    for (const b of landed) { try { resetCursor(catKey(b)); } catch { /* ignore */ } }
     if (_curCat === cat) _curCat = "All";
   });
 }
@@ -1150,15 +1172,12 @@ function openLibraryMenu(anchor) {
   menu.appendChild(mi);
   _overlay.appendChild(menu);
   // Footer button: open UPWARD when there is no room below.
-  const r = anchor.getBoundingClientRect();
-  menu.style.left = Math.max(8, Math.min(r.left, window.innerWidth - menu.offsetWidth - 8)) + "px";
-  const below = window.innerHeight - r.bottom;
-  menu.style.top = (below < menu.offsetHeight + 8 ? Math.max(8, r.top - menu.offsetHeight - 6) : r.bottom + 4) + "px";
+  placeMenu(menu, anchor);
   _catMenu = menu;
 }
 // A localized create form pinned at the top: fill name + text in one place and
-// hit Create - no bouncing to a button on the far side of the editor. New tags
-// land in the currently-selected category (Uncategorized when "All" is selected).
+// hit Create - no bouncing to a button on the far side of the editor. New tags land
+// in the currently-selected category, or that side's Text / List bucket under "All".
 function buildCreateForm() {
   // Whichever side the sidebar is showing decides what you are about to make: open a
   // List category and the form is ready for a list. "All tags" has no side, and once
@@ -1376,10 +1395,7 @@ function openExportMenu(anchor) {
   block("list", "List categories");
   _overlay.appendChild(menu);
   // The button sits in the footer, so open UPWARD when there isn't room below.
-  const r = anchor.getBoundingClientRect();
-  menu.style.left = Math.max(8, Math.min(r.left, window.innerWidth - menu.offsetWidth - 8)) + "px";
-  const below = window.innerHeight - r.bottom;
-  menu.style.top = (below < menu.offsetHeight + 8 ? Math.max(8, r.top - menu.offsetHeight - 6) : r.bottom + 4) + "px";
+  placeMenu(menu, anchor);
   _catMenu = menu;
 }
 function pickImportFile() {
@@ -1410,7 +1426,7 @@ function startImport(text) {
   // be closed (Escape / Done / the node deleted) between choosing the file and the
   // read finishing. Everything below needs _overlay and _data.
   if (!_overlay || !_data) return;
-  flushLibrary(); // so parseImport sees exactly our working library
+  flushLibrary(); // push any pending write out before we start merging into it
   const parsed = parseImport(text);
   if (parsed.error) { toast("warn", parsed.error); return; }
   showImportPick(parsed);
@@ -1461,7 +1477,12 @@ function showImportPick(parsed) {
   modal.querySelector(".pk-go").addEventListener("click", () => {
     const names = boxes().filter((r) => r.querySelector("input").checked).map((r) => r.dataset.cat);
     const sub = subsetImport(parsed, names);
-    if (!sub.data.tags.length) { toast("info", "Nothing selected to import."); return; }
+    // A ticked EMPTY category is a real selection: importCategories offers those so a
+    // backup can restore them, and gating on tags alone refused them with a message
+    // that was also untrue ("nothing selected" while something was ticked).
+    if (!sub.data.tags.length && !sub.data.categories.length) {
+      toast("info", "Nothing selected to import."); return;
+    }
     modal.remove();
     if (!sub.conflicts.length) { applyLibraryImport(sub, "both"); return; }
     showImportModal(sub);
@@ -1735,13 +1756,14 @@ function onKey(e) {
     // dismissing the browser's own autofill list. Give up the field, not the editor.
     const t = active.tagName;
     if (t === "INPUT" || t === "TEXTAREA") {
-      active.blur();
+      // A field that COMMITS on blur must be cancelled through its own handle, never
+      // by blur() - blurring it is how Escape ended up applying the very edit it was
+      // meant to abandon (twice: the category rename, then the card name).
+      if (typeof active._pixCancel === "function") active._pixCancel(); else active.blur();
       e.stopPropagation();
       return;
     }
   }
-  const s = _overlay?.querySelector(".pix-prled-srch input");
-  if (s && document.activeElement === s && s.value) return; // its own handler clears the search first
   e.stopPropagation();
   closeLibraryEditor();
 }
@@ -1765,9 +1787,10 @@ export function closeLibraryEditor() {
     // this tab's snapshot over the library, silently undoing another tab's edits.
     try { if (!isSameAsStored(_data)) commitLibrary(_data); } catch { /* ignore */ }
   }
-  // The flush is UNCONDITIONAL: in-editor edits commit through a 350ms debounce, so
-  // skipping it would lose the last one if the tab is closed straight after. It pushes
-  // out what the library module already holds, not this working copy.
+  // flushLibrary only writes when a debounced write is actually PENDING, so this
+  // cannot lose the last edit and cannot stamp this tab's snapshot over another
+  // tab's work either (which an unconditional flush here silently did, cancelling
+  // the isSameAsStored guard two lines above).
   try { flushLibrary(); } catch { /* ignore */ }
   try { flushCursors(); } catch { /* ignore */ }   // write any Start-over straight away
   try { _undoGuardOff?.(); } catch { /* ignore */ }
