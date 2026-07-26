@@ -462,14 +462,18 @@ export function parseImport(jsonStr) {
     }
   }
   const data = normalize(raw);
-  if (!data.tags.length) {
-    if (dropped) {
-      return { error: `None of the ${dropped} tag${dropped === 1 ? "" : "s"} in that file can be used. A tag name can only contain letters a to z, numbers, - and _.` };
-    }
-    // A file with categories but no tags is a legitimate backup of an empty-ish
-    // library - exactly what "Export a backup first" hands you before a wipe. Refusing
-    // it made that backup unrestorable.
-    if (!data.categories.length) return { error: "No tags found in that file." };
+  // A file with categories but no usable tags is still a legitimate backup - exactly
+  // what "Export a backup first" hands you for an empty category. Refuse ONLY when
+  // there is nothing at all to bring in; the dropped count is reported by the picker.
+  // (The category check used to sit on the no-tags branch only, so a file with three
+  // categories plus two unusable tag names was refused while the same file with zero
+  // tags imported fine - the same gate, applied twice with different rules.)
+  if (!data.tags.length && !data.categories.length) {
+    return {
+      error: dropped
+        ? `None of the ${dropped} tag${dropped === 1 ? "" : "s"} in that file can be used. A tag name can only contain letters a to z, numbers, - and _.`
+        : "No tags found in that file.",
+    };
   }
   const have = new Set(getTags().map((t) => t.name.toLowerCase()));
   const conflicts = data.tags.filter((t) => have.has(t.name.toLowerCase())).map((t) => t.name);

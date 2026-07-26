@@ -595,14 +595,32 @@ function makeCard(tag) {
   // an existing prompt: @name keeps giving the whole block either way.
   const kindSw = makeKindSwitch((toList) => {
     if (isListTag(tag) === !!toList) return;
-    if (toList) tag.kind = "list"; else delete tag.kind;
-    // A category belongs to ONE side, so a flipped tag cannot stay in it: send it to
+    const side = toList ? "list" : "text";
+    const bucket = bucketOf(side);
+    // A category belongs to ONE side, so a flipped tag cannot stay in it: it goes to
     // its new side's bucket, where the user can file it from the category pill.
-    const moved = tag.cat && sideOf(tag.cat) !== (toList ? "list" : "text");
-    if (moved) tag.cat = "";
-    commit();
-    render();   // it may have left the category being shown
-    if (moved) toast("info", `${toList ? "#" : "@"}${tag.name} moved to ${bucketOf(toList ? "list" : "text")}`);
+    const from = tag.cat && sideOf(tag.cat) !== side ? tag.cat : "";
+    const flip = () => applyChange(() => {
+      if (toList) tag.kind = "list"; else delete tag.kind;
+      if (from) tag.cat = "";
+    });
+    // Flipping OUT of a category throws that filing away, and switching straight back
+    // does not restore it (the tag lands in the other bucket, not where it came from).
+    // With no undo, that was the one place left in the editor that could lose something
+    // on a single unconfirmed click - so it asks, but only when there is something to
+    // lose. A tag already sitting in a bucket just flips.
+    if (!from) { flip(); return; }
+    confirmDanger({
+      title: `Move ${esc(tag.name)} out of ${esc(from)}?`,
+      lead: `A category holds one kind, so making this a <b>${toList ? "List" : "Text"}</b> tag takes it out of ` +
+        `<b>${esc(from)}</b> and puts it in <b>${esc(bucket)}</b>, ready to file somewhere else. ` +
+        `Switching back will not return it to ${esc(from)}.`,
+      confirmLabel: `Make it a ${toList ? "List" : "Text"} tag`,
+      onConfirm: () => {
+        flip();
+        toast("info", `${toList ? "#" : "@"}${tag.name} moved to ${bucket}`);
+      },
+    });
   });
   // Only a List picks between things, so only a List needs a mode row.
   const modeRow = makeModeRow({
@@ -625,8 +643,8 @@ function makeCard(tag) {
   paintKind();
   del.className = "pix-prled-ic del";
   del.innerHTML = `<span class="pix-prled-svg" style="-webkit-mask-image:url(${ICON_BASE}delete.svg);mask-image:url(${ICON_BASE}delete.svg)"></span>`;
-  // No confirm dialog on purpose: one tag is small, and being asked every time makes
-  // clearing out a library miserable. It goes at once and the Undo strip offers it
+  // Asks first, and shows the tag's own text in the question so you can see whether it
+  // is the one you meant. There is no undo behind it.
   del.addEventListener("click", () => {
     const list = isListTag(tag);
     const sym = list ? "#" : "@";
@@ -818,7 +836,7 @@ function openCatActions(row, cat, anchor) {
     menu.appendChild(mi);
   };
   add("Rename", "", "", () => startRenameCat(row, cat));
-  add("Export this category", n ? many(n) : "empty", n ? "" : "dim", n ? () => exportScope(cat) : null);
+  add("Export this category", n ? many(n) : "empty", "", () => exportScope(cat));
   menu.appendChild(Object.assign(document.createElement("div"), { className: "msep" }));
   if (n) {
     add("Delete category", `keeps the ${many(n)}`, "danger", () => confirmDeleteCat(cat));
@@ -888,6 +906,7 @@ function moveBucketTags(bucket, cat) {
     // Every other path that empties a bucket drops it; this one was stranding it for a
     // later bucket of the same size to inherit.
     try { resetCursor(catKey(bucket)); } catch { /* ignore */ }
+    if (_data.catModes) delete _data.catModes[bucket];   // as confirmDeleteBucket does
     if (_curCat === bucket) _curCat = cat;   // follow them, the old row is about to go
   });
 }
@@ -951,7 +970,7 @@ function confirmDeleteCat(cat) {
         `Only the category itself goes.`
       : `It is empty, so only the category itself goes.`,
     confirmLabel: "Delete the category",
-    offerExport: !!n,
+    offerExport: true,   // an empty category still has a name, a side and a Picks mode
     exportCat: cat,
     onConfirm: () => deleteCat(cat),
   });
@@ -1231,9 +1250,11 @@ function exportScope(cat) {
     a.download = cat == null ? "prompt-tags.json" : `prompt-tags-${String(cat).replace(/[^a-zA-Z0-9_\-]+/g, "-")}.json`;
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
-    toast("info", cat == null
-      ? `Exported ${count} tag${count === 1 ? "" : "s"}.`
-      : `Exported ${count} tag${count === 1 ? "" : "s"} from ${cat}.`);
+    // The noun follows the side, like every menu that launches this. Saying "3 tags"
+    // straight after a row that said "3 lists" made one gesture use two words.
+    const word = cat == null ? "tag" : (sideOf(cat) === "list" ? "list" : "tag");
+    const what = count ? `${count} ${word}${count === 1 ? "" : "s"}` : "an empty category";
+    toast("info", cat == null ? `Exported ${what}.` : `Exported ${what} from ${cat}.`);
   } catch (err) {
     console.error("Pixaroma.Prompt export failed", err);
     toast("warn", "Could not write that file");
@@ -1246,11 +1267,14 @@ function openExportMenu(anchor) {
   const menu = document.createElement("div");
   menu.className = "pix-prled-menu";
   const add = (label, color, count, cat) => {
+    const word = cat == null ? "tag" : (sideOf(cat) === "list" ? "list" : "tag");
     const mi = document.createElement("div");
-    mi.className = "mi mrow" + (count ? "" : " dim");
+    // Only "Everything" on a completely empty library is genuinely nothing to export.
+    const nothing = count === 0 && cat == null;
+    mi.className = "mi mrow" + (nothing ? " dim" : "");
     mi.innerHTML = (color ? `<span class="cd" style="background:${color}"></span>` : `<span style="width:10px"></span>`) +
-      `<span class="nm">${esc(label)}</span><span class="cnt">${count} tag${count === 1 ? "" : "s"}</span>`;
-    if (count) mi.addEventListener("click", () => { hideCatMenu(); exportScope(cat); });
+      `<span class="nm">${esc(label)}</span><span class="cnt">${count ? `${count} ${word}${count === 1 ? "" : "s"}` : "empty"}</span>`;
+    if (!nothing) mi.addEventListener("click", () => { hideCatMenu(); exportScope(cat); });
     menu.appendChild(mi);
   };
   add("Everything", "", _data.tags.length, null);
