@@ -149,6 +149,11 @@ function pushUndo(label, pre) {
   // where you were looking, not leave the sidebar pointing at nothing.
   _undo.push({ data: snap.data, label, cat: snap.cat });
   if (_undo.length > UNDO_MAX) _undo.shift();
+  // Rebase HERE, not at the call sites. "_undoSig describes the current _data" was
+  // hand-maintained at three places, none of which was this one - and the site that
+  // forgot it (import) promptly lost its own undo. Doing it where the stack grows
+  // means a new caller cannot reintroduce that.
+  _undoSig = libSig();
 }
 function clearUndo() { _undo = []; _undoSig = null; hideUndoStrip(); }
 function hideUndoStrip() {
@@ -158,6 +163,10 @@ function hideUndoStrip() {
 }
 function showUndoStrip(label) {
   if (!_overlay) return;
+  // A modal backdrop (z-index 10045) paints OVER the strip (10042), so offering it
+  // there is an invisible, unclickable button whose 12s timer runs out while the panel
+  // is being read. Reachable via Ctrl+Z with the help panel open.
+  if (_overlay.querySelector(".pix-prled-modal")) return;
   hideUndoStrip();
   const bar = document.createElement("div");
   bar.className = "pix-prled-undo";
@@ -167,10 +176,23 @@ function showUndoStrip(label) {
   // blur handler that commits can tear this bar out of the DOM between mousedown and
   // mouseup, so the click never lands on a button that is no longer there. Acting on
   // mousedown means the press always counts.
-  bar.querySelector(".ub").addEventListener("mousedown", (e) => {
+  // But mousedown is NOT click, and swapping them cost three separate regressions:
+  //   - it fires for EVERY button, so a right-click (a learned gesture in this editor,
+  //     where rows have context menus) or a middle-click silently spent an undo, and
+  //     there is no redo to get it back;
+  //   - it repeats on a double-click, and because undoLast re-shows the strip in the
+  //     same pixels with the NEXT entry armed, a double-click undid two actions;
+  //   - Enter/Space on a focused button dispatch `click`, not mousedown, so keyboard
+  //     activation was dead.
+  const ub = bar.querySelector(".ub");
+  ub.addEventListener("mousedown", (e) => {
+    if (e.button !== 0 || e.detail > 1) return;   // primary button, first press only
     e.preventDefault(); e.stopPropagation();
     undoLast();
   });
+  // detail === 0 means a synthesised click (keyboard activation); a real mouse click is
+  // already handled above and must not run twice.
+  ub.addEventListener("click", (e) => { if (e.detail === 0) { e.preventDefault(); undoLast(); } });
   _overlay.appendChild(bar);
   _undoTimer = setTimeout(hideUndoStrip, UNDO_SHOW_MS);
 }
@@ -198,12 +220,15 @@ function undoLast() {
 // action in this editor uses, so none of them can forget a step. `pre` overrides the
 // snapshot when the gesture started earlier (see pushUndo).
 function destructive(label, mutate, pre) {
-  pushUndo(label, pre);
-  _undoDepth++;                 // ...so commit() below does not clear what we just pushed
+  // Snapshot BEFORE the mutation, push AFTER it. Pushing first left an entry with a
+  // baseline describing the pre-mutation library if `mutate` threw, and made the push
+  // and the rebase two separate steps that could drift.
+  const snap = pre || snapshotNow();
+  _undoDepth++;                 // ...so commit() below does not clear what we then push
   try {
     mutate();
     commit();
-    _undoSig = libSig();        // the baseline every later commit() is compared against
+    pushUndo(label, snap);      // rebases _undoSig itself
   } finally { _undoDepth--; }
   render();
   showUndoStrip(label);
@@ -435,6 +460,17 @@ function injectCSS() {
 
 function hideCatMenu() { if (_catMenu) { _catMenu.remove(); _catMenu = null; } }
 
+// Clamp a body-appended popup to the viewport, flipping above the anchor when there is
+// no room below. Call it again if the menu GROWS after it was first placed.
+function placeMenu(menu, anchor) {
+  const r = anchor.getBoundingClientRect();
+  menu.style.left = Math.max(8, Math.min(r.left, window.innerWidth - menu.offsetWidth - 8)) + "px";
+  const below = window.innerHeight - r.bottom;
+  menu.style.top = (below < menu.offsetHeight + 8
+    ? Math.max(8, r.top - menu.offsetHeight - 6)
+    : r.bottom + 4) + "px";
+}
+
 // Category picker for ONE side: that side's categories + its bucket + a New-category
 // row (which creates on that side), calling onPick(catValue) ("" = the bucket).
 // Does NOT re-render - the caller decides (so the create form keeps its typed values).
@@ -455,7 +491,14 @@ function openCategoryMenu(anchor, onPick, side) {
   nc.innerHTML = `<span>＋</span> New ${sd === "list" ? "list " : ""}category`;
   const inp = document.createElement("input");
   inp.placeholder = "name"; inp.style.display = "none";
-  nc.addEventListener("click", () => { inp.style.display = "block"; inp.focus(); });
+  nc.addEventListener("click", () => {
+    inp.style.display = "block";
+    inp.focus();
+    // The menu was positioned against its pre-growth height, so on a short window the
+    // revealed field could sit below the bottom edge with the user typing blind. This
+    // is the only popup here without the flip-upward logic the others have.
+    placeMenu(menu, anchor);
+  });
   inp.addEventListener("keydown", (e) => {
     e.stopPropagation();
     if (e.key === "Enter") {
@@ -489,9 +532,7 @@ function openCategoryMenu(anchor, onPick, side) {
   });
   menu.append(nc, inp);
   _overlay.appendChild(menu);
-  const r = anchor.getBoundingClientRect();
-  menu.style.left = Math.min(r.left, window.innerWidth - menu.offsetWidth - 8) + "px";
-  menu.style.top = Math.min(r.bottom + 4, window.innerHeight - menu.offsetHeight - 8) + "px";
+  placeMenu(menu, anchor);
   _catMenu = menu;
 }
 // Moving an existing tag between categories: only its OWN side is offered, since a
@@ -866,6 +907,13 @@ function startRenameCat(row, cat) {
     render();   // the name really changed, so the sidebar and the header must follow
   };
   const cancelRename = () => { if (inp.isConnected) inp.replaceWith(nmSpan); };
+  // onKey is a CAPTURE-phase window listener, so this field's own keydown never sees
+  // Escape. Expose the cancel as a handle it can call directly - the same fix the
+  // new-category field already had. Without it, onKey's generic `active.blur()` ran the
+  // blur listener below, which COMMITS: pressing Escape to abandon a rename applied it
+  // instead, and commitRename goes through commit(), which retires the undo stack, so
+  // there was no way back.
+  inp._pixCancel = cancelRename;
   inp.addEventListener("keydown", (e) => { e.stopPropagation(); if (e.key === "Enter") commitRename(); if (e.key === "Escape") cancelRename(); });
   inp.addEventListener("blur", commitRename);
 }
@@ -1179,13 +1227,26 @@ function buildCreateForm() {
   btn.title = "Add this tag to the library (Ctrl+Enter)";
   const doCreate = () => {
     const name = sanitizeName(nm.value);
-    if (!name) { nm.focus(); return; }
+    // Typing "!!!" strips to nothing, and silently refusing read as a broken button.
+    if (!name) {
+      toast("info", nm.value.trim()
+        ? "A tag name can only use letters, numbers, - and _."
+        : "Give the tag a name first.");
+      nm.focus();
+      return;
+    }
     const uniq = uniqueNameExcept(name, null);
     const isList = _createDraft.kind === "list";
+    const kindAtCreate = _createDraft.kind;
+    const kindTouchedAtCreate = _createDraft.kindTouched;
     const rec = { name: uniq, cat: createCat, text: tx.value };
     if (isList) rec.kind = "list";   // only ever written for a List (library normalize)
     _data.tags.unshift(rec);
     _createDraft = newDraft();       // tag saved -> next render's form is empty
+    // ...but keep the Text/List choice if the user made it. Resetting kindTouched let
+    // buildCreateForm re-derive the side from the sidebar, so after creating one
+    // one-line List the next one silently came out as Text.
+    if (kindTouchedAtCreate) { _createDraft.kind = kindAtCreate; _createDraft.kindTouched = true; }
     commit();
     render();
     const nf = _overlay && _overlay.querySelector(".pix-prled-create .cnm");
@@ -1409,6 +1470,15 @@ function applyLibraryImport(parsed, mode) {
   const pre = snapshotNow();
   const res = applyImport(parsed, mode);
   _data = clone(getLibrary());
+  // REBASE UNCONDITIONALLY, right where the working copy is replaced. This is the only
+  // path that swaps `_data` for a freshly normalized clone, and normalize emits a fixed
+  // key order while the editor appends keys in place (`tag.kind = "list"` after a
+  // `mode`), so the raw JSON can differ with no semantic change. Rebasing only on the
+  // "something changed" branch meant an import that reported "Nothing was imported"
+  // left the baseline describing the OLD object graph, and the next commit - even a
+  // no-op one - binned a pending Undo. There is no branch where keeping the old
+  // signature is correct. (library.mjs::isSameAsStored documents this same trap.)
+  _undoSig = libSig();
   render();
   const bits = [];
   if (res.added) bits.push(`${res.added} tag${res.added === 1 ? "" : "s"} added`);
@@ -1428,11 +1498,6 @@ function applyLibraryImport(parsed, mode) {
   if (bits.length || modesChanged) {
     const what = bits.length ? "Imported " + bits.join(", ") : "Imported settings";
     pushUndo(what, pre);          // same wording the strip shows, so "Undone: ..." matches
-    // MUST rebase the signature: this is the only place that pushes an entry outside
-    // destructive(). Without it `_undoSig` still describes the pre-import library, so
-    // the very next commit() - even a no-op one - would see a difference and bin the
-    // import's own undo entry.
-    _undoSig = libSig();
     showUndoStrip(what);
   }
 }
@@ -1441,7 +1506,14 @@ function showImportModal(parsed) {
   const modal = document.createElement("div");
   modal.className = "pix-prled-modal";
   const total = parsed.data.tags.length;
-  const conf = parsed.conflicts.slice(0, 40).map((n) => "@" + n).join(" · ");
+  // Match the other two listings: name a list with # (not always @), and say when the
+  // list has been cut short rather than just stopping.
+  const symOf = (n) => {
+    const t = parsed.data.tags.find((x) => x.name === n);
+    return t && t.kind === "list" ? "#" : "@";
+  };
+  const conf = parsed.conflicts.slice(0, 40).map((n) => symOf(n) + n).join(" · ") +
+    (parsed.conflicts.length > 40 ? ` … and ${parsed.conflicts.length - 40} more` : "");
   modal.innerHTML =
     `<div class="pix-prled-mcard"><div class="mh">Import tags</div>` +
     `<div class="mb">Importing <b>${total} tag${total === 1 ? "" : "s"}</b>. ` +
@@ -1594,9 +1666,14 @@ function onKey(e) {
     // never commits, so treating it as "editing" made Ctrl+Z silently dead in the most
     // likely place to press it, while the strip beside it still promised "or Ctrl+Z".
     const a = document.activeElement;
-    const editing = a && _overlay && _overlay.contains(a) && !a.closest(".pix-prled-srch") &&
+    const isField = a && _overlay && _overlay.contains(a) &&
       (a.tagName === "INPUT" || a.tagName === "TEXTAREA" || a.isContentEditable);
-    if (editing) return;
+    // ...and only when there is actually something to undo. Claiming it unconditionally
+    // in the search box meant the likeliest Ctrl+Z in the editor (the box is focused on
+    // open, before anything has been deleted) threw away the typed filter's text undo
+    // and gave back only a "Nothing to undo" toast.
+    const searchWithUndo = isField && !!a.closest(".pix-prled-srch") && _undo.length > 0;
+    if (isField && !searchWithUndo) return;
     e.preventDefault();
     e.stopPropagation();
     undoLast();
@@ -1614,7 +1691,22 @@ function onKey(e) {
   const active = document.activeElement;
   if (active && _overlay && _overlay.contains(active)) {
     if (active.classList.contains("catinput")) {   // renaming a category: cancel it
-      active.blur();                                // its own Escape path puts the label back
+      // Call the field's own cancel. blur() would run its blur listener, which COMMITS
+      // the rename - the exact opposite of what Escape means.
+      if (typeof active._pixCancel === "function") active._pixCancel(); else active.blur();
+      e.stopPropagation();
+      return;
+    }
+    // The SEARCH box clears its filter on the first Escape, then gives up focus on the
+    // next. The generic INPUT branch below used to swallow it (capture phase, so the
+    // field's own handler never ran), leaving the box showing a filter it had dropped.
+    if (active.closest(".pix-prled-srch")) {
+      if (active.value) {
+        _search = ""; active.value = "";
+        renderContent(_overlay.querySelector(".pix-prled-content"));
+      } else {
+        active.blur();
+      }
       e.stopPropagation();
       return;
     }

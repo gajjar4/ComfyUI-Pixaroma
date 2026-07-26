@@ -326,8 +326,15 @@ export function commitLibrary(data) {
 }
 
 // Flush any pending debounced write now (call on blur / editor close).
+// ONLY when a write is actually pending. Persisting unconditionally quietly cancelled
+// the editor's own cross-tab guard: closeLibraryEditor deliberately skips
+// commitLibrary when nothing changed (so tab A cannot stamp its open-time snapshot
+// over tab B's edits), and then this wrote that snapshot out anyway two lines later.
+// Gating on the pending TIMER is the right test and still cannot lose the last edit -
+// an in-editor edit always leaves a timer set until it is written.
 export function flushLibrary() {
-  if (_persistTimer) { clearTimeout(_persistTimer); _persistTimer = null; }
+  if (!_persistTimer) return;
+  clearTimeout(_persistTimer); _persistTimer = null;
   if (_data) persist(_data);
 }
 
@@ -363,6 +370,16 @@ export function importCategories(parsed) {
     const k = c.toLowerCase();
     if (!seen.has(k)) { seen.set(k, { name: c, count: 0 }); out.push(seen.get(k)); }
     seen.get(k).count += 1;
+  }
+  // A category the FILE declares but that holds no tags still has to be offered, or an
+  // export -> import round trip silently loses every empty category (its name, its
+  // side, and its Picks mode). That matters most for the "Export a backup first" flow,
+  // where the whole point is to get everything back.
+  for (const c of (parsed?.data?.categories || [])) {
+    const k = String(c || "").toLowerCase();
+    if (!k || seen.has(k)) continue;
+    seen.set(k, { name: c, count: 0 });
+    out.push(seen.get(k));
   }
   return out;
 }
