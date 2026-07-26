@@ -90,152 +90,24 @@ function uniqueNameExcept(base, exceptTag) {
   if (!taken(n)) return n;
   let i = 2; while (taken(n + "-" + i)) i++; return n + "-" + i;
 }
-// >0 while a destructive action (or an undo of one) is being applied, so the commit
-// it makes does not retire the very stack it is maintaining. See commit().
-let _undoDepth = 0;
-function commit() {
-  // An ordinary edit retires the undo stack. Undo restores a WHOLE-LIBRARY snapshot,
-  // and only destructive actions take one - so replaying an older snapshot after a
-  // normal edit would silently destroy that edit (delete a tag, then create three, then
-  // Ctrl+Z and the three are gone with no warning). Rather than snapshot every
-  // keystroke, an edit simply ends the offer: clearUndo() also hides the strip, so the
-  // Undo button is never on screen while it would do the wrong thing. A run of deletes
-  // with nothing else in between still undoes one by one.
-  //
-  // But it is the CHANGE that retires it, not the call. Gating on "commit() happened"
-  // was wrong and cost the user their undo three different ways: leaving a name box
-  // without renaming, picking the category a tag is already in, and picking the Picks
-  // mode it already has all commit an IDENTICAL library. Worst of the three, pressing
-  // the Undo button blurs the name box first, so the blur's commit tore the bar out of
-  // the DOM between mousedown and mouseup and the click never landed (found by three
-  // independent reviewers, 2026-07-26). Comparing state also covers every future no-op
-  // caller, which patching the three known ones would not.
-  // The compare runs ONLY while there is something to retire - a brief window after a
-  // delete - so the ordinary per-keystroke path still pays nothing for it.
-  if (!_undoDepth && _undo.length) {
-    const sig = libSig();
-    if (sig === null || sig !== _undoSig) clearUndo();
-  }
-  commitLibrary(_data);
-}
+function commit() { commitLibrary(_data); }
 
-// ── undo ───────────────────────────────────────────────────────────────
-// Every destructive action snapshots the working copy FIRST. That is what lets a
-// delete be INSTANT: a confirm dialog on every trash click is unbearable when you are
-// tidying up, and people stop reading it by the third one, so it protects nothing.
-// The way back is the strip that appears at the bottom, or Ctrl+Z for as long as the
-// library is open. This undoes LIBRARY edits only - it is not the graph's undo, which
-// is deliberately neutered while the editor is open (installGraphUndoGuard).
-const UNDO_MAX = 30;
-// 8s was not enough: by the time you have read the message and moved the mouse over,
-// the strip has gone and the click lands on the grid behind it (hit live, 2026-07-26).
-// Ctrl+Z still works after it hides, so this is only about the visible offer.
-const UNDO_SHOW_MS = 12000;
-let _undo = [];
-let _undoTimer = null;
-// The library as of the last destructive action / undo. commit() compares against it so
-// a no-op commit cannot retire the stack (see commit()).
-let _undoSig = null;
-function libSig() { try { return JSON.stringify(_data); } catch { return null; } }
-// `pre` is an EARLIER snapshot from snapshotNow(), for a gesture whose first half runs
-// before destructive() is reached - "Put them all in a category -> New category" makes
-// the category (and commits) before the move, so snapshotting at move time would leave
-// an orphan empty category behind after an undo.
-function snapshotNow() { return _data ? { data: clone(_data), cat: _curCat } : null; }
-function pushUndo(label, pre) {
-  const snap = pre || snapshotNow();
-  if (!snap) return;
-  // The selected category rides along: undoing a category delete should put you back
-  // where you were looking, not leave the sidebar pointing at nothing.
-  _undo.push({ data: snap.data, label, cat: snap.cat });
-  if (_undo.length > UNDO_MAX) _undo.shift();
-  // Rebase HERE, not at the call sites. "_undoSig describes the current _data" was
-  // hand-maintained at three places, none of which was this one - and the site that
-  // forgot it (import) promptly lost its own undo. Doing it where the stack grows
-  // means a new caller cannot reintroduce that.
-  _undoSig = libSig();
-}
-function clearUndo() { _undo = []; _undoSig = null; hideUndoStrip(); }
-function hideUndoStrip() {
-  if (_undoTimer) { clearTimeout(_undoTimer); _undoTimer = null; }
-  const b = _overlay && _overlay.querySelector(".pix-prled-undo");
-  if (b) b.remove();
-}
-function showUndoStrip(label) {
-  if (!_overlay) return;
-  // Tear the old bar down FIRST. Returning before this left the PREVIOUS strip mounted
-  // with a label for an action that had since been undone, still holding its original
-  // deadline - so after closing the panel it read "Deleted @b" while its button would
-  // have undone @a.
-  hideUndoStrip();
-  // A modal backdrop (z-index 10045) paints OVER the strip (10042), so offering it
-  // there is an invisible, unclickable button whose 12s timer runs out while the panel
-  // is being read. Reachable via Ctrl+Z with the help panel open.
-  if (_overlay.querySelector(".pix-prled-modal")) return;
-  const bar = document.createElement("div");
-  bar.className = "pix-prled-undo";
-  bar.innerHTML = `<span class="msg">${esc(label)}</span>` +
-    `<button class="ub" type="button">Undo</button><span class="uk">or Ctrl+Z</span>`;
-  // mousedown, NOT click: pressing this button blurs whatever field had focus, and a
-  // blur handler that commits can tear this bar out of the DOM between mousedown and
-  // mouseup, so the click never lands on a button that is no longer there. Acting on
-  // mousedown means the press always counts.
-  // But mousedown is NOT click, and swapping them cost three separate regressions:
-  //   - it fires for EVERY button, so a right-click (a learned gesture in this editor,
-  //     where rows have context menus) or a middle-click silently spent an undo, and
-  //     there is no redo to get it back;
-  //   - it repeats on a double-click, and because undoLast re-shows the strip in the
-  //     same pixels with the NEXT entry armed, a double-click undid two actions;
-  //   - Enter/Space on a focused button dispatch `click`, not mousedown, so keyboard
-  //     activation was dead.
-  const ub = bar.querySelector(".ub");
-  ub.addEventListener("mousedown", (e) => {
-    if (e.button !== 0 || e.detail > 1) return;   // primary button, first press only
-    e.preventDefault(); e.stopPropagation();
-    undoLast();
-  });
-  // detail === 0 means a synthesised click (keyboard activation); a real mouse click is
-  // already handled above and must not run twice.
-  ub.addEventListener("click", (e) => { if (e.detail === 0) { e.preventDefault(); undoLast(); } });
-  _overlay.appendChild(bar);
-  _undoTimer = setTimeout(hideUndoStrip, UNDO_SHOW_MS);
-}
-function undoLast() {
-  if (!_undo.length || !_data) { toast("info", "Nothing to undo"); return false; }
-  const e = _undo.pop();
-  _data = e.data;
-  // The category that was showing may be back now, or may never have existed - point
-  // at something that is actually drawn (render() handles the two buckets itself).
-  const alive = e.cat === "All" || e.cat === TEXT_BUCKET || e.cat === LIST_BUCKET ||
-    _data.categories.some((c) => c === e.cat);
-  _curCat = alive ? e.cat : "All";
-  _undoDepth++;                 // this commit is maintaining the stack, not retiring it
-  try { commit(); _undoSig = libSig(); } finally { _undoDepth--; }
+// ── applying a change ──────────────────────────────────────
+// THERE IS DELIBERATELY NO UNDO. An earlier build had one (a whole-library snapshot
+// stack, a change-signature gate, a Ctrl+Z handler and a floating Undo bar) and it was
+// by a wide margin the largest source of bugs this editor has ever had: because it made
+// "save the library" also mean "end the undo offer", every one of the twelve callers of
+// commit() became a place undo could silently die, and the floating bar brought its own
+// mouse-button, double-click, keyboard and z-order defects. Five review rounds kept
+// finding fresh damage from the previous round's repairs to it.
+//
+// Anything that can lose something now ASKS FIRST (confirmDanger) and is then applied
+// straight through. One question, one answer, no state living between them.
+// Do NOT reintroduce undo without reading .claude/patterns/prompt.md #41.
+function applyChange(mutate) {
+  mutate();
+  commit();
   render();
-  toast("info", "Undone: " + e.label);
-  // Keep offering the NEXT step while there is one. Hiding the strip after a single
-  // undo left the remaining entries reachable only by Ctrl+Z, and a second click aimed
-  // at where the button had been landed on the grid behind it.
-  if (_undo.length) showUndoStrip(_undo[_undo.length - 1].label);
-  else hideUndoStrip();
-  return true;
-}
-// Snapshot, mutate, persist, redraw, offer it back - the shape every destructive
-// action in this editor uses, so none of them can forget a step. `pre` overrides the
-// snapshot when the gesture started earlier (see pushUndo).
-function destructive(label, mutate, pre) {
-  // Snapshot BEFORE the mutation, push AFTER it. Pushing first left an entry with a
-  // baseline describing the pre-mutation library if `mutate` threw, and made the push
-  // and the rebase two separate steps that could drift.
-  const snap = pre || snapshotNow();
-  _undoDepth++;                 // ...so commit() below does not clear what we then push
-  try {
-    mutate();
-    commit();
-    pushUndo(label, snap);      // rebases _undoSig itself
-  } finally { _undoDepth--; }
-  render();
-  showUndoStrip(label);
 }
 
 function injectCSS() {
@@ -430,23 +302,6 @@ function injectCSS() {
     .pix-prled-help-card .mb p { margin:0 0 11px; }
     .pix-prled-help-card .mb p:last-child { margin-bottom:0; }
     .pix-prled-help-foot { display:flex; justify-content:flex-end; padding:0 16px 16px; }
-    /* Undo strip. A delete happens IMMEDIATELY (asking every time is unbearable when
-       you are tidying up a library) and this offers it straight back. Ctrl+Z keeps
-       working for longer, so the strip is the visible reminder, not the only way back.
-       It is our own DOM because ComfyUI's toast cannot carry a button. */
-    /* pointer-events:none on the BAR (auto only on the button): it sits over the bottom
-       of the sidebar and the bottom-left card for 12s after every delete, and each new
-       delete restarts that timer - so while bulk tidying, which is exactly what this
-       feature is for, it was permanently eating clicks on rows, the New category button
-       and a card's own controls. Only the Undo button needs to be clickable. */
-    .pix-prled-undo { position:absolute; left:16px; bottom:60px; z-index:10042; display:flex; align-items:center; gap:12px;
-      pointer-events:none; background:#2a2a2a; border:1px solid #4a4a4a; border-radius:8px; padding:9px 11px 9px 14px;
-      box-shadow:0 10px 26px rgba(0,0,0,.5); font:12.5px 'Segoe UI',sans-serif; color:#d6d6d6; max-width:min(440px,60vw); }
-    .pix-prled-undo .msg { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-    .pix-prled-undo .ub { flex:none; pointer-events:auto; background:transparent; border:1px solid var(--acc); color:var(--acc);
-      border-radius:5px; padding:4px 12px; font:12px 'Segoe UI',sans-serif; cursor:pointer; }
-    .pix-prled-undo .ub:hover { background:var(--acc); color:#fff; }
-    .pix-prled-undo .uk { flex:none; color:#767676; font-size:11px; }
     /* A menu row that destroys something must never look like the ordinary ones. */
     .pix-prled-menu .mi.danger { color:#e2554a; }
     .pix-prled-menu .mi.danger:hover { background:rgba(226,85,74,.15); color:#ff8d81; }
@@ -663,9 +518,9 @@ function makeCard(tag) {
     // empty-named tag. The tag and its text vanished from the store and from every
     // node's highlighting on the spot; closing the editor resurrected it under the
     // made-up name "tag", so the original name was gone for good. Verified live
-    // 2026-07-26 (store 30 vs grid 31). It also poisoned an undo snapshot, since
-    // pushUndo clones `_data`. The field keeps showing whatever was typed; the model
-    // keeps the last good name until a valid one is typed or blur settles it.
+    // 2026-07-26 (store 30 vs grid 31).
+    // The field keeps showing whatever was typed; the model keeps the last good name
+    // until a valid one is typed or blur settles it.
     const dup = !!cleaned && _data.tags.some((o) => o !== tag && o.name.toLowerCase() === cleaned.toLowerCase());
     if (cleaned && !dup) {
       tag.name = cleaned;
@@ -688,7 +543,7 @@ function makeCard(tag) {
   // Escape must ABANDON what was typed. onKey is capture-phase, so without a handle it
   // fell through to the generic `active.blur()`, which runs the blur listener below and
   // COMMITS: typing a name that is already taken and pressing Escape renamed the tag to
-  // `thatname-2` (a name nobody typed) and retired the undo stack with it. Putting the
+  // `thatname-2` - a name nobody typed. Putting the
   // original name back first makes the blur a no-op by its own equality check.
   nm._pixCancel = () => { nm.value = tag.name; nm.blur(); };
   nm.addEventListener("blur", () => {
@@ -699,8 +554,8 @@ function makeCard(tag) {
     const u = uniqueNameExcept(nm.value, tag);
     // Nothing changed (the usual case - you clicked into the box and back out, or the
     // input handler already applied a valid rename). Do NOT commit: commit() is what
-    // retires the undo offer, so a pure focus-and-leave used to bin it. Same shape as
-    // commitRename's no-op guard.
+    // a real change; committing an identical library is pointless work on every
+    // focus-and-leave. Same shape as commitRename's no-op guard.
     if (u === tag.name) { if (nm.value !== u) nm.value = u; return; }
     tag.name = u; nm.value = u;
     if (nameAtFocus.v && nameAtFocus.v !== tag.name) {
@@ -763,7 +618,7 @@ function makeCard(tag) {
     kindSw.paint(list, tagLines(tag.text).length);
     tx.placeholder = list ? "one option per line" : "what it expands to - the full prompt text";
     ins.title = list ? "Insert #" + tag.name + " into your prompt (one of its options each run)" : "Insert @" + tag.name + " into your prompt";
-    del.title = `Delete this ${list ? "list" : "tag"} (you can undo)`;
+    del.title = `Delete this ${list ? "list" : "tag"}`;
     modeRow.el.style.display = list ? "flex" : "none";
     if (list) modeRow.paint();
   }
@@ -772,15 +627,25 @@ function makeCard(tag) {
   del.innerHTML = `<span class="pix-prled-svg" style="-webkit-mask-image:url(${ICON_BASE}delete.svg);mask-image:url(${ICON_BASE}delete.svg)"></span>`;
   // No confirm dialog on purpose: one tag is small, and being asked every time makes
   // clearing out a library miserable. It goes at once and the Undo strip offers it
-  // back (destructive() snapshots first).
   del.addEventListener("click", () => {
-    const sym = isListTag(tag) ? "#" : "@";
-    destructive(`Deleted ${sym}${tag.name}`, () => {
-      const i = _data.tags.indexOf(tag);
-      if (i > -1) _data.tags.splice(i, 1);
-      // Drop its position too, or a NEW list later given the same name inherits the
-      // dead one's half-drained deck (deleteCat already does this for a category).
-      try { resetCursor(listKey(tag.name)); } catch { /* ignore */ }
+    const list = isListTag(tag);
+    const sym = list ? "#" : "@";
+    const body = (tag.text || "").trim();
+    confirmDanger({
+      title: `Delete ${sym}${tag.name}?`,
+      // Show what is actually in it. For one tag this is the whole point of asking:
+      // you can see at a glance whether it is the one you meant.
+      lead: `This deletes the ${list ? "list" : "tag"} <b>${esc(sym + tag.name)}</b>` +
+        (body ? ` and what it holds:` : `, which is empty.`),
+      listing: body ? (body.length > 400 ? body.slice(0, 400) + " …" : body) : "",
+      confirmLabel: "Delete it",
+      onConfirm: () => applyChange(() => {
+        const i = _data.tags.indexOf(tag);
+        if (i > -1) _data.tags.splice(i, 1);
+        // Drop its position too, or a NEW list later given the same name inherits the
+        // dead one's half-drained deck (deleteCat already does this for a category).
+        try { resetCursor(listKey(tag.name)); } catch { /* ignore */ }
+      }),
     });
   });
   foot.append(ins, kindSw.el, del);
@@ -928,8 +793,7 @@ function startRenameCat(row, cat) {
   // Escape. Expose the cancel as a handle it can call directly - the same fix the
   // new-category field already had. Without it, onKey's generic `active.blur()` ran the
   // blur listener below, which COMMITS: pressing Escape to abandon a rename applied it
-  // instead, and commitRename goes through commit(), which retires the undo stack, so
-  // there was no way back.
+  // instead, with no way back.
   inp._pixCancel = cancelRename;
   inp.addEventListener("keydown", (e) => { e.stopPropagation(); if (e.key === "Enter") commitRename(); if (e.key === "Escape") cancelRename(); });
   inp.addEventListener("blur", commitRename);
@@ -957,10 +821,10 @@ function openCatActions(row, cat, anchor) {
   add("Export this category", n ? many(n) : "empty", n ? "" : "dim", n ? () => exportScope(cat) : null);
   menu.appendChild(Object.assign(document.createElement("div"), { className: "msep" }));
   if (n) {
-    add("Delete category", `keeps the ${many(n)}`, "danger", () => deleteCat(cat));
+    add("Delete category", `keeps the ${many(n)}`, "danger", () => confirmDeleteCat(cat));
     add(`Delete category and its ${n === 1 ? word : word + "s"}`, `${many(n)} deleted`, "danger", () => confirmDeleteCatWithTags(cat));
   } else {
-    add("Delete category", "it is empty", "danger", () => deleteCat(cat));
+    add("Delete category", "it is empty", "danger", () => confirmDeleteCat(cat));
   }
   _overlay.appendChild(menu);
   placeMenu(menu, anchor);
@@ -996,16 +860,12 @@ function openBucketActions(bucket, anchor) {
     menu.appendChild(mi);
   };
   add(n === 1 ? "Put it in a category…" : "Put them all in a category…", many(n), "", () => {
-    // Snapshot BEFORE the picker opens. Its "New category" row creates and commits the
-    // category before handing back, so a snapshot taken at move time would already
-    // contain it and Undo would leave an empty orphan category behind.
-    const pre = snapshotNow();
     // openCategoryMenu replaces this menu with the picker (it calls hideCatMenu itself).
     openCategoryMenu(anchor, (c) => {
       // "" means the picker landed back on the bucket itself, or the typed name was
       // unusable. Saying nothing made the button look broken.
       if (!c) { toast("info", `Pick a real category to move ${side === "list" ? "these lists" : "these tags"} into.`); return; }
-      moveBucketTags(bucket, c, pre);
+      moveBucketTags(bucket, c);
     }, side);
   });
   // Singularise like every sibling menu does - "Export these tags · 1 tag" read wrong.
@@ -1017,19 +877,19 @@ function openBucketActions(bucket, anchor) {
   _catMenu = menu;
 }
 // File every tag sitting in a bucket into a real category, which is the tidy way to
-// make the bucket row go away. Undoable like any other bulk change.
-function moveBucketTags(bucket, cat, pre) {
+// make the bucket row go away. A move, not a loss, so it does not ask.
+function moveBucketTags(bucket, cat) {
   const moving = tagsIn(bucket);
   if (!moving.length) return;
   const word = bucket === LIST_BUCKET ? "list" : "tag";
-  destructive(`Moved ${moving.length} ${word}${moving.length === 1 ? "" : "s"} into ${cat}`, () => {
+  applyChange(() => {
     for (const t of moving) t.cat = cat;
     // The bucket is emptied by this, so its own *wildcard position means nothing now.
     // Every other path that empties a bucket drops it; this one was stranding it for a
     // later bucket of the same size to inherit.
     try { resetCursor(catKey(bucket)); } catch { /* ignore */ }
     if (_curCat === bucket) _curCat = cat;   // follow them, the old row is about to go
-  }, pre);
+  });
 }
 function confirmDeleteBucket(bucket) {
   const shown = tagsIn(bucket);          // for the dialog's own wording only
@@ -1045,15 +905,13 @@ function confirmDeleteBucket(bucket) {
     offerExport: true,
     exportCat: bucket,
     onConfirm: () => {
-      // RE-RESOLVE at confirm time. Holding the tag OBJECTS captured when the dialog
-      // was built was a real defect: undoLast() swaps `_data` for a clone() whose tags
-      // are brand new objects, so a delete-by-identity matched nothing while still
-      // reporting "Deleted 3 tags" and burning an undo slot. The sibling
-      // deleteCatWithTags always re-resolved; this path had drifted from it.
+      // RE-RESOLVE at confirm time rather than holding the tag OBJECTS captured when
+      // the dialog was built - the library can move underneath an open dialog, and a
+      // delete-by-identity would then match nothing while still reporting success.
       const doomed = tagsIn(bucket);
       const k = doomed.length;
       if (!k) { toast("info", "Nothing left to delete there."); return; }
-      destructive(`Deleted ${k} ${word}${k === 1 ? "" : "s"} from ${bucket}`, () => {
+      applyChange(() => {
         const gone = new Set(doomed);
         _data.tags = _data.tags.filter((t) => !gone.has(t));
         for (const t of doomed) { try { resetCursor(listKey(t.name)); } catch { /* ignore */ } }
@@ -1080,13 +938,26 @@ function dropCategoryRecord(cat) {
   try { resetCursor(catKey(cat)); } catch { /* ignore */ }   // don't strand its position
 }
 // Drop the category, KEEP its tags (they fall into their own side's bucket).
-function deleteCat(cat) {
+// Behind a confirm like everything else: the tags survive, but the category's name,
+// its side and how it picks do not, and with no undo a mis-click is final.
+function confirmDeleteCat(cat) {
   const n = tagsIn(cat).length;
-  const word = sideOf(cat) === "list" ? "list" : "tag";   // a List category holds lists
-  const label = !n ? `Deleted the category ${cat}`
-    : n === 1 ? `Deleted the category ${cat} - its ${word} was kept`
-      : `Deleted the category ${cat} - its ${n} ${word}s were kept`;
-  destructive(label, () => {
+  const word = sideOf(cat) === "list" ? "list" : "tag";
+  confirmDanger({
+    title: `Delete the category ${cat}?`,
+    lead: n
+      ? `The <b>${n} ${word}${n === 1 ? "" : "s"}</b> in it are kept - they move to ` +
+        `<b>${esc(sideOf(cat) === "list" ? LIST_BUCKET : TEXT_BUCKET)}</b>, ready to file somewhere else. ` +
+        `Only the category itself goes.`
+      : `It is empty, so only the category itself goes.`,
+    confirmLabel: "Delete the category",
+    offerExport: !!n,
+    exportCat: cat,
+    onConfirm: () => deleteCat(cat),
+  });
+}
+function deleteCat(cat) {
+  applyChange(() => {
     dropCategoryRecord(cat);
     const landed = new Set();
     for (const t of _data.tags) {
@@ -1104,7 +975,7 @@ function deleteCatWithTags(cat) {
   const doomed = tagsIn(cat);
   const n = doomed.length;
   const word = sideOf(cat) === "list" ? "list" : "tag";
-  destructive(`Deleted ${cat} and its ${n} ${word}${n === 1 ? "" : "s"}`, () => {
+  applyChange(() => {
     const gone = new Set(doomed);
     _data.tags = _data.tags.filter((t) => !gone.has(t));
     // Each one's position goes too, or a later tag with the same name inherits a
@@ -1142,7 +1013,7 @@ function confirmDeleteEverything() {
     confirmLabel: "Delete everything",
     offerExport: true,
     exportCat: null,
-    onConfirm: () => destructive(`Deleted the whole library (${n} tag${n === 1 ? "" : "s"})`, () => {
+    onConfirm: () => applyChange(() => {
       for (const t of _data.tags) { try { resetCursor(listKey(t.name)); } catch { /* ignore */ } }
       for (const cc of _data.categories) { try { resetCursor(catKey(cc)); } catch { /* ignore */ } }
       // The two buckets are *wildcard targets too, so they hold positions of their own
@@ -1492,43 +1363,21 @@ function showImportPick(parsed) {
 }
 function applyLibraryImport(parsed, mode) {
   if (!_overlay) return;
-  // An import - "Replace mine" especially - can overwrite tags you wrote yourself, so
-  // it is snapshotted like any other destructive action. Taken BEFORE, pushed only if
-  // something actually changed, so a no-op import cannot shift the oldest entry off a
-  // full stack.
-  const pre = snapshotNow();
+  const before = { categories: [..._data.categories], catModes: { ..._data.catModes } };
   const res = applyImport(parsed, mode);
   _data = clone(getLibrary());
-  // REBASE UNCONDITIONALLY, right where the working copy is replaced. This is the only
-  // path that swaps `_data` for a freshly normalized clone, and normalize emits a fixed
-  // key order while the editor appends keys in place (`tag.kind = "list"` after a
-  // `mode`), so the raw JSON can differ with no semantic change. Rebasing only on the
-  // "something changed" branch meant an import that reported "Nothing was imported"
-  // left the baseline describing the OLD object graph, and the next commit - even a
-  // no-op one - binned a pending Undo. There is no branch where keeping the old
-  // signature is correct. (library.mjs::isSameAsStored documents this same trap.)
-  _undoSig = libSig();
   render();
   const bits = [];
   if (res.added) bits.push(`${res.added} tag${res.added === 1 ? "" : "s"} added`);
   if (res.replaced) bits.push(`${res.replaced} replaced`);
   // applyImport merges categories, sides and Picks modes INDEPENDENTLY of the tag
   // counts, so a file whose tags were all skipped as duplicates could still add
-  // categories. Reporting "Nothing was imported" then was false, and skipping the undo
-  // entry meant those categories could not be taken back AND a later Ctrl+Z silently
-  // reverted them along with whatever it was actually named after.
-  const hadCat = new Set((pre?.data.categories || []).map((c) => c.toLowerCase()));
+  // categories. Reporting "Nothing was imported" then was simply false.
+  const hadCat = new Set(before.categories.map((c) => c.toLowerCase()));
   const catsAdded = _data.categories.filter((c) => !hadCat.has(c.toLowerCase())).length;
   if (catsAdded) bits.push(`${catsAdded} categor${catsAdded === 1 ? "y" : "ies"} added`);
-  const modesChanged = Object.keys(_data.catModes || {}).length !==
-    Object.keys(pre?.data.catModes || {}).length;
+  const modesChanged = Object.keys(_data.catModes || {}).length !== Object.keys(before.catModes).length;
   toast("info", bits.length ? "Imported: " + bits.join(", ") + "." : "Nothing was imported.");
-  // Nothing changed -> no undo entry, or Ctrl+Z would spend a step doing nothing.
-  if (bits.length || modesChanged) {
-    const what = bits.length ? "Imported " + bits.join(", ") : "Imported settings";
-    pushUndo(what, pre);          // same wording the strip shows, so "Undone: ..." matches
-    showUndoStrip(what);
-  }
 }
 function showImportModal(parsed) {
   if (!_overlay) return;
@@ -1560,7 +1409,7 @@ function showImportModal(parsed) {
   _overlay.appendChild(modal);
 }
 // A real "are you sure?", used ONLY where one click takes away more than one thing.
-// Anything smaller deletes straight away and offers Undo instead - see pushUndo.
+// There is no undo (see applyChange), so every path that can lose something uses it.
 // `lead` is HTML (so it can bold the count); escape any user value before passing it.
 function confirmDanger({ title, lead, listing, confirmLabel, offerExport, exportCat, onConfirm }) {
   if (!_overlay) return;
@@ -1571,9 +1420,8 @@ function confirmDanger({ title, lead, listing, confirmLabel, offerExport, export
     `<div class="mb">${lead}` +
     (listing ? `<div class="conf">${esc(listing)}</div>` : "") +
     // Its own block: without a listing above it, this ran straight on from the end of
-    // `lead` with no gap ("...stops working.Undo takes it back").
-    `<div style="margin-top:10px"><b>Undo</b> takes it back, until you make some other ` +
-    `change or close the library.</div></div>` +
+    // `lead` with no gap.
+    `<div style="margin-top:10px">This cannot be undone.</div></div>` +
     `<div class="pix-prled-mfoot">` +
     (offerExport ? `<button class="pix-prled-btn dg-exp" type="button">⭳ Export a backup first</button>` : "") +
     `<button class="pix-prled-btn push dg-cancel" type="button">Cancel</button>` +
@@ -1599,8 +1447,7 @@ function toast(sev, msg) {
 function showLibraryHelp() {
   if (!_overlay) return;
   const modal = document.createElement("div");
-  // The extra class marks this as the HELP panel, not a confirm - the Ctrl+Z gate in
-  // onKey excludes it so undo still works while you are reading about it.
+  // Marked as the HELP panel rather than a confirm, so gates can tell them apart.
   modal.className = "pix-prled-modal pix-prled-helpmodal";
   modal.innerHTML =
     `<div class="pix-prled-mcard pix-prled-help-card"><div class="mh">How the tag library works</div>` +
@@ -1611,7 +1458,7 @@ function showLibraryHelp() {
     `<p><b>Text or List.</b> Every card has a switch at the bottom with both choices on it. <b>Text</b> is one piece of writing and <b>@name</b> drops in all of it. <b>List</b> holds one option per line (cat, dog, mouse) and <b>#name</b> drops in a random one, fresh every run. Flip the switch any time: it changes what the card is for, never what your saved prompts do. While the create box at the top is set to List, Enter starts the next option and Ctrl+Enter adds the tag.</p>` +
     `<p><b>Categories.</b> Make them in the left sidebar. Click a card's coloured pill to move that tag to another category. The <b>⋯</b> on a category row (right-clicking the row does the same) lets you rename it, export just that category, or delete it. Typing <b>*category</b> in a prompt picks a random tag from it each run.</p>` +
     `<p><b>The italic Text and List rows are not categories.</b> They are where tags with no category of their own are shown, so there is nothing to rename or delete about the row itself. Their <b>⋯</b> can file them all into a category at once (and the row then disappears by itself), export them, or delete them.</p>` +
-    `<p><b>Deleting, and getting it back.</b> The bin on a card removes that tag straight away, with no dialog to click through, and an <b>Undo</b> strip appears at the bottom of the screen for a few seconds. <b>Ctrl+Z</b> undoes as well, and keeps working after the strip goes. Deleting a category gives you two choices: keep its tags (they move to Text or List) or delete them along with it. The <b>⋯</b> next to Export and Import has <b>Delete everything</b> for starting over. Anything that removes a whole group offers to save you a backup file first. Undo stops being available once you make some other change, and once you close the library.</p>` +
+    `<p><b>Deleting.</b> Anything that removes something asks you first and shows you exactly what will go, so you can check it is the one you meant. Deleting a category gives you two choices: keep its tags (they move to Text or List) or delete them along with it. The <b>⋯</b> next to Export and Import has <b>Delete everything</b> for starting over. Where a whole group is going, the question also offers to save you a backup file first. There is no undo, so the answer is final once you give it.</p>` +
     `<p><b>Picks: Shuffle, Random or In order.</b> A List card, and the header of anything you can roll with <b>*name</b>, each have a <b>Picks</b> control for how they choose. <b>Shuffle</b> is the default: it deals a shuffled deck, so every option comes up once before any repeat. <b>Random</b> is any one every time, so the same one can come up twice in a row. <b>In order</b> goes 1, 2, 3 and around again. Shuffle and In order remember their place between runs (the card shows it) and the <b>↺</b> button starts that list over.</p>` +
     `<p><b>Use a tag.</b> Type <b>@</b> (or <b>#</b> for lists, <b>*</b> for categories) in the prompt box for a searchable list, or press <b>Insert</b> on a card to drop it straight into your prompt.</p>` +
     `<p><b>Share.</b> <b>Export</b> saves your tags to a file: everything, or just one category. <b>Import</b> shows you what is in a file so you can pick which categories to bring in, and if a name already exists you choose keep both, replace, or skip.</p>` +
@@ -1677,37 +1524,6 @@ export function openLibraryEditor(node, opts) {
   window.addEventListener("keydown", onKey, true);
 }
 function onKey(e) {
-  // Ctrl/Cmd+Z takes back the last delete / import for as long as the library is open
-  // (the Undo strip only shows for a few seconds, this keeps working after it goes).
-  if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && (e.key === "z" || e.key === "Z")) {
-    // NOT while a CONFIRM dialog is up. A confirm describes a state ("delete these 3
-    // tags") that it captured when it opened, so letting the library change underneath
-    // it made the dialog lie and, worse, made the confirmed action a no-op that still
-    // reported success. Escape already refuses to fall through a modal; this matches.
-    // The HELP panel is deliberately excluded: it reuses the same modal chrome, and it
-    // is the very panel that tells you Ctrl+Z works, so swallowing it there is absurd.
-    if (_overlay?.querySelector(".pix-prled-modal:not(.pix-prled-helpmodal)")) {
-      e.preventDefault(); e.stopPropagation(); return;
-    }
-    // Inside a text field Ctrl+Z means the BROWSER's text undo, and stealing that would
-    // make typing feel broken. Only claim it when the user is not editing. The SEARCH
-    // box is the exception: it is focused the moment the library opens and typing in it
-    // never commits, so treating it as "editing" made Ctrl+Z silently dead in the most
-    // likely place to press it, while the strip beside it still promised "or Ctrl+Z".
-    const a = document.activeElement;
-    const isField = a && _overlay && _overlay.contains(a) &&
-      (a.tagName === "INPUT" || a.tagName === "TEXTAREA" || a.isContentEditable);
-    // ...and only when there is actually something to undo. Claiming it unconditionally
-    // in the search box meant the likeliest Ctrl+Z in the editor (the box is focused on
-    // open, before anything has been deleted) threw away the typed filter's text undo
-    // and gave back only a "Nothing to undo" toast.
-    const searchWithUndo = isField && !!a.closest(".pix-prled-srch") && _undo.length > 0;
-    if (isField && !searchWithUndo) return;
-    e.preventDefault();
-    e.stopPropagation();
-    undoLast();
-    return;
-  }
   if (e.key !== "Escape") return;
   if (_overlay?.querySelector(".pix-prled-modal")) { _overlay.querySelector(".pix-prled-modal").remove(); e.stopPropagation(); return; }
   if (_catMenu) { hideCatMenu(); e.stopPropagation(); return; }
@@ -1770,10 +1586,6 @@ function onKey(e) {
 export function closeLibraryEditor() {
   window.removeEventListener("keydown", onKey, true);
   hideCatMenu();
-  // Undo is for THIS editing session: the snapshots are of a working copy that is
-  // about to be written back, and the next open re-reads storage (another tab may
-  // have edited it), so keeping them would let Ctrl+Z restore a stale library.
-  clearUndo();
   // BELT AND BRACES, not live recovery. Since the card's name input stopped writing an
   // invalid name into the working copy at all (see the makeCard blur/input handlers),
   // nothing can put an empty or duplicate name in `_data.tags` any more, so this loop
