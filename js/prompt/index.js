@@ -181,7 +181,7 @@ const PROMPT_HELP = {
     {
       heading: "Shuffle, Random or In order",
       body:
-        "Every list and every category has a `Picks` control, on its own card or on the category header in the library:",
+        "A `Picks` control decides how a list, or anything you can roll with `*name`, chooses. It sits on the list's own card, and on the header when you open one in the library:",
       defs: [
         ["Shuffle", "the default. Like dealing a shuffled deck: every option comes up once before any repeat, then it reshuffles. A surprise every time, without the same one landing twice in a row."],
         ["Random", "any one, every time. True random repeats itself, so with three options you might get 1, 1, 3, 2, 1. Use it when you genuinely want that."],
