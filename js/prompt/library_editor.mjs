@@ -1428,6 +1428,14 @@ function showImportPick(parsed) {
     `<div class="pix-prled-mcard"><div class="mh">Import tags</div>` +
     `<div class="mb">This file has <b>${total} tag${total === 1 ? "" : "s"}</b> in ` +
     `<b>${cats.length} categor${cats.length === 1 ? "y" : "ies"}</b>. Tick what you want to bring in.</div>` +
+    // Names that cannot be used are dropped before we ever get here, and the counts
+    // above are taken after that - so say it plainly rather than let the file look
+    // smaller than it is.
+    (parsed.dropped
+      ? `<div class="mb" style="padding-top:0"><div class="conf">${parsed.dropped} more ` +
+        `tag${parsed.dropped === 1 ? "" : "s"} cannot be brought in: a tag name can only ` +
+        `contain letters a to z, numbers, - and _.</div></div>`
+      : "") +
     `<div class="pix-prled-pick"></div>` +
     `<div class="pix-prled-mfoot">` +
     `<button class="pix-prled-mlink pk-all">All</button>` +

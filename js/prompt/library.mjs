@@ -439,11 +439,29 @@ export function parseImport(jsonStr) {
       return name === t.name ? t : { ...t, name };
     });
   }
+  // A tag name has to be typeable as an @token, so `normalize` drops anything that
+  // cleans to nothing - which silently discards every Cyrillic / CJK / accented name in
+  // the file. Worse, the import picker's counts are taken AFTER the drop, so a
+  // collection could import as near-empty with nothing anywhere reporting the loss.
+  // Count them here and say so. (Widening the name rule is NOT the fix: the token
+  // grammar in expand.mjs is ASCII, so such a tag could never be referenced.)
+  let dropped = 0;
+  if (raw && Array.isArray(raw.tags)) {
+    for (const t of raw.tags) {
+      if (!t || typeof t !== "object" || !cleanName(t.name)) dropped++;
+    }
+  }
   const data = normalize(raw);
-  if (!data.tags.length) return { error: "No tags found in that file." };
+  if (!data.tags.length) {
+    return {
+      error: dropped
+        ? `None of the ${dropped} tag${dropped === 1 ? "" : "s"} in that file can be used. A tag name can only contain letters a to z, numbers, - and _.`
+        : "No tags found in that file.",
+    };
+  }
   const have = new Set(getTags().map((t) => t.name.toLowerCase()));
   const conflicts = data.tags.filter((t) => have.has(t.name.toLowerCase())).map((t) => t.name);
-  return { data, conflicts };
+  return { data, conflicts, dropped };
 }
 
 // Apply a parsed import. mode: "both" (rename incoming clashes, keep everything),

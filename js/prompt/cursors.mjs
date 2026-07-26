@@ -114,9 +114,22 @@ function shuffled(n) {
 // together" means), and a parked, unwired node can no longer steal picks from the one
 // you are actually using.
 // Cleared by commitPicks() once a queue has genuinely been accepted.
-const _pending = new Map();   // key -> { i, n, mode }
+// The ADVANCE rides along in `state` and is applied to the stored map only here, when
+// a queue has genuinely been accepted. It used to be written at roll time with only
+// the in-memory `_pending` acting as the hold - which meant the hold protected nothing
+// durable: pressing Export, or a run rejected by validation, permanently advanced an
+// "In order" list on disk, the card immediately reported a position no run had reached,
+// and after a tab reload that option was skipped for good. That is the exact symptom
+// the hold was introduced to fix; it only papered over it while the tab stayed alive.
+// If the tab dies between an accepted queue and this call the advance is lost, so a
+// run REPEATS an option rather than SKIPPING one - the safe direction of the two.
+const _pending = new Map();   // key -> { i, n, mode, state }
 export function commitPicks() {
-  if (_pending.size) { _pending.clear(); flushCursors(); }
+  if (!_pending.size) return;
+  const map = all();
+  if (map) for (const [key, p] of _pending) { if (p.state) map[key] = p.state; }
+  _pending.clear();
+  if (map) flushCursors();
 }
 
 // The index to use NOW, advancing the cursor. `len` is the current pool size, so a
@@ -129,26 +142,26 @@ export function nextIndex(key, len, mode) {
   const m = cleanMode(mode);
   const held = _pending.get(key);
   if (held && held.n === n && held.mode === m) return held.i;
-  const i = rollIndex(key, n, m);
-  if (i >= 0) _pending.set(key, { i, n, mode: m });
-  return i;
+  const r = rollIndex(key, n, m);
+  if (r.i >= 0) _pending.set(key, { i: r.i, n, mode: m, state: r.state });
+  return r.i;
 }
 
 // The actual draw. Only ever called by nextIndex, once per key per run.
+// Returns { i, state }: `state` is what the stored cursor SHOULD become if this pick is
+// spent on a real run. It is deliberately NOT written here - commitPicks applies it.
 function rollIndex(key, n, m) {
-  if (m === "random" || n === 1) return Math.floor(Math.random() * n);
+  if (m === "random" || n === 1) return { i: Math.floor(Math.random() * n), state: null };
   const map = all();
   // Nowhere to remember a position (settings not ready). Fall back to a plain random
   // pick rather than pretending to sequence and dropping the result.
-  if (!map) return Math.floor(Math.random() * n);
+  if (!map) return { i: Math.floor(Math.random() * n), state: null };
   let st = map[key];
   if (!st || typeof st !== "object" || st.n !== n) st = null;   // pool changed -> restart
 
   if (m === "order") {
     const i = st && Number.isInteger(st.i) ? ((st.i % n) + n) % n : 0;
-    map[key] = { n, i: (i + 1) % n, last: i };
-    touch();
-    return i;
+    return { i, state: { n, i: (i + 1) % n, last: i } };
   }
   // shuffle: deal from a deck, reshuffle when it runs out.
   // A stored deck must be DISTINCT in-range indices. Filtering out the bad entries
@@ -173,9 +186,7 @@ function rollIndex(key, n, m) {
     }
   }
   const i = bag.pop();
-  map[key] = { n, bag, last: i };
-  touch();
-  return i;
+  return { i, state: { n, bag, last: i } };
 }
 
 // What to show in the library: how far through the sequence this cursor is.
