@@ -313,8 +313,10 @@ function setupNode(node) {
     // change under us (files renamed/added/deleted), and a stale listing here
     // silently produces a wrong image batch. The route is a live folder walk, the
     // token guard in refreshListing handles racing opens, and the userAction flag
-    // prunes selections of files that no longer exist.
-    await refreshListing(node, true);
+    // prunes selections of files that no longer exist. Button disabled during the
+    // await so a fast double-click can't fire two listings (mirrors Browse).
+    ui.pickBtn.disabled = true;
+    try { await refreshListing(node, true); } finally { ui.pickBtn.disabled = false; }
     openPickGallery(node, ui.pickBtn, {
       onChange: renderUI,
       refreshListing: (n) => refreshListing(n, true),

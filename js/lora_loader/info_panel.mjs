@@ -276,7 +276,7 @@ export async function openInfoPanel(node, id, refresh) {
     const th = el("div", "pix-ll-info-th");
     const turl = thumb();
     // Strip quotes/backslashes so a stray char in a Civitai image URL can't break the
-    // CSS url() value (thumbUrl(name) is already percent-encoded; civ.info.thumbnail is raw).
+    // CSS url() value (thumbUrl(name, bust) is already percent-encoded; civ.info.thumbnail is raw).
     if (turl) th.style.backgroundImage = `url("${String(turl).replace(/["\\]/g, "")}")`;
     const h = el("div", "pix-ll-info-h");
     const title = el("h3", null, (civ?.state === "found" && civ.info?.name) || info.title || "LoRA");

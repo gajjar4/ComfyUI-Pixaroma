@@ -11,25 +11,29 @@ const _infoPromise = new Map();
 export async function listLoras(force = false) {
   if (!force && _listCache) return _listCache;
   if (!force && _listPromise) return _listPromise;
-  _listPromise = (async () => {
-    let result = [];
+  const p = (async () => {
     try {
       // no-store: the route sends no cache headers, and a heuristically-cached
       // copy of this list is exactly the "renamed file never appears" bug.
       const r = await fetch("/pixaroma/api/lora/list", { cache: "no-store" });
       const j = await r.json();
-      _listCache = Array.isArray(j.loras) ? j.loras : [];
-      result = _listCache;
+      // j.error = the SERVER's folder scan failed (not an empty folder). Treat it
+      // like a network failure: keep whatever list we had. Trusting it as a real
+      // [] made hasLora() brand every row "missing" - a workflow-wide false alarm.
+      if (!j.error && Array.isArray(j.loras)) _listCache = j.loras;
     } catch {
-      // Do NOT cache a transient failure - an empty [] is truthy and would stick
-      // for the whole session ("No LoRAs" forever). Leave the cache null so the
-      // next call retries; just return an empty list for this one.
-      _listCache = null;
+      // Transient failure: KEEP the previous list (stale beats empty - nulling it
+      // here used to wipe a perfectly good cache now that every dropdown open
+      // force-refetches). A never-fetched cache stays null so hasLora() stays
+      // "unknown" and no false missing-marks appear.
     }
-    _listPromise = null;
-    return _listCache || result;
+    // Only clear the in-flight slot if it is still OURS - a forced call may have
+    // replaced it while we were in the air (keeps the dedupe honest).
+    if (_listPromise === p) _listPromise = null;
+    return _listCache || [];
   })();
-  return _listPromise;
+  _listPromise = p;
+  return p;
 }
 
 export async function loraInfo(name, force = false) {

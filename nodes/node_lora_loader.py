@@ -65,8 +65,9 @@ class PixaromaLoraLoader:
         #   "all"  = keep the whole current stack (fastest re-runs, gigabytes for a
         #            big stack - the pre-2026-07-27 always-on behavior);
         #   "none" = keep nothing, re-read every run (lowest memory).
-        # In "last"/"none" each entry is also released DURING the run right after it
-        # is applied, so peak memory stays ~one LoRA instead of the whole stack.
+        # In "last"/"none" each entry loaded this run is also released right after
+        # the NEXT one applies, so peak memory stays a couple of files instead of
+        # the whole stack (the cross-run retained entry rides along until the end).
         self._cache = {}
         self._last_path = None
 
@@ -88,6 +89,12 @@ class PixaromaLoraLoader:
     def apply(self, model, clip=None, LoraLoaderState="{}"):
         state = H.parse_state(LoraLoaderState)
         cache_mode = state.get("cacheMode", "last")
+        # The most recent row THIS run actually loaded. Kept separate from
+        # self._last_path (the entry retained from the PREVIOUS run) - evicting the
+        # retained entry when this run's FIRST row applied made "last" behave like
+        # "none" for every 2+ row stack (the warm file was dropped moments before
+        # it would have been reused; caught in the pre-release review).
+        last_this_run = None
 
         # Rows whose LoRA was actually applied (or deliberately parked at strength 0).
         # ONLY these contribute trigger words, so the triggers output never claims words
@@ -132,11 +139,13 @@ class PixaromaLoraLoader:
                 applied += 1
                 resolved.append(entry)  # actually applied -> its triggers count
                 if cache_mode != "all":
-                    # Release the PREVIOUS row's data as soon as this one is applied,
-                    # so a 10-row stack peaks at ~one LoRA in RAM, not ten.
-                    if self._last_path is not None and self._last_path != path:
-                        self._cache.pop(self._last_path, None)
-                    self._last_path = path
+                    # Release the PREVIOUS row loaded THIS run, so a 10-row stack
+                    # peaks at a couple of files in RAM, not ten. The cross-run
+                    # retained entry (self._last_path) is deliberately NOT touched
+                    # here - it may still be reused later in this run.
+                    if last_this_run is not None and last_this_run != path:
+                        self._cache.pop(last_this_run, None)
+                    last_this_run = path
             except Exception as exc:
                 # Load failed -> NOT resolved, so its words don't reach the output.
                 print("[LoRA Loader Pixaroma] failed to apply {}: {}".format(name, exc))
@@ -154,11 +163,17 @@ class PixaromaLoraLoader:
             for path in list(self._cache):
                 if path not in used_paths:
                     del self._cache[path]
-        else:  # "last": ComfyUI parity - at most ONE entry survives the run
-            keep = self._last_path
+        else:  # "last": ComfyUI parity - at most ONE entry survives the run:
+            # the most recent load of THIS run. If this run loaded nothing, the
+            # previously retained file survives only while it is still part of the
+            # stack (a strength-0 row counts) - an emptied stack really frees it.
+            keep = last_this_run
+            if keep is None and self._last_path in used_paths:
+                keep = self._last_path
             for path in list(self._cache):
                 if path != keep:
                     del self._cache[path]
+            self._last_path = keep
 
         print("[LoRA Loader Pixaroma] applied {} LoRA(s).".format(applied))
         return (model, clip, triggers)

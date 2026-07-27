@@ -1671,18 +1671,22 @@ async def api_lif_list(request):
     """List image files in a folder. ?path=<folder>&recursive=0|1
     Returns {ok, folder, files:[{file, name, size, mtime}]} (file = path
     relative to the folder, forward-slashed)."""
+    # no-store on every branch: the gallery re-lists on each open, and a browser
+    # heuristically caching this JSON would serve a stale folder (same hardening
+    # as the LoRA list route).
+    hdrs = {"Cache-Control": "no-store"}
     folder = request.query.get("path", "")
     recursive = request.query.get("recursive", "0") == "1"
     if not folder or not os.path.isdir(folder):
-        return web.json_response({"ok": False, "message": "Folder not found.", "files": []})
+        return web.json_response({"ok": False, "message": "Folder not found.", "files": []}, headers=hdrs)
     real = os.path.realpath(folder)
     try:
         import asyncio
         loop = asyncio.get_running_loop()
         files = await loop.run_in_executor(None, _lif_list_files, real, recursive)
     except Exception as e:
-        return web.json_response({"ok": False, "message": f"Could not read folder: {e}", "files": []})
-    return web.json_response({"ok": True, "folder": real, "files": files})
+        return web.json_response({"ok": False, "message": f"Could not read folder: {e}", "files": []}, headers=hdrs)
+    return web.json_response({"ok": True, "folder": real, "files": files}, headers=hdrs)
 
 
 def _lif_make_thumb(full):
@@ -2077,14 +2081,18 @@ def _resolve_lora_path(name):
 @PromptServer.instance.routes.get("/pixaroma/api/lora/list")
 async def api_lora_list(request):
     """Every LoRA filename ComfyUI knows about (names include any subfolder prefix)."""
-    try:
-        files = list(folder_paths.get_filename_list("loras"))
-    except Exception:
-        files = []
     # no-store: this JSON carries no cache headers otherwise, and a browser
     # heuristically caching it reproduces "renamed file never appears" even
     # after our JS re-fetches. Same class as the .mjs no-cache layers above.
-    return web.json_response({"loras": files}, headers={"Cache-Control": "no-store"})
+    hdrs = {"Cache-Control": "no-store"}
+    try:
+        files = list(folder_paths.get_filename_list("loras"))
+    except Exception:
+        # A SCAN FAILURE is not an empty folder: the frontend treats a clean []
+        # as ground truth and would mark every row "missing" (a workflow-wide
+        # false alarm on a transient network-drive/locked-file hiccup). Say so.
+        return web.json_response({"loras": [], "error": True}, headers=hdrs)
+    return web.json_response({"loras": files}, headers=hdrs)
 
 
 @PromptServer.instance.routes.get("/pixaroma/api/lora/info")

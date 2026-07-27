@@ -33,10 +33,16 @@ onNodeDefsRefresh(() => {
   invalidateList();
   invalidateAllInfo();
   listLoras().then(() => {
-    const nodes = app.graph?._nodes || [];
-    for (const n of nodes) {
-      if ((n.comfyClass === CLASS || n.type === CLASS) && n._pixLlRoot) renderNode(n);
-    }
+    // Recurse into subgraphs like buildIndex below does - a LoRA node nested in a
+    // subgraph must get its missing-marks repainted too, not just top-level ones.
+    const walk = (g) => {
+      for (const n of (g?._nodes || [])) {
+        if ((n.comfyClass === CLASS || n.type === CLASS) && n._pixLlRoot) renderNode(n);
+        const sub = n.subgraph || n.graph || n._graph;
+        if (sub && sub !== g) walk(sub);
+      }
+    };
+    walk(app.graph);
   });
 });
 const MIN_W = 300;

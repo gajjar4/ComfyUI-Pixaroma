@@ -55,8 +55,9 @@ function sortByCategory(icons) {
 // within the same browser session — reload to re-pick-up new SVGs
 // the user drops into assets/icons/note/.
 let _iconsCache = null;
-// Single-flight guard so two concurrent ensureIcons() calls share one
-// fetch instead of firing two network requests.
+// Single-flight guard so concurrent UNFORCED ensureIcons() calls share one
+// fetch instead of firing two network requests (force=true deliberately
+// bypasses it and replaces the slot with its own fresh fetch).
 let _iconsPromise = null;
 // One-time CSS injection guard — per-icon mask-image rules are
 // appended to <head> exactly once per page load.
@@ -82,7 +83,7 @@ let _cssInjected = false;
 export async function ensureIcons(force = false) {
   if (!force && _iconsCache !== null) return _iconsCache;
   if (!force && _iconsPromise) return _iconsPromise;
-  _iconsPromise = (async () => {
+  const p = (async () => {
     try {
       const r = await fetch("/pixaroma/api/note/icons/list", { cache: "no-store" });
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
@@ -93,17 +94,19 @@ export async function ensureIcons(force = false) {
     } catch (e) {
       // Transient failure (network error, HTTP 5xx, malformed JSON)
       // → keep whatever cache we had (null makes the NEXT call retry;
-      // an older list keeps the picker working). Clear _iconsPromise so
-      // subsequent callers don't latch onto this settled promise.
+      // an older list keeps the picker working). Clear the in-flight
+      // slot ONLY if it is still ours - a forced call may have replaced
+      // it while we were in the air.
       // A successful fetch returning {"icons": []} for a genuinely
       // empty folder DOES cache [] (fast path above), which is the
       // right behavior for intentional empties.
       console.warn("[pix-note/icons] list fetch failed, will retry on next open:", e);
-      _iconsPromise = null;
+      if (_iconsPromise === p) _iconsPromise = null;
       return _iconsCache || [];
     }
   })();
-  return _iconsPromise;
+  _iconsPromise = p;
+  return p;
 }
 
 // Build the per-icon CSS block. One rule per icon. CSS.escape the slug

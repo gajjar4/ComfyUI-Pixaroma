@@ -6,7 +6,10 @@ export async function listFolder(folder, recursive) {
     const url =
       `/pixaroma/api/load_images_folder/list?path=${encodeURIComponent(folder)}` +
       `&recursive=${recursive ? 1 : 0}`;
-    const r = await fetch(url);
+    // no-store: the gallery now re-lists on every open, and a heuristically
+    // cached copy of this JSON would defeat exactly that (same hardening as the
+    // LoRA / sounds / icons lists).
+    const r = await fetch(url, { cache: "no-store" });
     return await r.json();
   } catch (e) {
     return { ok: false, message: String(e), files: [] };
