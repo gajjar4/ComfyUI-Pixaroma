@@ -49,6 +49,12 @@ function injectCSS() {
     .pix-llp-sw.on { background:var(--acc,${BRAND}); } .pix-llp-sw.on::after { left:17px; background:#fff; }
     .pix-llp-swatch { width:30px; height:22px; border-radius:5px; border:1px solid #555; cursor:pointer; flex:0 0 auto; }
     .pix-llp-swatch:hover { border-color:#fff; }
+    .pix-llp-seg { flex:0 0 auto; display:flex; background:rgba(0,0,0,0.25); border:1px solid #444;
+      border-radius:6px; overflow:hidden; }
+    .pix-llp-segb { padding:5px 9px; font:11px 'Segoe UI',sans-serif; color:#aaa; cursor:pointer;
+      user-select:none; }
+    .pix-llp-segb:hover { color:#ddd; background:rgba(255,255,255,0.08); }
+    .pix-llp-segb.on { background:var(--acc,${BRAND}); color:#fff; }
     .pix-llp-f { display:flex; gap:8px; padding:10px 12px; border-top:1px solid #333; background:#1f1f1f; }
     .pix-llp-btn { border:1px solid #444; background:rgba(255,255,255,0.04); color:#d8d8d8; border-radius:5px;
       padding:6px 12px; font:12px 'Segoe UI',sans-serif; cursor:pointer; }
@@ -201,6 +207,39 @@ export function openLoraPanel(node, refresh) {
   sepIn.addEventListener("change", () => { set({ sep: sepIn.value }); fire(); });
   sepRow.appendChild(sepIn);
   body.appendChild(sepRow);
+
+  // memory mode - a 3-way segmented pick (suite conventions #13: active = accent fill)
+  function segRow(label, key, options) {
+    const row = el("div", "pix-llp-row");
+    const l = el("div", "lab"); l.append(el("span", null, label));
+    const hint = el("span", "hint", "");
+    l.appendChild(hint);
+    const wrap = el("div", "pix-llp-seg");
+    const paint = () => {
+      const cur = readState(node)[key];
+      for (const b of wrap.children) b.classList.toggle("on", b.dataset.v === cur);
+      const o = options.find((x) => x.v === readState(node)[key]);
+      hint.textContent = o ? o.hint : "";
+    };
+    for (const o of options) {
+      const b = el("div", "pix-llp-segb", o.label);
+      b.dataset.v = o.v;
+      b.title = o.title;
+      b.addEventListener("click", () => { set({ [key]: o.v }); paint(); fire(); });
+      wrap.appendChild(b);
+    }
+    paint();
+    row.append(l, wrap);
+    return row;
+  }
+  body.appendChild(segRow("LoRA memory use", "cacheMode", [
+    { v: "last", label: "Standard", hint: "Keeps the last used LoRA in memory, like ComfyUI",
+      title: "Balanced default: one LoRA stays loaded between runs" },
+    { v: "all", label: "Fast", hint: "Keeps the whole stack in memory for quick re-runs",
+      title: "Fastest re-runs; big stacks can hold gigabytes of RAM" },
+    { v: "none", label: "Lowest", hint: "Re-reads the files on every run",
+      title: "Smallest memory footprint, best for low-RAM machines" },
+  ]));
 
   body.appendChild(toggleRow("Hide file extension",
     "Show the LoRA name without .safetensors", "hideExt"));

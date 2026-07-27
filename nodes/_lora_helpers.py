@@ -267,12 +267,15 @@ def _clamp_strength(v):
 
 
 def parse_state(state_str):
-    """Normalize the hidden LoraLoaderState JSON into {'loras': [...], 'sep': str}.
+    """Normalize the hidden LoraLoaderState JSON into
+    {'loras': [...], 'sep': str, 'cacheMode': 'last'|'all'|'none'}.
 
     Forgiving by design (a hand-edited API workflow must still run): bad/empty input
-    -> {'loras': [], 'sep': ', '}; nameless or non-dict entries are dropped; each
-    kept entry is {name, on, sm, sc, triggers}. sc defaults to sm when absent (single
-    strength drives both). Never raises.
+    -> {'loras': [], 'sep': ', ', 'cacheMode': 'last'}; nameless or non-dict entries
+    are dropped; each kept entry is {name, on, sm, sc, triggers}. sc defaults to sm
+    when absent (single strength drives both). cacheMode (how much LoRA data the node
+    keeps in RAM between runs) clamps any unknown value to 'last' - ComfyUI parity,
+    keep only the most recently used file. Never raises.
     """
     try:
         obj = json.loads(state_str) if isinstance(state_str, str) else (state_str or {})
@@ -283,6 +286,9 @@ def parse_state(state_str):
     sep = obj.get("sep")
     if not isinstance(sep, str):
         sep = ", "
+    cache_mode = obj.get("cacheMode")
+    if cache_mode not in ("last", "all", "none"):
+        cache_mode = "last"
     loras = []
     raw = obj.get("loras")
     if isinstance(raw, list):
@@ -302,7 +308,7 @@ def parse_state(state_str):
                 "triggers": [str(w).strip() for w in trg if str(w).strip()]
                             if isinstance(trg, list) else [],
             })
-    return {"loras": loras, "sep": sep}
+    return {"loras": loras, "sep": sep, "cacheMode": cache_mode}
 
 
 def collect_triggers(state):

@@ -27,6 +27,11 @@ export const DEFAULT_PREFS = {
   thumbs: true,       // show preview thumbnails in the info panel
   hideExt: true,      // show "MoXin" instead of "MoXin.safetensors" on the rows
   accent: null,       // highlight colour; null = the Pixaroma orange
+  // How much LoRA data Python keeps in RAM between runs (gear "LoRA memory use"):
+  // "last" (default) = ComfyUI parity, keep only the most recently used file;
+  // "all" = keep the whole stack (fastest re-runs, gigabytes for big stacks);
+  // "none" = keep nothing (lowest memory, re-read files every run).
+  cacheMode: "last",
 };
 
 export const DEFAULT_STATE = {
@@ -89,6 +94,7 @@ function normalize(raw) {
   st.thumbs = st.thumbs == null ? true : !!st.thumbs;
   st.hideExt = st.hideExt == null ? true : !!st.hideExt;
   if (st.accent != null && typeof st.accent !== "string") st.accent = null;
+  st.cacheMode = st.cacheMode === "all" || st.cacheMode === "none" ? st.cacheMode : "last";
   st.loras = (Array.isArray(st.loras) ? st.loras : [])
     .map((e) => normLora(e, st))
     .filter(Boolean)
@@ -236,6 +242,12 @@ export function promptState(state) {
   return {
     version: 1,
     sep: state.sep,
+    // cacheMode is deliberately INCLUDED although it never changes the outputs:
+    // Python only sees what the prompt carries, and it needs the memory mode to
+    // know what to keep between runs. Cost: flipping the mode re-runs the node
+    // once - acceptable for a memory-behavior switch, unlike the cosmetic prefs
+    // above which stay stripped (the documented re-cache trap).
+    cacheMode: state.cacheMode,
     loras: state.loras.map((e) => ({
       name: e.name, on: !!e.on, sm: e.sm, sc: e.sc, triggers: e.triggers,
     })),

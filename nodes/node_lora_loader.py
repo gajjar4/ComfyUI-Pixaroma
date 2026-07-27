@@ -59,9 +59,16 @@ class PixaromaLoraLoader:
     CATEGORY = "👑 Pixaroma/🧰 Utility"
 
     def __init__(self):
-        # path -> (lora_state_dict, lora_metadata). Kept across runs so re-running
-        # doesn't re-read the files; pruned each run to only the LoRAs still in use.
+        # path -> (lora_state_dict, lora_metadata). What survives BETWEEN runs is the
+        # user's choice (gear "LoRA memory use", carried in the state as cacheMode):
+        #   "last" (default) = ComfyUI parity, keep only the most recently used file;
+        #   "all"  = keep the whole current stack (fastest re-runs, gigabytes for a
+        #            big stack - the pre-2026-07-27 always-on behavior);
+        #   "none" = keep nothing, re-read every run (lowest memory).
+        # In "last"/"none" each entry is also released DURING the run right after it
+        # is applied, so peak memory stays ~one LoRA instead of the whole stack.
         self._cache = {}
+        self._last_path = None
 
     def _get_lora(self, path):
         cached = self._cache.get(path)
@@ -80,6 +87,7 @@ class PixaromaLoraLoader:
 
     def apply(self, model, clip=None, LoraLoaderState="{}"):
         state = H.parse_state(LoraLoaderState)
+        cache_mode = state.get("cacheMode", "last")
 
         # Rows whose LoRA was actually applied (or deliberately parked at strength 0).
         # ONLY these contribute trigger words, so the triggers output never claims words
@@ -123,6 +131,12 @@ class PixaromaLoraLoader:
                 used_paths.add(path)
                 applied += 1
                 resolved.append(entry)  # actually applied -> its triggers count
+                if cache_mode != "all":
+                    # Release the PREVIOUS row's data as soon as this one is applied,
+                    # so a 10-row stack peaks at ~one LoRA in RAM, not ten.
+                    if self._last_path is not None and self._last_path != path:
+                        self._cache.pop(self._last_path, None)
+                    self._last_path = path
             except Exception as exc:
                 # Load failed -> NOT resolved, so its words don't reach the output.
                 print("[LoRA Loader Pixaroma] failed to apply {}: {}".format(name, exc))
@@ -131,10 +145,20 @@ class PixaromaLoraLoader:
         # resolved row is on, so it dedups + joins their picked words).
         triggers = H.collect_triggers({"loras": resolved, "sep": state.get("sep", ", ")})
 
-        # Free cache entries for LoRAs the user removed, so memory tracks the node.
-        for path in list(self._cache):
-            if path not in used_paths:
-                del self._cache[path]
+        # Prune per the user's memory mode (see __init__).
+        if cache_mode == "none":
+            self._cache.clear()
+            self._last_path = None
+        elif cache_mode == "all":
+            # Free entries for LoRAs the user removed, so memory tracks the node.
+            for path in list(self._cache):
+                if path not in used_paths:
+                    del self._cache[path]
+        else:  # "last": ComfyUI parity - at most ONE entry survives the run
+            keep = self._last_path
+            for path in list(self._cache):
+                if path != keep:
+                    del self._cache[path]
 
         print("[LoRA Loader Pixaroma] applied {} LoRA(s).".format(applied))
         return (model, clip, triggers)

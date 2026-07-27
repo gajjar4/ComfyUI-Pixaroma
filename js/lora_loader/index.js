@@ -293,6 +293,15 @@ registerNodeHelp(CLASS, {
         "the Civitai button, thumbnails, and the highlight colour). Right-click a row to move it, duplicate " +
         "it, or remove it.",
     },
+    {
+      heading: "LoRA memory use",
+      body:
+        "In the gear. Standard keeps only the last used LoRA file in memory between runs, the way ComfyUI " +
+        "itself does - the balanced default. Fast keeps the whole stack loaded for the quickest re-runs, " +
+        "which can hold a lot of memory with several large LoRAs. Lowest keeps nothing and re-reads the " +
+        "files each run - the best choice on a machine with limited memory. If a LoRA's file has been " +
+        "renamed or removed, its row shows a red warning and it is skipped until you pick the file again.",
+    },
   ],
   footer: "Trigger words are read from the file, so it works offline. Civitai is optional and off until you click it.",
 });
