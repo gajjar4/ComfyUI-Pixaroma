@@ -10,11 +10,6 @@
 // State lives on node.properties.outpaintState and is injected into the hidden
 // OutpaintState input by the graphToPrompt hook at the bottom (Vue Compat #9),
 // so nothing here needs a visible widget or an input dot.
-//
-// The chevron, the gear and the colour swatch are rendered at their final
-// geometry but are deliberately INERT: the settings panel is a later task and a
-// button that opens nothing would be a lie. They carry the "dim" class until
-// then so they read as not-yet-live rather than broken.
 
 import { app } from "/scripts/app.js";
 import { api } from "/scripts/api.js";
@@ -69,17 +64,18 @@ const ROW_GAP = 6;  // gap between rows
 const PREVIEW_MIN = 120;
 // Four rows (148) + a gap + the preview at its minimum, plus the cards strip in
 // Nodes 2.0 (where it is a real row rather than paint on the node body). Used
-// ONLY while the root is unmounted, so it must track the row set: any task that
-// adds or removes a row has to move this with it.
+// ONLY while the root is unmounted, so it must track the TALLEST row set: any
+// task that adds or removes a row SHOWN IN TO RATIO MODE has to move this
+// with it.
 //
-// 148 encodes the TALLEST row set, not the row COUNT - and the tallest set is
-// To ratio (mode + ratio + Add space + limit). The By side pad row added later
-// does NOT change it, because By side hides the ratio and Add space rows, so it
-// shows three rows where To ratio shows four. Do NOT "helpfully" raise this to
-// five rows for it: this value is what the load-time fit pass reads (the widget
-// root is not mounted yet then, so measureFloor returns this cache), and raising
-// it would grow every saved Outpaint node on open - the exact regression the
-// comment above is meant to prevent. Only a row shown in RATIO mode moves it.
+// The emphasis matters, because 148 encodes the tallest set (To ratio: mode +
+// ratio + Add space + limit), NOT the row count. The By side pad row does not
+// move it: By side hides the ratio and Add space rows, so it shows three rows
+// where To ratio shows four. Do NOT raise this "for consistency" - measured,
+// this value is what the load-time fit pass reads (the widget root is not
+// mounted yet then, so measureFloor returns this cache), so raising it would
+// grow every saved Outpaint node on open, which is the very regression this
+// constant exists to avoid.
 const CARDS_H = 38;
 function floorFallback() {
   return 148 + ROW_GAP + PREVIEW_MIN + (isVueNodes() ? CARDS_H + ROW_GAP : 0);
@@ -194,6 +190,12 @@ function watchSource(node) {
     }
     const sig = sourceSig(node);
     if (sig === node._pixOpSrcSig) return;
+    // renderFace rebuilds every row, which would remove a pad field the user is
+    // typing in and discard the half-typed text with it (removing a focused
+    // element fires no blur, so it goes silently). Repaint the picture now and
+    // leave the signature UNCHANGED so the next tick retries the rebuild once
+    // focus has moved on.
+    if (focusedPadInput(node)) { requestPreviewRedraw(node); return; }
     node._pixOpSrcSig = sig;
     // The rows depend on the source too (the Add space triplet follows the
     // source aspect), so repaint the whole face, not just the preview.
@@ -271,15 +273,18 @@ function injectCSS() {
 
     /* Reset: all four edges back to 0 in one click. Square like the chevron
        and gear, and it sits with the numbers it clears. */
+    /* A real <button>, so padding/font have to be reset to match the chips. */
     .pix-op-reset { flex:0 0 auto; width:26px; min-height:28px; box-sizing:border-box;
       display:flex; align-items:center; justify-content:center;
       background:#1d1d1d; border:1px solid #444; border-radius:5px;
-      color:#aaa; cursor:pointer;
+      color:#aaa; cursor:pointer; padding:0; font:inherit;
       transition:border-color .08s, color .08s; }
-    .pix-op-reset:hover { border-color:var(--pix-op-acc,${BRAND});
+    .pix-op-reset:hover:not(:disabled) { border-color:var(--pix-op-acc,${BRAND});
       color:var(--pix-op-acc,${BRAND}); }
-    .pix-op-reset.dim { opacity:.4; cursor:default; }
-    .pix-op-reset.dim:hover { border-color:#444; color:#aaa; }
+    .pix-op-reset:focus-visible { border-color:var(--pix-op-acc,${BRAND});
+      color:var(--pix-op-acc,${BRAND}); outline:none; }
+    /* Nothing to reset: genuinely inert, not merely faded. */
+    .pix-op-reset:disabled { opacity:.4; cursor:default; }
     /* A mask, not a text glyph: no font-fallback tofu risk, and it matches the
        Reset on the shared pad panel. */
     .pix-op-reset-ic { width:12px; height:12px; background-color:currentColor;
@@ -502,22 +507,37 @@ function renderPadRow(node, host) {
   for (const [key, letter, name] of PAD_SIDES) {
     const cell = document.createElement("div");
     cell.className = "pix-op-pad";
-    cell.title = name + ": pixels of fill to add on that edge. Maths works too, e.g. 512*2.";
+    const tip = name + " edge: pixels of fill to add. Maths works, e.g. 512*2.";
+    cell.title = tip;
     const lab = document.createElement("span");
     lab.className = "pix-op-pad-l";
     lab.textContent = letter;
     cell.appendChild(lab);
 
+    // The opts object is HELD, not thrown away: makeNumericInput mutates this
+    // very object and reads opts.value as its fallback whenever the typed text
+    // does not parse (and as the base for an arrow step from an empty field).
+    // syncPadInputs must therefore refresh opts.value as well as the visible
+    // text - writing only el.value would strand the fallback at the number this
+    // row was BUILT with, so clearing a field after a drag would revert to a
+    // pre-drag value instead of the one on screen.
+    //
     // sidePad is the SAME clamp Python applies while parsing state, so a typed
     // value can never preview a pad the run would discard.
-    const built = makeNumericInput({
+    const opts = {
       value: sidePad(st[key]),
       min: 0, max: MAX_PAD, step: 1,
       format: (v) => String(Math.round(v)),
       onCommit: (v) => commitPad(node, key, v),
-    });
+    };
+    const built = makeNumericInput(opts);
+    // makeNumericInput sets its own generic maths title on the input, which
+    // covers nearly the whole cell - so without this the tooltip never says
+    // WHICH edge the box is (the letter has pointer-events:none and falls
+    // through to the cell, but the number the user aims at does not).
+    built.input.title = tip;
     cell.appendChild(built.wrap);
-    inputs[key] = built.input;
+    inputs[key] = { el: built.input, opts };
     // A press on the field must not reach the LiteGraph canvas underneath, or
     // the node drags out from under the cursor as the user clicks into the box.
     // Same guard installDrag puts on the preview.
@@ -526,16 +546,31 @@ function renderPadRow(node, host) {
   }
   node._pixOpPadInputs = inputs;
 
-  const rst = document.createElement("div");
-  const empty = !st.left && !st.top && !st.right && !st.bottom;
-  rst.className = "pix-op-reset" + (empty ? " dim" : "");
-  rst.title = empty ? "Nothing to reset - all four edges are already 0"
-                    : "Reset all four edges to 0";
+  // A real <button>, not a styled div: it gets an accessible name, a focus ring
+  // and Enter/Space for free, and `disabled` makes "nothing to reset" genuinely
+  // inert rather than merely faded. Matches the shared pad panel's own Reset.
+  const rst = document.createElement("button");
+  rst.type = "button";
+  rst.className = "pix-op-reset";
+  rst.setAttribute("aria-label", "Reset all four edges to 0");
   const ic = document.createElement("span");
   ic.className = "pix-op-reset-ic";
   rst.appendChild(ic);
-  if (!empty) rst.onclick = () => resetPads(node);
+  rst.onclick = () => resetPads(node);
   host.appendChild(rst);
+  refreshResetState(node); // sets disabled + title from the live state
+}
+
+// The pad input that currently has focus, or null. Used to avoid two distinct
+// ways of silently eating a half-typed value.
+function focusedPadInput(node) {
+  const inputs = node._pixOpPadInputs;
+  if (!inputs) return null;
+  for (const [key] of PAD_SIDES) {
+    const f = inputs[key];
+    if (f && f.el === document.activeElement) return f.el;
+  }
+  return null;
 }
 
 // A typed value deliberately does NOT commit through apply(): that calls
@@ -546,8 +581,7 @@ function commitPad(node, key, value) {
   const v = sidePad(value);
   if (sidePad(readState(node)[key]) === v) return; // nothing actually moved
   writeState(node, { [key]: v });
-  requestPreviewRedraw(node);
-  renderCardsCanvas(node);            // Nodes 2.0: cards live on our own canvas
+  requestPreviewRedraw(node);         // repaints the picture AND the size cards
   node.setDirtyCanvas?.(true, true);  // legacy: cards are painted on the body
   refreshResetState(node);            // 0 -> non-zero re-arms the reset button
 }
@@ -569,10 +603,9 @@ function refreshResetState(node) {
   if (!btn) return;
   const st = readState(node);
   const empty = !st.left && !st.top && !st.right && !st.bottom;
-  btn.classList.toggle("dim", empty);
+  btn.disabled = empty;
   btn.title = empty ? "Nothing to reset - all four edges are already 0"
                     : "Reset all four edges to 0";
-  btn.onclick = empty ? null : () => resetPads(node);
 }
 
 // The edge-drag writes state WITHOUT rebuilding the rows (it must not, at
@@ -583,11 +616,16 @@ function syncPadInputs(node) {
   if (!inputs) return;
   const st = readState(node);
   for (const [key] of PAD_SIDES) {
-    const el = inputs[key];
+    const f = inputs[key];
     // Never fight a field the user is actively typing in.
-    if (!el || !el.isConnected || el === document.activeElement) continue;
-    const v = String(sidePad(st[key]));
-    if (el.value !== v) el.value = v;
+    if (!f || !f.el.isConnected || f.el === document.activeElement) continue;
+    const v = sidePad(st[key]);
+    // BOTH, always: the visible text and the field's own non-parsing fallback.
+    // See the comment where opts is built - updating only the text leaves a
+    // stale fallback that can undo a drag.
+    f.opts.value = v;
+    const text = String(v);
+    if (f.el.value !== text) f.el.value = text;
   }
   refreshResetState(node);
 }
@@ -911,6 +949,11 @@ function requestPreviewRedraw(node) {
   node._pixOpRaf = requestAnimationFrame(() => {
     node._pixOpRaf = null;
     renderPreview(node);
+    // The size cards read padsForState too, so they must ride the same frame or
+    // they state the pre-drag numbers while the picture shows the new ones. In
+    // legacy they are painted on the node body and setDirtyCanvas covers them;
+    // in Nodes 2.0 they are our own canvas and nothing else would repaint them.
+    renderCardsCanvas(node);
   });
 }
 
@@ -962,6 +1005,14 @@ function installDrag(node) {
 
   prev.addEventListener("pointerdown", (e) => {
     if (e.button !== 0) return;
+    // Commit and release any pad box still holding focus, BEFORE the geometry
+    // is read. Two things conspire otherwise: syncPadInputs deliberately skips
+    // the focused field, and the preventDefault below stops the browser moving
+    // focus off it - so that box would show its pre-drag number for the whole
+    // gesture and then commit that stale text on its eventual blur, silently
+    // undoing the drag. Blurring first also means d.pads starts from the number
+    // the user actually typed.
+    focusedPadInput(node)?.blur();
     const ps = previewState(node);
     if (!ps) return;
     const [lx, ly] = localPos(prev, e);
