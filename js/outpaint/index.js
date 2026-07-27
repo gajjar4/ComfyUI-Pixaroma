@@ -23,9 +23,11 @@ import { isGraphLoading } from "../shared/graph_loading.mjs";
 import { installCanvasZoomPassthrough } from "../shared/canvas_zoom.mjs";
 import {
   ACCENT_SETTING, BRAND, DEFAULT_STATE, MAX_PAD, STATE_PROP,
-  anchorAxis, finalSize, limitsOf, padsForState, ratiosOf, readState, remapAnchor, writeState,
+  anchorAxis, finalSize, limitsOf, padsForState, ratiosOf, readState, remapAnchor,
+  sidePad, writeState,
 } from "./core.mjs";
 import { openPixaromaColorPickerPopup, PIXAROMA_PALETTE } from "../shared/color_picker.mjs";
+import { makeNumericInput, injectResizePanelCSS } from "../shared/resize_panel.mjs";
 import { openOutpaintSettings, closeOutpaintSettingsFor } from "./settings.mjs";
 
 // The node's accent: its own saved colour, else the global default, else BRAND.
@@ -69,6 +71,15 @@ const PREVIEW_MIN = 120;
 // Nodes 2.0 (where it is a real row rather than paint on the node body). Used
 // ONLY while the root is unmounted, so it must track the row set: any task that
 // adds or removes a row has to move this with it.
+//
+// 148 encodes the TALLEST row set, not the row COUNT - and the tallest set is
+// To ratio (mode + ratio + Add space + limit). The By side pad row added later
+// does NOT change it, because By side hides the ratio and Add space rows, so it
+// shows three rows where To ratio shows four. Do NOT "helpfully" raise this to
+// five rows for it: this value is what the load-time fit pass reads (the widget
+// root is not mounted yet then, so measureFloor returns this cache), and raising
+// it would grow every saved Outpaint node on open - the exact regression the
+// comment above is meant to prevent. Only a row shown in RATIO mode moves it.
 const CARDS_H = 38;
 function floorFallback() {
   return 148 + ROW_GAP + PREVIEW_MIN + (isVueNodes() ? CARDS_H + ROW_GAP : 0);
@@ -230,6 +241,50 @@ function injectCSS() {
     .pix-op-sq { flex:0 0 auto; width:30px; padding:6px 0; font-size:14px; line-height:1; }
     .pix-op-alabel { flex:0 0 auto; display:flex; align-items:center;
       color:#8a8a8a; padding-right:1px; white-space:nowrap; }
+
+    /* By side pad fields: L / T / R / B, one per edge. The shared
+       makeNumericInput is reused for its maths entry and, more importantly,
+       its keydown isolation (the canvas grabs arrows and Enter otherwise) -
+       but its 13px spinner column is dropped, because four fields plus a
+       reset only fit across this node at its minimum width once the arrows
+       are gone. min-width keeps all five on one line rather than wrapping. */
+    /* min-height matches a chip row (the fields' own content is only ~16px, and
+       .pix-op-row stretches, so without this the whole row reads as a thin
+       cramped strip against the 28px rows above and below it). */
+    .pix-op-pad { flex:1 1 0; min-width:44px; min-height:28px; box-sizing:border-box;
+      display:flex; align-items:center; gap:3px;
+      background:#1d1d1d; border:1px solid #444; border-radius:5px;
+      padding:0 4px 0 6px; }
+    .pix-op-pad:focus-within { border-color:var(--pix-op-acc,${BRAND}); }
+    .pix-op-pad-l { flex:0 0 auto; font-size:9px; font-weight:700; color:#8a8a8a;
+      letter-spacing:.5px; pointer-events:none; }
+    /* Strip the shared wrapper's own box so only .pix-op-pad draws one. */
+    .pix-op-pad .pix-li-numinput { flex:1 1 auto; min-width:0;
+      border:none !important; background:transparent !important;
+      border-radius:0 !important; }
+    .pix-op-pad .pix-li-spin { display:none !important; }
+    /* user-select is none on .pix-op-inner and inherits, which would stop the
+       user drag-selecting the number they are about to replace. */
+    .pix-op-pad .pix-li-numinput input { padding:0 !important;
+      text-align:right !important; color:var(--pix-op-acc,${BRAND});
+      user-select:text; }
+
+    /* Reset: all four edges back to 0 in one click. Square like the chevron
+       and gear, and it sits with the numbers it clears. */
+    .pix-op-reset { flex:0 0 auto; width:26px; min-height:28px; box-sizing:border-box;
+      display:flex; align-items:center; justify-content:center;
+      background:#1d1d1d; border:1px solid #444; border-radius:5px;
+      color:#aaa; cursor:pointer;
+      transition:border-color .08s, color .08s; }
+    .pix-op-reset:hover { border-color:var(--pix-op-acc,${BRAND});
+      color:var(--pix-op-acc,${BRAND}); }
+    .pix-op-reset.dim { opacity:.4; cursor:default; }
+    .pix-op-reset.dim:hover { border-color:#444; color:#aaa; }
+    /* A mask, not a text glyph: no font-fallback tofu risk, and it matches the
+       Reset on the shared pad panel. */
+    .pix-op-reset-ic { width:12px; height:12px; background-color:currentColor;
+      -webkit-mask: url("/pixaroma/assets/icons/ui/reset.svg") center/12px 12px no-repeat;
+              mask: url("/pixaroma/assets/icons/ui/reset.svg") center/12px 12px no-repeat; }
 
     /* The fill-colour swatch. Clickable on the limit row (opens the fill
        picker); a plain readout in the folded summary. */
@@ -421,6 +476,120 @@ function renderAnchorRow(node, host) {
     }
     host.appendChild(c);
   }
+}
+
+// ── By side: type the four pad values ──────────────────────────────────────
+// Dragging a green edge was the only way to set these. The numbers themselves
+// already exist in state - the drag writes exactly these four keys - so typing
+// one adds no saved data, needs no Python change, and an existing workflow
+// round-trips unchanged.
+//
+// Left-to-right in the order the eye reads a frame: L T R B.
+const PAD_SIDES = [["left", "L", "Left"], ["top", "T", "Top"],
+                   ["right", "R", "Right"], ["bottom", "B", "Bottom"]];
+
+// Shown ONLY in By side mode. padsForState ignores all four values in ratio
+// mode (core.mjs), so a field there would be a control that visibly does
+// nothing - the same reason the ratio and Add space rows hide themselves in
+// the other direction. Resetting in ratio mode is already one click on a
+// ratio chip, so the reset hides with them.
+function renderPadRow(node, host) {
+  const st = readState(node);
+  host.style.display = st.mode === "sides" ? "" : "none";
+  if (st.mode !== "sides") return;
+
+  const inputs = {};
+  for (const [key, letter, name] of PAD_SIDES) {
+    const cell = document.createElement("div");
+    cell.className = "pix-op-pad";
+    cell.title = name + ": pixels of fill to add on that edge. Maths works too, e.g. 512*2.";
+    const lab = document.createElement("span");
+    lab.className = "pix-op-pad-l";
+    lab.textContent = letter;
+    cell.appendChild(lab);
+
+    // sidePad is the SAME clamp Python applies while parsing state, so a typed
+    // value can never preview a pad the run would discard.
+    const built = makeNumericInput({
+      value: sidePad(st[key]),
+      min: 0, max: MAX_PAD, step: 1,
+      format: (v) => String(Math.round(v)),
+      onCommit: (v) => commitPad(node, key, v),
+    });
+    cell.appendChild(built.wrap);
+    inputs[key] = built.input;
+    // A press on the field must not reach the LiteGraph canvas underneath, or
+    // the node drags out from under the cursor as the user clicks into the box.
+    // Same guard installDrag puts on the preview.
+    cell.addEventListener("pointerdown", (e) => e.stopPropagation());
+    host.appendChild(cell);
+  }
+  node._pixOpPadInputs = inputs;
+
+  const rst = document.createElement("div");
+  const empty = !st.left && !st.top && !st.right && !st.bottom;
+  rst.className = "pix-op-reset" + (empty ? " dim" : "");
+  rst.title = empty ? "Nothing to reset - all four edges are already 0"
+                    : "Reset all four edges to 0";
+  const ic = document.createElement("span");
+  ic.className = "pix-op-reset-ic";
+  rst.appendChild(ic);
+  if (!empty) rst.onclick = () => resetPads(node);
+  host.appendChild(rst);
+}
+
+// A typed value deliberately does NOT commit through apply(): that calls
+// renderFace, which rebuilds every row - destroying the very input the user is
+// typing in and taking the caret with it. Follow the drag's path instead: write
+// the state, repaint the picture and the size cards, leave the rows alone.
+function commitPad(node, key, value) {
+  const v = sidePad(value);
+  if (sidePad(readState(node)[key]) === v) return; // nothing actually moved
+  writeState(node, { [key]: v });
+  requestPreviewRedraw(node);
+  renderCardsCanvas(node);            // Nodes 2.0: cards live on our own canvas
+  node.setDirtyCanvas?.(true, true);  // legacy: cards are painted on the body
+  refreshResetState(node);            // 0 -> non-zero re-arms the reset button
+}
+
+// One click back to no padding at all. A one-shot action, so the full renderFace
+// is fine here - and it is what refills the four fields with 0 and dims the
+// button again.
+function resetPads(node) {
+  const st = readState(node);
+  if (!st.left && !st.top && !st.right && !st.bottom) return;
+  apply(node, { left: 0, top: 0, right: 0, bottom: 0 });
+}
+
+// Enable/dim the reset without rebuilding the row (which would eject the caret
+// mid-typing). Cheap enough to call on every commit and every drag frame.
+function refreshResetState(node) {
+  const ui = node._pixOpUI;
+  const btn = ui && ui.inner.querySelector(".pix-op-reset");
+  if (!btn) return;
+  const st = readState(node);
+  const empty = !st.left && !st.top && !st.right && !st.bottom;
+  btn.classList.toggle("dim", empty);
+  btn.title = empty ? "Nothing to reset - all four edges are already 0"
+                    : "Reset all four edges to 0";
+  btn.onclick = empty ? null : () => resetPads(node);
+}
+
+// The edge-drag writes state WITHOUT rebuilding the rows (it must not, at
+// 120Hz), so the boxes would sit on stale numbers for the whole gesture. Push
+// the live values straight into the inputs instead.
+function syncPadInputs(node) {
+  const inputs = node._pixOpPadInputs;
+  if (!inputs) return;
+  const st = readState(node);
+  for (const [key] of PAD_SIDES) {
+    const el = inputs[key];
+    // Never fight a field the user is actively typing in.
+    if (!el || !el.isConnected || el === document.activeElement) continue;
+    const v = String(sidePad(st[key]));
+    if (el.value !== v) el.value = v;
+  }
+  refreshResetState(node);
 }
 
 function renderLimitRow(node, host) {
@@ -842,8 +1011,9 @@ function installDrag(node) {
     writeState(node, patch);
     // The mode chips and the Add space row only change on the flip; every other
     // move is the picture alone, so do not rebuild the rows 120 times a second.
+    // The pad boxes still have to keep up, so they are written directly.
     if (patch.mode) renderFace(node);
-    else requestPreviewRedraw(node);
+    else { syncPadInputs(node); requestPreviewRedraw(node); }
   });
 
   const end = (e) => {
@@ -871,6 +1041,11 @@ function renderFace(node) {
   for (const el of [...inner.children]) {
     if (el !== ui.prev && el !== ui.cards) el.remove();
   }
+  // The pad fields live on a row that was just removed, so the cached
+  // references are dead until renderPadRow hands over fresh ones. Clearing
+  // here (not in renderPadRow) also covers the folded path, which never calls
+  // it at all - syncPadInputs would otherwise write into detached inputs.
+  node._pixOpPadInputs = null;
   renderModeRow(node, row(inner));
   // Folded drops the three control rows and keeps the mode summary + cards +
   // preview. The mode row above already rendered its summary form; skipping the
@@ -879,6 +1054,9 @@ function renderFace(node) {
   if (!readState(node).collapsed) {
     renderRatioRow(node, row(inner));
     renderAnchorRow(node, row(inner));
+    // By side only. It costs no height overall: this mode hides the two rows
+    // above, so it shows three rows where To ratio shows four.
+    renderPadRow(node, row(inner));
     renderLimitRow(node, row(inner));
   }
   // Re-assert the order: cards on top, preview last. Both calls MOVE the
@@ -1104,6 +1282,7 @@ app.registerExtension({
     nodeType.prototype._pixOpPatched = true;
 
     injectCSS();
+    injectResizePanelCSS(); // the .pix-li-* base for the shared numeric fields
 
     const _origConfigure = nodeType.prototype.onConfigure;
     nodeType.prototype.onConfigure = function (info) {
@@ -1156,6 +1335,7 @@ app.registerExtension({
       if (this._pixOpRaf) cancelAnimationFrame(this._pixOpRaf);
       this._pixOpRaf = null;
       this._pixOpDrag = null;
+      this._pixOpPadInputs = null;
       // Close THIS node's settings panel and fill picker if either was open, or
       // their window listeners would outlive the node.
       closeOutpaintSettingsFor(this);
@@ -1169,10 +1349,20 @@ app.registerExtension({
   // (Vue Compat #20), NOT the deprecated getNodeMenuOptions monkey-patch.
   getNodeMenuItems(node) {
     if (node?.comfyClass !== CLASS) return [];
-    const folded = !!readState(node).collapsed;
+    const st = readState(node);
+    const folded = !!st.collapsed;
+    // A second way to the reset, for when the node is folded or the user is
+    // already in the menu. Disabled rather than hidden in ratio mode, where the
+    // pads are derived and a ratio chip is the way back.
+    const padded = !!(st.left || st.top || st.right || st.bottom);
     return [
       null,
       { content: folded ? "▸ Expand" : "▾ Collapse", callback: () => toggleFold(node) },
+      {
+        content: "↺ Reset padding",
+        disabled: st.mode !== "sides" || !padded,
+        callback: () => resetPads(node),
+      },
       { content: "⚙ Outpaint settings", callback: () => openSettings(node) },
     ];
   },

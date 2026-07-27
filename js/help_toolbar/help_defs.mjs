@@ -87,7 +87,18 @@ const HELP = {
         heading: "The two modes",
         defs: [
           ["To ratio", "Grow the image to a target shape, like 16:9 or 3:2. The node works out how much fill to add. Pick which ratios appear in the settings (the gear)."],
-          ["By side", "Add an exact number of pixels to a chosen edge. Drag a green edge in the preview to set it by hand; this also switches you to By side automatically."],
+          ["By side", "Add an exact number of pixels to a chosen edge. Drag a fill edge in the preview to set it by hand; this also switches you to By side automatically. Or type the numbers straight into the `L` `T` `R` `B` boxes."],
+        ],
+      },
+      {
+        heading: "Setting the four edges by hand",
+        body: "By side mode shows a box per edge: `L` left, `T` top, `R` right, `B` bottom, each in pixels of fill to add.",
+        bullets: [
+          "Type a number and press Enter, or click away, to apply it. The preview and the size cards update as you go.",
+          "Sums work too, so `512*2` or `1024+128` are fine.",
+          "Arrow keys nudge by 1, and Shift with an arrow nudges by 10.",
+          "Dragging an edge in the preview fills the matching box in live, so the two ways always agree.",
+          "The `↺` button at the end of the row puts all four edges back to 0 in one click. It is also on the node's right-click menu.",
         ],
       },
       {
