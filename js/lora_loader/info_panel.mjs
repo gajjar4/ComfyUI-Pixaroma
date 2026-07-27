@@ -165,6 +165,9 @@ export async function openInfoPanel(node, id, refresh) {
   // when a saved sidecar / fresh lookup exists, else the file's own words). The
   // user's SELECTED words persist regardless of the view (they live in row.triggers).
   let viewSource = null;
+  // Bumped whenever this panel rewrites the sidecar (Civitai fetch / delete) so
+  // thumb() busts the browser's hour-long image cache for the changed preview.
+  let _thumbBust = 0;
 
   const selected = () => new Set((readState(node).loras.find((e) => e.id === id)?.triggers || []).map((w) => w.toLowerCase()));
 
@@ -256,7 +259,10 @@ export async function openInfoPanel(node, id, refresh) {
 
   function thumb() {
     if (civ?.state === "found" && civ.info?.thumbnail) return civ.info.thumbnail;
-    if (info.has_preview && name) return thumbUrl(name);
+    // _thumbBust is set when THIS panel changed the sidecar (Civitai fetch/delete):
+    // the thumb URL never changes and the route sends max-age=3600, so without the
+    // bust the browser kept showing the pre-change image for up to an hour.
+    if (info.has_preview && name) return thumbUrl(name, _thumbBust);
     return null;
   }
 
@@ -428,6 +434,7 @@ export async function openInfoPanel(node, id, refresh) {
     if (res.ok && res.found) {
       civ = { state: "found", info: res.info || {} };
       viewSource = "civitai";               // found on Civitai -> switch the view to its words
+      _thumbBust = Date.now();              // the lookup may have written a new preview
       invalidateInfo(name);
       // refresh offline info so the source badge / cached ids reflect the new sidecar,
       // then repaint (the panel may have been closed meanwhile - guard on isConnected).
@@ -445,6 +452,7 @@ export async function openInfoPanel(node, id, refresh) {
   async function runDeleteCivitai() {
     await deleteCivitai(name);
     if (!panel.isConnected) return;
+    _thumbBust = Date.now();              // the sidecar (and so the preview) changed
     invalidateInfo(name);                 // drop the cached (sidecar-flavoured) info
     civ = null;
     viewSource = "file";                  // nothing to toggle to now - show the file words

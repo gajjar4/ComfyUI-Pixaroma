@@ -42,6 +42,8 @@ export { installResizeFloor, measureRootContent } from "./resize_floor.mjs";
 
 export { installCanvasZoomPassthrough } from "./canvas_zoom.mjs";
 
+export { onNodeDefsRefresh, runRefreshHandlers, installRefreshHook } from "./refresh.mjs";
+
 export {
   createPixaromaColorPicker,
   openPixaromaColorPickerPopup,

@@ -309,7 +309,12 @@ function setupNode(node) {
       renderUI(node);
       return;
     }
-    if (!node._pixLifFiles) await refreshListing(node, true);
+    // ALWAYS re-list on open (not just the first time): the folder's contents can
+    // change under us (files renamed/added/deleted), and a stale listing here
+    // silently produces a wrong image batch. The route is a live folder walk, the
+    // token guard in refreshListing handles racing opens, and the userAction flag
+    // prunes selections of files that no longer exist.
+    await refreshListing(node, true);
     openPickGallery(node, ui.pickBtn, {
       onChange: renderUI,
       refreshListing: (n) => refreshListing(n, true),

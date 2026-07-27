@@ -14,7 +14,9 @@ export async function listLoras(force = false) {
   _listPromise = (async () => {
     let result = [];
     try {
-      const r = await fetch("/pixaroma/api/lora/list");
+      // no-store: the route sends no cache headers, and a heuristically-cached
+      // copy of this list is exactly the "renamed file never appears" bug.
+      const r = await fetch("/pixaroma/api/lora/list", { cache: "no-store" });
       const j = await r.json();
       _listCache = Array.isArray(j.loras) ? j.loras : [];
       result = _listCache;
@@ -62,8 +64,29 @@ export function invalidateInfo(name) {
   _infoCache.delete(name);
 }
 
-export function thumbUrl(name) {
-  return "/pixaroma/api/lora/thumb?name=" + encodeURIComponent(name);
+// Refresh-time invalidators (wired to ComfyUI's R via js/shared/refresh.mjs).
+// The list cache goes stale the moment a file is renamed/added on disk; the
+// server is always fresh (folder_paths re-validates on directory mtime), so
+// dropping OUR copy is all a refresh needs.
+export function invalidateList() {
+  _listCache = null;
+}
+export function invalidateAllInfo() {
+  _infoCache.clear();
+}
+
+// Is this name in the last fetched list? null = list not fetched yet (unknown),
+// so callers can avoid false "missing" marks before the first load.
+export function hasLora(name) {
+  return _listCache ? _listCache.includes(name) : null;
+}
+
+// `bust` (a timestamp or counter) forces past the browser's image cache - the
+// thumb route sends max-age=3600 and the URL otherwise never changes, so a
+// preview replaced by a Civitai fetch kept showing the OLD image up to an hour.
+export function thumbUrl(name, bust) {
+  return "/pixaroma/api/lora/thumb?name=" + encodeURIComponent(name) +
+    (bust ? "&t=" + bust : "");
 }
 
 export async function civitaiLookup(name) {

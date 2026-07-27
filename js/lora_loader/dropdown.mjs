@@ -108,7 +108,11 @@ export async function openLoraDropdown(anchorEl, opts) {
   }
   place();
 
-  const all = await listLoras();
+  // Force-fetch on EVERY open: the list is tiny, the server re-validates against
+  // disk each request, and serving the session cache here is exactly the reported
+  // bug (rename a file, press R, picker still shows the old name until a full
+  // restart). Freshness on open also covers users who never press R at all.
+  const all = await listLoras(true);
   if (!pop.isConnected) return; // closed while loading
 
   // Folder navigation: `curPath` is the folder we're browsing ("" = root). Typing

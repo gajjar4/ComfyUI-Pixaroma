@@ -7,7 +7,8 @@
 // (Vue Compat #9). Info panel, gear panel, dropdown, and row menu live in siblings.
 
 import { app } from "/scripts/app.js";
-import { hideJsonWidget, applyAdaptiveCanvasOnly, installCanvasZoomPassthrough } from "../shared/index.mjs";
+import { hideJsonWidget, applyAdaptiveCanvasOnly, installCanvasZoomPassthrough, onNodeDefsRefresh, installRefreshHook } from "../shared/index.mjs";
+import { listLoras, invalidateList, invalidateAllInfo } from "./api.mjs";
 import { isVueNodes } from "../shared/nodes2.mjs";
 import { isGraphLoading } from "../shared/graph_loading.mjs";
 import { registerNodeHelp } from "../shared/help.mjs";
@@ -23,6 +24,21 @@ import { closeLoraDropdown } from "./dropdown.mjs";
 import { closeRowMenu } from "./interaction.mjs";
 
 const CLASS = "PixaromaLoraLoader";
+
+// R (Refresh Node Definitions) must reach OUR picker too: drop both session
+// caches, re-fetch the list, and repaint every LoRA node so the missing-file
+// marks track reality. Fires once per refresh pass (deduped in refresh.mjs),
+// and also on WebSocket reconnect - the same moments native combos refresh.
+onNodeDefsRefresh(() => {
+  invalidateList();
+  invalidateAllInfo();
+  listLoras().then(() => {
+    const nodes = app.graph?._nodes || [];
+    for (const n of nodes) {
+      if ((n.comfyClass === CLASS || n.type === CLASS) && n._pixLlRoot) renderNode(n);
+    }
+  });
+});
 const MIN_W = 300;
 const CHROME = 66;      // legacy fallback: title + 2 input + 3 output slot rows
 const VUE_CHROME = 96;  // Nodes 2.0 fallback
@@ -97,6 +113,12 @@ function setupNode(node) {
   // Defer the first populate past configure() so a restored workflow renders its
   // saved rows, not the default (Vue Compat #8). fitToContent bails on the load path.
   queueMicrotask(() => { renderNode(node); fitToContent(node); });
+
+  // Warm the list so the missing-file marks can show WITHOUT the picker ever being
+  // opened (a workflow whose LoRA was renamed on disk should say so on load).
+  // Cached after the first node; the repaint is DOM-only, so it can't dirty a
+  // freshly loaded workflow (Vue Compat #18).
+  listLoras().then(() => { if (node._pixLlRoot) renderNode(node); });
 }
 
 app.registerExtension({
@@ -108,6 +130,9 @@ app.registerExtension({
     nodeType.prototype._pixLlPatched = true;
 
     injectCSS();
+    // Core calls node.refreshComboInNode(defs) on every graph node when the user
+    // presses R - this wires that signal into the cache invalidation above.
+    installRefreshHook(nodeType);
 
     const _origConfigure = nodeType.prototype.onConfigure;
     nodeType.prototype.onConfigure = function (info) {

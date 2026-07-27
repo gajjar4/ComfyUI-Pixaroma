@@ -99,13 +99,17 @@ function setMuted(on) {
 // ── sounds (shared with Notify Pixaroma's library) ──────────────────────────
 let _soundsCache = [];
 let _soundsPromise = null;
-function fetchSounds() {
-  if (!_soundsPromise) {
-    _soundsPromise = fetch("/pixaroma/api/sounds")
-      .then((r) => r.json())
-      .then((j) => (Array.isArray(j && j.sounds) ? j.sounds : []))
-      .catch(() => []);
-  }
+// force=true re-fetches (the settings panel passes it on every open, so a sound
+// dropped into the folder mid-session appears without a page reload - the old
+// single-flight promise never reset, so the panel's per-open fetchSounds() call
+// silently served the very first fetch forever). Unforced calls keep the cached
+// promise: maybeChime relies on that fast path for a very quick first run.
+function fetchSounds(force = false) {
+  if (_soundsPromise && !force) return _soundsPromise;
+  _soundsPromise = fetch("/pixaroma/api/sounds", { cache: "no-store" })
+    .then((r) => r.json())
+    .then((j) => (Array.isArray(j && j.sounds) ? j.sounds : []))
+    .catch(() => _soundsCache || []);
   return _soundsPromise;
 }
 function defaultSound() {
@@ -524,7 +528,8 @@ function renderPanelBody(node, body) {
     }
   };
   fillSounds();
-  fetchSounds().then((list) => { _soundsCache = list; fillSounds(); });
+  // force: the panel just opened - show what is in the folder NOW, not at page load.
+  fetchSounds(true).then((list) => { _soundsCache = list; fillSounds(); });
   sel.onchange = () => writeState(node, { sound: sel.value });
   sRow.appendChild(sel);
   cSec.appendChild(sRow);

@@ -73,30 +73,36 @@ let _cssInjected = false;
 //                                                     the NEXT call retries.
 // So callers can render "No icons found" immediately without try/catch,
 // AND transient server hiccups don't permanently brick the picker.
-export async function ensureIcons() {
-  if (_iconsCache !== null) return _iconsCache;
-  if (!_iconsPromise) {
-    _iconsPromise = (async () => {
-      try {
-        const r = await fetch("/pixaroma/api/note/icons/list");
-        if (!r.ok) throw new Error(`HTTP ${r.status}`);
-        const j = await r.json();
-        _iconsCache = Array.isArray(j?.icons) ? j.icons : [];
-        return _iconsCache;
-      } catch (e) {
-        // Transient failure (network error, HTTP 5xx, malformed JSON)
-        // → leave _iconsCache as null so the NEXT ensureIcons() call
-        // re-fetches. Clear _iconsPromise here too so subsequent
-        // callers don't latch onto this rejected-but-caught promise.
-        // A successful fetch returning {"icons": []} for a genuinely
-        // empty folder DOES cache [] (fast path above), which is the
-        // right behavior for intentional empties.
-        console.warn("[pix-note/icons] list fetch failed, will retry on next open:", e);
-        _iconsPromise = null;
-        return [];
-      }
-    })();
-  }
+// `force=true` re-fetches even when a cached list exists (the icon PICKER passes
+// it on open, so an SVG dropped into assets/icons/note/ mid-session appears
+// without a page reload - the cache used to be sticky for the whole session with
+// no recovery path at all). Unforced calls (the editor-open warm-up) keep the
+// cached list. A forced fetch that FAILS keeps the previous cache (stale beats
+// empty); a fresh result re-injects the per-icon CSS so NEW icons get rules.
+export async function ensureIcons(force = false) {
+  if (!force && _iconsCache !== null) return _iconsCache;
+  if (!force && _iconsPromise) return _iconsPromise;
+  _iconsPromise = (async () => {
+    try {
+      const r = await fetch("/pixaroma/api/note/icons/list", { cache: "no-store" });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const j = await r.json();
+      _iconsCache = Array.isArray(j?.icons) ? j.icons : [];
+      injectIconCSS(true); // rules for any icons this fetch discovered
+      return _iconsCache;
+    } catch (e) {
+      // Transient failure (network error, HTTP 5xx, malformed JSON)
+      // → keep whatever cache we had (null makes the NEXT call retry;
+      // an older list keeps the picker working). Clear _iconsPromise so
+      // subsequent callers don't latch onto this settled promise.
+      // A successful fetch returning {"icons": []} for a genuinely
+      // empty folder DOES cache [] (fast path above), which is the
+      // right behavior for intentional empties.
+      console.warn("[pix-note/icons] list fetch failed, will retry on next open:", e);
+      _iconsPromise = null;
+      return _iconsCache || [];
+    }
+  })();
   return _iconsPromise;
 }
 
@@ -114,9 +120,10 @@ export function buildIconCSS(icons) {
 
 // Create the <style id="pix-note-icon-css"> element once and populate
 // it with per-icon rules. Idempotent — subsequent calls no-op. Safe
-// to call on every editor open.
-export function injectIconCSS() {
-  if (_cssInjected) return;
+// to call on every editor open. `force=true` rewrites the rules from the
+// current cache (used after a forced re-fetch found new icons).
+export function injectIconCSS(force = false) {
+  if (_cssInjected && !force) return;
   const icons = _iconsCache || [];
   if (icons.length === 0) return; // nothing to inject; retry on next call
   // getElementById branch handles hot-module-reload scenarios where a
@@ -447,7 +454,10 @@ NoteEditor.prototype._insertInlineIcon = async function (anchorBtn) {
     return r.cloneRange();
   })();
 
-  const icons = await ensureIcons();
+  // force: the picker just opened - list what is in the folder NOW, so a newly
+  // dropped-in SVG shows without a page reload. ensureIcons(true) re-injects the
+  // per-icon CSS itself when the fetch lands.
+  const icons = await ensureIcons(true);
   injectIconCSS();
 
   openIconPop(anchorBtn, icons, this, (id) => {

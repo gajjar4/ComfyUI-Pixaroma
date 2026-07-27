@@ -2081,7 +2081,10 @@ async def api_lora_list(request):
         files = list(folder_paths.get_filename_list("loras"))
     except Exception:
         files = []
-    return web.json_response({"loras": files})
+    # no-store: this JSON carries no cache headers otherwise, and a browser
+    # heuristically caching it reproduces "renamed file never appears" even
+    # after our JS re-fetches. Same class as the .mjs no-cache layers above.
+    return web.json_response({"loras": files}, headers={"Cache-Control": "no-store"})
 
 
 @PromptServer.instance.routes.get("/pixaroma/api/lora/info")

@@ -5,6 +5,7 @@
 
 import { isVueNodes } from "../shared/nodes2.mjs";
 import { BRAND, readState, accentOf, countOn, MAX_LORAS } from "./core.mjs";
+import { hasLora } from "./api.mjs";
 
 // Height constants - kept in lockstep with the CSS so the node hugs its content
 // with no bottom gap and no scrollbar (getMinHeight in index.js reads contentHeight).
@@ -124,6 +125,8 @@ export function injectCSS() {
     .pix-ll-name:hover { border-color:var(--acc,${BRAND}); }
     .pix-ll-name .nm { flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
     .pix-ll-name.empty .nm { color:#777; }
+    .pix-ll-name.missing .nm { color:#e05555; }
+    .pix-ll-name.missing::before { content:"⚠"; flex:none; color:#e05555; font-size:11px; }
     .pix-ll-name .car { flex:none; color:#777; font-size:9px; }
 
     .pix-ll-w { flex:0 0 auto; display:flex; align-items:center; height:24px; width:56px;
@@ -247,12 +250,20 @@ export function renderNode(node) {
     row.dataset.id = e.id;
 
     const name = document.createElement("div");
-    name.className = "pix-ll-name" + (e.name ? "" : " empty");
+    // hasLora returns null while the list is unknown (first load in flight) so a
+    // slow fetch can't flash a false "missing" mark; the setup/refresh repaint
+    // re-renders once the list lands. A row whose file is gone (renamed/removed)
+    // is SKIPPED at run time with only a console line, so this mark is the one
+    // place the user can actually SEE that the LoRA is not being applied.
+    const missing = e.name ? hasLora(e.name) === false : false;
+    name.className = "pix-ll-name" + (e.name ? "" : " empty") + (missing ? " missing" : "");
     name.dataset.act = "name";
     const nm = document.createElement("span");
     nm.className = "nm";
     nm.textContent = e.name ? displayName(e.name, st.hideExt) : NO_LORAS;
-    nm.title = e.name || "Pick a LoRA";
+    nm.title = missing
+      ? e.name + " - file not found (renamed or removed?). This row is skipped; pick the file again."
+      : (e.name || "Pick a LoRA");
     const car = document.createElement("span"); car.className = "car"; car.textContent = "▾";
     name.append(nm, car);
 
