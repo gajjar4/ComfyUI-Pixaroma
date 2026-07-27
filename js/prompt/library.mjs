@@ -68,8 +68,16 @@ function settingsApi() {
   return s && typeof s.getSettingValue === "function" ? s : null;
 }
 
+// Only a real string (or a number, which hand-edited JSON produces) can NAME a thing.
+// Blind String() coercion turned objects/arrays in an import file into categories
+// literally called "[object Object]" and tags called "objectObject" - fabricated
+// names the dropped-counter never saw. Guard the TYPE here, once, for every name.
+function asName(v) {
+  if (typeof v === "number" && Number.isFinite(v)) v = String(v);
+  return typeof v === "string" ? v.trim() : "";
+}
 function cleanName(n) {
-  return String(n == null ? "" : n).trim().replace(NAME_RE, "");
+  return asName(n).replace(NAME_RE, "");
 }
 
 // Coerce any parsed blob into the canonical shape, deduping tag names.
@@ -78,7 +86,7 @@ function normalize(raw) {
   const src = raw && typeof raw === "object" ? raw : {};
   const seenCat = new Set();
   const addCat = (c) => {
-    const name = String(c || "").trim();
+    const name = asName(c);
     // Reserved names are case-INSENSITIVE: a user-typed "list" must not survive as a
     // separate category that then merges with the synthetic bucket of the same name.
     if (!name || RESERVED.has(lc(name)) || seenCat.has(lc(name))) return;
@@ -91,7 +99,7 @@ function normalize(raw) {
   // `categories` overlap to rely on).
   const listKeys = new Set();
   for (const c of (Array.isArray(src.listCats) ? src.listCats : [])) {
-    const name = String(c || "").trim();
+    const name = asName(c);
     if (!name || RESERVED.has(lc(name))) continue;
     listKeys.add(lc(name));
     addCat(name);
@@ -102,7 +110,7 @@ function normalize(raw) {
     const name = cleanName(t.name);
     if (!name || seenTag.has(lc(name))) continue;
     seenTag.add(lc(name));
-    let cat = String(t.cat || "").trim();
+    let cat = asName(t.cat);
     let kind = t.kind === "list" ? "list" : "text";
     if (RESERVED.has(lc(cat))) {
       // A bucket name is not a category. "List" also TELLS us the tag is a list (an
@@ -468,12 +476,14 @@ export function parseImport(jsonStr) {
   // (The category check used to sit on the no-tags branch only, so a file with three
   // categories plus two unusable tag names was refused while the same file with zero
   // tags imported fine - the same gate, applied twice with different rules.)
-  // A tags-less file is only a library if its categories are real NAMES. Accepting any
-  // top-level `categories` array turned any stray JSON into a valid import (an array of
-  // objects came through as a category literally called "[object Object]").
-  const namedCats = Array.isArray(raw?.categories) &&
-    raw.categories.some((c) => typeof c === "string" && c.trim());
-  if (!data.tags.length && !namedCats) {
+  // A tags-less file is only a library if its categories are real NAMES. This gate
+  // once checked the RAW array because addCat coerced stray JSON into a category
+  // literally called "[object Object]" - but the raw check accepted a file whose only
+  // "category" was a reserved bucket name ("Uncategorized"), opening a dead-end picker
+  // with nothing in it. asName now refuses non-names inside normalize itself, so the
+  // normalized result is the single truth again: reserved-only and junk-only files
+  // both normalize to zero categories and are refused with a clear error.
+  if (!data.tags.length && !data.categories.length) {
     return {
       error: dropped
         ? `None of the ${dropped} tag${dropped === 1 ? "" : "s"} in that file can be used. A tag name can only contain letters a to z, numbers, - and _.`

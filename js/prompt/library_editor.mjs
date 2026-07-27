@@ -937,7 +937,13 @@ function moveBucketTags(bucket, cat) {
     // later bucket of the same size to inherit.
     try { resetCursor(catKey(bucket)); } catch { /* ignore */ }
     if (_data.catModes) delete _data.catModes[bucket];   // as confirmDeleteBucket does
-    if (_curCat === bucket) _curCat = cat;   // follow them, the old row is about to go
+    if (_curCat === bucket) {
+      _curCat = cat;   // follow them, the old row is about to go
+      // Landing on a real category IS picking it, so the create form must follow it
+      // again - same rule as the sidebar row click. (4th instance of this failure:
+      // every path that points _curCat at a real category must drop the override.)
+      _createDraft.kindTouched = false;
+    }
   });
 }
 function confirmDeleteBucket(bucket) {
@@ -1417,7 +1423,7 @@ function showImportPick(parsed) {
 }
 function applyLibraryImport(parsed, mode) {
   if (!_overlay) return;
-  const before = { categories: [..._data.categories], catModes: { ..._data.catModes } };
+  const before = { categories: [..._data.categories] };
   const res = applyImport(parsed, mode);
   _data = clone(getLibrary());
   render();
@@ -1430,7 +1436,6 @@ function applyLibraryImport(parsed, mode) {
   const hadCat = new Set(before.categories.map((c) => c.toLowerCase()));
   const catsAdded = _data.categories.filter((c) => !hadCat.has(c.toLowerCase())).length;
   if (catsAdded) bits.push(`${catsAdded} categor${catsAdded === 1 ? "y" : "ies"} added`);
-  const modesChanged = Object.keys(_data.catModes || {}).length !== Object.keys(before.catModes).length;
   toast("info", bits.length ? "Imported: " + bits.join(", ") + "." : "Nothing was imported.");
 }
 function showImportModal(parsed) {
@@ -1459,7 +1464,24 @@ function showImportModal(parsed) {
     `<div class="pix-prled-opt" data-mode="skip"><span class="oic">⊘</span><span class="t">Skip duplicates<small>Only add the tags I don't already have</small></span></div>` +
     `</div></div>`;
   modal.addEventListener("mousedown", (e) => { if (e.target === modal) modal.remove(); });
-  modal.querySelectorAll(".pix-prled-opt").forEach((o) => o.addEventListener("click", () => { const m = o.dataset.mode; modal.remove(); applyLibraryImport(parsed, m); }));
+  modal.querySelectorAll(".pix-prled-opt").forEach((o) => o.addEventListener("click", () => {
+    const m = o.dataset.mode;
+    if (m !== "replace") { modal.remove(); applyLibraryImport(parsed, m); return; }
+    // "Replace mine" overwrites text the user WROTE, in one click. It used to be
+    // covered by undo; removing undo silently left it as the ONE loss that never
+    // asked. Ask like every other destructive path - and keep the options modal
+    // open underneath, so Cancel lands back on the choice, not on nothing.
+    const n = parsed.conflicts.length;
+    confirmDanger({
+      title: `Overwrite ${n === 1 ? "1 tag" : n + " tags"} of yours?`,
+      lead: `The imported text replaces your own on <b>${n}</b> tag${n === 1 ? "" : "s"}. What you have there now goes away.`,
+      listing: parsed.conflicts.slice(0, 40).join(" · ") + (n > 40 ? ` … and ${n - 40} more` : ""),
+      confirmLabel: "Replace mine",
+      offerExport: true,
+      exportCat: null,
+      onConfirm: () => { modal.remove(); applyLibraryImport(parsed, "replace"); },
+    });
+  }));
   _overlay.appendChild(modal);
 }
 // A real "are you sure?", used ONLY where one click takes away more than one thing.
