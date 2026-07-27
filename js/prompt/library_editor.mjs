@@ -776,6 +776,10 @@ function renderSidebar(sideEl) {
           const v = inp.value.trim();
           if (v && !isReservedName(v) && !_data.categories.some((c) => c.toLowerCase() === v.toLowerCase())) {
             addCategory(v, sd); _curCat = v; commit();
+            // Landing on the just-made category IS picking it, so the create form must
+            // follow its side again (5th sighting of the kindTouched carry - the rule:
+            // EVERY `_curCat = <real category>` clears the override; grep `_curCat =`).
+            _createDraft.kindTouched = false;
             render();   // a real action: the new category needs a row and a selection
             return;
           }
@@ -1601,7 +1605,12 @@ export function openLibraryEditor(node, opts) {
 }
 function onKey(e) {
   if (e.key !== "Escape") return;
-  if (_overlay?.querySelector(".pix-prled-modal")) { _overlay.querySelector(".pix-prled-modal").remove(); e.stopPropagation(); return; }
+  // Close the TOPMOST modal (last in DOM order), not the first: the Replace-mine
+  // confirm stacks on top of the still-open import-options modal, and removing the
+  // first match silently deleted the covered one - Escape looked like it did nothing,
+  // then Cancel landed on a bare editor with the import choices gone.
+  const _modals = _overlay ? _overlay.querySelectorAll(".pix-prled-modal") : [];
+  if (_modals.length) { _modals[_modals.length - 1].remove(); e.stopPropagation(); return; }
   if (_catMenu) { hideCatMenu(); e.stopPropagation(); return; }
   // This is a CAPTURE-phase window listener, so it beats every field's own keydown
   // handler (those are bubble-phase). Escape therefore used to close the WHOLE editor
