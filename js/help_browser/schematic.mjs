@@ -75,8 +75,14 @@ export function readSlots(comfyClass) {
       const opts = Array.isArray(spec) ? spec[1] : null;
       // forceInput turns a primitive into a real wired slot, so honour it.
       const forced = !!(opts && typeof opts === "object" && opts.forceInput);
+      // A real widget row shows its VALUE, so show the default the node ships
+      // with. It is the closest thing the definition knows to what the reader
+      // will see, and a bare name looked nothing like the node.
+      let dflt;
+      if (opts && typeof opts === "object" && opts.default !== undefined) dflt = opts.default;
+      else if (Array.isArray(spec) && Array.isArray(spec[0]) && spec[0].length) dflt = spec[0][0];
       (PRIMITIVE.has(type) || type === "COMBO") && !forced
-        ? widgets.push({ name, type })
+        ? widgets.push({ name, type, dflt })
         : inputs.push({ name, type });
     }
   }
@@ -107,8 +113,11 @@ export function buildSchematic(comfyClass, displayName) {
   const wrap = el("div", "pixhb-shot");
   const card = el("div", "pixhb-scard");
 
+  // No crown: a real Pixaroma node title carries none. The crown is part of the
+  // Add Node menu path ("👑 Pixaroma/..."), and putting it here made the
+  // diagram look like a node nobody has.
   const bar = el("div", "pixhb-sbar");
-  bar.append(el("span", "pixhb-crown", "👑"), el("span", null, displayName || comfyClass));
+  bar.appendChild(el("span", null, displayName || comfyClass));
   card.appendChild(bar);
 
   const rows = el("div", "pixhb-srows");
@@ -123,7 +132,15 @@ export function buildSchematic(comfyClass, displayName) {
 
   if (s.widgets.length) {
     const w = el("div", "pixhb-swid");
-    s.widgets.forEach((x) => w.appendChild(el("span", "pixhb-wp", x.name)));
+    s.widgets.forEach((x) => {
+      const row = el("span", "pixhb-wp");
+      row.appendChild(el("span", "pixhb-wp-n", x.name));
+      if (x.dflt !== undefined && x.dflt !== "") {
+        const v = String(x.dflt);
+        row.appendChild(el("span", "pixhb-wp-v", v.length > 22 ? v.slice(0, 21) + "…" : v));
+      }
+      w.appendChild(row);
+    });
     card.appendChild(w);
   }
   if (s.isOutput && !s.outputs.length) {

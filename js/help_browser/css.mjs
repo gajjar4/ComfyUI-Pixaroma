@@ -292,13 +292,19 @@ export function injectHelpBrowserCSS() {
   border: 1px solid #302d2b; border-radius: 8px; background: #111010;
   padding: 14px 12px 10px; margin: 0 0 14px; text-align: center;
 }
+/* These two colours are the REAL Pixaroma node defaults from js/brand/index.js
+   (title #1d1d1d, body #2a2a2a). The diagram is meant to look like the node the
+   reader will actually see, so it uses the node's own colours rather than an
+   invented palette - and carries NO crown, because a real node title has none.
+   The crown lives in the Add Node menu path, not on the node. */
 .pixhb-scard {
-  display: inline-block; min-width: 220px; max-width: 320px; background: #252423;
-  border: 1px solid #3a3634; border-radius: 8px; text-align: left; box-shadow: 0 6px 20px rgba(0,0,0,.4);
+  display: inline-block; min-width: 230px; max-width: 330px; background: #2a2a2a;
+  border: 1px solid #3a3a3a; border-radius: 8px; text-align: left; box-shadow: 0 6px 20px rgba(0,0,0,.45);
 }
 .pixhb-sbar {
-  background: #353331; padding: 5px 10px; font-size: 11px; color: #e8e4e2; font-weight: 600;
-  border-bottom: 1px solid #444; border-radius: 7px 7px 0 0; display: flex; align-items: center; gap: 6px;
+  background: #1d1d1d; padding: 6px 11px; font-size: 11.5px; color: #fff; font-weight: 600;
+  border-bottom: 1px solid #3a3a3a; border-radius: 7px 7px 0 0;
+  display: flex; align-items: center; gap: 6px;
 }
 .pixhb-srows { padding: 6px 0; }
 .pixhb-srow { display: flex; align-items: center; gap: 6px; min-height: 18px; padding: 1px 10px; }
@@ -307,13 +313,19 @@ export function injectHelpBrowserCSS() {
 .pixhb-dot { width: 9px; height: 9px; border-radius: 50%; flex: none; border: 1px solid rgba(0,0,0,.45); }
 .pixhb-side-in .pixhb-dot { margin-left: -15px; }
 .pixhb-side-out .pixhb-dot { margin-right: -15px; }
-.pixhb-sname { font-size: 10.5px; color: #ddd7d4; white-space: nowrap; }
+.pixhb-sname { font-size: 11px; color: #e2e2e2; white-space: nowrap; }
 .pixhb-stype { font-family: monospace; font-size: 8px; letter-spacing: .05em; color: #7d7673; white-space: nowrap; }
-.pixhb-swid { margin: 4px 10px 7px; display: flex; flex-wrap: wrap; gap: 4px; }
+/* A ComfyUI widget is a full-width rounded row inside the node body, not a
+   little chip floating in it. Drawing them the same way is most of what makes
+   the diagram read as the node rather than as an abstract picture of it. */
+.pixhb-swid { margin: 5px 9px 9px; display: flex; flex-direction: column; gap: 4px; }
 .pixhb-wp {
-  font-size: 9.5px; padding: 2px 7px; border-radius: 4px; background: rgba(255,255,255,.06);
-  color: #b4aeab; border: 1px solid rgba(255,255,255,.07);
+  font-size: 10px; padding: 3px 10px; border-radius: 9px; background: #353535;
+  color: #ddd; border: none; display: flex; gap: 8px; align-items: baseline;
+  white-space: nowrap; overflow: hidden;
 }
+.pixhb-wp-n { overflow: hidden; text-overflow: ellipsis; }
+.pixhb-wp-v { margin-left: auto; color: #fff; font-variant-numeric: tabular-nums; }
 .pixhb-send { margin: 5px 10px 8px; font-size: 9.5px; color: #7d7673; font-style: italic; }
 .pixhb-slegend {
   display: flex; gap: 9px; justify-content: center; flex-wrap: wrap; margin-top: 7px;
