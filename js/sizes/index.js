@@ -436,6 +436,8 @@ registerNodeHelp(CLASS, {
 // entry does. ownMenuItem: this node already adds its own menu line.
 registerNodeSettings(CLASS, {
   title: "Sizes",
+  // paints from its OWN --acc var - run its own render (see Control Panel)
+  onChange: (node) => render(node),
   ownMenuItem: true,
   open: (node) => openSizesPanel(node, onPanelChange(node)),
 });

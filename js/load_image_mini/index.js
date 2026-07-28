@@ -905,6 +905,8 @@ if (!app._pixLmPromptPatched) {
 // entry does. ownMenuItem: this node already adds its own menu line.
 registerNodeSettings(CLASS, {
   title: "Load Image Mini",
+  // paints from its OWN --acc var - run its own render (see Control Panel)
+  onChange: (node) => refreshFace(node),
   ownMenuItem: true,
   open: (node) => openMiniSettings(node, { onChange: () => refreshFace(node) }),
 });

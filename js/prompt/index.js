@@ -1316,5 +1316,7 @@ app.graphToPrompt = async function (...args) {
 // ownMenuItem flag, so the central hook adds the line for us).
 registerNodeSettings("PixaromaPrompt", {
   title: "Prompt",
+  // paints from its OWN --acc var - run its own render (see Control Panel)
+  onChange: (node) => { applyAccent(node); refreshBody(node); },
   open: (node) => openPromptSettings(node, () => { applyAccent(node); refreshBody(node); }),
 });

@@ -45,8 +45,8 @@ function injectCSS() {
     .pix-ll-chips::-webkit-scrollbar-thumb { background:#555; border-radius:3px; }
     .pix-ll-chip { font:10.5px 'Segoe UI'; background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.14);
       color:#b8b8b8; border-radius:99px; padding:3px 9px; cursor:pointer; user-select:none; display:flex; align-items:center; gap:4px; max-width:100%; }
-    .pix-ll-chip:hover { border-color:${BRAND}; }
-    .pix-ll-chip.sel { background:color-mix(in srgb, var(--pix-acc,#f66744) 18%, transparent); border-color:${BRAND}; color:#f8a48c; }
+    .pix-ll-chip:hover { border-color:var(--acc,${BRAND}); }
+    .pix-ll-chip.sel { background:color-mix(in srgb, var(--acc,${BRAND}) 18%, transparent); border-color:var(--acc,${BRAND}); color:#f8a48c; }
     .pix-ll-chip.sel::before { content:"✓"; font-size:9px; flex:none; }
     .pix-ll-chip .ct { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
     .pix-ll-chip-none { color:#777; font-size:11px; }
@@ -153,6 +153,7 @@ export async function openInfoPanel(node, id, refresh) {
   const accent = accentOf(node);
 
   const panel = el("div", "pix-ll-info-p");
+  panel.style.setProperty("--acc", accent);   // body-level panel inherits nothing
   panel.style.borderColor = accent;
   document.body.appendChild(panel);
   _panel = panel;

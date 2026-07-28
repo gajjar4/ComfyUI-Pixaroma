@@ -414,6 +414,9 @@ registerNodeHelp(CLASS, {
 // entry does. ownMenuItem: this node already adds its own menu line.
 registerNodeSettings(CLASS, {
   title: "Control Panel",
+  // This node paints from its OWN --acc var (set on inner elements), so the
+  // generic repaint cannot reach it - run its own render instead.
+  onChange: (node) => refresh(node),
   ownMenuItem: true,
   open: (node) => openSlidersPanel(node, () => { refresh(node); fitNode(node); }),
 });

@@ -317,6 +317,8 @@ registerNodeHelp(CLASS, {
 // entry does. ownMenuItem: this node already adds its own menu line.
 registerNodeSettings(CLASS, {
   title: "LoRA Loader",
+  // paints from its OWN --acc var - run its own render (see Control Panel)
+  onChange: (node) => makeRefresh(node)(),
   ownMenuItem: true,
   open: (node) => openLoraPanel(node, makeRefresh(node)),
 });

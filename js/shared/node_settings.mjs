@@ -312,6 +312,15 @@ export function repaintAccent(node) {
   const a = accentOf(node);
   for (const e of accentTargets(node)) e.style.setProperty(ACCENT_VAR, a);
   try { node.setDirtyCanvas?.(true, true); } catch {}
+  // MUST also run the node's own refresh. The CSS var + a canvas redraw is not
+  // enough for two whole families:
+  //   - the seven nodes that predate this module paint from their OWN --acc var,
+  //     set on INNER elements, so writing --pix-acc on the root cannot win;
+  //   - a node whose Nodes 2.0 body is a self-owned <canvas> (Compare, Preview)
+  //     only redraws through its own render call, never through setDirtyCanvas.
+  // Without this, changing a DEFAULT left every such node showing the old colour
+  // until some unrelated redraw happened to fire.
+  try { getNodeSettings(node.comfyClass)?.onChange?.(node); } catch {}
 }
 
 /**
@@ -762,10 +771,9 @@ export function openAccentPanel(node) {
       title,
       label: def?.swatchLabel,
       hint: def?.swatchHint,
-      onChange: () => {
-        panel.style.setProperty(ACCENT_VAR, accentOf(node));  // the panel's own chrome
-        def?.onChange?.(node);                                // whatever the node rebuilds
-      },
+      // Only the panel's own chrome here: repaintAccent already runs the node's
+      // onChange, and calling it again would double every rebuild per pick.
+      onChange: () => { panel.style.setProperty(ACCENT_VAR, accentOf(node)); },
       onPickerOpen: (h) => { _cpHandle = h; },                // so close() reaches it
     }));
   }

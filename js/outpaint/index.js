@@ -1521,6 +1521,8 @@ if (!app._pixOpPromptPatched) {
 // entry does. ownMenuItem: this node already adds its own menu line.
 registerNodeSettings(CLASS, {
   title: "Outpaint",
+  // paints from its OWN --acc var - run its own render (see Control Panel)
+  onChange: (node) => { renderFace(node); node.setDirtyCanvas?.(true, true); },
   ownMenuItem: true,
   open: (node) => openSettings(node),
 });

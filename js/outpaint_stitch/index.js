@@ -204,6 +204,8 @@ app.graphToPrompt = async function (...args) {
 // entry does. ownMenuItem: this node already adds its own menu line.
 registerNodeSettings(CLASS, {
   title: "Outpaint Stitch",
+  // paints from its OWN --acc var - run its own render (see Control Panel)
+  onChange: (node) => paintRows(node),
   ownMenuItem: true,
   open: (node) => openOpsPanel(node, () => paintRows(node)),
 });
