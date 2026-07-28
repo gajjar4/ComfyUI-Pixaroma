@@ -10,6 +10,7 @@
 import { app } from "/scripts/app.js";
 import { isVueNodes } from "../shared/nodes2.mjs";
 import { openPixaromaColorPickerPopup, BUTTON_PALETTE } from "../shared/color_picker.mjs";
+import { GLOBAL_ACCENT_SETTING, repaintAllAccents } from "../shared/node_settings.mjs";
 import {
   readState, normalizeSliders, addSlider, removeSlider, syncOutputs,
   accentOf, BRAND, ACCENT_SETTING, MAX_SLIDERS, clampValue, ensureToggle,
@@ -622,7 +623,21 @@ export function openSlidersPanel(node, onChange) {
   const done = el("button", "pix-sldp-btn pix-sldp-push", "Done");
   done.addEventListener("click", closeSlidersPanel);
 
-  foot.append(add, mkDefault, reset, done);
+
+  // The SECOND default: one master colour every Pixaroma node follows unless it
+  // (or its node type) has been given one of its own. Written through the shared
+  // helper so all the panels agree on the key.
+  const mkAll = el("button", "pix-sldp-btn", "Every Pixaroma node");
+  mkAll.title = "Every Pixaroma node follows this colour, unless it has been given one of its own";
+  mkAll.addEventListener("click", async () => {
+    try {
+      await app.ui.settings.setSettingValueAsync(GLOBAL_ACCENT_SETTING, accentOf(node));
+      mkAll.textContent = "Saved";
+      setTimeout(() => { mkAll.textContent = "Every Pixaroma node"; }, 1200);
+      repaintAllAccents();
+    } catch { /* settings not ready */ }
+  });
+  foot.append(add, mkDefault, mkAll, reset, done);
   panel.append(title, body, foot);
   document.body.appendChild(panel);
 

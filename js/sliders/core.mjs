@@ -13,6 +13,7 @@
 //   accent null = follow the global default setting; a hex string overrides it.
 
 import { app } from "/scripts/app.js";
+import { globalAccent } from "../shared/node_settings.mjs";
 
 export const STATE_PROP = "slidersState";
 export const MAX_SLIDERS = 16;          // must match MAX_SLIDERS in node_sliders.py
@@ -67,7 +68,7 @@ export function accentOf(node) {
     const v = app.ui?.settings?.getSettingValue?.(ACCENT_SETTING);
     if (typeof v === "string" && v.trim()) return v.trim();
   } catch {}
-  return BRAND;
+  return globalAccent() || BRAND;   // then the master Pixaroma default
 }
 
 // Decimal places implied by a slider's step (0.01 -> 2). Used for display and

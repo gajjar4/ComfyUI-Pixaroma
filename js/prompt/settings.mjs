@@ -9,6 +9,7 @@ import { app } from "/scripts/app.js";
 import { isVueNodes } from "../shared/nodes2.mjs";
 import { BRAND } from "../shared/utils.mjs";
 import { openPixaromaColorPickerPopup, BUTTON_PALETTE } from "../shared/color_picker.mjs";
+import { globalAccent, GLOBAL_ACCENT_SETTING, repaintAllAccents } from "../shared/node_settings.mjs";
 
 export const ACCENT_SETTING = "Pixaroma.Prompt.AccentColor";
 export const ORDER_SETTING = "Pixaroma.Prompt.DefaultOrder";
@@ -37,8 +38,8 @@ function globalDefaultAccent() {
       const s = v.trim();
       return s[0] === "#" ? s : "#" + s;
     }
-  } catch { /* fall through to BRAND */ }
-  return BRAND;
+  } catch { /* fall through to the master default */ }
+  return globalAccent() || BRAND;   // then the master Pixaroma default
 }
 
 // The colour a node's buttons paint with: per-node override, else the global
@@ -237,7 +238,21 @@ export function openPromptSettings(node, onChange) {
   reset.addEventListener("click", () => { setNodeAccent(node, null); sw.style.background = accentOf(node); _onChange?.(); });
   const done = el("button", "pix-prmset-btn pix-prmset-push", "Done");
   done.addEventListener("click", closePromptSettings);
-  foot.append(mkDefault, reset, done);
+
+  // The SECOND default: one master colour every Pixaroma node follows unless it
+  // (or its node type) has been given one of its own. Written through the shared
+  // helper so all the panels agree on the key.
+  const mkAll = el("button", "pix-prmset-btn", "Every Pixaroma node");
+  mkAll.title = "Every Pixaroma node follows this colour, unless it has been given one of its own";
+  mkAll.addEventListener("click", async () => {
+    try {
+      await app.ui.settings.setSettingValueAsync(GLOBAL_ACCENT_SETTING, accentOf(node));
+      mkAll.textContent = "Saved";
+      setTimeout(() => { mkAll.textContent = "Every Pixaroma node"; }, 1200);
+      repaintAllAccents();
+    } catch { /* settings not ready */ }
+  });
+  foot.append(mkDefault, mkAll, reset, done);
 
   panel.append(title, body, foot);
   document.body.appendChild(panel);

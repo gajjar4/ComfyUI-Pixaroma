@@ -15,7 +15,7 @@ import { app } from "/scripts/app.js";
 import { api } from "/scripts/api.js";
 import { applyAdaptiveCanvasOnly, canvasBackingScale, installZoomRepaint, isVueNodes } from "../shared/nodes2.mjs";
 import { isGraphLoading } from "../shared/graph_loading.mjs";
-import { registerNodeSettings } from "../shared/node_settings.mjs";
+import { registerNodeSettings, globalAccent } from "../shared/node_settings.mjs";
 import { installCanvasZoomPassthrough } from "../shared/canvas_zoom.mjs";
 import {
   ACCENT_SETTING, BRAND, DEFAULT_STATE, MAX_PAD, STATE_PROP,
@@ -36,7 +36,7 @@ function accentOf(node) {
     const g = app.ui?.settings?.getSettingValue(ACCENT_SETTING);
     if (g) return g;
   } catch (_e) { /* settings not ready */ }
-  return BRAND;
+  return globalAccent() || BRAND;   // then the master Pixaroma default
 }
 
 const CLASS = "PixaromaOutpaint";

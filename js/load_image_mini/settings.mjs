@@ -11,6 +11,7 @@ import { openPixaromaColorPickerPopup, BUTTON_PALETTE } from "../shared/color_pi
 import { injectCSS as injectLiCSS, renderGlobalControls } from "../load_image/ui.mjs";
 import { buildModePanel } from "../load_image/resize_modes.mjs";
 import { applyInlineLabel, applyWHLayout, applyCoverControls } from "../load_image/panel_polish.mjs";
+import { GLOBAL_ACCENT_SETTING, repaintAllAccents } from "../shared/node_settings.mjs";
 import {
   ACCENT_SETTING, BRAND, STATE_PROP, accentOf, readState, writeState,
 } from "./core.mjs";
@@ -274,7 +275,21 @@ export function openMiniSettings(node, ctx) {
   });
   const done = el("button", "pix-lmset-btn pix-lmset-push", "Done");
   done.addEventListener("click", closeMiniSettings);
-  foot.append(mkDefault, done);
+
+  // The SECOND default: one master colour every Pixaroma node follows unless it
+  // (or its node type) has been given one of its own. Written through the shared
+  // helper so all the panels agree on the key.
+  const mkAll = el("button", "pix-lmset-btn", "Every Pixaroma node");
+  mkAll.title = "Every Pixaroma node follows this colour, unless it has been given one of its own";
+  mkAll.addEventListener("click", async () => {
+    try {
+      await app.ui.settings.setSettingValueAsync(GLOBAL_ACCENT_SETTING, accentOf(node));
+      mkAll.textContent = "Saved";
+      setTimeout(() => { mkAll.textContent = "Every Pixaroma node"; }, 1200);
+      repaintAllAccents();
+    } catch { /* settings not ready */ }
+  });
+  foot.append(mkDefault, mkAll, done);
 
   panel.append(title, body, foot);
   document.body.appendChild(panel);

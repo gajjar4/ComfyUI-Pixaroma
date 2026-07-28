@@ -6,6 +6,7 @@
 // height and stores them as state.w / state.h so Python just reads them back.
 
 import { app } from "/scripts/app.js";
+import { globalAccent } from "../shared/node_settings.mjs";
 
 export const BRAND = "#f66744";
 export const STATE_PROP = "sizesState";
@@ -198,5 +199,5 @@ export function accentOf(node) {
     const g = app.ui?.settings?.getSettingValue(ACCENT_SETTING);
     if (g) return g;
   } catch { /* ignore */ }
-  return BRAND;
+  return globalAccent() || BRAND;   // then the master Pixaroma default
 }

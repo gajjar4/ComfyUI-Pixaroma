@@ -10,6 +10,7 @@
 // reaches the backend - it is a pure frontend concern.
 
 import { app } from "/scripts/app.js";
+import { globalAccent } from "../shared/node_settings.mjs";
 
 export const BRAND = "#f66744";
 export const CLASS = "PixaromaLoadImageMini";
@@ -63,5 +64,5 @@ export function accentOf(node) {
     const g = app.ui?.settings?.getSettingValue(ACCENT_SETTING);
     if (g) return g;
   } catch (_e) { /* settings not ready */ }
-  return BRAND;
+  return globalAccent() || BRAND;   // then the master Pixaroma default
 }

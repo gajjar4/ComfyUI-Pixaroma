@@ -6,6 +6,7 @@
 // each switched-on LoRA, and joins the picked trigger words into the triggers output.
 
 import { app } from "/scripts/app.js";
+import { globalAccent } from "../shared/node_settings.mjs";
 
 export const BRAND = "#f66744";
 export const STATE_PROP = "loraLoaderState";
@@ -258,5 +259,5 @@ export function accentOf(node) {
   const st = readState(node);
   if (st.accent) return st.accent;
   const d = loadDefaults();
-  return (d && d.accent) || BRAND;
+  return (d && d.accent) || globalAccent() || BRAND;   // then the master Pixaroma default
 }

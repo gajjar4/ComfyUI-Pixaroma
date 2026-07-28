@@ -13,6 +13,7 @@
 // This file only adds the accent-colour plumbing.
 
 import { app } from "/scripts/app.js";
+import { globalAccent } from "../shared/node_settings.mjs";
 
 export const CLASS = "PixaromaOutpaintStitch";
 export const BRAND = "#f66744";
@@ -29,7 +30,7 @@ export function accentOf(node) {
     const v = app.ui?.settings?.getSettingValue?.(ACCENT_SETTING);
     if (typeof v === "string" && v.trim()) return v.trim();
   } catch {}
-  return BRAND;
+  return globalAccent() || BRAND;   // then the master Pixaroma default
 }
 
 // Written ONLY when the user actually picks a colour (never on the load path),

@@ -6,6 +6,7 @@
 import { app } from "/scripts/app.js";
 import { isVueNodes } from "../shared/nodes2.mjs";
 import { openPixaromaColorPickerPopup, BUTTON_PALETTE } from "../shared/color_picker.mjs";
+import { GLOBAL_ACCENT_SETTING, repaintAllAccents } from "../shared/node_settings.mjs";
 import {
   readState, writeState, addSize, removeSize, reorderSize, addCommonSizes,
   accentOf, sanitizePair, BRAND, ACCENT_SETTING, SNAP_OPTIONS, MAX_SIZES,
@@ -384,7 +385,21 @@ export function openSizesPanel(node, onChange) {
   const done = el("button", "pix-szp-btn pix-szp-push", "Done");
   done.addEventListener("click", closeSizesPanel);
 
-  foot.append(mkDefault, done);
+
+  // The SECOND default: one master colour every Pixaroma node follows unless it
+  // (or its node type) has been given one of its own. Written through the shared
+  // helper so all the panels agree on the key.
+  const mkAll = el("button", "pix-szp-btn", "Every Pixaroma node");
+  mkAll.title = "Every Pixaroma node follows this colour, unless it has been given one of its own";
+  mkAll.addEventListener("click", async () => {
+    try {
+      await app.ui.settings.setSettingValueAsync(GLOBAL_ACCENT_SETTING, accentOf(node));
+      mkAll.textContent = "Saved";
+      setTimeout(() => { mkAll.textContent = "Every Pixaroma node"; }, 1200);
+      repaintAllAccents();
+    } catch { /* settings not ready */ }
+  });
+  foot.append(mkDefault, mkAll, done);
 
   // "Add common sizes" gets its own full-width row above the button footer.
   const commonWrap = el("div", "pix-szp-f");
