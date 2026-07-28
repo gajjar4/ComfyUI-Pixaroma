@@ -12,10 +12,21 @@
 // rgba(246,103,68,...) would stay orange while everything around it recoloured,
 // which reads as a bug.
 
+import { PIXAROMA_LOGO } from "../shared/index.mjs";
+
 const CSS_ID = "pixaroma-help-browser-css";
 const ACC = "var(--pix-acc, #f66744)";
 
-export function injectHelpBrowserCSS(questionIcon, logoIcon) {
+// The icons live HERE rather than being passed in. The stylesheet is injected
+// exactly once, by whichever caller gets there first, so an icon supplied by a
+// later caller would silently never appear. That is not hypothetical: the
+// toolbar mounts before the window is ever built, so passing the logo from the
+// window produced `mask: url("undefined")`, which masks the element out
+// entirely - it computes as "a mask is present" while painting nothing.
+const QUESTION_ICON = "/pixaroma/assets/icons/note/question-mark.svg";
+const LOGO_ICON = PIXAROMA_LOGO;
+
+export function injectHelpBrowserCSS() {
   if (document.getElementById(CSS_ID)) return;
   const style = document.createElement("style");
   style.id = CSS_ID;
@@ -24,7 +35,7 @@ export function injectHelpBrowserCSS(questionIcon, logoIcon) {
 .pixhb-btn .pixhb-btn-icon {
   display: inline-block; width: 18px; height: 18px;
   background-color: currentColor; pointer-events: none;
-  mask-image: url(${questionIcon}); -webkit-mask-image: url(${questionIcon});
+  mask-image: url(${QUESTION_ICON}); -webkit-mask-image: url(${QUESTION_ICON});
   mask-size: contain; -webkit-mask-size: contain;
   mask-repeat: no-repeat; -webkit-mask-repeat: no-repeat;
   mask-position: center; -webkit-mask-position: center;
@@ -63,8 +74,8 @@ export function injectHelpBrowserCSS(questionIcon, logoIcon) {
 .pixhb-title .pixhb-logo {
   display: inline-block; width: 15px; height: 15px; flex: none;
   background-color: ${ACC};
-  mask: url("${logoIcon}") center / contain no-repeat;
-  -webkit-mask: url("${logoIcon}") center / contain no-repeat;
+  mask: url("${LOGO_ICON}") center / contain no-repeat;
+  -webkit-mask: url("${LOGO_ICON}") center / contain no-repeat;
 }
 .pixhb-sbar .pixhb-crown { color: ${ACC}; }
 .pixhb-title .pixhb-sp { flex: 1; }

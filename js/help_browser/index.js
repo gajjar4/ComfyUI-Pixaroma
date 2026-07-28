@@ -34,7 +34,6 @@ import {
 
 const PINS_SETTING = "Pixaroma.Help.Pins";
 const LAST_SETTING = "Pixaroma.Help.Last";
-const QUESTION_ICON = "/pixaroma/assets/icons/note/question-mark.svg";
 const CMD_ID = "Pixaroma.OpenHelpBrowser";
 
 // ── state ────────────────────────────────────────────────────
@@ -140,6 +139,9 @@ function makeDraggable(cardEl, entry) {
     const sx = e.clientX, sy = e.clientY;
     let ghost = null;
     const move = (ev) => {
+      // Same lost-pointerup guard as the window drag: without it a missed
+      // release leaves the ghost glued to the cursor forever.
+      if (!(ev.buttons & 1)) { up(ev); return; }
       if (!ghost && (Math.abs(ev.clientX - sx) > 6 || Math.abs(ev.clientY - sy) > 6)) {
         ghost = el("div", "pixhb-dragghost", entry.title);
         document.body.appendChild(ghost);
@@ -147,7 +149,10 @@ function makeDraggable(cardEl, entry) {
       }
       if (ghost) { ghost.style.left = (ev.clientX + 12) + "px"; ghost.style.top = (ev.clientY + 12) + "px"; }
     };
+    let done = false;
     const up = (ev) => {
+      if (done) return;
+      done = true;
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", up);
       cardEl.style.opacity = "";
@@ -398,7 +403,7 @@ function mountToolbarButton() {
     setTimeout(mountToolbarButton, 250);
     return;
   }
-  injectHelpBrowserCSS(QUESTION_ICON);
+  injectHelpBrowserCSS();
 
   const btn = document.createElement("button");
   btn.className = "comfyui-button pixhb-btn";

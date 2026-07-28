@@ -68,7 +68,7 @@ function saveRect(rect) {
 }
 
 export function createHelpWindow({ onRender }) {
-  injectHelpBrowserCSS(QUESTION_ICON, PIXAROMA_LOGO);
+  injectHelpBrowserCSS();
 
   const win = el("div", "pixhb-win");
   win.style.display = "none";
