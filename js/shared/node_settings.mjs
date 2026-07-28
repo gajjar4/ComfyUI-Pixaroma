@@ -278,11 +278,15 @@ export function applyAccent(el, node) {
  */
 export function installNodeAccent(node, ...els) {
   if (!node) return;
-  const keep = (node._pixAccentEls ||= []);
+  // Prune detached entries FIRST. A node that adds and removes rows (Switch,
+  // Mute Switch) calls this once per new row, and the removed row's element was
+  // never dropped - so the list grew forever and kept dead DOM alive.
+  let keep = (node._pixAccentEls ||= []).filter((e) => e?.isConnected);
   for (const e of els) {
     if (e?.style && !keep.includes(e)) keep.push(e);
     applyAccent(e, node);
   }
+  node._pixAccentEls = keep;
 }
 
 // Every element that should carry the var for this node: the roots it handed us,
@@ -346,6 +350,25 @@ let _panel = null;
 let _panelNode = null;
 let _cpHandle = null;
 let _loadWrapped = false;
+// The open option-row dropdown's closer. It lives on <body>, NOT inside the
+// panel, so a PROGRAMMATIC close (a workflow load, or the node being deleted)
+// would otherwise leave it floating over the canvas with its global listeners
+// still attached. The user-driven closes happen to work via its own handlers.
+// Debounced text-row writes still owed to the store; flushed on panel close.
+const _pendingTextWrites = new Set();
+function flushPendingTextWrites() {
+  const fns = [..._pendingTextWrites];
+  _pendingTextWrites.clear();
+  for (const f of fns) { try { f(); } catch {} }
+}
+let _optionPopupClose = null;
+function closeOptionPopup() {
+  const fn = _optionPopupClose;
+  _optionPopupClose = null;
+  try { fn?.(); } catch {}
+  // belt-and-braces: drop any stray node even if its closer was lost
+  try { document.querySelectorAll('.pix-nset-pop').forEach((e) => e.remove()); } catch {}
+}
 
 const CSS_ID = "pix-nodeset-css";
 
@@ -361,16 +384,21 @@ function injectCSS() {
   const s = document.createElement("style");
   s.id = CSS_ID;
   s.textContent = `
+    /* max-height + a scrolling body: a node with several rows PLUS the colour
+       block can be taller than the screen, and placeBeside only clamps the TOP -
+       without this the footer sits below the viewport with no way to reach it. */
     .pix-nset { position:fixed; z-index:10010; width:340px; max-width:94vw; background:#1a1a1a;
       border:1px solid #3a3a3a; border-radius:10px; box-shadow:0 18px 50px rgba(0,0,0,0.6);
-      color:#d8d8d8; font:12px 'Segoe UI',-apple-system,sans-serif; overflow:hidden; }
-    .pix-nset-t { display:flex; align-items:center; gap:8px; padding:10px 12px; background:#232323;
+      color:#d8d8d8; font:12px 'Segoe UI',-apple-system,sans-serif; overflow:hidden;
+      max-height:88vh; display:flex; flex-direction:column; }
+    .pix-nset-t { flex:0 0 auto; display:flex; align-items:center; gap:8px; padding:10px 12px; background:#232323;
       border-bottom:1px solid #333; cursor:grab; user-select:none; }
     .pix-nset-t .g { color:${ACC}; }
     .pix-nset-t .n { color:${ACC}; font-weight:600; }
     .pix-nset-t .x { margin-left:auto; color:#8a8a8a; cursor:pointer; padding:0 4px; }
     .pix-nset-t .x:hover { color:#fff; }
-    .pix-nset-b { padding:14px 12px; display:flex; flex-direction:column; gap:12px; }
+    .pix-nset-b { padding:14px 12px; display:flex; flex-direction:column; gap:12px;
+      overflow-y:auto; min-height:0; }
     .pix-nset-sec { display:flex; flex-direction:column; gap:10px; }
     /* ── option rows (the ones that used to sit in ComfyUI's Settings panel) ── */
     .pix-nset-optrow { display:flex; align-items:center; gap:10px; }
@@ -410,7 +438,7 @@ function injectCSS() {
     .pix-nset-btn { border:1px solid #444; background:rgba(255,255,255,0.04); color:#d8d8d8; border-radius:5px;
       padding:5px 12px; font:12px 'Segoe UI',sans-serif; cursor:pointer; box-sizing:border-box; }
     .pix-nset-btn:hover { border-color:${ACC}; color:#fff; }
-    .pix-nset-f { display:flex; gap:8px; padding:10px 12px; border-top:1px solid #333; background:#1f1f1f; }
+    .pix-nset-f { flex:0 0 auto; display:flex; gap:8px; padding:10px 12px; border-top:1px solid #333; background:#1f1f1f; }
     .pix-nset-push { margin-left:auto; }
   `;
   document.head.appendChild(s);
@@ -480,20 +508,26 @@ function makeDraggable(panel, handle) {
 function outsideClose(e) {
   if (!_panel) return;
   if (_panel.contains(e.target)) return;
-  // clicks inside the colour picker must not dismiss the panel behind it
-  if (e.target.closest?.(".pix-cp-popup, .pix-cp-modal-backdrop")) return;
+  // Clicks inside the colour picker OR an option-row dropdown must not dismiss
+  // the panel behind them. Both live on <body>, not inside the panel, and this
+  // capture-phase handler runs BEFORE their own - so without the exemption,
+  // picking a value closed the panel out from under the user.
+  if (e.target.closest?.(".pix-cp-popup, .pix-cp-modal-backdrop, .pix-nset-pop")) return;
   closeNodeSettingsPanel();
 }
 
 function escClose(e) {
   if (e.key === "Escape" && _panel) {
-    if (document.querySelector(".pix-cp-popup, .pix-cp-modal-backdrop")) return;
+    // an open picker / dropdown owns Escape first - it closes, the panel stays
+    if (document.querySelector(".pix-cp-popup, .pix-cp-modal-backdrop, .pix-nset-pop")) return;
     e.stopPropagation();
     closeNodeSettingsPanel();
   }
 }
 
 export function closeNodeSettingsPanel() {
+  flushPendingTextWrites();
+  closeOptionPopup();
   try { _cpHandle?.close(); } catch {}
   _cpHandle = null;
   if (_panel) { try { _panel.remove(); } catch {} }
@@ -541,7 +575,7 @@ function buildComboRow(row, onChange) {
     e.stopPropagation();
     // The Pixaroma custom dark dropdown - NEVER a native <select>, whose OS
     // chrome (a blue highlight) clashes with the theme (node UI convention #14).
-    document.querySelector(".pix-nset-pop")?.remove();
+    closeOptionPopup();
     const pop = el("div", "pix-nset-pop");
     const r = wrap.getBoundingClientRect();
     pop.style.left = r.left + "px";
@@ -560,6 +594,10 @@ function buildComboRow(row, onChange) {
     // keep it on screen, then close on any outside press / wheel / Escape
     const pr = pop.getBoundingClientRect();
     if (pr.bottom > window.innerHeight - 8) pop.style.top = Math.max(8, r.top - pr.height - 3) + "px";
+    // horizontal clamp too: a long option makes the popup wider than its anchor,
+    // and the panel itself can sit flush against the right edge of the screen
+    if (pr.right > window.innerWidth - 8)
+      pop.style.left = Math.max(8, window.innerWidth - pr.width - 8) + "px";
     const away = (ev) => { if (!pop.contains(ev.target)) close(); };
     const esc = (ev) => { if (ev.key === "Escape") { ev.stopPropagation(); close(); } };
     const close = () => {
@@ -567,7 +605,9 @@ function buildComboRow(row, onChange) {
       document.removeEventListener("pointerdown", away, true);
       document.removeEventListener("wheel", away, true);
       document.removeEventListener("keydown", esc, true);
+      if (_optionPopupClose === close) _optionPopupClose = null;
     };
+    _optionPopupClose = close;   // so a programmatic panel close can reach it
     setTimeout(() => {
       document.addEventListener("pointerdown", away, true);
       document.addEventListener("wheel", away, true);
@@ -600,10 +640,20 @@ function buildTextRow(row, onChange) {
   inp.addEventListener("input", () => {
     clearTimeout(t);                       // debounced: one write per pause, not per keystroke
     t = setTimeout(async () => {
+      _pendingTextWrites.delete(flush);
       await setNodeSetting(row.setting, inp.value);
       onChange?.(row.setting, inp.value);
     }, 250);
+    _pendingTextWrites.add(flush);
   });
+  // Closing the panel FLUSHES the pending keystroke immediately rather than
+  // letting a stray timer fire against a torn-down panel a quarter second later.
+  const flush = () => {
+    if (t == null) return;
+    clearTimeout(t); t = null;
+    setNodeSetting(row.setting, inp.value);
+    onChange?.(row.setting, inp.value);
+  };
   inp.addEventListener("pointerdown", (e) => e.stopPropagation());
   return { wrap: inp, refresh: () => { inp.value = String(nodeSetting(row.setting, row.defaultValue) ?? ""); } };
 }

@@ -29,11 +29,11 @@ function injectPanelCSS() {
   const s = document.createElement("style");
   s.id = "pix-seed-panel-css";
   s.textContent = [
-    ".pix-seed-panel{position:fixed;z-index:10010;width:300px;max-width:94vw;background:#1a1a1a;border:1px solid #444;border-radius:6px;box-shadow:0 8px 24px rgba(0,0,0,0.6);font-family:'Segoe UI',system-ui,sans-serif;overflow:hidden;}",
+    ".pix-seed-panel{position:fixed;z-index:10010;width:300px;max-width:94vw;background:#1a1a1a;border:1px solid #444;border-radius:6px;box-shadow:0 8px 24px rgba(0,0,0,0.6);font-family:'Segoe UI',system-ui,sans-serif;overflow:hidden;max-height:88vh;display:flex;flex-direction:column;}",
     ".pix-seed-phead{display:flex;align-items:center;justify-content:space-between;padding:10px 12px;border-bottom:1px solid #333;color:#ddd;font-size:13px;font-weight:600;cursor:move;}",
     ".pix-seed-px{border:0;background:transparent;color:#999;font-size:13px;cursor:pointer;padding:2px 7px;border-radius:4px;}",
     ".pix-seed-px:hover{color:#fff;}",
-    ".pix-seed-pbody{padding:12px;display:flex;flex-direction:column;gap:15px;color:#ddd;}",
+    ".pix-seed-pbody{padding:12px;display:flex;flex-direction:column;gap:15px;color:#ddd;overflow-y:auto;min-height:0;}",
     ".pix-seed-prow{display:flex;flex-direction:column;gap:6px;}",
     ".pix-seed-plab{font-size:12px;color:#ddd;font-weight:500;}",
     ".pix-seed-psub{font-size:10px;color:#8f8f8f;line-height:1.45;}",

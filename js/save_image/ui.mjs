@@ -90,11 +90,11 @@ export function injectCSS() {
     // right-click settings panel (Run Timer palette; DROPPED by mistake in
     // the mockup-v2 rewrite - the panel rendered as an invisible unstyled
     // div at the page bottom. Keep this block when restyling the face!)
-    ".pix-si-panel{position:fixed;z-index:10010;width:300px;max-width:94vw;background:#1a1a1a;border:1px solid #444;border-radius:6px;box-shadow:0 8px 24px rgba(0,0,0,0.6);font-family:'Segoe UI',system-ui,sans-serif;overflow:hidden;}",
+    ".pix-si-panel{position:fixed;z-index:10010;width:300px;max-width:94vw;background:#1a1a1a;border:1px solid #444;border-radius:6px;box-shadow:0 8px 24px rgba(0,0,0,0.6);font-family:'Segoe UI',system-ui,sans-serif;overflow:hidden;max-height:88vh;display:flex;flex-direction:column;}",
     ".pix-si-phead{display:flex;align-items:center;justify-content:space-between;padding:10px 12px;border-bottom:1px solid #333;color:#ddd;font-size:13px;font-weight:600;cursor:move;}",
     ".pix-si-px{border:0;background:transparent;color:#999;font-size:13px;cursor:pointer;padding:2px 7px;border-radius:4px;}",
     ".pix-si-px:hover{color:#fff;}",
-    ".pix-si-pbody{padding:12px;display:flex;flex-direction:column;gap:12px;color:#ddd;}",
+    ".pix-si-pbody{padding:12px;display:flex;flex-direction:column;gap:12px;color:#ddd;overflow-y:auto;min-height:0;}",
     ".pix-si-prow{display:flex;align-items:center;gap:9px;}",
     ".pix-si-plab{font-size:12px;color:#ddd;}",
     ".pix-si-psub{font-size:10px;color:#8f8f8f;margin-top:2px;line-height:1.4;}",

@@ -34,7 +34,8 @@
 import { app } from "/scripts/app.js";
 import { openHelpPopup, getNodeHelp } from "../shared/index.mjs";
 import {
-  getNodeSettings, openNodeSettings, repaintAllAccents, GLOBAL_ACCENT_SETTING, BRAND,
+  getNodeSettings, openNodeSettings, repaintAllAccents, closeNodeSettingsFor,
+  GLOBAL_ACCENT_SETTING, BRAND,
 } from "../shared/node_settings.mjs";
 import "./help_defs.mjs";     // registers help for most Pixaroma nodes (one place to edit)
 
@@ -160,6 +161,24 @@ app.registerExtension({
     if (!def || def.ownMenuItem) return [];
     const label = def.menuLabel || (def.title || "Node") + " settings";
     return [null, { content: "⚙ " + label, callback: () => openNodeSettings(node) }];
+  },
+
+  // Deleting a node while its settings panel is open must close that panel.
+  // Doing it centrally is the only way that scales: registerNodeAccent wires a
+  // closeFor for every node, but nothing was ever CALLING it - so the panel
+  // stayed on screen pointing at a destroyed node until the user clicked away.
+  // The registry is read at removal time, so registration order does not matter.
+  beforeRegisterNodeDef(nodeType, nodeData) {
+    if (!nodeData?.name || nodeType.prototype._pixSettingsRemovedPatched) return;
+    nodeType.prototype._pixSettingsRemovedPatched = true;
+    const origRemoved = nodeType.prototype.onRemoved;
+    nodeType.prototype.onRemoved = function () {
+      try {
+        const def = getNodeSettings(this.comfyClass);
+        if (def) (def.closeFor ? def.closeFor(this) : closeNodeSettingsFor(this));
+      } catch {}
+      return origRemoved?.apply(this, arguments);
+    };
   },
 
   setup() {

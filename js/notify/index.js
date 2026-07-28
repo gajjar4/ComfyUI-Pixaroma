@@ -669,7 +669,7 @@ app.registerExtension({
 // The colour option: a right-click "Notify settings" entry, the gear in the
 // selection toolbar, and the shared colour panel behind both. On this node the
 // colour shows in the run-time history panel (the node face itself is grey).
-registerNodeAccent("PixaromaNotify", {
+registerNodeAccent("NotifyPixaroma", {
   title: "Notify",
   rows: [
     { kind: "toggle", setting: "Pixaroma.Notify.Enabled", defaultValue: true,
