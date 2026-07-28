@@ -261,11 +261,21 @@ export function renderArticle(main, entry, onNav, ctx) {
     // loads, so `error` never fires and the empty box just sits there), and the
     // element starts display:none rather than being removed on error, so the
     // page never reflows under the reader.
+    // .webp first (smaller), then .png, because a snipping tool gives you PNG
+    // and nobody should have to convert a file to add a picture.
     const img = el("img", "pixhb-pic");
     img.alt = entry.title;
     img.style.display = "none";
+    let triedPng = false;
     img.addEventListener("load", () => { img.style.display = ""; });
-    img.addEventListener("error", () => img.remove());
+    img.addEventListener("error", () => {
+      if (!triedPng) {
+        triedPng = true;
+        img.src = `/pixaroma/assets/help/${encodeURIComponent(entry.cls)}.png`;
+        return;
+      }
+      img.remove();
+    });
     img.src = `/pixaroma/assets/help/${encodeURIComponent(entry.cls)}.webp`;
     pad.appendChild(img);
 
