@@ -31,6 +31,7 @@ import {
   toast, flash, createNodeAt, selectedNode, autoWire, couldWire, graphPointFromClient,
   copyText, versionLine, helpAsText, openExternal, LINKS,
 } from "./actions.mjs";
+import { exampleFor, openExample } from "./examples.mjs";
 
 const PINS_SETTING = "Pixaroma.Help.Pins";
 const LAST_SETTING = "Pixaroma.Help.Last";
@@ -106,6 +107,25 @@ function articleCtx() {
             : `Added <b>${entry.title}</b>, but nothing on <b>${from.title || from.comfyClass}</b> fits its inputs, so no wire was made.`);
         });
         row.appendChild(wire);
+
+        // Only offered when an example actually exists for this node: a button
+        // that sometimes does nothing is worse than no button. Built now but
+        // hidden, so it keeps its place in the row rather than appearing at the
+        // end once the lookup resolves.
+        const ex = el("button", "pixhb-btn2", "Example workflow");
+        ex.type = "button";
+        ex.style.display = "none";
+        row.appendChild(ex);
+        exampleFor(entry.cls).then((name) => {
+          if (!name || !row.isConnected) return;
+          ex.style.display = "";
+          ex.title = `Opens ComfyUI's templates, where "${name}" lives`;
+          ex.addEventListener("click", async () => {
+            const res = await openExample(name);
+            if (res.ok) toast(S.win.el, `Look for <b>${name}</b> in the templates that just opened.`);
+            else toast(S.win.el, res.reason);
+          });
+        });
       }
 
       const copy = el("button", "pixhb-btn2", "Copy as text");
