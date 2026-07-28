@@ -108,9 +108,13 @@ app.registerExtension({
       type: "color",
       defaultValue: BRAND,
       tooltip:
-        "The colour Pixaroma nodes paint their buttons and highlights with. " +
-        "A node keeps its own colour if you picked one for it, or for its node type.",
-      category: ["👑 Pixaroma", "Accent", "Accent colour"],
+        "The colour Pixaroma nodes paint their buttons and highlights with. A node keeps " +
+        "its own colour if you picked one for it, or for its node type. NOTE: ComfyUI's " +
+        "colour field shows saved values without '#' but requires '#' when typing - enter " +
+        "'#f66744' to go back to the Pixaroma orange, or use the colour picker.",
+      // Two levels, like every other Pixaroma setting. A distinct leaf ("Accent")
+      // so it cannot collapse into another node's row (Align Pattern #10).
+      category: ["👑 Pixaroma", "Accent"],
       // onChange fires BEFORE the store write, so repaint on the next tick or
       // every node re-reads the value it already had.
       onChange: () => { setTimeout(repaintAllAccents, 0); },
