@@ -261,10 +261,16 @@ export function renderArticle(main, entry, onNav, ctx) {
     // loads, so `error` never fires and the empty box just sits there), and the
     // element starts display:none rather than being removed on error, so the
     // page never reflows under the reader.
-    // Try .webp, then .png, then .jpg. Whatever your screenshot tool gives you
-    // works straight away, and converting to webp later just makes the first
-    // one win. Nobody should have to convert a file to add a picture.
-    const EXTS = ["webp", "png", "jpg"];
+    // The file may be named after the CLASS ("PixaromaLoadImage.webp") or after
+    // the node as people know it ("Load Image Pixaroma.webp"), in webp, png or
+    // jpg. Whoever takes the screenshots should not have to care, so every
+    // combination is tried and the first that loads wins. Converting to webp
+    // later just makes it win sooner, with nothing to rename.
+    const bases = [...new Set([entry.cls, entry.title].filter(Boolean))];
+    const candidates = [];
+    for (const ext of ["webp", "png", "jpg"]) {
+      for (const b of bases) candidates.push(`/pixaroma/assets/help/${encodeURIComponent(b)}.${ext}`);
+    }
     const img = el("img", "pixhb-pic");
     img.alt = entry.title;
     img.style.display = "none";
@@ -272,13 +278,10 @@ export function renderArticle(main, entry, onNav, ctx) {
     img.addEventListener("load", () => { img.style.display = ""; });
     img.addEventListener("error", () => {
       attempt += 1;
-      if (attempt < EXTS.length) {
-        img.src = `/pixaroma/assets/help/${encodeURIComponent(entry.cls)}.${EXTS[attempt]}`;
-        return;
-      }
+      if (attempt < candidates.length) { img.src = candidates[attempt]; return; }
       img.remove();
     });
-    img.src = `/pixaroma/assets/help/${encodeURIComponent(entry.cls)}.${EXTS[0]}`;
+    img.src = candidates[0];
     pad.appendChild(img);
 
     const dia = buildSchematic(entry.cls, help.title || entry.title);
