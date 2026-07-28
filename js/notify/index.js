@@ -488,17 +488,10 @@ async function playSound(filename, volume01) {
 app.registerExtension({
   name: "Pixaroma.Notify",
 
-  settings: [
-    {
-      id: MASTER_ID,
-      name: "Enabled",
-      type: "boolean",
-      defaultValue: true,
-      tooltip:
-        "Master switch for all Notify Pixaroma sounds. When off, no Notify node plays sound (checkpoint timers still record).",
-      category: ["👑 Pixaroma", "Notify"],
-    },
-  ],
+  // No Settings-panel rows: this node's options live on the node itself (the
+  // gear in the selection toolbar / the right-click entry). The setting ids are
+  // unchanged and merely unregistered, so existing choices carry over; every
+  // read site already supplies its own default for the unset case.
 
   setup() {
     if (_listenersInstalled) return;
@@ -676,4 +669,11 @@ app.registerExtension({
 // The colour option: a right-click "Notify settings" entry, the gear in the
 // selection toolbar, and the shared colour panel behind both. On this node the
 // colour shows in the run-time history panel (the node face itself is grey).
-registerNodeAccent("PixaromaNotify", { title: "Notify" });
+registerNodeAccent("PixaromaNotify", {
+  title: "Notify",
+  rows: [
+    { kind: "toggle", setting: "Pixaroma.Notify.Enabled", defaultValue: true,
+      label: "Play notification sounds",
+      hint: "Off silences every Notify node in every workflow" },
+  ],
+});

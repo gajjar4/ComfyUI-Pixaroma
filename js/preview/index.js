@@ -1351,42 +1351,10 @@ function createStripDOMWidget(node) {
 app.registerExtension({
   name: "Pixaroma.Preview",
 
-  settings: [
-    {
-      id: "Pixaroma.Preview.DefaultLayout",
-      name: "Default batch layout",
-      type: "combo",
-      defaultValue: "Grid",
-      options: ["Grid", "Strip"],
-      tooltip: "How a multi-image batch is laid out in the Preview Image Pixaroma node body. Grid wraps into rows (matches native ComfyUI); Strip is a single horizontal row. Each node also has its own toggle in the top-right of the preview area; this setting only affects the default for newly-created nodes.",
-      category: ["👑 Pixaroma", "Preview"],
-    },
-    {
-      // Distinct leaf category required: Vue's settings UI silently
-      // drops a row when two settings share the same leaf name
-      // (CLAUDE.md Align Pattern #10). DefaultLayout already owns
-      // "Preview", so this one uses "Preview (save mode)".
-      id: "Pixaroma.Preview.DefaultSaveMode",
-      name: "Default save mode",
-      type: "combo",
-      defaultValue: "Preview",
-      options: ["Preview", "Save"],
-      tooltip: "Initial value of the save_mode widget on newly-created Preview Image Pixaroma nodes. Preview writes batch frames to ComfyUI's temp/ folder (auto-cleared on restart, no clutter). Save writes them to output/ with embedded workflow metadata, like native SaveImage. Existing nodes keep whatever save_mode they were saved with - this setting only affects fresh nodes you drop on the canvas.",
-      category: ["👑 Pixaroma", "Preview (save mode)"],
-    },
-    {
-      // Distinct leaf category — Align Pattern #10. Affects ONLY the
-      // Save Disk button; Save Output keeps its counter because it
-      // writes silently to ComfyUI's output/ folder with no overwrite
-      // prompt (dropping the counter there would clobber prior runs).
-      id: "Pixaroma.Preview.OmitCounterOnSaveDisk",
-      name: "Save Disk: omit counter from filename",
-      type: "boolean",
-      defaultValue: false,
-      tooltip: "When ON, the Save Disk button suggests filenames without the auto-counter (e.g. 'myimage.png' instead of 'myimage_00001_.png'). The OS Save dialog will warn you before overwriting an existing file. Save Output is unaffected — it always keeps the counter to protect prior runs.",
-      category: ["👑 Pixaroma", "Preview (disk save)"],
-    },
-  ],
+  // No Settings-panel rows: this node's options live on the node itself (the
+  // gear in the selection toolbar / the right-click entry). The setting ids are
+  // unchanged and merely unregistered, so existing choices carry over; every
+  // read site already supplies its own default for the unset case.
 
   async beforeRegisterNodeDef(nodeType, nodeData) {
     if (nodeData.name !== "PixaromaPreview") return;
@@ -1692,4 +1660,15 @@ api.addEventListener("executed", ({ detail }) => {
 registerNodeAccent("PixaromaPreview", {
   title: "Preview Image",
   onChange: (node) => repaint(node),
+  rows: [
+    { kind: "combo", setting: "Pixaroma.Preview.DefaultLayout", options: ["Grid", "Strip"],
+      defaultValue: "Grid", label: "Default batch layout",
+      hint: "How a batch is laid out on a new node. Each node also has its own toggle." },
+    { kind: "combo", setting: "Pixaroma.Preview.DefaultSaveMode", options: ["Preview", "Save"],
+      defaultValue: "Preview", label: "Default save mode",
+      hint: "What a new node starts as. Preview keeps images in temp, Save writes them to output." },
+    { kind: "toggle", setting: "Pixaroma.Preview.OmitCounterOnSaveDisk", defaultValue: false,
+      label: "Save Disk: no counter in the name",
+      hint: "Suggests myimage.png instead of myimage_00001_.png" },
+  ],
 });

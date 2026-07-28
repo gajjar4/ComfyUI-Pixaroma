@@ -179,25 +179,10 @@ function makeHandlers(node, root) {
 app.registerExtension({
   name: "Pixaroma.PromptStack",
 
-  settings: [
-    {
-      id: "Pixaroma.PromptStack.SeparatorText",
-      name: "Separator",
-      type: "text",
-      defaultValue: ", ",
-      tooltip: "What goes between enabled rows in the joined output. Edit directly. Examples: ', ' (default comma+space), '\\n' for newline (type backslash + n), ' ' for a single space, ' | ' for pipe. Clear the field to reset to the default ', '.",
-      category: ["👑 Pixaroma", "Prompt Stack"],
-      onChange: (v) => {
-        // Empty field acts as "reset to default" - refill with ", " so the
-        // user can see and edit the actual current value next time.
-        if (typeof v === "string" && v.length === 0) {
-          try {
-            app.ui?.settings?.setSettingValue?.("Pixaroma.PromptStack.SeparatorText", ", ");
-          } catch (_e) {}
-        }
-      },
-    },
-  ],
+  // No Settings-panel rows: this node's options live on the node itself (the
+  // gear in the selection toolbar / the right-click entry). The setting ids are
+  // unchanged and merely unregistered, so existing choices carry over; every
+  // read site already supplies its own default for the unset case.
 
   beforeRegisterNodeDef(nodeType, nodeData) {
     if (nodeData.name !== "PixaromaPromptStack") return;
@@ -406,4 +391,11 @@ function resolveSeparator() {
 
 // The colour option: gives this node a right-click "Prompt Stack settings" entry, the
 // gear in the selection toolbar, and the shared colour panel behind both.
-registerNodeAccent("PixaromaPromptStack", { title: "Prompt Stack" });
+registerNodeAccent("PixaromaPromptStack", {
+  title: "Prompt Stack",
+  rows: [
+    { kind: "text", setting: "Pixaroma.PromptStack.SeparatorText", defaultValue: ", ",
+      placeholder: ", ", label: "Separator",
+      hint: "What goes between the rows. Type \n for a new line. Empty means comma + space." },
+  ],
+});

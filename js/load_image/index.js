@@ -996,17 +996,10 @@ function setupLoadImageNode(node) {
 app.registerExtension({
   name: "Pixaroma.LoadImage",
 
-  settings: [
-    {
-      id: "Pixaroma.LoadImage.ThumbSize",
-      name: "Dropdown thumbnail size",
-      type: "combo",
-      defaultValue: "Large",
-      options: ["Small", "Large"],
-      tooltip: "Thumbnail size shown in the Load Image Pixaroma file dropdown.",
-      category: ["👑 Pixaroma", "Load Image"],
-    },
-  ],
+  // No Settings-panel rows: this node's options live on the node itself (the
+  // gear in the selection toolbar / the right-click entry). The setting ids are
+  // unchanged and merely unregistered, so existing choices carry over; every
+  // read site already supplies its own default for the unset case.
 
   beforeRegisterNodeDef(nodeType, nodeData) {
     if (nodeData.name !== "PixaromaLoadImage") return;
@@ -1207,4 +1200,11 @@ app.graphToPrompt = async function (...args) {
 
 // The colour option: a right-click "Load Image settings" entry, the gear in the
 // selection toolbar, and the shared colour panel behind both.
-registerNodeAccent("PixaromaLoadImage", { title: "Load Image" });
+registerNodeAccent("PixaromaLoadImage", {
+  title: "Load Image",
+  rows: [
+    { kind: "combo", setting: "Pixaroma.LoadImage.ThumbSize", options: ["Small", "Large"],
+      defaultValue: "Large", label: "Thumbnail size",
+      hint: "How big the pictures are in the file dropdown" },
+  ],
+});

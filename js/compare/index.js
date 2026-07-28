@@ -1110,17 +1110,10 @@ function createCompareDOMWidget(node) {
 
 app.registerExtension({
   name: "Pixaroma.Compare",
-  settings: [
-    {
-      id: SETTING_DEFAULT_MODE,
-      name: "Default Compare Mode",
-      type: "combo",
-      defaultValue: "Show 2",
-      options: DEFAULT_MODE_OPTIONS,
-      tooltip: "The initial view mode when a new Compare node is created",
-      category: ["👑 Pixaroma", "Image Compare"],
-    },
-  ],
+  // No Settings-panel rows: this node's options live on the node itself (the
+  // gear in the selection toolbar / the right-click entry). The setting ids are
+  // unchanged and merely unregistered, so existing choices carry over; every
+  // read site already supplies its own default for the unset case.
   async beforeRegisterNodeDef(nodeType, nodeData) {
     if (nodeData.name !== "PixaromaCompare") return;
 
@@ -1321,4 +1314,9 @@ app.registerExtension({
 registerNodeAccent("PixaromaCompare", {
   title: "Image Compare",
   onChange: (node) => cmpRepaint(node),
+  rows: [
+    { kind: "combo", setting: SETTING_DEFAULT_MODE, options: DEFAULT_MODE_OPTIONS,
+      defaultValue: "Show 2", label: "Default view mode",
+      hint: "The view a newly dropped Compare node starts in" },
+  ],
 });

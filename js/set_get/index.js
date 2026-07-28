@@ -18,22 +18,15 @@ import { registerPixaromaSetNode } from "./set_node.mjs";
 import { registerPixaromaGetNode } from "./get_node.mjs";
 import { startValuePoll } from "./value_preview.mjs";
 import { SETTING_ID, recolorAllGets } from "./colors.mjs";
+import { registerNodeAccent } from "../shared/node_settings.mjs";
 import "./help.mjs"; // registers help for both nodes (convention #16)
 
 app.registerExtension({
   name: "Pixaroma.SetGet",
-  settings: [
-    {
-      id: SETTING_ID,
-      name: "Get matches its Set's colour",
-      type: "boolean",
-      defaultValue: true,
-      tooltip:
-        "A Get node takes the colour you gave its Set, so matching pairs are easy to spot. Turn off to leave Gets on their own colour.",
-      category: ["👑 Pixaroma", "Set & Get"],
-      onChange: () => recolorAllGets(),
-    },
-  ],
+  // No Settings-panel row: this option lives on the node itself (the gear in
+  // the selection toolbar / the right-click entry). The setting id is unchanged
+  // and merely unregistered, so an existing choice carries over; the read site
+  // supplies the default for the unset case.
   registerCustomNodes() {
     registerPixaromaSetNode();
     registerPixaromaGetNode();
@@ -42,3 +35,20 @@ app.registerExtension({
     startValuePoll();
   },
 });
+
+// No colour block: a Set / Get node's colour IS its node body colour, which
+// ComfyUI's own right-click Colors menu already owns. The panel hosts the
+// pairing option, which used to sit in the global Settings panel. Registered on
+// BOTH classes so the gear appears whichever half of the pair is selected.
+for (const cls of ["PixaromaSetNode", "PixaromaGetNode"]) {
+  registerNodeAccent(cls, {
+    title: "Set and Get",
+    accent: false,
+    rows: [
+      { kind: "toggle", setting: SETTING_ID, defaultValue: true,
+        label: "Get matches its Set's colour",
+        hint: "Matching pairs are easy to spot. Off leaves Gets on their own colour." },
+    ],
+    onRowChange: () => recolorAllGets(),
+  });
+}

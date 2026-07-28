@@ -77,11 +77,10 @@ function writeState(node, patch) {
 
 // ── master mute (GLOBAL, not per node) ──────────────────────────────────────
 // One switch that silences the finish chime on EVERY Run Timer, in every
-// workflow. It is the SAME registered setting that shows in ComfyUI's Settings
-// (👑 Pixaroma → Run Timer) — the right-click panel just surfaces it so it is one
-// click away. Because both surfaces read/write this one setting, they can never
-// disagree, and it persists across reloads on its own (no node.properties, so a
-// run/mute can never dirty a workflow).
+// workflow. It lives in the node's own settings panel (it used to also have a
+// row in ComfyUI's Settings panel; node-specific options moved onto the node).
+// The id is unregistered, so isMuted() supplies the default itself. It persists
+// on its own (no node.properties, so a run/mute can never dirty a workflow).
 const MUTE_ID = "Pixaroma.RunTimer.Muted";
 function isMuted() {
   try { return app.ui.settings.getSettingValue(MUTE_ID) === true; }
@@ -1010,24 +1009,8 @@ const HELP = {
 app.registerExtension({
   name: "Pixaroma.RunTimer",
 
-  settings: [
-    {
-      id: MUTE_ID,
-      // Same label as the panel row — it is the same switch, so it must not read as
-      // two different features.
-      name: "Mute all Run Timers",
-      type: "boolean",
-      defaultValue: false,
-      tooltip: "Master switch. When on, no Run Timer plays its finish chime, in any workflow. Also on the node's right-click settings panel.",
-      category: ["👑 Pixaroma", "Run Timer"],
-      // Keep an OPEN right-click panel in step when the mute is flipped from
-      // ComfyUI's Settings dialog instead. ComfyUI calls onChange BEFORE it writes
-      // the store, so pass the NEW value through rather than letting syncMute re-read
-      // a stale one. Also fires once at startup, when no panel exists — the null
-      // check makes that a no-op.
-      onChange: (v) => { if (_panelSyncMute) { try { _panelSyncMute(v === true); } catch (_e) {} } },
-    },
-  ],
+  // No Settings-panel row: this option already lives in the node's own
+  // settings panel, which is the one place to change it.
 
   setup() {
     installRunListeners();

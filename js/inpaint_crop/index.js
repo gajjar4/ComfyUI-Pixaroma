@@ -5,6 +5,7 @@ import { app } from "/scripts/app.js";
 import { api } from "/scripts/api.js";
 import { isGraphLoading } from "../shared/graph_loading.mjs";
 import { InpaintCropEditor, INPAINT_PREVIEW_COLORS } from "./core.mjs";
+import { registerNodeAccent } from "../shared/node_settings.mjs";
 import "./paint.mjs";   // mixin: brush / mask / keys
 import "./render.mjs";  // mixin: canvas render + save
 import {
@@ -215,15 +216,10 @@ function findActiveNode() {
 app.registerExtension({
   name: "Pixaroma.InpaintCrop",
 
-  settings: [{
-    id: "Pixaroma.Inpaint.PreviewColor",
-    name: "Mask preview color",
-    type: "combo",
-    defaultValue: "Red",
-    options: ["Red", "Green", "Blue", "Yellow", "Orange"],
-    tooltip: "Tint color for the mask + seam preview in the Inpaint editor (display only).",
-    category: ["👑 Pixaroma", "Inpaint"],
-  }],
+  // No Settings-panel row: the mask preview colour lives on the node itself (the
+  // gear in the selection toolbar / the right-click entry). The setting id is
+  // unchanged and merely unregistered, so an existing choice carries over; the
+  // read site supplies the default for the unset case.
 
   async beforeRegisterNodeDef(nodeType, nodeData) {
     if (nodeData.name !== "PixaromaInpaintCrop") return;
@@ -419,4 +415,18 @@ app.registerExtension({
       try { api.removeEventListener("executed", onExec); } catch {}
     };
   },
+});
+
+// No colour block: this node's face is ComfyUI's own grey button plus a preview,
+// so there is no Pixaroma orange on it to change. The panel hosts the mask
+// preview colour, which used to sit in the global Settings panel.
+registerNodeAccent("PixaromaInpaintCrop", {
+  title: "Inpaint Crop",
+  accent: false,
+  rows: [
+    { kind: "combo", setting: "Pixaroma.Inpaint.PreviewColor",
+      options: ["Red", "Green", "Blue", "Yellow", "Orange"], defaultValue: "Red",
+      label: "Mask preview colour",
+      hint: "The tint over the mask and seam in the editor. Display only." },
+  ],
 });

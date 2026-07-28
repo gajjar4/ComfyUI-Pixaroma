@@ -12,6 +12,7 @@ import "./shape_params.mjs";
 import "./interaction.mjs";
 import "./persistence.mjs";
 import "./importer.mjs";
+import { registerNodeAccent } from "../shared/node_settings.mjs";
 
 import {
   allow_debug,
@@ -27,16 +28,10 @@ import {
 app.registerExtension({
   name: "Pixaroma.3DEditor",
 
-  settings: [
-    {
-      id: "Pixaroma.3D.DefaultBgColor",
-      name: "Default Background Color — 3D Builder (default #6e6e6e)",
-      type: "color",
-      defaultValue: "#6e6e6e",
-      tooltip: "Color used as the background for new 3D scenes. Default is #6e6e6e (neutral gray). NOTE: ComfyUI's color field shows saved values without '#' but requires '#' when typing — enter '#6e6e6e' to reset, or use the color picker.",
-      category: ["👑 Pixaroma", "3D Builder"],
-    },
-  ],
+  // No Settings-panel row: this option lives on the node itself (the gear in
+  // the selection toolbar / the right-click entry). The setting id is unchanged
+  // and merely unregistered, so an existing choice carries over; the read site
+  // supplies the default for the unset case.
 
   // Handle execution result (OUTPUT_NODE = True on python side)
   async beforeRegisterNodeDef(nodeType, nodeData, app) {
@@ -161,3 +156,17 @@ app.registerExtension({
 
 // Re-export for backward compatibility
 export { Pixaroma3DEditor } from "./core.mjs";
+
+// The colour option is not offered: this node's face is ComfyUI's own grey
+// button plus a preview, so there is no Pixaroma orange on it to change. The
+// panel exists purely to host the scene background, which used to sit in the
+// global Settings panel.
+registerNodeAccent("Pixaroma3D", {
+  title: "3D Builder",
+  accent: false,
+  rows: [
+    { kind: "color", setting: "Pixaroma.3D.DefaultBgColor", defaultValue: "#6e6e6e",
+      label: "Background colour for new scenes",
+      hint: "The colour a fresh 3D scene starts on. Existing scenes keep theirs." },
+  ],
+});

@@ -119,6 +119,30 @@ export function globalAccent() {
 }
 
 /**
+ * Read a setting that is NOT registered in ComfyUI's Settings panel, with an
+ * explicit fallback.
+ *
+ * Node-specific options live on the node's own panel, not in the global Settings
+ * panel, so their ids are unregistered. An unregistered id returns `undefined`
+ * until something actually writes it - so EVERY read site must supply the
+ * default itself. (Registering it instead is what caused the accent bug: a
+ * registered default always reads back, so "never chosen" became
+ * indistinguishable from "deliberately chosen".)
+ */
+export function nodeSetting(id, fallback) {
+  try {
+    const v = app.ui?.settings?.getSettingValue?.(id);
+    if (v !== undefined && v !== null) return v;
+  } catch {}
+  return fallback;
+}
+
+/** Write an unregistered node setting. Returns true on success. */
+export function setNodeSetting(id, value) {
+  return writeSetting(id, value);
+}
+
+/**
  * Register a node's own settings panel.
  *   def = {
  *     title:       "Outpaint",            // shown in the menu + toolbar tooltip
@@ -150,6 +174,13 @@ export function registerNodeAccent(comfyClass, opts = {}) {
   if (!comfyClass) return;
   const def = {
     kind: "accent",
+    // Options that used to sit in ComfyUI's Settings panel live here instead, so
+    // a node's own settings are all in one place. See the `rows` doc above.
+    rows: Array.isArray(opts.rows) ? opts.rows : [],
+    onRowChange: typeof opts.onRowChange === "function" ? opts.onRowChange : null,
+    // A node with NO orange on its face (3D Builder, Inpaint Crop, Set/Get) can
+    // host rows without offering a colour that would change nothing.
+    accent: opts.accent !== false,
     title: opts.title || defaultTitle(comfyClass),
     prop: opts.prop || DEFAULT_ACCENT_PROP,
     setting: opts.setting || classAccentSetting(comfyClass),
@@ -332,12 +363,40 @@ function injectCSS() {
     .pix-nset-t .x:hover { color:#fff; }
     .pix-nset-b { padding:14px 12px; display:flex; flex-direction:column; gap:12px; }
     .pix-nset-sec { display:flex; flex-direction:column; gap:10px; }
+    /* ── option rows (the ones that used to sit in ComfyUI's Settings panel) ── */
+    .pix-nset-optrow { display:flex; align-items:center; gap:10px; }
+    .pix-nset-optrow.stack { flex-direction:column; align-items:stretch; gap:5px; }
+    .pix-nset-opttxt { flex:1 1 auto; min-width:0; }
+    .pix-nset-opttxt .lab { font-size:12px; color:#cfcfcf; }
+    .pix-nset-opttxt .sub { font-size:11px; color:#8a8a8a; margin-top:2px; }
+    .pix-nset-ctl { flex:0 0 auto; display:flex; align-items:center; gap:7px; min-width:96px;
+      justify-content:space-between; background:#1d1d1d; border:1px solid #444; border-radius:4px;
+      padding:5px 8px; cursor:pointer; user-select:none; }
+    .pix-nset-ctl:hover { border-color:${ACC}; }
+    .pix-nset-val { color:#ddd; font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .pix-nset-caret { color:${ACC}; font-size:9px; line-height:1; flex:0 0 auto; }
+    .pix-nset-pop { position:fixed; z-index:10040; background:#1a1a1a; border:1px solid #444;
+      border-radius:5px; box-shadow:0 10px 30px rgba(0,0,0,0.6); padding:3px; max-height:50vh; overflow:auto; }
+    .pix-nset-popitem { padding:6px 12px; font-size:12px; color:#ccc; cursor:pointer; border-radius:3px; white-space:nowrap; }
+    .pix-nset-popitem:hover { background:#2a2a2a; color:#fff; }
+    .pix-nset-popitem.on { color:${ACC}; }
+    .pix-nset-tog { flex:0 0 auto; width:34px; height:18px; border-radius:9px; cursor:pointer;
+      background:rgba(255,255,255,0.10); border:1px solid rgba(255,255,255,0.18); position:relative;
+      transition:background .1s, border-color .1s; }
+    .pix-nset-tog .knob { position:absolute; top:2px; left:2px; width:12px; height:12px; border-radius:50%;
+      background:#bbb; transition:left .1s, background .1s; }
+    .pix-nset-tog.on { background:${ACC}; border-color:${ACC}; }
+    .pix-nset-tog.on .knob { left:18px; background:#fff; }
+    .pix-nset-text { width:100%; box-sizing:border-box; background:#1d1d1d; border:1px solid #444;
+      border-radius:4px; padding:6px 8px; color:#e0e0e0; font:12px monospace; outline:none; }
+    .pix-nset-text:focus { border-color:${ACC}; }
     .pix-nset-acc { display:flex; align-items:center; gap:10px; }
     .pix-nset-acc .lab { font-size:12px; color:#cfcfcf; }
     .pix-nset-acc .sub { font-size:11px; color:#8a8a8a; margin-top:2px; }
     .pix-nset-sw { width:34px; height:24px; border-radius:5px; border:1px solid #555; cursor:pointer; flex:none; }
     .pix-nset-sw:hover { border-color:#fff; }
     .pix-nset-dt { font-size:11px; color:#8a8a8a; }
+    .pix-nset-rule { height:1px; background:#333; margin:2px 0; }
     .pix-nset-row { display:flex; gap:8px; flex-wrap:wrap; }
     .pix-nset-btn { border:1px solid #444; background:rgba(255,255,255,0.04); color:#d8d8d8; border-radius:5px;
       padding:5px 12px; font:12px 'Segoe UI',sans-serif; cursor:pointer; box-sizing:border-box; }
@@ -452,6 +511,145 @@ function wrapLoadGraphData() {
   };
 }
 
+// ── option rows (what used to live in ComfyUI's Settings panel) ──────────────
+//
+// A row is { kind, setting, label, hint?, defaultValue?, options?, placeholder? }
+// with kind one of "combo" | "toggle" | "text" | "color". The value is read with
+// nodeSetting(setting, defaultValue) and written straight back, so a node's code
+// keeps reading the SAME id it always did - only the surface moved.
+
+function buildComboRow(row, onChange) {
+  const wrap = el("div", "pix-nset-ctl");
+  const val = el("div", "pix-nset-val");
+  const opts = Array.isArray(row.options) ? row.options : [];
+  const cur = () => nodeSetting(row.setting, row.defaultValue);
+  const paint = () => { val.textContent = String(cur() ?? ""); };
+  paint();
+  const caret = el("span", "pix-nset-caret", "▼");
+  wrap.append(val, caret);
+
+  wrap.addEventListener("click", (e) => {
+    e.stopPropagation();
+    // The Pixaroma custom dark dropdown - NEVER a native <select>, whose OS
+    // chrome (a blue highlight) clashes with the theme (node UI convention #14).
+    document.querySelector(".pix-nset-pop")?.remove();
+    const pop = el("div", "pix-nset-pop");
+    const r = wrap.getBoundingClientRect();
+    pop.style.left = r.left + "px";
+    pop.style.top = (r.bottom + 3) + "px";
+    pop.style.minWidth = r.width + "px";
+    for (const o of opts) {
+      const it = el("div", "pix-nset-popitem" + (String(o) === String(cur()) ? " on" : ""), String(o));
+      it.addEventListener("click", async (ev) => {
+        ev.stopPropagation();
+        await setNodeSetting(row.setting, o);
+        paint(); pop.remove(); onChange?.(row.setting, o);
+      });
+      pop.appendChild(it);
+    }
+    document.body.appendChild(pop);
+    // keep it on screen, then close on any outside press / wheel / Escape
+    const pr = pop.getBoundingClientRect();
+    if (pr.bottom > window.innerHeight - 8) pop.style.top = Math.max(8, r.top - pr.height - 3) + "px";
+    const away = (ev) => { if (!pop.contains(ev.target)) close(); };
+    const esc = (ev) => { if (ev.key === "Escape") { ev.stopPropagation(); close(); } };
+    const close = () => {
+      pop.remove();
+      document.removeEventListener("pointerdown", away, true);
+      document.removeEventListener("wheel", away, true);
+      document.removeEventListener("keydown", esc, true);
+    };
+    setTimeout(() => {
+      document.addEventListener("pointerdown", away, true);
+      document.addEventListener("wheel", away, true);
+      document.addEventListener("keydown", esc, true);
+    }, 0);
+  });
+  return { wrap, refresh: paint };
+}
+
+function buildToggleRow(row, onChange) {
+  const cur = () => !!nodeSetting(row.setting, row.defaultValue);
+  const tog = el("div", "pix-nset-tog" + (cur() ? " on" : ""));
+  tog.appendChild(el("span", "knob"));
+  tog.addEventListener("click", async (e) => {
+    e.stopPropagation();
+    const next = !cur();
+    await setNodeSetting(row.setting, next);
+    tog.classList.toggle("on", next);
+    onChange?.(row.setting, next);
+  });
+  return { wrap: tog, refresh: () => tog.classList.toggle("on", cur()) };
+}
+
+function buildTextRow(row, onChange) {
+  const inp = el("input", "pix-nset-text");
+  inp.type = "text";
+  inp.value = String(nodeSetting(row.setting, row.defaultValue) ?? "");
+  if (row.placeholder) inp.placeholder = row.placeholder;
+  let t = null;
+  inp.addEventListener("input", () => {
+    clearTimeout(t);                       // debounced: one write per pause, not per keystroke
+    t = setTimeout(async () => {
+      await setNodeSetting(row.setting, inp.value);
+      onChange?.(row.setting, inp.value);
+    }, 250);
+  });
+  inp.addEventListener("pointerdown", (e) => e.stopPropagation());
+  return { wrap: inp, refresh: () => { inp.value = String(nodeSetting(row.setting, row.defaultValue) ?? ""); } };
+}
+
+function buildColorRow(row, onChange, onPickerOpen) {
+  const sw = el("div", "pix-nset-sw");
+  const cur = () => nodeSetting(row.setting, row.defaultValue) || BRAND;
+  sw.style.background = cur();
+  sw.title = "Pick a colour";
+  sw.addEventListener("click", (e) => {
+    e.stopPropagation();
+    const h = openPixaromaColorPickerPopup(sw, {
+      initialColor: cur(),
+      swatches: BUTTON_PALETTE,
+      wide: true,
+      resetColor: row.defaultValue || BRAND,
+      onPick: async (c) => {
+        const v = c || row.defaultValue || BRAND;
+        await setNodeSetting(row.setting, v);
+        sw.style.background = v;
+        onChange?.(row.setting, v);
+      },
+    });
+    onPickerOpen?.(h);
+  });
+  return { wrap: sw, refresh: () => { sw.style.background = cur(); } };
+}
+
+/**
+ * Render a node's option rows as a drop-in element. Same drop-in contract as
+ * createAccentSection, so a node with its own richer panel can host these too.
+ */
+export function createOptionRows(node, rows, opts = {}) {
+  injectCSS();
+  const host = el("div", "pix-nset-sec");
+  const fire = (setting, value) => opts.onChange?.(node, setting, value);
+  for (const row of rows || []) {
+    if (!row || !row.setting) continue;
+    const line = el("div", "pix-nset-optrow");
+    const txt = el("div", "pix-nset-opttxt");
+    txt.appendChild(el("div", "lab", row.label || row.setting));
+    if (row.hint) txt.appendChild(el("div", "sub", row.hint));
+    let ctl;
+    if (row.kind === "toggle") ctl = buildToggleRow(row, fire);
+    else if (row.kind === "text") ctl = buildTextRow(row, fire);
+    else if (row.kind === "color") ctl = buildColorRow(row, fire, opts.onPickerOpen);
+    else ctl = buildComboRow(row, fire);
+    // a text field wants the full width, so it goes under its label
+    if (row.kind === "text") { line.classList.add("stack"); line.append(txt, ctl.wrap); }
+    else line.append(txt, ctl.wrap);
+    host.appendChild(line);
+  }
+  return host;
+}
+
 /**
  * The colour block as a drop-in element, so a node that already owns a richer
  * settings panel can offer the same colour option without rebuilding it:
@@ -544,19 +742,33 @@ export function openAccentPanel(node) {
   x.addEventListener("click", closeNodeSettingsPanel);
   head.appendChild(x);
 
-  // The whole body IS the shared colour block, so this panel and a node that
-  // drops the block into its own richer panel behave identically.
   const body = el("div", "pix-nset-b");
-  body.appendChild(createAccentSection(node, {
-    title,
-    label: def?.swatchLabel,
-    hint: def?.swatchHint,
-    onChange: () => {
-      panel.style.setProperty(ACCENT_VAR, accentOf(node));  // the panel's own chrome
-      def?.onChange?.(node);                                // whatever the node rebuilds
-    },
-    onPickerOpen: (h) => { _cpHandle = h; },                // so close() reaches it
-  }));
+
+  // This node's own options first (what used to sit in ComfyUI's Settings
+  // panel), then the colour block - so the settings a user came here to change
+  // are at the top and the colour is the tail.
+  if (def?.rows?.length) {
+    body.appendChild(createOptionRows(node, def.rows, {
+      onChange: (n, setting, value) => def.onRowChange?.(n, setting, value),
+      onPickerOpen: (h) => { _cpHandle = h; },
+    }));
+  }
+
+  // A node with no orange on its face opts out of the colour block entirely
+  // rather than offering a colour that would change nothing.
+  if (def?.accent !== false) {
+    if (def?.rows?.length) body.appendChild(el("div", "pix-nset-rule"));
+    body.appendChild(createAccentSection(node, {
+      title,
+      label: def?.swatchLabel,
+      hint: def?.swatchHint,
+      onChange: () => {
+        panel.style.setProperty(ACCENT_VAR, accentOf(node));  // the panel's own chrome
+        def?.onChange?.(node);                                // whatever the node rebuilds
+      },
+      onPickerOpen: (h) => { _cpHandle = h; },                // so close() reaches it
+    }));
+  }
 
   const foot = el("div", "pix-nset-f");
   const done = el("button", "pix-nset-btn pix-nset-push", "Done");

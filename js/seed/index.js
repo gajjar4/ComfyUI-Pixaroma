@@ -307,7 +307,9 @@ const NODE_H_HINT = WIDGET_H_FALLBACK + 48; // starting height (replace-branch o
 const STATE_PROP = "seedState";
 const HIDDEN_INPUT_NAME = "SeedState"; // matches Python INPUT_TYPES key
 
-const DEFAULT_SIZE_SETTING = "Pixaroma.Seed.DefaultSize"; // global default: new nodes start compact
+// New-node default, set from the node's own settings panel (it used to also have
+// a row in ComfyUI's Settings panel). Unregistered, so the read supplies the default.
+const DEFAULT_SIZE_SETTING = "Pixaroma.Seed.DefaultSize";
 const MIN_DIGITS = 3; // was 4; users wanted small, memorable seeds (0-999 at 3 digits)
 const MAX_DIGITS = 16; // 16 = the full safe-integer range (original behaviour)
 
@@ -1109,17 +1111,8 @@ function setupSeedNode(node) {
 app.registerExtension({
   name: "Pixaroma.Seed",
 
-  settings: [
-    {
-      id: DEFAULT_SIZE_SETTING,
-      name: "New Seed nodes start compact",
-      type: "boolean",
-      defaultValue: false,
-      tooltip:
-        "New Seed Pixaroma nodes drop in the small one-line layout. Any node can still be switched with right-click.",
-      category: ["👑 Pixaroma", "Seed"],
-    },
-  ],
+  // No Settings-panel row: this option already lives in the node's own
+  // settings panel, which is the one place to change it.
 
   // Right-click → toggle this node between the Full and Compact (one-line)
   // layouts. Writes only on the click (a user action), so no dirty-on-load.
