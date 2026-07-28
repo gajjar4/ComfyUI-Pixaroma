@@ -15,7 +15,7 @@
 const CSS_ID = "pixaroma-help-browser-css";
 const ACC = "var(--pix-acc, #f66744)";
 
-export function injectHelpBrowserCSS(questionIcon) {
+export function injectHelpBrowserCSS(questionIcon, logoIcon) {
   if (document.getElementById(CSS_ID)) return;
   const style = document.createElement("style");
   style.id = CSS_ID;
@@ -60,7 +60,13 @@ export function injectHelpBrowserCSS(questionIcon) {
   font-weight: 600; color: #fff; font-size: 12.5px;
   display: flex; align-items: center; gap: 7px;
 }
-.pixhb-title .pixhb-crown { color: ${ACC}; }
+.pixhb-title .pixhb-logo {
+  display: inline-block; width: 15px; height: 15px; flex: none;
+  background-color: ${ACC};
+  mask: url("${logoIcon}") center / contain no-repeat;
+  -webkit-mask: url("${logoIcon}") center / contain no-repeat;
+}
+.pixhb-sbar .pixhb-crown { color: ${ACC}; }
 .pixhb-title .pixhb-sp { flex: 1; }
 .pixhb-wbtn {
   width: 22px; height: 22px; border-radius: 4px; border: none; flex: none;

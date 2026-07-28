@@ -20,7 +20,7 @@
 // ids persist fine and add no rows to the Settings panel).
 
 import { app } from "/scripts/app.js";
-import { nodeSetting, setNodeSetting, globalAccent, BRAND } from "../shared/index.mjs";
+import { nodeSetting, setNodeSetting, globalAccent, BRAND, PIXAROMA_LOGO } from "../shared/index.mjs";
 import { injectHelpBrowserCSS } from "./css.mjs";
 
 const RECT_SETTING = "Pixaroma.Help.Rect";
@@ -68,15 +68,19 @@ function saveRect(rect) {
 }
 
 export function createHelpWindow({ onRender }) {
-  injectHelpBrowserCSS(QUESTION_ICON);
+  injectHelpBrowserCSS(QUESTION_ICON, PIXAROMA_LOGO);
 
   const win = el("div", "pixhb-win");
   win.style.display = "none";
 
   // ── title bar ──
   const title = el("div", "pixhb-title");
+  // The Pixaroma logo mark rather than the crown emoji: this is an app panel,
+  // not a node, so it should carry the brand rather than the node-menu icon.
+  // Drawn as a mask so it takes the accent colour instead of being locked to
+  // orange while everything around it recolours.
   const name = el("div", "pixhb-name");
-  name.innerHTML = `<span class="pixhb-crown">👑</span><span>Pixaroma Help</span>`;
+  name.append(el("span", "pixhb-logo"), el("span", null, "Pixaroma Help"));
   const sp = el("div", "pixhb-sp");
   const closeBtn = el("button", "pixhb-wbtn", "✕");
   closeBtn.type = "button";
@@ -105,45 +109,66 @@ export function createHelpWindow({ onRender }) {
   };
   applyRect();
 
-  // ── drag by the title bar ──
-  title.addEventListener("pointerdown", (e) => {
-    if (e.button !== 0 || e.target.closest(".pixhb-wbtn")) return;
-    const ox = e.clientX - win.offsetLeft;
-    const oy = e.clientY - win.offsetTop;
-    title.classList.add("pixhb-dragging");
-    const move = (ev) => {
-      rect.x = Math.max(0, Math.min(ev.clientX - ox, window.innerWidth - Math.min(rect.w, 160)));
-      rect.y = Math.max(0, Math.min(ev.clientY - oy, window.innerHeight - 40));
-      applyRect();
-    };
-    const up = () => {
-      window.removeEventListener("pointermove", move);
-      window.removeEventListener("pointerup", up);
+  // ── dragging, for both the title bar and the resize grip ──
+  //
+  // Listening for pointermove/pointerup on `window` is NOT reliable here: with
+  // a real mouse the release can go missing (the pointer leaves the viewport,
+  // another element takes pointer capture, or a handler upstream stops the
+  // event), and then the panel keeps following the cursor forever - it "sticks"
+  // and can never be put down.
+  //
+  // Two defences, and we want both:
+  //   1. setPointerCapture on the handle, so every event for this pointer is
+  //      delivered to THAT element until we release it, even off-window.
+  //   2. the buttons-are-up guard that js/align/index.js already relies on:
+  //      if a move arrives with no button held, the release was missed, so end
+  //      the drag there and then.
+  function startDrag(handle, e, onMove) {
+    if (e.button !== 0) return false;
+    let done = false;
+    const end = () => {
+      if (done) return;
+      done = true;
+      handle.removeEventListener("pointermove", move);
+      handle.removeEventListener("pointerup", end);
+      handle.removeEventListener("pointercancel", end);
+      handle.removeEventListener("lostpointercapture", end);
+      try { handle.releasePointerCapture(e.pointerId); } catch { /* already gone */ }
       title.classList.remove("pixhb-dragging");
       saveRect(rect);
     };
-    window.addEventListener("pointermove", move);
-    window.addEventListener("pointerup", up);
+    const move = (ev) => {
+      if (!(ev.buttons & 1)) { end(); return; }   // the release went missing
+      onMove(ev);
+    };
+    try { handle.setPointerCapture(e.pointerId); } catch { /* older build: the guard still covers us */ }
+    handle.addEventListener("pointermove", move);
+    handle.addEventListener("pointerup", end);
+    handle.addEventListener("pointercancel", end);
+    handle.addEventListener("lostpointercapture", end);
     e.preventDefault();
+    return true;
+  }
+
+  title.addEventListener("pointerdown", (e) => {
+    if (e.target.closest(".pixhb-wbtn")) return;
+    const ox = e.clientX - win.offsetLeft;
+    const oy = e.clientY - win.offsetTop;
+    if (!startDrag(title, e, (ev) => {
+      rect.x = Math.max(0, Math.min(ev.clientX - ox, window.innerWidth - Math.min(rect.w, 160)));
+      rect.y = Math.max(0, Math.min(ev.clientY - oy, window.innerHeight - 40));
+      applyRect();
+    })) return;
+    title.classList.add("pixhb-dragging");
   });
 
-  // ── resize from the corner ──
   grip.addEventListener("pointerdown", (e) => {
-    if (e.button !== 0) return;
     const left = win.offsetLeft, top = win.offsetTop;
-    const move = (ev) => {
+    startDrag(grip, e, (ev) => {
       rect.w = Math.max(MIN_W, Math.min(ev.clientX - left, window.innerWidth - left));
       rect.h = Math.max(MIN_H, Math.min(ev.clientY - top, window.innerHeight - top));
       applyRect();
-    };
-    const up = () => {
-      window.removeEventListener("pointermove", move);
-      window.removeEventListener("pointerup", up);
-      saveRect(rect);
-    };
-    window.addEventListener("pointermove", move);
-    window.addEventListener("pointerup", up);
-    e.preventDefault();
+    });
     e.stopPropagation();
   });
 
