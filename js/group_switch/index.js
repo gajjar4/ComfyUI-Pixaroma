@@ -3,7 +3,9 @@ import { installCanvasZoomPassthrough } from "../shared/canvas_zoom.mjs";
 import { isVueNodes, applyAdaptiveCanvasOnly } from "../shared/nodes2.mjs";
 import { installResizeFloor } from "../shared/resize_floor.mjs";
 import { isGraphLoading } from "../shared/graph_loading.mjs";
-import { registerNodeSettings } from "../shared/node_settings.mjs";
+import {
+  registerNodeSettings, createAccentSection, applyAccent, installNodeAccent,
+} from "../shared/node_settings.mjs";
 import { registerNodeHelp } from "../shared/help.mjs";
 
 // ╔══════════════════════════════════════════════════════════════════════╗
@@ -435,6 +437,12 @@ function renderPanelBody(node, body) {
     }));
   }
   body.appendChild(sSec);
+
+  // the shared colour block, so this node offers the same option as the rest
+  body.appendChild(createAccentSection(node, {
+    onChange: () => { applyAccent(_panel, node); renderNode(node); },
+  }));
+
   // Keep the (possibly taller) panel fully on-screen after a structural change.
   requestAnimationFrame(reclampPanel);
 }
@@ -479,6 +487,7 @@ function outsideClose(e) {
   if (!_panel) return;
   if (_panel.contains(e.target)) return;
   if (e.target.closest && e.target.closest(".pix-gs-gear")) return; // gear toggles its own panel
+  if (e.target.closest && e.target.closest(".pix-cp-popup, .pix-cp-modal-backdrop")) return; // the colour picker
   closePanel();
 }
 function escClose(e) { if (e.key === "Escape" && _panel) { e.stopPropagation(); closePanel(); } }
@@ -493,6 +502,7 @@ function openPanel(node, ev) {
   injectCSS();
   const panel = el("div", "pix-gs-panel");
   _panel = panel; _panelNode = node;
+  applyAccent(panel, node);   // the panel's own toggles/chips follow the accent
   const head = el("div", "pix-gs-phead");
   const ttl = el("span"); ttl.textContent = "Group Switch settings";
   const x = el("button", "pix-gs-px"); x.textContent = "✕"; x.onclick = closePanel;
@@ -537,11 +547,11 @@ function injectCSS() {
     // any node colour - Pixaroma node UI convention #1. Height 22 = the gear's, so
     // the strip stays TOP_H (32) tall and bodyHeight() is unaffected.
     ".pix-gs-bulkbtn{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;height:22px;box-sizing:border-box;padding:0 7px;font:11px 'Segoe UI',system-ui,sans-serif;border-radius:5px;border:1px solid rgba(255,255,255,0.14);background:rgba(255,255,255,0.05);color:rgba(255,255,255,0.72);cursor:pointer;white-space:nowrap;}",
-    ".pix-gs-bulkbtn:hover{border-color:#f66744;background:#f66744;color:#fff;}",
+    ".pix-gs-bulkbtn:hover{border-color:var(--pix-acc,#f66744);background:var(--pix-acc,#f66744);color:#fff;}",
     // Greyed, not hidden - the tooltip says WHY (the switching rule forbids it).
     ".pix-gs-bulkbtn.off,.pix-gs-bulkbtn.off:hover{opacity:0.35;cursor:default;border-color:rgba(255,255,255,0.14);background:rgba(255,255,255,0.05);color:rgba(255,255,255,0.72);}",
     ".pix-gs-gear{display:flex;align-items:center;justify-content:center;width:22px;height:22px;border:0;background:transparent;color:rgba(255,255,255,0.5);cursor:pointer;border-radius:5px;padding:0;flex:0 0 auto;}",
-    ".pix-gs-gear:hover{color:#f66744;background:rgba(255,255,255,0.06);}",
+    ".pix-gs-gear:hover{color:var(--pix-acc,#f66744);background:rgba(255,255,255,0.06);}",
     ".pix-gs-list{display:flex;flex-direction:column;gap:1px;padding:0 5px 4px;}",
     ".pix-gs-row{display:flex;align-items:center;gap:9px;padding:6px 7px;border-radius:6px;cursor:pointer;}",
     ".pix-gs-row:hover{background:rgba(255,255,255,0.04);}",
@@ -551,7 +561,7 @@ function injectCSS() {
     ".pix-gs-num{font-size:10.5px;color:rgba(255,255,255,0.5);background:rgba(255,255,255,0.08);border-radius:4px;padding:1px 5px;flex:none;}",
     ".pix-gs-tog{width:34px;height:18px;border-radius:9px;background:rgba(255,255,255,0.16);position:relative;cursor:pointer;flex:none;transition:background .15s;}",
     ".pix-gs-tog .k{position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:50%;background:#c8c8c8;transition:left .15s,background .15s;}",
-    ".pix-gs-tog.on{background:#f66744;}",
+    ".pix-gs-tog.on{background:var(--pix-acc,#f66744);}",
     ".pix-gs-tog.on .k{left:18px;background:#fff;}",
     ".pix-gs-hint{font-size:11.5px;color:rgba(255,255,255,0.42);padding:10px 16px;line-height:1.5;text-align:center;}",
     ".pix-gs-panel{position:fixed;z-index:10010;width:320px;max-width:94vw;background:#232325;border:1px solid rgba(255,255,255,0.14);border-radius:11px;box-shadow:0 10px 34px rgba(0,0,0,0.5);font-family:'Segoe UI',system-ui,sans-serif;overflow:hidden;}",
@@ -564,7 +574,7 @@ function injectCSS() {
     ".pix-gs-sh{font-size:11px;color:rgba(255,255,255,0.42);margin-bottom:8px;}",
     ".pix-gs-seg{display:flex;background:rgba(0,0,0,0.3);border-radius:7px;padding:2px;}",
     ".pix-gs-sg{flex:1;text-align:center;color:rgba(255,255,255,0.66);font-size:12px;padding:6px 0;border-radius:5px;cursor:pointer;user-select:none;}",
-    ".pix-gs-sg.on{background:#f66744;color:#fff;}",
+    ".pix-gs-sg.on{background:var(--pix-acc,#f66744);color:#fff;}",
     ".pix-gs-phint{font-size:11.5px;color:rgba(255,255,255,0.42);margin-top:8px;line-height:1.5;}",
     ".pix-gs-search{display:flex;align-items:center;gap:7px;background:#1c1c1e;border:1px solid rgba(255,255,255,0.1);border-radius:6px;padding:7px 9px;margin:9px 0 8px;}",
     ".pix-gs-sicon{color:rgba(255,255,255,0.35);display:flex;}",
@@ -573,20 +583,20 @@ function injectCSS() {
     ".pix-gs-sortrow{display:flex;align-items:center;justify-content:space-between;margin-bottom:7px;}",
     ".pix-gs-sortlab{font-size:11px;color:rgba(255,255,255,0.4);}",
     ".pix-gs-sortchip{display:flex;align-items:center;gap:6px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.14);color:#dcdcdc;font-size:11.5px;padding:4px 10px;border-radius:6px;cursor:pointer;}",
-    ".pix-gs-sortchip:hover{border-color:#f66744;}",
+    ".pix-gs-sortchip:hover{border-color:var(--pix-acc,#f66744);}",
     ".pix-gs-picklist{max-height:168px;overflow-y:auto;display:flex;flex-direction:column;gap:1px;}",
     ".pix-gs-ck{display:flex;align-items:center;gap:9px;padding:6px 4px;font-size:12.5px;color:#d3d3d3;cursor:pointer;border-radius:5px;}",
     ".pix-gs-ck:hover{background:rgba(255,255,255,0.04);}",
     ".pix-gs-cbx{width:14px;height:14px;border-radius:4px;border:1px solid rgba(255,255,255,0.3);flex:none;display:flex;align-items:center;justify-content:center;font-size:10px;color:#fff;}",
-    ".pix-gs-cbx.tk{background:#f66744;border-color:#f66744;}",
+    ".pix-gs-cbx.tk{background:var(--pix-acc,#f66744);border-color:var(--pix-acc,#f66744);}",
     ".pix-gs-cnm{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}",
     ".pix-gs-loc{color:rgba(255,255,255,0);cursor:pointer;display:flex;transition:color .12s;}",
     ".pix-gs-ck:hover .pix-gs-loc{color:rgba(255,255,255,0.4);}",
-    ".pix-gs-loc:hover{color:#f66744;}",
+    ".pix-gs-loc:hover{color:var(--pix-acc,#f66744);}",
     ".pix-gs-radio{display:flex;align-items:center;gap:9px;padding:6px 2px;font-size:12.5px;color:#d5d5d5;cursor:pointer;user-select:none;}",
     ".pix-gs-rc{width:15px;height:15px;border-radius:50%;border:1px solid rgba(255,255,255,0.32);flex:none;display:flex;align-items:center;justify-content:center;}",
-    ".pix-gs-rc .ri{width:7px;height:7px;border-radius:50%;background:#f66744;display:none;}",
-    ".pix-gs-radio.on .pix-gs-rc{border-color:#f66744;}",
+    ".pix-gs-rc .ri{width:7px;height:7px;border-radius:50%;background:var(--pix-acc,#f66744);display:none;}",
+    ".pix-gs-radio.on .pix-gs-rc{border-color:var(--pix-acc,#f66744);}",
     ".pix-gs-radio.on .pix-gs-rc .ri{display:block;}",
   ].join("\n");
   (document.head || document.documentElement).appendChild(s);
@@ -612,6 +622,7 @@ function setupNode(node) {
   injectCSS();
   const root = el("div", "pix-gs-root");
   installCanvasZoomPassthrough(root);
+  installNodeAccent(node, root);   // the switches follow this node's accent colour
   const widget = node.addDOMWidget("group_switch_ui", "pixaroma_group_switch", root, {
     getValue: () => readState(node),
     setValue: () => {},

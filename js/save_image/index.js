@@ -15,7 +15,7 @@ import {
   installCanvasZoomPassthrough,
 } from "../shared/index.mjs";
 import { isGraphLoading } from "../shared/graph_loading.mjs";
-import { registerNodeSettings } from "../shared/node_settings.mjs";
+import { registerNodeSettings, installNodeAccent } from "../shared/node_settings.mjs";
 import { applyFilenameTokenRefs } from "../shared/filename_tokens.mjs";
 import {
   COMFY_CLASS,
@@ -911,6 +911,7 @@ function setupNode(node) {
   const ui = buildRoot();
   node._pixSiUI = ui;
   installCanvasZoomPassthrough(ui.root);
+  installNodeAccent(node, ui.root);   // the face follows this node's accent colour
   const widget = node.addDOMWidget("pixaroma_save_image", "custom", ui.root, {
     getValue: () => null,
     setValue: () => {},

@@ -4,7 +4,9 @@ import { api } from "/scripts/api.js";
 import { isVueNodes, applyAdaptiveCanvasOnly } from "../shared/nodes2.mjs";
 import { installResizeFloor } from "../shared/resize_floor.mjs";
 import { isGraphLoading } from "../shared/graph_loading.mjs";
-import { registerNodeSettings } from "../shared/node_settings.mjs";
+import {
+  registerNodeSettings, createAccentSection, accentOf, applyAccent, installNodeAccent,
+} from "../shared/node_settings.mjs";
 import { registerNodeHelp } from "../shared/help.mjs";
 import { createPixaromaColorPicker } from "../shared/color_picker.mjs";
 import { openRunHistory, closeRunHistoryFor, refreshRunHistory } from "./history.mjs";
@@ -605,6 +607,15 @@ function renderPanelBody(node, body) {
   dSec.appendChild(picker.element);
 
   body.appendChild(dSec);
+
+  // The shared colour block. Distinct from the clock colour above: that paints
+  // the big digits, this paints the buttons, toggles and the status dot.
+  body.appendChild(createAccentSection(node, {
+    label: "Button colour",
+    hint: "Toggles, the volume slider and the status dot. This node only.",
+    onChange: () => { applyAccent(_panel, node); applyState(node); },
+  }));
+
   requestAnimationFrame(reclampPanel);
 }
 
@@ -687,6 +698,7 @@ function openPanel(node) {
   closePanel();
   injectCSS();
   const panel = el("div", "pix-rt-panel");
+  applyAccent(panel, node);   // the panel's own toggles/slider follow the accent
   _panel = panel; _panelNode = node;
   const head = el("div", "pix-rt-phead");
   const ttl = el("span"); ttl.textContent = "Run Timer settings";
@@ -730,7 +742,7 @@ function injectCSS() {
     ".pix-rt-unit{font-size:13px;line-height:1;margin-left:2px;margin-top:2px;opacity:0.5;}",
     ".pix-rt-dot{position:absolute;top:6px;left:7px;width:7px;height:7px;border-radius:50%;background:#6b6b72;}",
     ".pix-rt-dot.run{background:#3ec371;animation:pixRtPulse 1s infinite;}",
-    ".pix-rt-dot.done{background:#f66744;}",
+    ".pix-rt-dot.done{background:var(--pix-acc,#f66744);}",
     ".pix-rt-screen.flash{animation:pixRtFlash 0.6s;}",
     "@keyframes pixRtPulse{0%,100%{opacity:1;}50%{opacity:.3;}}",
     "@keyframes pixRtFlash{0%{box-shadow:0 0 0 3px var(--cc,#f66744);}100%{box-shadow:0 0 0 0 rgba(0,0,0,0);}}",
@@ -786,20 +798,20 @@ function injectCSS() {
     ".pix-rt-sublbl{font-size:11px;color:#888;margin:2px 0 8px;}",
     ".pix-rt-tog{width:34px;height:18px;border-radius:9px;background:#3a3a3a;position:relative;cursor:pointer;flex:none;transition:background .15s;}",
     ".pix-rt-tog .k{position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:50%;background:#bbb;transition:left .15s,background .15s;}",
-    ".pix-rt-tog.on{background:#f66744;}",
+    ".pix-rt-tog.on{background:var(--pix-acc,#f66744);}",
     ".pix-rt-tog.on .k{left:18px;background:#fff;}",
     ".pix-rt-select{background:#1a1a1a;border:1px solid #444;color:#ddd;border-radius:4px;font-size:12.5px;padding:5px 7px;font-family:inherit;cursor:pointer;max-width:150px;}",
-    ".pix-rt-select:focus{outline:none;border-color:#f66744;}",
-    ".pix-rt-vol{-webkit-appearance:none;appearance:none;flex:1;min-width:0;height:4px;border-radius:2px;outline:none;cursor:pointer;background:linear-gradient(to right,#f66744 var(--fill,70%),#3a3a3a var(--fill,70%));}",
-    ".pix-rt-vol::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:14px;height:14px;border-radius:50%;background:#f66744;border:2px solid #1a1a1a;cursor:pointer;}",
-    ".pix-rt-vol::-moz-range-thumb{width:13px;height:13px;border-radius:50%;background:#f66744;border:2px solid #1a1a1a;cursor:pointer;}",
+    ".pix-rt-select:focus{outline:none;border-color:var(--pix-acc,#f66744);}",
+    ".pix-rt-vol{-webkit-appearance:none;appearance:none;flex:1;min-width:0;height:4px;border-radius:2px;outline:none;cursor:pointer;background:linear-gradient(to right,var(--pix-acc,#f66744) var(--fill,70%),#3a3a3a var(--fill,70%));}",
+    ".pix-rt-vol::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:14px;height:14px;border-radius:50%;background:var(--pix-acc,#f66744);border:2px solid #1a1a1a;cursor:pointer;}",
+    ".pix-rt-vol::-moz-range-thumb{width:13px;height:13px;border-radius:50%;background:var(--pix-acc,#f66744);border:2px solid #1a1a1a;cursor:pointer;}",
     ".pix-rt-vol::-moz-range-track{height:4px;border-radius:2px;background:transparent;}",
     ".pix-rt-volout{font-size:12px;color:#bbb;width:36px;text-align:right;flex:none;}",
     ".pix-rt-prev{background:transparent;border:1px solid #444;color:#ccc;border-radius:4px;font-size:12px;padding:5px 9px;cursor:pointer;flex:none;font-family:inherit;}",
-    ".pix-rt-prev:hover{border-color:#f66744;color:#f66744;}",
+    ".pix-rt-prev:hover{border-color:var(--pix-acc,#f66744);color:var(--pix-acc,#f66744);}",
     ".pix-rt-seg{display:flex;background:#0e0e0e;border:1px solid #333;border-radius:6px;padding:2px;flex:none;}",
     ".pix-rt-sg{min-width:42px;text-align:center;color:#aaa;font-size:12px;padding:5px 10px;border-radius:4px;cursor:pointer;user-select:none;}",
-    ".pix-rt-sg.on{background:#f66744;color:#fff;}",
+    ".pix-rt-sg.on{background:var(--pix-acc,#f66744);color:#fff;}",
   ].join("\n");
   (document.head || document.documentElement).appendChild(s);
 }
@@ -830,7 +842,7 @@ function paintLegacyClock(node, ctx) {
   ctx.beginPath(); rr(0, 0, w, h, 8); ctx.fill();
   // status dot
   const dm = node._rtDotState || "idle";
-  ctx.fillStyle = dm === "run" ? "#3ec371" : dm === "done" ? "#f66744" : "#6b6b72";
+  ctx.fillStyle = dm === "run" ? "#3ec371" : dm === "done" ? accentOf(node) : "#6b6b72";
   ctx.beginPath(); ctx.arc(11, 11, 3.5, 0, Math.PI * 2); ctx.fill();
   // time
   const col = readState(node).color || BRAND;
@@ -929,6 +941,7 @@ function setupNode(node) {
   if (isVueNodes()) {
     // Nodes 2.0: a DOM-widget clock (frameless + click-through via the CSS above).
     const root = el("div", "pix-rt-root");
+    installNodeAccent(node, root);   // the status dot follows this node's accent
     const screen = el("div", "pix-rt-screen");
     const dot = el("span", "pix-rt-dot");
     const time = el("div", "pix-rt-time");

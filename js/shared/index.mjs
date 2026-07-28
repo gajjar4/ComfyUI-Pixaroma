@@ -69,6 +69,7 @@ export {
   getNodeSettings,
   openNodeSettings,
   openAccentPanel,
+  createAccentSection,
   closeNodeSettingsPanel,
   closeNodeSettingsFor,
   accentOf,

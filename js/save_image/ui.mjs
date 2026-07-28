@@ -32,26 +32,26 @@ export function injectCSS() {
     // it hugs the slots and doesn't leave a big empty gap on the right)
     ".pix-si-topbar{display:flex;justify-content:flex-start;align-items:center;flex:0 0 auto;min-height:20px;margin:-6px 0 -6px;}",
     // orange square + white triangle, same idea as the group fold icon
-    ".pix-si-fold{width:24px;height:22px;border:none;border-radius:4px;background:#f66744;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;padding:0;flex:0 0 auto;}",
+    ".pix-si-fold{width:24px;height:22px;border:none;border-radius:4px;background:var(--pix-acc,#f66744);cursor:pointer;display:inline-flex;align-items:center;justify-content:center;padding:0;flex:0 0 auto;}",
     ".pix-si-fold:hover{background:#ff7d58;}",
     ".pix-si-fold i{display:block;width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;}",
     ".pix-si-fold:not(.folded) i{border-bottom:6px solid #fff;}", // ▲ = fold up
     ".pix-si-fold.folded i{border-top:6px solid #fff;}", // ▼ = open back up
-    ".pix-si-lab{display:block;font-size:10px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:#f66744;margin-bottom:4px;}",
+    ".pix-si-lab{display:block;font-size:10px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:var(--pix-acc,#f66744);margin-bottom:4px;}",
     ".pix-si-row{display:flex;gap:6px;align-items:center;}",
     ".pix-si-field{flex:1;min-width:0;background:#1d1d1d;border:1px solid #444;border-radius:4px;color:#e0e0e0;padding:5px 8px;font-size:12px;outline:none;box-sizing:border-box;font-family:inherit;width:100%;}",
-    ".pix-si-field:focus{border-color:#f66744;}",
+    ".pix-si-field:focus{border-color:var(--pix-acc,#f66744);}",
     ".pix-si-field.mono{font-family:Consolas,ui-monospace,monospace;font-size:12px;}",
     ".pix-si-btn{background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.16);color:#ccc;border-radius:4px;padding:5px 10px;font-size:12px;cursor:pointer;display:inline-flex;align-items:center;gap:5px;white-space:nowrap;flex:0 0 auto;font-family:inherit;user-select:none;}",
-    ".pix-si-btn:hover{background:#f66744;border-color:#f66744;color:#fff;}",
+    ".pix-si-btn:hover{background:var(--pix-acc,#f66744);border-color:var(--pix-acc,#f66744);color:#fff;}",
     ".pix-si-btn:disabled{opacity:.5;cursor:default;}",
     ".pix-si-btn:disabled:hover{background:rgba(255,255,255,.05);border-color:rgba(255,255,255,.16);color:#ccc;}",
     // solid BRAND action buttons (Preview Image parity)
-    ".pix-si-primary{background:#f66744;border-color:#f66744;color:#fff;}",
+    ".pix-si-primary{background:var(--pix-acc,#f66744);border-color:var(--pix-acc,#f66744);color:#fff;}",
     ".pix-si-primary:hover{background:#ff7d58;border-color:#ff7d58;color:#fff;}",
     ".pix-si-chips{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px;}",
     ".pix-si-chip{background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.14);color:#ccc;border-radius:4px;padding:2px 7px;font-size:11px;cursor:pointer;font-family:inherit;user-select:none;}",
-    ".pix-si-chip:hover{border-color:#f66744;color:#eee;}",
+    ".pix-si-chip:hover{border-color:var(--pix-acc,#f66744);color:#eee;}",
     ".pix-si-prev{background:#1d1d1d;border:1px solid #444;border-radius:4px;padding:6px 8px;margin-top:8px;}",
     ".pix-si-prevlab{font-size:10px;color:#8f8f8f;margin-bottom:2px;}",
     ".pix-si-prevpath{font-family:Consolas,ui-monospace,monospace;font-size:11px;color:#ffb59e;word-break:break-all;line-height:1.45;}",
@@ -60,7 +60,7 @@ export function injectCSS() {
     // (the rectangular orange buttons are the actions - user request)
     ".pix-si-seg{display:inline-flex;border:1px solid #444;border-radius:999px;overflow:hidden;flex:0 0 auto;}",
     ".pix-si-seg button{background:#1d1d1d;color:#aaa;border:none;padding:4px 11px;font-size:12px;cursor:pointer;font-family:inherit;}",
-    ".pix-si-seg button.on{background:#f66744;color:#fff;}",
+    ".pix-si-seg button.on{background:var(--pix-acc,#f66744);color:#fff;}",
     // the action buttons share the leftover row space EQUALLY and the row
     // ends flush with the right edge (flex-wrap only as a narrow fallback)
     ".pix-si-btnrow{display:flex;flex-wrap:wrap;gap:6px;align-items:stretch;}",
@@ -75,16 +75,16 @@ export function injectCSS() {
     ".pix-si-view.gridmode .pix-si-grid{display:grid;}",
     ".pix-si-cell{position:relative;overflow:hidden;cursor:pointer;display:flex;align-items:center;justify-content:center;min-width:0;min-height:0;}",
     ".pix-si-cell img{width:100%;height:100%;object-fit:contain;display:block;}",
-    ".pix-si-cell:hover{outline:1px solid #f66744;outline-offset:-1px;border-radius:3px;}",
+    ".pix-si-cell:hover{outline:1px solid var(--pix-acc,#f66744);outline-offset:-1px;border-radius:3px;}",
     ".pix-si-cellbadge{position:absolute;right:4px;bottom:4px;background:rgba(0,0,0,.55);color:#ddd;font-size:10px;padding:0 5px;border-radius:3px;pointer-events:none;}",
     ".pix-si-nav{position:absolute;top:50%;transform:translateY(-50%);background:rgba(0,0,0,.5);border:1px solid rgba(255,255,255,.18);color:#ddd;border-radius:4px;padding:4px 7px;font-size:11px;cursor:pointer;display:none;}",
     ".pix-si-view.has:hover .pix-si-nav.show{display:block;}",
     ".pix-si-nav.prev{left:6px;}",
     ".pix-si-nav.next{right:6px;}",
-    ".pix-si-nav:hover{background:#f66744;border-color:#f66744;color:#fff;}",
+    ".pix-si-nav:hover{background:var(--pix-acc,#f66744);border-color:var(--pix-acc,#f66744);color:#fff;}",
     ".pix-si-count{position:absolute;right:6px;bottom:6px;background:rgba(0,0,0,.55);color:#ddd;font-size:11px;padding:1px 7px;border-radius:3px;display:none;}",
     ".pix-si-x{position:absolute;top:6px;right:6px;background:rgba(0,0,0,.55);border:1px solid rgba(255,255,255,.18);color:#ddd;border-radius:4px;padding:2px 9px;font-size:11px;cursor:pointer;display:none;}",
-    ".pix-si-x:hover{background:#f66744;border-color:#f66744;color:#fff;}",
+    ".pix-si-x:hover{background:var(--pix-acc,#f66744);border-color:var(--pix-acc,#f66744);color:#fff;}",
     // one small info line under the image: dims + save summary + flashes
     ".pix-si-info{flex:0 0 auto;text-align:center;font-size:11px;color:#8f8f8f;min-height:12px;line-height:1.25;word-break:break-word;}",
     // right-click settings panel (Run Timer palette; DROPPED by mistake in
@@ -98,16 +98,16 @@ export function injectCSS() {
     ".pix-si-prow{display:flex;align-items:center;gap:9px;}",
     ".pix-si-plab{font-size:12px;color:#ddd;}",
     ".pix-si-psub{font-size:10px;color:#8f8f8f;margin-top:2px;line-height:1.4;}",
-    ".pix-si-qval{font-size:12px;color:#f66744;min-width:24px;text-align:right;}",
-    ".pix-si-qsl{flex:1;min-width:0;accent-color:#f66744;}",
+    ".pix-si-qval{font-size:12px;color:var(--pix-acc,#f66744);min-width:24px;text-align:right;}",
+    ".pix-si-qsl{flex:1;min-width:0;accent-color:var(--pix-acc,#f66744);}",
     '.pix-si-sw{width:30px;height:16px;border-radius:8px;background:#555;position:relative;display:inline-block;cursor:pointer;flex:0 0 auto;transition:background .15s;}',
     '.pix-si-sw::after{content:"";position:absolute;top:2px;left:2px;width:12px;height:12px;border-radius:50%;background:#ccc;transition:left .15s;}',
-    ".pix-si-sw.on{background:#f66744;}",
+    ".pix-si-sw.on{background:var(--pix-acc,#f66744);}",
     ".pix-si-sw.on::after{left:16px;background:#fff;}",
     // right-click menu on the preview image (Open / Copy / Save image)
     ".pix-si-menu{position:fixed;z-index:10011;background:#1a1a1a;border:1px solid #444;border-radius:6px;padding:4px;min-width:150px;box-shadow:0 8px 24px rgba(0,0,0,0.6);font-family:'Segoe UI',system-ui,sans-serif;}",
     ".pix-si-mitem{padding:6px 12px;font-size:12px;color:#ddd;border-radius:4px;cursor:pointer;white-space:nowrap;user-select:none;}",
-    ".pix-si-mitem:hover{background:#f66744;color:#fff;}",
+    ".pix-si-mitem:hover{background:var(--pix-acc,#f66744);color:#fff;}",
     // Nodes 2.0: hide the native output-image preview panel for this node
     ".lg-node:has(.pix-si-root) .image-preview{display:none !important;}",
   ].join("\n");

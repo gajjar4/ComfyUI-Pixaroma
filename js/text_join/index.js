@@ -274,7 +274,8 @@ registerNodeHelp("PixaromaTextJoinFour", {
 // entry does, for all three sizes. ownMenuItem: the node adds its own line.
 for (const cls of Object.keys(CLASSES)) {
   registerNodeSettings(cls, {
-    title: "Text Join",
+    // no title: the derived one ("Text Join Two/Three/Four") is what the colour
+    // block's "New ... nodes" button should say, since each size saves its own.
     ownMenuItem: true,
     open: (node) => openTextJoinPanel(node, () => {
       paintRows(node);

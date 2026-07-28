@@ -5,6 +5,7 @@
 
 import { app } from "/scripts/app.js";
 import { isVueNodes } from "../shared/index.mjs";
+import { createAccentSection } from "../shared/node_settings.mjs";
 import { BRAND, SEP_OPTIONS, readState, writeState, saveGlobalDefault } from "./core.mjs";
 
 let _panel = null;
@@ -65,6 +66,7 @@ function injectCSS() {
     .pix-tjp-tog.on { background:${BRAND}; }
     .pix-tjp-tog.on::after { left:18px; }
 
+    .pix-tjp-accbox { border-top:1px solid #333; }
     .pix-tjp-f { display:flex; gap:8px; padding:10px 12px; border-top:1px solid #333; background:#1f1f1f; }
     .pix-tjp-btn { border:1px solid #444; background:rgba(255,255,255,0.04); color:#d8d8d8; border-radius:5px;
       padding:6px 12px; font:12px 'Segoe UI',sans-serif; cursor:pointer; }
@@ -185,6 +187,7 @@ function outsideClose(e) {
   if (!_panel) return;
   if (_panel.contains(e.target)) return;
   if (e.target.closest?.(".pix-tjp-dd")) return;   // the separator dropdown
+  if (e.target.closest?.(".pix-cp-popup, .pix-cp-modal-backdrop")) return;  // the colour picker
   closeTextJoinPanel();
 }
 function escClose(e) {
@@ -321,7 +324,12 @@ export function openTextJoinPanel(node, onChange) {
   done.addEventListener("click", closeTextJoinPanel);
   foot.append(mkDefault, done);
 
-  panel.append(title, body, foot);
+  // The colour block sits in its own container, not in `body`, because
+  // buildBody() wipes body.innerHTML on every toggle and would take it with it.
+  const accBox = el("div", "pix-tjp-b pix-tjp-accbox");
+  accBox.appendChild(createAccentSection(node, { onChange: () => fire() }));
+
+  panel.append(title, body, accBox, foot);
   document.body.appendChild(panel);
 
   placeBeside(panel, getNodeScreenRect(node));

@@ -310,6 +310,7 @@ function injectCSS() {
     .pix-nset-t .x { margin-left:auto; color:#8a8a8a; cursor:pointer; padding:0 4px; }
     .pix-nset-t .x:hover { color:#fff; }
     .pix-nset-b { padding:14px 12px; display:flex; flex-direction:column; gap:12px; }
+    .pix-nset-sec { display:flex; flex-direction:column; gap:10px; }
     .pix-nset-acc { display:flex; align-items:center; gap:10px; }
     .pix-nset-acc .lab { font-size:12px; color:#cfcfcf; }
     .pix-nset-acc .sub { font-size:11px; color:#8a8a8a; margin-top:2px; }
@@ -430,6 +431,79 @@ function wrapLoadGraphData() {
   };
 }
 
+/**
+ * The colour block as a drop-in element, so a node that already owns a richer
+ * settings panel can offer the same colour option without rebuilding it:
+ *
+ *   body.appendChild(createAccentSection(node, { onChange: () => repaint(node) }));
+ *
+ * The host panel MUST let clicks inside the picker through its outside-close
+ * guard, or picking a colour dismisses the panel underneath:
+ *   if (e.target.closest?.(".pix-cp-popup, .pix-cp-modal-backdrop")) return;
+ *
+ * opts = { title, label, hint, onChange(node), onPickerOpen(handle) }
+ */
+export function createAccentSection(node, opts = {}) {
+  injectCSS();
+  const def = getNodeSettings(node?.comfyClass);
+  const title = opts.title || def?.title || defaultTitle(node?.comfyClass);
+  const setting = def?.setting || classAccentSetting(node?.comfyClass);
+
+  const wrap = el("div", "pix-nset-sec");
+  wrap.style.setProperty(ACCENT_VAR, accentOf(node));
+
+  const sw = el("div", "pix-nset-sw");
+  sw.title = "Pick the colour this node paints with";
+  sw.style.background = accentOf(node);
+
+  const repaint = () => {
+    const a = accentOf(node);
+    wrap.style.setProperty(ACCENT_VAR, a);
+    sw.style.background = a;
+    repaintAccent(node);
+    opts.onChange?.(node);
+  };
+
+  sw.addEventListener("click", () => {
+    const handle = openPixaromaColorPickerPopup(sw, {
+      initialColor: accentOf(node),
+      swatches: BUTTON_PALETTE,
+      wide: true,
+      resetColor: BRAND,
+      onPick: (c) => { setNodeAccent(node, c || BRAND); repaint(); },
+    });
+    opts.onPickerOpen?.(handle);   // so the host can close it on teardown
+  });
+
+  const row = el("div", "pix-nset-acc");
+  const txt = el("div");
+  txt.appendChild(el("div", "lab", opts.label || "Button colour"));
+  txt.appendChild(el("div", "sub", opts.hint || "This node only. Save it as a default below."));
+  row.append(sw, txt);
+
+  const flash = (btn, text) => {
+    const was = btn.textContent;
+    btn.textContent = text;
+    setTimeout(() => { btn.textContent = was; }, 1200);
+  };
+
+  const btns = el("div", "pix-nset-row");
+  const bType = el("button", "pix-nset-btn", "New " + title + " nodes");
+  bType.title = "Every new " + title + " node starts with this colour";
+  bType.addEventListener("click", async () => {
+    if (await writeSetting(setting, accentOf(node))) { flash(bType, "Saved"); repaintAllAccents(); }
+  });
+  const bAll = el("button", "pix-nset-btn", "Every Pixaroma node");
+  bAll.title = "Every Pixaroma node follows this colour, unless it has been given one of its own";
+  bAll.addEventListener("click", async () => {
+    if (await writeSetting(GLOBAL_ACCENT_SETTING, accentOf(node))) { flash(bAll, "Saved"); repaintAllAccents(); }
+  });
+  btns.append(bType, bAll);
+
+  wrap.append(row, el("div", "pix-nset-dt", "Use this colour as the default for"), btns);
+  return wrap;
+}
+
 export function openAccentPanel(node) {
   const def = getNodeSettings(node?.comfyClass);
   if (!node) return;
@@ -439,7 +513,6 @@ export function openAccentPanel(node) {
   _panelNode = node;
 
   const title = def?.title || defaultTitle(node.comfyClass);
-  const setting = def?.setting || classAccentSetting(node.comfyClass);
 
   const panel = el("div", "pix-nset");
   panel.style.setProperty(ACCENT_VAR, accentOf(node));
@@ -450,73 +523,19 @@ export function openAccentPanel(node) {
   x.addEventListener("click", closeNodeSettingsPanel);
   head.appendChild(x);
 
+  // The whole body IS the shared colour block, so this panel and a node that
+  // drops the block into its own richer panel behave identically.
   const body = el("div", "pix-nset-b");
-
-  const sw = el("div", "pix-nset-sw");
-  sw.title = "Pick the colour this node paints with";
-  sw.style.background = accentOf(node);
-
-  const repaint = () => {
-    const a = accentOf(node);
-    panel.style.setProperty(ACCENT_VAR, a);
-    sw.style.background = a;
-    repaintAccent(node);      // the CSS var + a canvas redraw, for free
-    def?.onChange?.(node);    // anything the node has to rebuild by hand
-  };
-
-  sw.addEventListener("click", () => {
-    // The LIVE picker (roomy plane + hue + hex + button-safe swatches) so the
-    // node recolours as you drag. No transparent tile - an accent is always a
-    // colour, and Reset means "back to the Pixaroma orange".
-    _cpHandle = openPixaromaColorPickerPopup(sw, {
-      initialColor: accentOf(node),
-      swatches: BUTTON_PALETTE,
-      wide: true,
-      resetColor: BRAND,
-      onPick: (c) => {
-        setNodeAccent(node, c || BRAND);
-        repaint();
-      },
-    });
-  });
-
-  const accRow = el("div", "pix-nset-acc");
-  const txt = el("div");
-  txt.appendChild(el("div", "lab", def?.swatchLabel || "Button colour"));
-  txt.appendChild(el("div", "sub", def?.swatchHint || "This node only. Save it as a default below."));
-  accRow.append(sw, txt);
-  body.appendChild(accRow);
-
-  // ── the two "save as default" buttons ──────────────────────────────────────
-  body.appendChild(el("div", "pix-nset-dt", "Use this colour as the default for"));
-  const btns = el("div", "pix-nset-row");
-
-  const flash = (btn, text) => {
-    const was = btn.textContent;
-    btn.textContent = text;
-    setTimeout(() => { btn.textContent = was; }, 1200);
-  };
-
-  const bType = el("button", "pix-nset-btn", "New " + title + " nodes");
-  bType.title = "Every new " + title + " node starts with this colour";
-  bType.addEventListener("click", async () => {
-    if (await writeSetting(setting, accentOf(node))) {
-      flash(bType, "Saved");
-      repaintAllAccents();   // nodes of this type with no colour of their own move now
-    }
-  });
-
-  const bAll = el("button", "pix-nset-btn", "Every Pixaroma node");
-  bAll.title = "Every Pixaroma node follows this colour, unless it has been given one of its own";
-  bAll.addEventListener("click", async () => {
-    if (await writeSetting(GLOBAL_ACCENT_SETTING, accentOf(node))) {
-      flash(bAll, "Saved");
-      repaintAllAccents();
-    }
-  });
-
-  btns.append(bType, bAll);
-  body.appendChild(btns);
+  body.appendChild(createAccentSection(node, {
+    title,
+    label: def?.swatchLabel,
+    hint: def?.swatchHint,
+    onChange: () => {
+      panel.style.setProperty(ACCENT_VAR, accentOf(node));  // the panel's own chrome
+      def?.onChange?.(node);                                // whatever the node rebuilds
+    },
+    onPickerOpen: (h) => { _cpHandle = h; },                // so close() reaches it
+  }));
 
   const foot = el("div", "pix-nset-f");
   const done = el("button", "pix-nset-btn pix-nset-push", "Done");

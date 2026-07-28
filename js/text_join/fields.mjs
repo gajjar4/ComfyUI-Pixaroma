@@ -17,6 +17,7 @@
 import { app } from "/scripts/app.js";
 import { widgetOf, BRAND, readState, labelFor } from "./core.mjs";
 import { applyAdaptiveCanvasOnly, isVueNodes, installResizeFloor, installCanvasZoomPassthrough } from "../shared/index.mjs";
+import { ACC, installNodeAccent } from "../shared/node_settings.mjs";
 
 export const MIN_FIELD_H = 56;     // smallest a single field box can shrink to
 const DEF_FIELD_H = 84;            // comfortable default per field on a fresh node
@@ -77,7 +78,7 @@ export function injectCSS() {
     .pix-tj-row.pix-tj-vue { flex:1 1 auto; min-height:${MIN_FIELD_H}px; }
     .pix-tj-field { position:absolute; top:0; right:0; bottom:0; left:0; box-sizing:border-box;
       background:#1d1d1d; border:1px solid #333; border-radius:5px; overflow:hidden; }
-    .pix-tj-field:focus-within { border-color:${BRAND}; }
+    .pix-tj-field:focus-within { border-color:${ACC}; }
     .pix-tj-lbl { position:absolute; top:4px; left:9px; right:9px; z-index:2; pointer-events:none;
       overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
       font:10px 'Segoe UI',-apple-system,sans-serif; color:#8f8f8f; }
@@ -93,7 +94,7 @@ export function injectCSS() {
     .pix-tj-ic { width:19px; height:19px; border-radius:4px; display:flex; align-items:center;
       justify-content:center; cursor:pointer; background:rgba(255,255,255,0.06);
       border:1px solid rgba(255,255,255,0.14); color:rgba(255,255,255,0.72); }
-    .pix-tj-ic:hover { background:${BRAND}; border-color:${BRAND}; color:#fff; }
+    .pix-tj-ic:hover { background:${ACC}; border-color:${ACC}; color:#fff; }
     .pix-tj-ic.ok, .pix-tj-ic.ok:hover { background:#3ec371; border-color:#3ec371; color:#fff; }
     /* Wire-driven: locked + grayed (the wired node drives it; the box is a dimmed,
        disabled fallback showing the typed text the wire overrides). */
@@ -346,6 +347,9 @@ export function installFields(node) {
     // 2.0). One widget per row, so install per row. A textarea with more text
     // than fits keeps its own scroll - the helper yields to it.
     installCanvasZoomPassthrough(wrap);
+    // Carry this node's accent colour on the row, so the focus ring and the icon
+    // hover follow the user's pick instead of being stuck on the brand orange.
+    installNodeAccent(node, wrap);
     seedField(node, wrap);
   });
 

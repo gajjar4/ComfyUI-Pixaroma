@@ -7,6 +7,7 @@ import { app } from "/scripts/app.js";
 import { isVueNodes } from "../shared/nodes2.mjs";
 import { readState, writeState } from "./state.mjs";
 import { injectCSS, el } from "./ui.mjs";
+import { createAccentSection } from "../shared/node_settings.mjs";
 
 let _panel = null;
 let _panelNode = null;
@@ -83,6 +84,7 @@ function makeDraggable(panel, handle) {
 function outsideClose(e) {
   if (!_panel) return;
   if (_panel.contains(e.target)) return;
+  if (e.target.closest?.(".pix-cp-popup, .pix-cp-modal-backdrop")) return;  // the colour picker
   closeSettingsPanel();
 }
 function escClose(e) {
@@ -252,6 +254,9 @@ export function openSettingsPanel(node, onChange) {
       "When folded, also tuck away the format and Copy/Open/Folder buttons"
     )
   );
+
+  // the shared colour block, so this node offers the same option as the rest
+  body.appendChild(createAccentSection(node, { onChange: () => _onChange?.() }));
 
   panel.appendChild(body);
   document.body.appendChild(panel);

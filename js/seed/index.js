@@ -1,8 +1,8 @@
 import { app } from "/scripts/app.js";
-import { BRAND, hideJsonWidget, applyAdaptiveCanvasOnly, isVueNodes, measureRootContent,
+import { hideJsonWidget, applyAdaptiveCanvasOnly, isVueNodes, measureRootContent,
   installCanvasZoomPassthrough,
 } from "../shared/index.mjs";
-import { registerNodeSettings } from "../shared/node_settings.mjs";
+import { registerNodeSettings, installNodeAccent, ACC } from "../shared/node_settings.mjs";
 import { openSeedSettings, closeSeedSettingsFor } from "./settings.mjs";
 import { openSeedHistory, closeSeedHistoryFor, refreshSeedHistory } from "./history.mjs";
 
@@ -65,7 +65,7 @@ function injectCSS() {
       letter-spacing: 0;
       outline: none;
     }
-    .pix-seed-num:focus { border-color: ${BRAND}; }
+    .pix-seed-num:focus { border-color: ${ACC}; }
     /* Number field + up/down (±1) spinner sit side-by-side. The wrap takes the
        number's place in the column, so the height measure is unchanged. */
     .pix-seed-numwrap { display: flex; align-items: stretch; }
@@ -104,7 +104,7 @@ function injectCSS() {
       transition: background 0.08s, color 0.08s;
     }
     .pix-seed-spinbtn + .pix-seed-spinbtn { border-top: 1px solid #3a3d40; }
-    .pix-seed-spinbtn:hover { background: ${BRAND}; color: #fff; }
+    .pix-seed-spinbtn:hover { background: ${ACC}; color: #fff; }
     .pix-seed-spinbtn:active { background: #ff8a5e; }
     /* Compact layout: a slim standalone spinner (full border + its own rounded
        corners) rather than one attached to the number's right edge. */
@@ -142,11 +142,11 @@ function injectCSS() {
     }
     .pix-seed-seg:hover:not(.active) { color: rgba(255,255,255,0.85); }
     .pix-seed-seg.active {
-      background: ${BRAND};
+      background: ${ACC};
       color: #fff;
       font-weight: 500;
     }
-    .pix-seed-seg:focus-visible { outline: 2px solid ${BRAND}; outline-offset: -2px; }
+    .pix-seed-seg:focus-visible { outline: 2px solid ${ACC}; outline-offset: -2px; }
     /* Action buttons — semi-transparent white surface, brand fill on hover
        (matches the Text / Prompt Pack action-button family). */
     .pix-seed-btn {
@@ -167,8 +167,8 @@ function injectCSS() {
       transition: background 0.08s, border-color 0.08s, color 0.08s;
     }
     .pix-seed-btn:hover {
-      background: ${BRAND};
-      border-color: ${BRAND};
+      background: ${ACC};
+      border-color: ${ACC};
       color: #fff;
     }
     .pix-seed-btn:disabled { opacity: 0.4; cursor: default; }
@@ -230,7 +230,7 @@ function injectCSS() {
       border-radius: 6px;
       background: rgba(255,255,255,0.05);
       border: 1px solid rgba(255,255,255,0.14);
-      color: ${BRAND};
+      color: ${ACC};
       font-family: inherit;
       font-size: 13px;
       font-weight: 600;
@@ -238,7 +238,7 @@ function injectCSS() {
       user-select: none;
       transition: background 0.08s, border-color 0.08s, color 0.08s;
     }
-    .pix-seed-minibtn:hover { background: ${BRAND}; border-color: ${BRAND}; color: #fff; }
+    .pix-seed-minibtn:hover { background: ${ACC}; border-color: ${ACC}; color: #fff; }
     /* Hover popover on the compact number: shows the FULL seed (the narrow field
        can clip a long one) + a copy button. Dark to match the seed box; floats on
        document.body so it escapes the node's clipping. */
@@ -272,11 +272,11 @@ function injectCSS() {
       border-radius: 5px;
       background: rgba(255,255,255,0.05);
       border: 1px solid rgba(255,255,255,0.14);
-      color: ${BRAND};
+      color: ${ACC};
       cursor: pointer;
       transition: background 0.08s, border-color 0.08s, color 0.08s;
     }
-    .pix-seed-tip-copy:hover { background: ${BRAND}; border-color: ${BRAND}; color: #fff; }
+    .pix-seed-tip-copy:hover { background: ${ACC}; border-color: ${ACC}; color: #fff; }
     .pix-seed-tip-copy.is-flashing,
     .pix-seed-tip-copy.is-flashing:hover { background: #3ec371; border-color: #3ec371; color: #fff; }
   `;
@@ -1009,6 +1009,7 @@ function setupSeedNode(node) {
   const root = document.createElement("div");
   root.className = "pix-seed-root";
   installCanvasZoomPassthrough(root);
+  installNodeAccent(node, root);   // the face follows this node's accent colour
   const _widget = node.addDOMWidget("seed_ui", "pixaroma_seed", root, {
     getValue: () => readState(node),
     setValue: () => {},

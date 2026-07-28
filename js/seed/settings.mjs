@@ -10,6 +10,7 @@
 
 import { app } from "/scripts/app.js";
 import { BRAND } from "../shared/index.mjs";
+import { createAccentSection } from "../shared/node_settings.mjs";
 
 function el(tag, cls, text) {
   const e = document.createElement(tag);
@@ -50,6 +51,7 @@ let _panel = null;
 let _panelNode = null;
 
 function outsideClose(e) {
+  if (e.target.closest?.(".pix-cp-popup, .pix-cp-modal-backdrop")) return;  // the colour picker
   if (_panel && !_panel.contains(e.target)) closeSeedSettings();
 }
 function escClose(e) {
@@ -246,6 +248,9 @@ export function openSeedSettings(node, ctx) {
     ctx.writeState(node, { ...st, digits: d });
   });
   body.appendChild(r3);
+
+  // the shared colour block, so this node offers the same option as the rest
+  body.appendChild(createAccentSection(node, { onChange: () => ctx.applyResize?.(node) }));
 
   panel.appendChild(body);
   document.body.appendChild(panel);
