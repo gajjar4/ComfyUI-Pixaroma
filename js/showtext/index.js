@@ -1,6 +1,6 @@
 import { app } from "/scripts/app.js";
 import { BRAND, applyAdaptiveCanvasOnly,
-  installCanvasZoomPassthrough,
+  installCanvasZoomPassthrough, installNodeAccent, registerNodeAccent,
 } from "../shared/index.mjs";
 
 // Resize clamp - user verified 210 x 118 as the smallest comfortable
@@ -33,8 +33,8 @@ function injectCSS() {
       font: 11px 'Segoe UI', -apple-system, sans-serif;
       padding: 2px 8px;
       background: rgba(20, 20, 20, 0.92);
-      color: ${BRAND};
-      border: 1px solid ${BRAND};
+      color: var(--pix-acc,var(--pix-acc,#f66744));
+      border: 1px solid var(--pix-acc,var(--pix-acc,#f66744));
       border-radius: 3px;
       cursor: pointer;
       opacity: 0;
@@ -49,7 +49,7 @@ function injectCSS() {
     }
     .pix-st-copy:hover {
       opacity: 1 !important;
-      background: ${BRAND};
+      background: var(--pix-acc,var(--pix-acc,#f66744));
       color: #fff;
     }
     .pix-st-copy.copied {
@@ -152,6 +152,7 @@ app.registerExtension({
       // value lands on a detached node). A unique type falls through to
       // WidgetDOM.vue, which re-parents OUR element. See CLAUDE.md Nodes 2.0.
       installCanvasZoomPassthrough(wrap);
+      installNodeAccent(this, wrap);   // the face follows this node's accent colour
       const widget = this.addDOMWidget("text", "pixaroma_showtext", wrap, {
         // canvasOnly is set ADAPTIVELY below (applyAdaptiveCanvasOnly):
         // true in legacy (hide from Parameters tab, Vue Compat #15), false
@@ -203,3 +204,7 @@ app.registerExtension({
     };
   },
 });
+
+// The colour option: gives this node a right-click "Show Text settings" entry, the
+// gear in the selection toolbar, and the shared colour panel behind both.
+registerNodeAccent("PixaromaShowText", { title: "Show Text" });

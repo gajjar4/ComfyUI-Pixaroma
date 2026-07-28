@@ -16,7 +16,7 @@ import {
 } from "./core.mjs";
 import { injectCSS, buildRoot, renderRows, measureContentHeight } from "./render.mjs";
 import { installResizeFloor, isVueNodes,
-  installCanvasZoomPassthrough,
+  installCanvasZoomPassthrough, installNodeAccent, registerNodeAccent,
 } from "../shared/index.mjs";
 import { pixConfirm, autoGrowTextareas } from "./interaction.mjs";
 import { isQueueLoopActive, runQueueLoop, feedsOnlyInactiveSwitch } from "../shared/queue_drivers.mjs";
@@ -206,6 +206,7 @@ app.registerExtension({
         node._pixPmRenderOnly = () => renderRows(node, root, handlers);
 
         installCanvasZoomPassthrough(root);
+        installNodeAccent(node, root);   // the face follows this node's accent colour
         const _pmWidget = node.addDOMWidget("promptmulti", "div", root, {
           serialize: false,
           // canvasOnly set adaptively (CLAUDE.md Nodes 2.0): true in legacy
@@ -525,3 +526,7 @@ app.queuePrompt = async function (...args) {
     return results[results.length - 1];
   });
 };
+
+// The colour option: gives this node a right-click "Prompt Multi settings" entry, the
+// gear in the selection toolbar, and the shared colour panel behind both.
+registerNodeAccent("PixaromaPromptMulti", { title: "Prompt Multi" });

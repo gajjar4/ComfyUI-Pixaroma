@@ -41,8 +41,8 @@ const CSS = `
   text-align: center;
   transition: background 0.1s, color 0.1s, border-color 0.1s;
 }
-.pix-pm-modepill:hover { background: #f66744; border-color: #f66744; color: #fff; }
-.pix-pm-modepill.active { background: #f66744; border-color: #f66744; color: #fff; }
+.pix-pm-modepill:hover { background: var(--pix-acc,#f66744); border-color: var(--pix-acc,#f66744); color: #fff; }
+.pix-pm-modepill.active { background: var(--pix-acc,#f66744); border-color: var(--pix-acc,#f66744); color: #fff; }
 
 /* Row card uses fixed dark grey background + visible grey border (NOT
    the adaptive white-overlay used for interactive surfaces). The card
@@ -63,8 +63,8 @@ const CSS = `
 }
 .pix-pm-row.is-disabled { opacity: 0.45; }
 .pix-pm-row.is-dragging { opacity: 0.4; }
-.pix-pm-row.is-drop-target-above { box-shadow: 0 -2px 0 0 #f66744; }
-.pix-pm-row.is-drop-target-below { box-shadow: 0 2px 0 0 #f66744; }
+.pix-pm-row.is-drop-target-above { box-shadow: 0 -2px 0 0 var(--pix-acc,#f66744); }
+.pix-pm-row.is-drop-target-below { box-shadow: 0 2px 0 0 var(--pix-acc,#f66744); }
 
 .pix-pm-row-head {
   display: flex;
@@ -110,8 +110,8 @@ const CSS = `
   color: #fff;
 }
 .pix-pm-toggle.on {
-  background: #f66744;
-  border-color: #f66744;
+  background: var(--pix-acc,#f66744);
+  border-color: var(--pix-acc,#f66744);
   color: #fff;
 }
 .pix-pm-toggle.on:hover {
@@ -130,7 +130,7 @@ const CSS = `
   outline: none;
   min-width: 0;
 }
-.pix-pm-label:focus { border-color: #f66744; }
+.pix-pm-label:focus { border-color: var(--pix-acc,#f66744); }
 .pix-pm-label::placeholder { color: rgba(255, 255, 255, 0.4); font-style: italic; }
 
 .pix-pm-delete {
@@ -146,7 +146,7 @@ const CSS = `
   flex-shrink: 0;
   padding: 0;
 }
-.pix-pm-delete:hover { color: #f66744; background: rgba(246,103,68,0.12); }
+.pix-pm-delete:hover { color: var(--pix-acc,#f66744); background: rgba(246,103,68,0.12); }
 .pix-pm-delete:disabled { color: #444; cursor: not-allowed; background: transparent; }
 
 /* Textarea interior matches Prompt Pack / Text Pixaroma for consistency. */
@@ -165,7 +165,7 @@ const CSS = `
   box-sizing: border-box;
   overflow-y: auto;
 }
-.pix-pm-textarea:focus { border-color: #f66744; }
+.pix-pm-textarea:focus { border-color: var(--pix-acc,#f66744); }
 
 /* Bottom action buttons mirror Prompt Pack's .pix-pp-actbtn exactly so
    the two nodes feel like one design. Same min-width, same border-box,
@@ -192,8 +192,8 @@ const CSS = `
   transition: background 0.1s, color 0.1s, border-color 0.1s;
 }
 .pix-pm-actbtn:hover {
-  background: #f66744;
-  border-color: #f66744;
+  background: var(--pix-acc,#f66744);
+  border-color: var(--pix-acc,#f66744);
   color: #fff;
 }
 .pix-pm-actbtn[disabled] {
@@ -258,8 +258,8 @@ const CSS = `
 }
 .pix-pm-confirm-btn:hover { background: #333; border-color: #555; }
 .pix-pm-confirm-btn.primary {
-  background: #f66744;
-  border-color: #f66744;
+  background: var(--pix-acc,#f66744);
+  border-color: var(--pix-acc,#f66744);
   color: #fff;
 }
 .pix-pm-confirm-btn.primary:hover { background: #ff7a58; border-color: #ff7a58; }

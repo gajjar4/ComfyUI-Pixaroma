@@ -51,8 +51,8 @@ const CSS = `
   white-space: nowrap;
   transition: background 0.12s, border-color 0.12s, color 0.12s;
 }
-.pix-fr-tog:hover { border-color: #f66744; color: #ddd; }
-.pix-fr-tog.on { background: #f66744; border-color: #f66744; color: #fff; }
+.pix-fr-tog:hover { border-color: var(--pix-acc,#f66744); color: #ddd; }
+.pix-fr-tog.on { background: var(--pix-acc,#f66744); border-color: var(--pix-acc,#f66744); color: #fff; }
 .pix-fr-tog.on:hover { filter: brightness(1.08); color: #fff; }
 .pix-fr-tog.is-muted {
   opacity: 0.4;
@@ -78,8 +78,8 @@ const CSS = `
 }
 .pix-fr-row.is-disabled { opacity: 0.45; }
 .pix-fr-row.is-dragging { opacity: 0.4; }
-.pix-fr-row.is-drop-target-above { box-shadow: 0 -2px 0 0 #f66744; }
-.pix-fr-row.is-drop-target-below { box-shadow: 0 2px 0 0 #f66744; }
+.pix-fr-row.is-drop-target-above { box-shadow: 0 -2px 0 0 var(--pix-acc,#f66744); }
+.pix-fr-row.is-drop-target-below { box-shadow: 0 2px 0 0 var(--pix-acc,#f66744); }
 
 .pix-fr-handle {
   cursor: grab;
@@ -114,7 +114,7 @@ const CSS = `
   transition: background 0.12s, border-color 0.12s, color 0.12s;
 }
 .pix-fr-toggle:hover { background: rgba(255,255,255,0.1); border-color: rgba(255,255,255,0.35); color: #fff; }
-.pix-fr-toggle.on { background: #f66744; border-color: #f66744; color: #fff; }
+.pix-fr-toggle.on { background: var(--pix-acc,#f66744); border-color: var(--pix-acc,#f66744); color: #fff; }
 .pix-fr-toggle.on:hover { filter: brightness(1.08); color: #fff; }
 
 /* find -> replace fields */
@@ -141,11 +141,11 @@ const CSS = `
   overflow-y: auto;
   line-height: 1.35;
 }
-.pix-fr-field:focus { border-color: #f66744; }
+.pix-fr-field:focus { border-color: var(--pix-acc,#f66744); }
 .pix-fr-field::placeholder { color: rgba(255,255,255,0.32); font-style: italic; }
 .pix-fr-field.is-delete::placeholder { color: rgba(255,150,160,0.55); }
 
-.pix-fr-arrow { color: #f66744; font-weight: 700; line-height: 30px; flex: none; }
+.pix-fr-arrow { color: var(--pix-acc,#f66744); font-weight: 700; line-height: 30px; flex: none; }
 
 .pix-fr-delete {
   width: 18px;
@@ -161,7 +161,7 @@ const CSS = `
   flex: none;
   padding: 0;
 }
-.pix-fr-delete:hover { color: #f66744; background: rgba(246,103,68,0.12); }
+.pix-fr-delete:hover { color: var(--pix-acc,#f66744); background: rgba(246,103,68,0.12); }
 .pix-fr-delete:disabled { color: #444; cursor: not-allowed; background: transparent; }
 
 /* ---- action row ---- */
@@ -180,9 +180,9 @@ const CSS = `
   padding: 5px 12px;
   transition: background 0.1s, color 0.1s, border-color 0.1s;
 }
-.pix-fr-add { color: #f66744; border-color: rgba(246,103,68,0.5); }
-.pix-fr-add:hover { background: #f66744; border-color: #f66744; color: #fff; }
-.pix-fr-reset:hover { background: #f66744; border-color: #f66744; color: #fff; }
+.pix-fr-add { color: var(--pix-acc,#f66744); border-color: rgba(246,103,68,0.5); }
+.pix-fr-add:hover { background: var(--pix-acc,#f66744); border-color: var(--pix-acc,#f66744); color: #fff; }
+.pix-fr-reset:hover { background: var(--pix-acc,#f66744); border-color: var(--pix-acc,#f66744); color: #fff; }
 .pix-fr-reset:disabled {
   color: rgba(255,255,255,0.3);
   cursor: default;
@@ -255,7 +255,7 @@ const CSS = `
   color: #ddd; cursor: pointer; font-size: 12px; padding: 6px 14px; font-family: inherit;
 }
 .pix-fr-confirm-btn:hover { background: #333; border-color: #555; }
-.pix-fr-confirm-btn.primary { background: #f66744; border-color: #f66744; color: #fff; }
+.pix-fr-confirm-btn.primary { background: var(--pix-acc,#f66744); border-color: var(--pix-acc,#f66744); color: #fff; }
 .pix-fr-confirm-btn.primary:hover { background: #ff7a58; border-color: #ff7a58; }
 `;
 

@@ -1,6 +1,6 @@
 import { app } from "/scripts/app.js";
 import { BRAND, hideJsonWidget, applyAdaptiveCanvasOnly,
-  installCanvasZoomPassthrough,
+  installCanvasZoomPassthrough, installNodeAccent, registerNodeAccent,
 } from "../shared/index.mjs";
 
 function injectCSS() {
@@ -47,9 +47,9 @@ function injectCSS() {
     }
     .pix-res-chip:hover { border-color: #666; }
     .pix-res-chip.active {
-      background: ${BRAND};
+      background: var(--pix-acc,var(--pix-acc,#f66744));
       color: #fff;
-      border-color: ${BRAND};
+      border-color: var(--pix-acc,var(--pix-acc,#f66744));
     }
     .pix-res-chip.span-half { grid-column: span 3; } /* 1/2 width — used by Custom Ratio + Custom Resolution */
     /* Tiny ratio-shape preview rendered inside each ratio chip. Width and
@@ -95,7 +95,7 @@ function injectCSS() {
     .pix-res-list::-webkit-scrollbar-thumb { background: #555; border-radius: 3px; }
     .pix-res-list::-webkit-scrollbar-track { background: transparent; }
     /* Subtle focus indicator: brand-tinted border (no outline ring overflow). */
-    .pix-res-list:focus { outline: none; border-color: ${BRAND}; }
+    .pix-res-list:focus { outline: none; border-color: var(--pix-acc,var(--pix-acc,#f66744)); }
     .pix-res-row {
       /* Fixed row height — must NOT grow with the node, otherwise resizing
          taller bloats every row to a giant cell. flex-shrink: 0 + the parent
@@ -117,7 +117,7 @@ function injectCSS() {
     .pix-res-row:last-child { border-bottom: none; }
     .pix-res-row.active {
       background: rgba(246,103,68,0.15);
-      color: ${BRAND};
+      color: var(--pix-acc,var(--pix-acc,#f66744));
       font-weight: 600;
     }
     .pix-res-row.empty {
@@ -149,7 +149,7 @@ function injectCSS() {
       border: 1px solid #444;
       border-radius: 4px;
       padding: 2px 6px;
-      color: ${BRAND};
+      color: var(--pix-acc,var(--pix-acc,#f66744));
       font-size: 11px;
       font-weight: 600;
       text-align: center;
@@ -159,7 +159,7 @@ function injectCSS() {
     }
     .pix-res-custom-field input:focus {
       outline: none;
-      border-color: ${BRAND};
+      border-color: var(--pix-acc,var(--pix-acc,#f66744));
     }
     /* Square icon button placed BETWEEN the W and H inputs (Figma/Photoshop pattern).
        Uses CSS mask-image so the SVG inherits color via the button's color property
@@ -185,7 +185,7 @@ function injectCSS() {
               mask: url("/pixaroma/assets/icons/ui/swap.svg") center / 12px 12px no-repeat;
       pointer-events: none;
     }
-    .pix-res-swap:hover { color: ${BRAND}; border-color: ${BRAND}; }
+    .pix-res-swap:hover { color: var(--pix-acc,var(--pix-acc,#f66744)); border-color: var(--pix-acc,var(--pix-acc,#f66744)); }
     .pix-res-readout {
       display: flex;
       align-items: center;
@@ -197,7 +197,7 @@ function injectCSS() {
       font-size: 10px;
       color: #777;
     }
-    .pix-res-readout .accent { color: ${BRAND}; }
+    .pix-res-readout .accent { color: var(--pix-acc,var(--pix-acc,#f66744)); }
     /* Aspect-ratio visual preview — fills the remaining custom-panel space.
        The inner rect is scaled to the chosen W:H ratio so the user sees the
        shape they'll get at a glance. Label below shows the exact W × H. */
@@ -213,7 +213,7 @@ function injectCSS() {
     }
     .pix-res-preview-rect {
       background: rgba(246, 103, 68, 0.18);
-      border: 1px solid ${BRAND};
+      border: 1px solid var(--pix-acc,var(--pix-acc,#f66744));
       border-radius: 2px;
       transition: width 0.15s ease, height 0.15s ease;
     }
@@ -222,7 +222,7 @@ function injectCSS() {
       font-size: 10px;
       color: #999;
     }
-    .pix-res-preview-label .accent { color: ${BRAND}; }
+    .pix-res-preview-label .accent { color: var(--pix-acc,var(--pix-acc,#f66744)); }
     /* Snap-step picker — magnet label + 4 small chip buttons (8/16/32/64). */
     .pix-res-snap-group {
       display: inline-flex;
@@ -256,9 +256,9 @@ function injectCSS() {
     }
     .pix-res-snap-btn:hover { color: #ddd; border-color: #666; }
     .pix-res-snap-btn.active {
-      background: ${BRAND};
+      background: var(--pix-acc,var(--pix-acc,#f66744));
       color: #fff;
-      border-color: ${BRAND};
+      border-color: var(--pix-acc,var(--pix-acc,#f66744));
     }
 
     /* Custom Ratio panel — Photoshop "lock-aspect" pattern. Sections top to
@@ -286,14 +286,14 @@ function injectCSS() {
       border: 1px solid #444;
       border-radius: 3px;
       padding: 2px 6px;
-      color: ${BRAND};
+      color: var(--pix-acc,var(--pix-acc,#f66744));
       font-size: 11px;
       font-weight: 600;
       text-align: center;
       font-family: inherit;
       box-sizing: border-box;
     }
-    .pix-res-ratio-input-row input:focus { outline: none; border-color: ${BRAND}; }
+    .pix-res-ratio-input-row input:focus { outline: none; border-color: var(--pix-acc,var(--pix-acc,#f66744)); }
     .pix-res-ratio-swap {
       width: 22px;
       height: 22px;
@@ -315,7 +315,7 @@ function injectCSS() {
               mask: url("/pixaroma/assets/icons/ui/swap.svg") center / 12px 12px no-repeat;
       pointer-events: none;
     }
-    .pix-res-ratio-swap:hover { color: ${BRAND}; border-color: ${BRAND}; }
+    .pix-res-ratio-swap:hover { color: var(--pix-acc,var(--pix-acc,#f66744)); border-color: var(--pix-acc,var(--pix-acc,#f66744)); }
     /* Quick-pick width chips — 4 evenly-spaced buttons under the ratio row. */
     .pix-res-quickpicks {
       display: grid;
@@ -335,9 +335,9 @@ function injectCSS() {
     }
     .pix-res-quickpick:hover { border-color: #666; color: #fff; }
     .pix-res-quickpick.active {
-      background: ${BRAND};
+      background: var(--pix-acc,var(--pix-acc,#f66744));
       color: #fff;
-      border-color: ${BRAND};
+      border-color: var(--pix-acc,var(--pix-acc,#f66744));
     }
   `;
   const style = document.createElement("style");
@@ -1263,6 +1263,7 @@ function setupResolutionNode(node) {
   // widget exactly fills the area between titlebar and node bottom.
   const WIDGET_H = NODE_H - 46; // 358 — keep in sync with the chrome estimate in NODE_H comment
   installCanvasZoomPassthrough(root);
+  installNodeAccent(node, root);   // the face follows this node's accent colour
   const _widget = node.addDOMWidget("resolution_ui", "custom", root, {
     // canvasOnly set adaptively below (CLAUDE.md Nodes 2.0): true in legacy
     // (out of the Parameters tab), false in Nodes 2.0 (renders in Vue body).
@@ -1485,3 +1486,7 @@ app.graphToPrompt = async function (...args) {
   }
   return result;
 };
+
+// The colour option: gives this node a right-click "Resolution settings" entry, the
+// gear in the selection toolbar, and the shared colour panel behind both.
+registerNodeAccent("PixaromaResolution", { title: "Resolution" });

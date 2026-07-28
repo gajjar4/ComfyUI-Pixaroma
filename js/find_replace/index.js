@@ -21,7 +21,7 @@ import {
 } from "./render.mjs";
 import { pixConfirm, autoGrowAllFields } from "./interaction.mjs";
 import { applyAdaptiveCanvasOnly, installResizeFloor, isVueNodes, closeHelpPopup,
-  installCanvasZoomPassthrough,
+  installCanvasZoomPassthrough, installNodeAccent, registerNodeAccent,
 } from "../shared/index.mjs";
 
 const DEFAULT_W = 380;
@@ -165,6 +165,7 @@ app.registerExtension({
         node._pixFrRefit = () => { refitNode(node); node.setDirtyCanvas(true, true); };
 
         installCanvasZoomPassthrough(root);
+        installNodeAccent(node, root);   // the face follows this node's accent colour
         const widget = node.addDOMWidget("findreplace", "pixaroma_find_replace", root, {
           serialize: false,
           getMinHeight: () => measureMinHeight(root),
@@ -375,3 +376,7 @@ app.graphToPrompt = async function (...args) {
   }
   return result;
 };
+
+// The colour option: gives this node a right-click "Find and Replace settings" entry, the
+// gear in the selection toolbar, and the shared colour panel behind both.
+registerNodeAccent("PixaromaFindReplace", { title: "Find and Replace" });

@@ -11,7 +11,7 @@ import {
 } from "./core.mjs";
 import { injectCSS, buildRoot, renderRows, measureContentHeight } from "./render.mjs";
 import { applyAdaptiveCanvasOnly, installResizeFloor, isVueNodes,
-  installCanvasZoomPassthrough,
+  installCanvasZoomPassthrough, installNodeAccent, registerNodeAccent,
 } from "../shared/index.mjs";
 import { pixConfirm, autoGrowTextareas } from "./interaction.mjs";
 
@@ -223,6 +223,7 @@ app.registerExtension({
         node._pixPsRenderOnly = () => renderRows(node, root, handlers);
 
         installCanvasZoomPassthrough(root);
+        installNodeAccent(node, root);   // the face follows this node's accent colour
         const _psWidget = node.addDOMWidget("promptstack", "div", root, {
           serialize: false,
           // canvasOnly set adaptively below (CLAUDE.md Nodes 2.0): true in
@@ -402,3 +403,7 @@ function resolveSeparator() {
   // express those in a single-line text input. Anything else stays literal.
   return raw.replace(/\\n/g, "\n").replace(/\\t/g, "\t");
 }
+
+// The colour option: gives this node a right-click "Prompt Stack settings" entry, the
+// gear in the selection toolbar, and the shared colour panel behind both.
+registerNodeAccent("PixaromaPromptStack", { title: "Prompt Stack" });

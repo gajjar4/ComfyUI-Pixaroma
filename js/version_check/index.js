@@ -15,7 +15,7 @@
 
 import { app } from "/scripts/app.js";
 import { BRAND, applyAdaptiveCanvasOnly,
-  installCanvasZoomPassthrough,
+  installCanvasZoomPassthrough, installNodeAccent, registerNodeAccent,
 } from "../shared/index.mjs";
 // Namespace import (NOT a named import) so a STALE cached shared module that
 // predates PIXAROMA_JS_VERSION yields `undefined` instead of a hard module link
@@ -54,7 +54,7 @@ function injectCSS() {
     .pix-vc-warn {
       display: none;
       padding: 7px 9px; border-radius: 6px; line-height: 1.35;
-      background: rgba(246,103,68,0.15); border: 1px solid ${BRAND};
+      background: rgba(246,103,68,0.15); border: 1px solid var(--pix-acc,var(--pix-acc,#f66744));
       color: #ffd9cc;
     }
     .pix-vc-warn b { color: #fff; font-weight: 700; }
@@ -76,7 +76,7 @@ function injectCSS() {
       background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.14);
       transition: background 0.12s, border-color 0.12s, color 0.12s;
     }
-    .pix-vc-copy:hover { background: ${BRAND}; border-color: ${BRAND}; color: #fff; }
+    .pix-vc-copy:hover { background: var(--pix-acc,var(--pix-acc,#f66744)); border-color: var(--pix-acc,var(--pix-acc,#f66744)); color: #fff; }
     .pix-vc-copy.is-flashing,
     .pix-vc-copy.is-flashing:hover { background: #3ec371; border-color: #3ec371; color: #fff; }
   `;
@@ -289,6 +289,7 @@ app.registerExtension({
       });
 
       installCanvasZoomPassthrough(wrap);
+      installNodeAccent(this, wrap);   // the face follows this node's accent colour
       const widget = this.addDOMWidget(
         "pixaroma_version_check",
         // UNIQUE type so Nodes 2.0 keeps OUR element (no native-widget hijack).
@@ -331,3 +332,7 @@ app.registerExtension({
     };
   },
 });
+
+// The colour option: gives this node a right-click "Version Check settings" entry, the
+// gear in the selection toolbar, and the shared colour panel behind both.
+registerNodeAccent("PixaromaVersionCheck", { title: "Version Check" });

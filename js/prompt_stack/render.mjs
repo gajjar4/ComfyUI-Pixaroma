@@ -33,8 +33,8 @@ const CSS = `
 }
 .pix-ps-row.is-disabled { opacity: 0.45; }
 .pix-ps-row.is-dragging { opacity: 0.4; }
-.pix-ps-row.is-drop-target-above { box-shadow: 0 -2px 0 0 #f66744; }
-.pix-ps-row.is-drop-target-below { box-shadow: 0 2px 0 0 #f66744; }
+.pix-ps-row.is-drop-target-above { box-shadow: 0 -2px 0 0 var(--pix-acc,#f66744); }
+.pix-ps-row.is-drop-target-below { box-shadow: 0 2px 0 0 var(--pix-acc,#f66744); }
 
 .pix-ps-row-head {
   display: flex;
@@ -80,8 +80,8 @@ const CSS = `
   color: #fff;
 }
 .pix-ps-toggle.on {
-  background: #f66744;
-  border-color: #f66744;
+  background: var(--pix-acc,#f66744);
+  border-color: var(--pix-acc,#f66744);
   color: #fff;
 }
 .pix-ps-toggle.on:hover {
@@ -100,7 +100,7 @@ const CSS = `
   outline: none;
   min-width: 0;
 }
-.pix-ps-label:focus { border-color: #f66744; }
+.pix-ps-label:focus { border-color: var(--pix-acc,#f66744); }
 .pix-ps-label::placeholder { color: rgba(255, 255, 255, 0.4); font-style: italic; }
 
 .pix-ps-delete {
@@ -116,7 +116,7 @@ const CSS = `
   flex-shrink: 0;
   padding: 0;
 }
-.pix-ps-delete:hover { color: #f66744; background: rgba(246,103,68,0.12); }
+.pix-ps-delete:hover { color: var(--pix-acc,#f66744); background: rgba(246,103,68,0.12); }
 .pix-ps-delete:disabled { color: #444; cursor: not-allowed; background: transparent; }
 
 /* Textarea interior matches Prompt Pack / Prompt Multi / Text Pixaroma
@@ -137,7 +137,7 @@ const CSS = `
   box-sizing: border-box;
   overflow-y: auto;
 }
-.pix-ps-textarea:focus { border-color: #f66744; }
+.pix-ps-textarea:focus { border-color: var(--pix-acc,#f66744); }
 
 .pix-ps-actions {
   display: flex;
@@ -166,8 +166,8 @@ const CSS = `
   transition: background 0.1s, color 0.1s, border-color 0.1s;
 }
 .pix-ps-add:hover, .pix-ps-clear:hover, .pix-ps-reset:hover {
-  background: #f66744;
-  border-color: #f66744;
+  background: var(--pix-acc,#f66744);
+  border-color: var(--pix-acc,#f66744);
   color: #fff;
 }
 .pix-ps-clear:disabled, .pix-ps-reset:disabled {
@@ -232,8 +232,8 @@ const CSS = `
 }
 .pix-ps-confirm-btn:hover { background: #333; border-color: #555; }
 .pix-ps-confirm-btn.primary {
-  background: #f66744;
-  border-color: #f66744;
+  background: var(--pix-acc,#f66744);
+  border-color: var(--pix-acc,#f66744);
   color: #fff;
 }
 .pix-ps-confirm-btn.primary:hover { background: #ff7a58; border-color: #ff7a58; }

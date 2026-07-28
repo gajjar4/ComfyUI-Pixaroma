@@ -14,7 +14,7 @@ import { injectCSS, buildRoot, applyState, updateCounter } from "./render.mjs";
 import { wireEvents, showNoPromptsToast } from "./interaction.mjs";
 import { isQueueLoopActive, beginQueueLoop, endQueueLoop } from "../shared/queue_drivers.mjs";
 import { applyAdaptiveCanvasOnly, installResizeFloor, measureRootContent, isVueNodes,
-  installCanvasZoomPassthrough,
+  installCanvasZoomPassthrough, installNodeAccent, registerNodeAccent,
 } from "../shared/index.mjs";
 
 const BRAND = "#f66744";
@@ -78,6 +78,7 @@ app.registerExtension({
         // pills would render in the panel AND its draw call would corrupt
         // node-body layout.
         installCanvasZoomPassthrough(root);
+        installNodeAccent(node, root);   // the face follows this node's accent colour
         const _ppWidget = node.addDOMWidget("promptpack", "div", root, {
           serialize: false,
           // canvasOnly set adaptively (CLAUDE.md Nodes 2.0): true in legacy
@@ -438,3 +439,7 @@ app.queuePrompt = async function (...args) {
 
   return results[results.length - 1];
 };
+
+// The colour option: gives this node a right-click "Prompt Pack settings" entry, the
+// gear in the selection toolbar, and the shared colour panel behind both.
+registerNodeAccent("PixaromaPromptPack", { title: "Prompt Pack" });
