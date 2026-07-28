@@ -2053,7 +2053,7 @@ app.registerExtension({
         },
       });
       if (over.folded) items.push({ content: (over.showLinks !== false) ? "👑 Hide links while folded" : "👑 Show links while folded", callback: () => { over.showLinks = (over.showLinks === false); invalidateHidden(); markChanged(); } });
-      items.push({ content: "👑 Group Help", callback: () => openHelpPopup(GROUP_HELP) });
+      items.push({ content: "👑 Group Help", callback: () => openHelpPopup(GROUP_HELP, { pageKey: "canvas:group" }) });
       items.push({ content: "👑 Delete Pixaroma Group", callback: () => deleteGroup(over) });
     } else {
       // No Pixaroma group here, but maybe a standard ComfyUI group is — offer to

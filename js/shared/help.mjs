@@ -140,6 +140,15 @@ const CSS = `
   margin-top: 4px; padding: 8px 11px; background: rgba(246,103,68,0.1);
   border-left: 2px solid ${BRAND}; border-radius: 3px; color: #ddd; font-size: 12px;
 }
+.pix-help-more {
+  display: block; width: 100%; margin-top: 14px; padding: 9px 12px;
+  border: 1px solid rgba(255,255,255,0.14); border-radius: 5px;
+  background: rgba(255,255,255,0.04); color: #cfcfcf;
+  font: 12.5px inherit; cursor: pointer; text-align: center;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
+}
+.pix-help-more:hover { background: ${BRAND}; border-color: ${BRAND}; color: #fff; }
+.pix-help-more:focus-visible { outline: 2px solid ${BRAND}; outline-offset: 2px; }
 `;
 
 export function injectHelpCSS() {
@@ -262,7 +271,10 @@ function ensureGraphCloseHook() {
   };
 }
 
-export function openHelpPopup(helpDef) {
+// opts.comfyClass, when given, adds a line at the bottom that opens the full
+// Help browser already on that node's page. Passed by the selection-toolbar
+// button (js/help_toolbar), which knows which node is selected.
+export function openHelpPopup(helpDef, opts = {}) {
   helpDef = helpDef || {};
   injectHelpCSS();
   ensureGraphCloseHook();
@@ -320,6 +332,26 @@ export function openHelpPopup(helpDef) {
     tip.innerHTML = fmt(helpDef.footer);
     body.appendChild(tip);
   }
+
+  // A way through to the full Help browser, on this node's page. Reached via
+  // the window global rather than an import so this shared module never depends
+  // on js/help_browser (which imports from here). Absent global -> no link, so
+  // this popup still works on its own.
+  if (window.PixaromaHelpBrowser?.open) {
+    const more = document.createElement("button");
+    more.type = "button";
+    more.className = "pix-help-more";
+    more.textContent = "Open the full help";
+    more.title = "Every node, the canvas tools and the guides, in a window you can keep open";
+    more.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const cls = opts.comfyClass || opts.pageKey;
+      cleanup();
+      try { window.PixaromaHelpBrowser.open(cls); } catch (err) { console.warn("[Pixaroma] help browser", err); }
+    });
+    body.appendChild(more);
+  }
+
   card.appendChild(body);
 
   // --- close wiring ---

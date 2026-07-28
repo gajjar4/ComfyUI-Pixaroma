@@ -376,12 +376,14 @@ function refresh() {
   }
 }
 
-export function openHelpBrowser(comfyClass) {
+// `target` may be a node's comfyClass ("PixaromaOutpaint") or a page key
+// ("canvas:colors"), so the canvas features can link here too.
+export function openHelpBrowser(target) {
   loadPins();
   const w = ensureWindow();
   w.open();
-  if (comfyClass) {
-    const hit = S.index.find((e) => e.cls === comfyClass);
+  if (target) {
+    const hit = S.index.find((e) => e.cls === target || e.key === target);
     if (hit) navigate(hit);
   }
 }

@@ -129,7 +129,9 @@ app.registerExtension({
       icon: HELP_ICON,
       function: () => {
         const found = firstWith((n) => getNodeHelp(n.comfyClass));
-        if (found) openHelpPopup(found.hit);
+        // Pass the class so the popup can offer a way through to the full Help
+        // browser, opened on this node's page.
+        if (found) openHelpPopup(found.hit, { comfyClass: found.node.comfyClass });
       },
     },
     {
