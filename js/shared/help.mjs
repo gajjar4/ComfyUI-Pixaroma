@@ -56,6 +56,14 @@ export function registerNodeHelp(comfyClass, helpDef) {
 export function getNodeHelp(comfyClass) {
   return comfyClass ? _nodeHelp.get(comfyClass) || null : null;
 }
+// Every registered entry, as [comfyClass, helpDef] pairs. The Help browser
+// (js/help_browser) walks this to build its node list, which is what makes a
+// NEW node appear there automatically the moment its help entry is written -
+// there is no second list to keep in sync. Returns a fresh array each call, so
+// a caller can sort or filter it without disturbing the registry.
+export function allNodeHelp() {
+  return [..._nodeHelp.entries()];
+}
 
 const CSS = `
 /* ---- the ? button nodes drop into their body ---- */

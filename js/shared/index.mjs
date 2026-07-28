@@ -57,6 +57,7 @@ export {
   injectHelpCSS,
   registerNodeHelp,
   getNodeHelp,
+  allNodeHelp,
 } from "./help.mjs";
 
 export {
