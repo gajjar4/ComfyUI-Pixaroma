@@ -19,6 +19,7 @@ import {
   installCanvasZoomPassthrough,
   registerNodeHelp,
 } from "../shared/index.mjs";
+import { installNodeAccent, registerNodeAccent } from "../shared/node_settings.mjs";
 
 const NODE = "KreaLoraConvertPixaroma";
 const MIN_W = 300;
@@ -44,7 +45,7 @@ function injectCSS() {
       box-sizing: border-box; width: 100%; min-height: 30px;
       border-radius: 6px; cursor: pointer; user-select: none;
       font: 600 13px 'Segoe UI', -apple-system, sans-serif;
-      color: #fff; background: ${BRAND}; border: 1px solid ${BRAND};
+      color: #fff; background: var(--pix-acc,#f66744); border: 1px solid var(--pix-acc,#f66744);
       transition: filter 0.12s, opacity 0.12s;
     }
     .pix-klc-btn:hover { filter: brightness(1.08); }
@@ -62,7 +63,7 @@ function injectCSS() {
       background: rgba(255,179,71,0.14); border-color: #ffb347; color: #ffe6c2;
     }
     .pix-klc-status.is-err {
-      background: rgba(246,103,68,0.15); border-color: ${BRAND}; color: #ffd9cc;
+      background: color-mix(in srgb, var(--pix-acc,#f66744) 15%, transparent); border-color: var(--pix-acc,#f66744); color: #ffd9cc;
     }
   `;
   document.head.appendChild(style);
@@ -243,6 +244,7 @@ app.registerExtension({
       }
 
       installCanvasZoomPassthrough(wrap);
+      installNodeAccent(node, wrap);   // the face follows this node's accent colour
       const widget = node.addDOMWidget("pixaroma_krea_convert", "pixaroma_krea_convert", wrap, {
         getValue: () => null,
         setValue: () => {},
@@ -323,3 +325,7 @@ registerNodeHelp(NODE, {
   ],
   footer: "Independent tool. Not affiliated with or endorsed by Krea or fal.ai.",
 });
+
+// The colour option: a right-click "Krea LoRA Convert settings" entry, the gear in the
+// selection toolbar, and the shared colour panel behind both.
+registerNodeAccent("PixaromaKreaLoraConvert", { title: "Krea LoRA Convert" });

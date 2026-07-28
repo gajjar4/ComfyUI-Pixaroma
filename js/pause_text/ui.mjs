@@ -42,7 +42,7 @@ function injectCSS() {
 
     .pix-pt-box { flex:1 1 0; min-height:0; display:flex; flex-direction:column;
       background:#1d1d1d; border:1px solid #333; border-radius:5px; overflow:hidden; }
-    .pix-pt-box.pt-focus { border-color:var(--pix-acc,var(--pix-acc,#f66744)); }
+    .pix-pt-box.pt-focus { border-color:var(--pix-acc,#f66744); }
     .pix-pt-box.pt-off { opacity:0.55; }
     .pix-pt-hdr { flex:0 0 auto; display:flex; align-items:center; gap:6px;
       padding:3px 6px 3px 9px; border-bottom:1px solid #2c2c2c; background:rgba(255,255,255,0.02); }
@@ -51,12 +51,12 @@ function injectCSS() {
     .pix-pt-toggle { display:flex; background:rgba(0,0,0,0.25); border-radius:5px; padding:1px; gap:2px; flex:0 0 auto; }
     .pix-pt-seg { text-align:center; padding:2px 9px; border-radius:4px; cursor:pointer;
       color:rgba(255,255,255,0.6); user-select:none; border:1px solid transparent; font-size:10px; }
-    .pix-pt-seg.active { background:var(--pix-acc,var(--pix-acc,#f66744)); color:#fff; border-color:var(--pix-acc,var(--pix-acc,#f66744)); }
-    .pix-pt-seg:not(.active):hover { border-color:var(--pix-acc,var(--pix-acc,#f66744)); color:#ddd; }
+    .pix-pt-seg.active { background:var(--pix-acc,#f66744); color:#fff; border-color:var(--pix-acc,#f66744); }
+    .pix-pt-seg:not(.active):hover { border-color:var(--pix-acc,#f66744); color:#ddd; }
     .pix-pt-hic { width:19px; height:18px; border-radius:4px; display:flex; align-items:center;
       justify-content:center; cursor:pointer; background:rgba(255,255,255,0.06);
       border:1px solid rgba(255,255,255,0.14); color:rgba(255,255,255,0.72); flex:0 0 auto; }
-    .pix-pt-hic:hover:not(.off) { background:var(--pix-acc,var(--pix-acc,#f66744)); border-color:var(--pix-acc,var(--pix-acc,#f66744)); color:#fff; }
+    .pix-pt-hic:hover:not(.off) { background:var(--pix-acc,#f66744); border-color:var(--pix-acc,#f66744); color:#fff; }
     .pix-pt-hic.ok, .pix-pt-hic.ok:hover { background:#3ec371; border-color:#3ec371; color:#fff; }
     .pix-pt-hic.off { opacity:0.35; cursor:default; }
     .pix-pt-ta { flex:1 1 0; min-height:0; width:100%; box-sizing:border-box;
@@ -75,8 +75,8 @@ function injectCSS() {
       border:1px solid rgba(255,255,255,0.18); background:rgba(255,255,255,0.05);
       color:rgba(255,255,255,0.85); font:12px sans-serif; cursor:pointer;
       box-sizing:border-box; white-space:nowrap; user-select:none; flex:0 0 auto; }
-    .pix-pt-btn:hover:not(:disabled) { border-color:var(--pix-acc,var(--pix-acc,#f66744)); color:#fff; }
-    .pix-pt-btn.primary:not(:disabled) { background:var(--pix-acc,var(--pix-acc,#f66744)); border-color:var(--pix-acc,var(--pix-acc,#f66744)); color:#fff; }
+    .pix-pt-btn:hover:not(:disabled) { border-color:var(--pix-acc,#f66744); color:#fff; }
+    .pix-pt-btn.primary:not(:disabled) { background:var(--pix-acc,#f66744); border-color:var(--pix-acc,#f66744); color:#fff; }
     .pix-pt-btn.primary:hover:not(:disabled) { background:#ff8a5e; border-color:#ff8a5e; }
     .pix-pt-btn:disabled { opacity:0.45; cursor:default; }
   `;

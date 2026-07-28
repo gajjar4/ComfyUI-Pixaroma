@@ -4,6 +4,7 @@ import { isVueNodes, applyAdaptiveCanvasOnly } from "../shared/nodes2.mjs";
 import { installResizeFloor } from "../shared/resize_floor.mjs";
 import { installCanvasZoomPassthrough } from "../shared/canvas_zoom.mjs";
 import { registerNodeHelp } from "../shared/help.mjs";
+import { installNodeAccent, registerNodeAccent } from "../shared/node_settings.mjs";
 
 // ╔══════════════════════════════════════════════════════════════════════╗
 // ║  Run Log Pixaroma — the last 10 run times, on the node                ║
@@ -497,16 +498,16 @@ function injectCSS() {
     // right by the border + padding, which is deliberate - it reads as a field).
     // Explicit line-height so an 11px font in a 14px content box cannot clip a
     // descender on a different font stack.
-    ".pix-rl-lblin{grid-column:3;justify-self:stretch;min-width:0;width:100%;box-sizing:border-box;height:16px;line-height:14px;font-family:'Segoe UI',system-ui,sans-serif;font-size:11px;color:#e6e2da;background:#1d1d1d;border:1px solid #f66744;border-radius:3px;padding:0 4px;outline:none;-webkit-user-select:text;user-select:text;}",
+    ".pix-rl-lblin{grid-column:3;justify-self:stretch;min-width:0;width:100%;box-sizing:border-box;height:16px;line-height:14px;font-family:'Segoe UI',system-ui,sans-serif;font-size:11px;color:#e6e2da;background:#1d1d1d;border:1px solid var(--pix-acc,#f66744);border-radius:3px;padding:0 4px;outline:none;-webkit-user-select:text;user-select:text;}",
     ".pix-rl-lblin::placeholder{color:#57544d;}",
     ".pix-rl-time{font-family:'Consolas','DejaVu Sans Mono',ui-monospace,monospace;font-variant-numeric:tabular-nums;font-size:13px;color:#b8b4ad;font-weight:500;}",
-    ".pix-rl-row--now{background:rgba(246,103,68,0.16);box-shadow:inset 2px 0 0 #f66744;}",
-    ".pix-rl-row--now:hover{background:rgba(246,103,68,0.24);}",
+    ".pix-rl-row--now{background:color-mix(in srgb, var(--pix-acc,#f66744) 16%, transparent);box-shadow:inset 2px 0 0 var(--pix-acc,#f66744);}",
+    ".pix-rl-row--now:hover{background:color-mix(in srgb, var(--pix-acc,#f66744) 24%, transparent);}",
     // The row classes are mutually exclusive, so when the newest run is ALSO the
     // fastest it carries --now only and the --best bolt rule never applies. Warm
     // the bolt here or it is the one grey element left on an orange row.
-    ".pix-rl-row--now .pix-rl-mark{color:#f66744;}",
-    ".pix-rl-row--now .pix-rl-time{color:#f66744;font-weight:700;}",
+    ".pix-rl-row--now .pix-rl-mark{color:var(--pix-acc,#f66744);}",
+    ".pix-rl-row--now .pix-rl-time{color:var(--pix-acc,#f66744);font-weight:700;}",
     ".pix-rl-row--now .pix-rl-idx{color:#ff8a63;}",
     ".pix-rl-row--now .pix-rl-lbl{color:#f0cfc4;}",
     ".pix-rl-row--best .pix-rl-time{color:#49c97a;font-weight:600;}",
@@ -528,7 +529,7 @@ function injectCSS() {
     // keyboard focus ring inside or it loses an edge.
     ".pix-rl-fbtn:focus-visible{outline-offset:-2px;}",
     ".pix-rl-ico{width:13px;height:13px;background-color:#7a776f;-webkit-mask-position:center;mask-position:center;-webkit-mask-repeat:no-repeat;mask-repeat:no-repeat;-webkit-mask-size:contain;mask-size:contain;transition:background-color 0.12s;}",
-    ".pix-rl-fbtn:hover:not(:disabled) .pix-rl-ico{background-color:#f66744;}",
+    ".pix-rl-fbtn:hover:not(:disabled) .pix-rl-ico{background-color:var(--pix-acc,#f66744);}",
     "@media (prefers-reduced-motion:reduce){.pix-rl-rdot{animation:none;}}",
     // Hide any native widget-input dot column beside our DOM widget in Nodes 2.0
     // (the node has no inputs, so there is nothing to plug in).
@@ -564,6 +565,7 @@ function setupNode(node) {
   node._pixRlClearBtn = clearBtn;
 
   installCanvasZoomPassthrough(root);
+  installNodeAccent(node, root);   // the face follows this node's accent colour
   const widget = node.addDOMWidget("run_log_ui", "pixaroma_run_log", root, {
     getValue: () => "",
     setValue: () => {},
@@ -694,3 +696,7 @@ app.registerExtension({
 });
 
 registerNodeHelp(NODE_NAME, HELP);
+
+// The colour option: a right-click "Run Log settings" entry, the gear in the
+// selection toolbar, and the shared colour panel behind both.
+registerNodeAccent("PixaromaRunLog", { title: "Run Log" });

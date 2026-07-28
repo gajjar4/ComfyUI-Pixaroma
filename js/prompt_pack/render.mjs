@@ -60,8 +60,8 @@ export function injectCSS() {
       text-align: center;
       transition: background 0.1s, color 0.1s, border-color 0.1s;
     }
-    .pix-pp-modepill:hover { background: var(--pix-acc,var(--pix-acc,#f66744)); border-color: var(--pix-acc,var(--pix-acc,#f66744)); color: #fff; }
-    .pix-pp-modepill.active { background: var(--pix-acc,var(--pix-acc,#f66744)); border-color: var(--pix-acc,var(--pix-acc,#f66744)); color: #fff; }
+    .pix-pp-modepill:hover { background: var(--pix-acc,#f66744); border-color: var(--pix-acc,#f66744); color: #fff; }
+    .pix-pp-modepill.active { background: var(--pix-acc,#f66744); border-color: var(--pix-acc,#f66744); color: #fff; }
     .pix-pp-tawrap {
       position: relative;
       flex: 1 1 auto;
@@ -82,7 +82,7 @@ export function injectCSS() {
       resize: none;
       outline: none;
     }
-    .pix-pp-ta:focus { border-color: var(--pix-acc,var(--pix-acc,#f66744)); }
+    .pix-pp-ta:focus { border-color: var(--pix-acc,#f66744); }
     .pix-pp-bottombar {
       display: flex;
       flex-wrap: wrap;
@@ -131,8 +131,8 @@ export function injectCSS() {
       transition: background 0.1s, color 0.1s, border-color 0.1s;
     }
     .pix-pp-actbtn:hover {
-      background: var(--pix-acc,var(--pix-acc,#f66744));
-      border-color: var(--pix-acc,var(--pix-acc,#f66744));
+      background: var(--pix-acc,#f66744);
+      border-color: var(--pix-acc,#f66744);
       color: #fff;
     }
     .pix-pp-actbtn[disabled] {
@@ -166,9 +166,9 @@ export function injectCSS() {
       white-space: nowrap;
     }
     .pix-pp-counter.active {
-      color: var(--pix-acc,var(--pix-acc,#f66744));
+      color: var(--pix-acc,#f66744);
       background: rgba(0, 0, 0, 0.25);
-      border: 1px solid var(--pix-acc,var(--pix-acc,#f66744));
+      border: 1px solid var(--pix-acc,#f66744);
     }
     .pix-pp-counter.empty {
       color: rgba(255, 255, 255, 0.3);

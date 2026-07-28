@@ -14,6 +14,7 @@ import {
 } from "./render.mjs";
 import { openLabelEditor, cancelEditorForNode } from "./editor.mjs";
 import { buildMuteSwitchVueList } from "./vue_list.mjs";
+import { registerNodeAccent } from "../shared/node_settings.mjs";
 
 // Mute Switch Pixaroma - dynamic N-row mute control. See:
 //   js/switch/index.js     for the structural reference
@@ -269,3 +270,7 @@ app.registerExtension({
 
 // (Bulk row toggles are now the getNodeMenuItems hook on the extension above —
 // no getNodeMenuOptions monkey-patch.)
+
+// The colour option: a right-click "Mute Switch settings" entry, the gear in the
+// selection toolbar, and the shared colour panel behind both.
+registerNodeAccent("PixaromaMuteSwitch", { title: "Mute Switch" });

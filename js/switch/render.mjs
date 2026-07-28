@@ -18,6 +18,12 @@ import { app } from "/scripts/app.js";
 import { getUpstreamType } from "./core.mjs";
 
 export const BRAND = "#f66744";
+import { accentOf } from "../shared/node_settings.mjs";
+// The accent of the node being painted. A canvas cannot read a CSS variable and
+// the small paint helpers below take no node argument, so the draw entry sets
+// this once per pass. Painting is synchronous per node, so it is never stale.
+let _acc = BRAND;
+
 export const ROW_H = 20;          // matches LiteGraph NODE_SLOT_HEIGHT
 export const TOP_PAD = 4;         // matches LiteGraph body top-padding
 
@@ -129,8 +135,8 @@ function drawToggle(ctx, nodeWidth, slotIdx0, on, disabled) {
   // buttons since the pill is smaller and needs to read as an interactive
   // toggle, not a passive label.
   ctx.beginPath();
-  ctx.fillStyle = on ? BRAND : "rgba(255,255,255,0.06)";
-  ctx.strokeStyle = on ? BRAND : "rgba(255,255,255,0.18)";
+  ctx.fillStyle = on ? _acc : "rgba(255,255,255,0.06)";
+  ctx.strokeStyle = on ? _acc : "rgba(255,255,255,0.18)";
   ctx.lineWidth = 1;
   const rad = TOGGLE_R;
   const t = r.y, b = r.y + r.h, l = r.x, ri = r.x + r.w;
@@ -209,6 +215,7 @@ function drawLabel(ctx, nodeWidth, slotIdx0, text, dim, placeholderType) {
 // Paint all rows for the node. Called from onDrawForeground.
 // node.inputs must exist; node.properties.switchState holds activeIndex.
 export function drawSwitchRows(node, ctx) {
+  _acc = accentOf(node);   // every paint helper below reads this
   const inputs = node.inputs;
   if (!inputs || inputs.length === 0) return;
   const w = node.size[0];

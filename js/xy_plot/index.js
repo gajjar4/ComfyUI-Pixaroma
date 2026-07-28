@@ -8,6 +8,7 @@ import { injectCSS, buildRoot, renderBody, measureContentHeight, closePopupIfOwn
 import { buildGridPreview } from "./grid.mjs";
 import { applyAdaptiveCanvasOnly, isVueNodes, closeHelpPopup, installCanvasZoomPassthrough } from "../shared/index.mjs";
 import { isQueueLoopActive, runQueueLoop, feedsOnlyInactiveSwitch } from "../shared/queue_drivers.mjs";
+import { installNodeAccent, registerNodeAccent } from "../shared/node_settings.mjs";
 
 const NODE = "PixaromaXYPlot";
 // MIN_W is set so the 3 natural-width toggles (Lock seed / Draw labels / Save
@@ -67,14 +68,14 @@ function pixConfirmSimple(message, onOpen) {
     const back = document.createElement("div");
     back.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:100000;display:flex;align-items:center;justify-content:center;";
     const box = document.createElement("div");
-    box.style.cssText = "background:#1d1d1d;border:1px solid #f66744;border-radius:8px;padding:18px 20px;max-width:340px;color:#e0e0e0;font:14px 'Segoe UI',system-ui,sans-serif;";
+    box.style.cssText = "background:#1d1d1d;border:1px solid var(--pix-acc,#f66744);border-radius:8px;padding:18px 20px;max-width:340px;color:#e0e0e0;font:14px 'Segoe UI',system-ui,sans-serif;";
     box.innerHTML = `<div style="margin-bottom:14px;line-height:1.45">${message}</div>`;
     const row = document.createElement("div");
     row.style.cssText = "display:flex;gap:8px;justify-content:flex-end;";
     const mk = (label, primary) => {
       const b = document.createElement("button");
       b.textContent = label;
-      b.style.cssText = `padding:6px 14px;border-radius:5px;border:1px solid ${primary ? "#f66744" : "rgba(255,255,255,.2)"};background:${primary ? "#f66744" : "transparent"};color:#fff;cursor:pointer;font:13px 'Segoe UI',system-ui,sans-serif;`;
+      b.style.cssText = `padding:6px 14px;border-radius:5px;border:1px solid ${primary ? "var(--pix-acc,#f66744)" : "rgba(255,255,255,.2)"};background:${primary ? "var(--pix-acc,#f66744)" : "transparent"};color:#fff;cursor:pointer;font:13px 'Segoe UI',system-ui,sans-serif;`;
       return b;
     };
     const cancel = mk("Cancel", false), ok = mk("Continue", true);
@@ -198,6 +199,7 @@ app.registerExtension({
         // is trusted and the workflow isn't falsely flagged modified (#18).
         node._pixXyRenderOnly = () => renderBody(node, root, { rerender: handlers.rerender, growth: null, reset: handlers.reset, resetAxis: handlers.resetAxis });
 
+        installNodeAccent(node, root);   // the face follows this node's accent colour
         const widget = node.addDOMWidget("xyplot", "pixaroma_xy_plot", root, {
           serialize: false,
           // Coarse-round to a 4px grid so sub-pixel/font measurement jitter can't
@@ -576,3 +578,7 @@ api.addEventListener("executed", ({ detail }) => {
     console.error("Pixaroma.XYPlot: executed handler failed", e);
   }
 });
+
+// The colour option: a right-click "XY Plot settings" entry, the gear in the
+// selection toolbar, and the shared colour panel behind both.
+registerNodeAccent("PixaromaXYPlot", { title: "XY Plot" });

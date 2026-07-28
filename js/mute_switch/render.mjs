@@ -12,6 +12,12 @@
 import { app } from "/scripts/app.js";
 
 export const BRAND = "#f66744";
+import { accentOf } from "../shared/node_settings.mjs";
+// The accent of the node being painted. A canvas cannot read a CSS variable and
+// the small paint helpers below take no node argument, so the draw entry sets
+// this once per pass. Painting is synchronous per node, so it is never stale.
+let _acc = BRAND;
+
 export const MODE_BAR_H = 28;        // height of the two-pills row at top
 export const ROW_H = 20;             // matches LG NODE_SLOT_HEIGHT
 export const TOP_PAD = 4;            // gap between mode bar and first row
@@ -163,7 +169,7 @@ function drawTwoSegmentPill(ctx, rect, leftLabel, rightLabel, leftActive) {
   ctx.save();
   roundedRectPath(ctx, rect.x, rect.y, rect.w, rect.h, rect.h / 2);
   ctx.clip();
-  ctx.fillStyle = BRAND;
+  ctx.fillStyle = _acc;
   if (leftActive) {
     ctx.fillRect(rect.x, rect.y, halfW, rect.h);
   } else {
@@ -184,8 +190,8 @@ function drawTwoSegmentPill(ctx, rect, leftLabel, rightLabel, leftActive) {
 
 function drawRowPill(ctx, rect, on) {
   ctx.save();
-  ctx.fillStyle = on ? BRAND : "rgba(255,255,255,0.06)";
-  ctx.strokeStyle = on ? BRAND : "rgba(255,255,255,0.18)";
+  ctx.fillStyle = on ? _acc : "rgba(255,255,255,0.06)";
+  ctx.strokeStyle = on ? _acc : "rgba(255,255,255,0.18)";
   ctx.lineWidth = 1;
   roundedRectPath(ctx, rect.x, rect.y, rect.w, rect.h, ROW_PILL_R);
   ctx.fill();
@@ -420,6 +426,7 @@ function updateHoverTooltip(node) {
 // ── Main paint ───────────────────────────────────────────────────────────
 
 export function drawMuteSwitch(node, ctx) {
+  _acc = accentOf(node);   // every paint helper below reads this
   updateHoverTooltip(node);
 
   const w = node.size[0];

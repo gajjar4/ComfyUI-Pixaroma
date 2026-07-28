@@ -22,7 +22,7 @@ function toast(summary, detail, severity = "info") {
   }
   try {
     const b = el("div", null, `${summary}: ${detail}`);
-    b.style.cssText = "position:fixed;top:60px;right:20px;background:#1d1d1d;color:#fff;font:13px sans-serif;padding:10px 14px;border-radius:6px;border:2px solid #f66744;z-index:99999;";
+    b.style.cssText = "position:fixed;top:60px;right:20px;background:#1d1d1d;color:#fff;font:13px sans-serif;padding:10px 14px;border-radius:6px;border:2px solid var(--pix-acc,#f66744);z-index:99999;";
     document.body.appendChild(b);
     setTimeout(() => b.remove(), 3500);
   } catch (_e) {}

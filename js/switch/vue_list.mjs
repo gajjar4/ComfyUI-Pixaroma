@@ -29,6 +29,7 @@
 
 import { readState, getUpstreamType, setActiveRow } from "./core.mjs";
 import { applyAdaptiveCanvasOnly } from "../shared/nodes2.mjs";
+import { installNodeAccent } from "../shared/node_settings.mjs";
 
 const BRAND = "#f66744";
 const ROW_MIN_H = 24;                 // matches the 24px slot-dot row height
@@ -47,8 +48,8 @@ function injectCSS() {
       cursor:pointer; user-select:none;
     }
     .pix-sw-row:hover { border-color:rgba(255,255,255,0.30); }
-    .pix-sw-row.active { border-color:${BRAND}; background:rgba(246,103,68,0.12); }
-    .pix-sw-row.active:hover { border-color:${BRAND}; }
+    .pix-sw-row.active { border-color:var(--pix-acc,#f66744); background:color-mix(in srgb, var(--pix-acc,#f66744) 12%, transparent); }
+    .pix-sw-row.active:hover { border-color:var(--pix-acc,#f66744); }
     .pix-sw-row.trailing { cursor:default; opacity:0.5; border-style:dashed; }
     .pix-sw-row.trailing:hover { border-color:rgba(255,255,255,0.12); }
     .pix-sw-num { flex:none; min-width:50px; color:rgba(255,255,255,0.55); font:12px 'Segoe UI',-apple-system,sans-serif; white-space:nowrap; }
@@ -66,13 +67,13 @@ function injectCSS() {
       padding:1px 4px; outline:none; cursor:text; text-overflow:ellipsis;
     }
     .pix-sw-name:hover { border-color:rgba(255,255,255,0.18); }
-    .pix-sw-name:focus { border-color:${BRAND}; background:#1d1d1d; }
+    .pix-sw-name:focus { border-color:var(--pix-acc,#f66744); background:#1d1d1d; }
     .pix-sw-name::placeholder { color:#888; }
     .pix-sw-toggle {
       position:relative; width:28px; height:14px; border-radius:7px; flex:none; box-sizing:border-box;
       border:1px solid rgba(255,255,255,0.18); background:rgba(255,255,255,0.06);
     }
-    .pix-sw-row.active .pix-sw-toggle { border-color:${BRAND}; background:${BRAND}; }
+    .pix-sw-row.active .pix-sw-toggle { border-color:var(--pix-acc,#f66744); background:var(--pix-acc,#f66744); }
     .pix-sw-knob { position:absolute; top:2px; left:2px; width:8px; height:8px; border-radius:50%; background:#ccc; transition:left .1s ease; }
     .pix-sw-row.active .pix-sw-knob { left:16px; background:#fff; }
     .pix-sw-row.trailing .pix-sw-toggle { visibility:hidden; }
@@ -105,6 +106,7 @@ function syncRowWidgets(node) {
   while (rows.length < inputs.length) {
     const el = document.createElement("div");
     el.className = "pix-sw-row";
+    installNodeAccent(node, el);   // the face follows this node's accent colour
     const w = node.addDOMWidget(ROW_WIDGET_NAME(rows.length + 1), WIDGET_TYPE, el, {
       serialize: false,   // options.serialize -> keeps it out of the API prompt
       getMinHeight: () => ROW_MIN_H,

@@ -27,16 +27,16 @@ function injectCSS() {
     .pix-pi-toggle { display:flex; background:rgba(0,0,0,0.25); border-radius:6px; padding:2px; gap:2px; flex:0 0 auto; }
     .pix-pi-seg { flex:1 1 0; text-align:center; padding:4px 0; border-radius:5px; cursor:pointer;
       color:rgba(255,255,255,0.6); user-select:none; border:1px solid transparent; }
-    .pix-pi-seg.active { background:var(--pix-acc,var(--pix-acc,#f66744)); color:#fff; border-color:var(--pix-acc,var(--pix-acc,#f66744)); }
-    .pix-pi-seg:not(.active):hover { border-color:var(--pix-acc,var(--pix-acc,#f66744)); color:#ddd; }
+    .pix-pi-seg.active { background:var(--pix-acc,#f66744); color:#fff; border-color:var(--pix-acc,#f66744); }
+    .pix-pi-seg:not(.active):hover { border-color:var(--pix-acc,#f66744); color:#ddd; }
     .pix-pi-status { flex:0 0 auto; font-size:11px; color:rgba(255,255,255,0.7); min-height:14px; text-align:center; }
     .pix-pi-btns { display:flex; gap:6px; flex:0 0 auto; }
     .pix-pi-btn { flex:1 1 0; min-width:0; height:26px; line-height:24px; border-radius:4px;
       border:1px solid rgba(255,255,255,0.18); background:rgba(255,255,255,0.05);
       color:rgba(255,255,255,0.85); font:12px sans-serif; cursor:pointer; padding:0 6px;
       box-sizing:border-box; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; user-select:none; }
-    .pix-pi-btn:hover:not(:disabled) { border-color:var(--pix-acc,var(--pix-acc,#f66744)); color:#fff; }
-    .pix-pi-btn.primary:not(:disabled) { background:var(--pix-acc,var(--pix-acc,#f66744)); border-color:var(--pix-acc,var(--pix-acc,#f66744)); color:#fff; }
+    .pix-pi-btn:hover:not(:disabled) { border-color:var(--pix-acc,#f66744); color:#fff; }
+    .pix-pi-btn.primary:not(:disabled) { background:var(--pix-acc,#f66744); border-color:var(--pix-acc,#f66744); color:#fff; }
     .pix-pi-btn.primary:hover:not(:disabled) { background:#ff8a5e; border-color:#ff8a5e; }
     .pix-pi-btn:disabled { opacity:0.45; cursor:default; }
     .pix-pi-preview { flex:1 1 0; min-height:0; position:relative; background:#1d1d1d;

@@ -54,7 +54,7 @@ function injectCSS() {
     .pix-vc-warn {
       display: none;
       padding: 7px 9px; border-radius: 6px; line-height: 1.35;
-      background: rgba(246,103,68,0.15); border: 1px solid var(--pix-acc,var(--pix-acc,#f66744));
+      background: color-mix(in srgb, var(--pix-acc,#f66744) 15%, transparent); border: 1px solid var(--pix-acc,#f66744);
       color: #ffd9cc;
     }
     .pix-vc-warn b { color: #fff; font-weight: 700; }
@@ -76,7 +76,7 @@ function injectCSS() {
       background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.14);
       transition: background 0.12s, border-color 0.12s, color 0.12s;
     }
-    .pix-vc-copy:hover { background: var(--pix-acc,var(--pix-acc,#f66744)); border-color: var(--pix-acc,var(--pix-acc,#f66744)); color: #fff; }
+    .pix-vc-copy:hover { background: var(--pix-acc,#f66744); border-color: var(--pix-acc,#f66744); color: #fff; }
     .pix-vc-copy.is-flashing,
     .pix-vc-copy.is-flashing:hover { background: #3ec371; border-color: #3ec371; color: #fff; }
   `;

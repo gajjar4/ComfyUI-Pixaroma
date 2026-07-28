@@ -37,7 +37,7 @@ export function openLabelEditor(node, rowIdx1, rect) {
     boxSizing: "border-box",
     background: "#1d1d1d",
     color: "#fff",
-    border: `${Math.max(1, Math.round(scale))}px solid #f66744`,
+    border: `${Math.max(1, Math.round(scale))}px solid var(--pix-acc,#f66744)`,
     borderRadius: `${Math.max(2, Math.round(3 * scale))}px`,
     padding: `0 ${Math.max(2, Math.round(4 * scale))}px`,
     font: `${Math.max(9, Math.round(12 * scale))}px 'Segoe UI', -apple-system, sans-serif`,

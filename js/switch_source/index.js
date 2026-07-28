@@ -11,6 +11,7 @@ import {
 import { openLabelEditor, cancelEditorForNode } from "./editor.mjs";
 import { makeNumericInput, injectResizePanelCSS } from "../shared/resize_panel.mjs";
 import { applyAdaptiveCanvasOnly, isVueNodes } from "../shared/nodes2.mjs";
+import { installNodeAccent, registerNodeAccent } from "../shared/node_settings.mjs";
 
 // Switch Source Pixaroma - two banks (A/B), one toggle flips every row.
 // Slot count is set by the Rows field (not by wiring); editable output labels;
@@ -67,10 +68,10 @@ function injectCSS() {
       display:inline-flex; align-items:center; flex:1;
       background:#1d1d1d; border:1px solid #444; border-radius:6px; overflow:hidden;
     }
-    .pix-ss-rowsfield:focus-within { border-color:${BRAND}; }
+    .pix-ss-rowsfield:focus-within { border-color:var(--pix-acc,#f66744); }
     .pix-ss-rowsfield.is-blocked { border-color:#ff5555 !important; }
     .pix-ss-rows-label {
-      color:${BRAND}; font-size:10px; font-weight:600; letter-spacing:0.5px;
+      color:var(--pix-acc,#f66744); font-size:10px; font-weight:600; letter-spacing:0.5px;
       text-transform:uppercase; padding:0 4px 0 9px; white-space:nowrap;
     }
     /* Blend the shared numeric input into the rows-field box (drop its own border/bg). */
@@ -82,7 +83,7 @@ function injectCSS() {
       cursor:pointer; transition:background .1s,border-color .1s,color .1s; font-family:inherit; padding:0;
     }
     .pix-ss-btn:hover { background:rgba(255,255,255,0.1); border-color:rgba(255,255,255,0.35); color:#fff; }
-    .pix-ss-btn.active { background:${BRAND}; color:#fff; border-color:${BRAND}; }
+    .pix-ss-btn.active { background:var(--pix-acc,#f66744); color:#fff; border-color:var(--pix-acc,#f66744); }
     .pix-ss-abtoggle { display:flex; gap:4px; width:96px; }
     /* Stack label above the buttons so "When active row is empty:" fits even
        at the min node width, and the buttons get the full row to themselves. */
@@ -225,6 +226,7 @@ app.registerExtension({
       const { root, refresh } = buildControls(node);
       node._pixSsRefresh = refresh;
       installCanvasZoomPassthrough(root);
+      installNodeAccent(node, root);   // the face follows this node's accent colour
       const ssWidget = node.addDOMWidget("pixaroma_switch_source_ui", "custom", root, {
         serialize: false,
         getMinHeight: () => CONTROL_BAND,
@@ -465,3 +467,7 @@ if (!api._pixSsQueueWrapped) {
     return _origQueuePrompt(...args);
   };
 }
+
+// The colour option: a right-click "Switch Source settings" entry, the gear in the
+// selection toolbar, and the shared colour panel behind both.
+registerNodeAccent("PixaromaSwitchSource", { title: "Switch Source" });

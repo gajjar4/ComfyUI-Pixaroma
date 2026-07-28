@@ -30,6 +30,7 @@ import {
   refreshNotifyHistory,
   fmtDur,
 } from "./history.mjs";
+import { registerNodeAccent } from "../shared/node_settings.mjs";
 
 const NODE_NAME = "NotifyPixaroma";
 const ID_PROP = "pixNotifyId";
@@ -671,3 +672,8 @@ app.registerExtension({
     ];
   },
 });
+
+// The colour option: a right-click "Notify settings" entry, the gear in the
+// selection toolbar, and the shared colour panel behind both. On this node the
+// colour shows in the run-time history panel (the node face itself is grey).
+registerNodeAccent("PixaromaNotify", { title: "Notify" });

@@ -84,7 +84,7 @@ function injectCSS() {
     .pix-szp-btn { border:1px solid #444; background:rgba(255,255,255,0.04); color:#d8d8d8; border-radius:5px;
       padding:6px 12px; font:12px 'Segoe UI',sans-serif; cursor:pointer; }
     .pix-szp-btn:hover { border-color:var(--acc,${BRAND}); color:#fff; }
-    .pix-szp-common { background:rgba(246,103,68,0.16); border:1px solid rgba(246,103,68,0.6); color:#f68a66;
+    .pix-szp-common { background:color-mix(in srgb, var(--pix-acc,#f66744) 16%, transparent); border:1px solid color-mix(in srgb, var(--pix-acc,#f66744) 60%, transparent); color:#f68a66;
       border-radius:6px; padding:9px; font:12px 'Segoe UI',sans-serif; cursor:pointer; width:100%;
       display:flex; align-items:center; justify-content:center; gap:7px; }
     .pix-szp-common:hover { filter:brightness(1.1); }

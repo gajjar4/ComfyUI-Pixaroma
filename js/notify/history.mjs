@@ -13,6 +13,7 @@
 
 import { app } from "/scripts/app.js";
 import { BRAND } from "../shared/index.mjs";
+import { applyAccent } from "../shared/node_settings.mjs";
 
 function el(tag, cls, text) {
   const e = document.createElement(tag);
@@ -71,13 +72,13 @@ function injectCSS() {
     ".pix-nt-hdurwrap{flex:0 0 auto;display:flex;align-items:center;gap:4px;}",
     ".pix-nt-hfast{font-size:12px;line-height:1;}",
     ".pix-nt-hdur{font-family:ui-monospace,Consolas,monospace;font-size:13px;color:#f2f2f2;font-variant-numeric:tabular-nums;}",
-    ".pix-nt-hrow.is-fast .pix-nt-hdur{color:" + BRAND + ";}",
+    ".pix-nt-hrow.is-fast .pix-nt-hdur{color:var(--pix-acc," + BRAND + ");}",
     ".pix-nt-hbtn{flex:0 0 auto;padding:4px 10px;border-radius:5px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.14);color:rgba(255,255,255,0.85);font-size:11px;cursor:pointer;font-family:inherit;transition:background .08s,border-color .08s,color .08s;}",
-    ".pix-nt-hbtn:hover{background:" + BRAND + ";border-color:" + BRAND + ";color:#fff;}",
+    ".pix-nt-hbtn:hover{background:var(--pix-acc," + BRAND + ");border-color:var(--pix-acc," + BRAND + ");color:#fff;}",
     ".pix-nt-hbtn.is-flashing,.pix-nt-hbtn.is-flashing:hover{background:#3ec371;border-color:#3ec371;color:#fff;}",
     ".pix-nt-hfoot{display:flex;gap:8px;padding:10px 12px;border-top:1px solid #333;flex:0 0 auto;}",
     ".pix-nt-hfbtn{flex:1;padding:7px;border-radius:6px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.14);color:rgba(255,255,255,0.85);font-size:12px;cursor:pointer;font-family:inherit;transition:background .08s,border-color .08s,color .08s;}",
-    ".pix-nt-hfbtn:hover{background:" + BRAND + ";border-color:" + BRAND + ";color:#fff;}",
+    ".pix-nt-hfbtn:hover{background:var(--pix-acc," + BRAND + ");border-color:var(--pix-acc," + BRAND + ");color:#fff;}",
   ].join("\n");
   document.head.appendChild(s);
 }
@@ -243,6 +244,7 @@ export function openNotifyHistory(node, ctx) {
   injectCSS();
   _ctx = ctx;
   const panel = el("div", "pix-nt-hpanel");
+  applyAccent(panel, node);   // the panel follows this node's accent colour
   _panel = panel;
   _panelNode = node;
 

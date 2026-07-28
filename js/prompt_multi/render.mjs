@@ -146,7 +146,7 @@ const CSS = `
   flex-shrink: 0;
   padding: 0;
 }
-.pix-pm-delete:hover { color: var(--pix-acc,#f66744); background: rgba(246,103,68,0.12); }
+.pix-pm-delete:hover { color: var(--pix-acc,#f66744); background: color-mix(in srgb, var(--pix-acc,#f66744) 12%, transparent); }
 .pix-pm-delete:disabled { color: #444; cursor: not-allowed; background: transparent; }
 
 /* Textarea interior matches Prompt Pack / Text Pixaroma for consistency. */

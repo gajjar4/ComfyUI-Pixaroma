@@ -18,6 +18,7 @@
 import { readState, togglePillRow, setSelectMode, setMuteMode } from "./core.mjs";
 import { getUpstreamType } from "./render.mjs";
 import { applyAdaptiveCanvasOnly } from "../shared/nodes2.mjs";
+import { installNodeAccent } from "../shared/node_settings.mjs";
 
 const BRAND = "#f66744";
 const MODEBAR_H = 34;                 // mode bar block (segments + its padding)
@@ -46,7 +47,7 @@ function injectCSS() {
       padding:0 4px;
     }
     .pix-ms-segbtn:hover { color:#ddd; }
-    .pix-ms-segbtn.active { background:${BRAND}; color:#fff; }
+    .pix-ms-segbtn.active { background:var(--pix-acc,#f66744); color:#fff; }
     .pix-ms-segbtn.active:hover { color:#fff; }
     /* Scene rows - each is its own widget, so its input dot sits on the row. */
     .pix-ms-row {
@@ -69,7 +70,7 @@ function injectCSS() {
       padding:1px 4px; outline:none; cursor:text; text-overflow:ellipsis;
     }
     .pix-ms-name:hover { border-color:rgba(255,255,255,0.18); }
-    .pix-ms-name:focus { border-color:${BRAND}; background:#1d1d1d; }
+    .pix-ms-name:focus { border-color:var(--pix-acc,#f66744); background:#1d1d1d; }
     .pix-ms-name::placeholder { color:#888; }
     /* ON/OFF toggle - the only click target to flip a scene. */
     .pix-ms-toggle {
@@ -77,7 +78,7 @@ function injectCSS() {
       border:1px solid rgba(255,255,255,0.18); background:rgba(255,255,255,0.06);
       cursor:pointer;
     }
-    .pix-ms-toggle.on { border-color:${BRAND}; background:${BRAND}; }
+    .pix-ms-toggle.on { border-color:var(--pix-acc,#f66744); background:var(--pix-acc,#f66744); }
     .pix-ms-knob { position:absolute; top:2px; left:2px; width:8px; height:8px; border-radius:50%; background:#ccc; transition:left .1s ease; }
     .pix-ms-toggle.on .pix-ms-knob { left:16px; background:#fff; }
 
@@ -129,6 +130,7 @@ function syncRowWidgets(node) {
   while (rows.length < inputs.length) {
     const el = document.createElement("div");
     el.className = "pix-ms-row";
+    installNodeAccent(node, el);   // the face follows this node's accent colour
     const w = node.addDOMWidget(ROW_WIDGET_NAME(rows.length + 1), ROW_WIDGET_TYPE, el, {
       serialize: false,   // options.serialize -> keeps it out of the API prompt
       getMinHeight: () => ROW_MIN_H,
@@ -173,6 +175,7 @@ export function buildMuteSwitchVueList(node) {
   const modebar = document.createElement("div");
   modebar.className = "pix-ms-modebar";
 
+  installNodeAccent(node, modebar);   // the face follows this node's accent colour
   const barWidget = node.addDOMWidget("pixaroma_mute_switch_bar", "pixaroma_mute_switch_bar", modebar, {
     serialize: false,
     getMinHeight: () => MODEBAR_H,

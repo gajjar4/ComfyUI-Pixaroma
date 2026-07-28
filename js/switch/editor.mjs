@@ -82,7 +82,7 @@ export function openLabelEditor(node, slotIdx /* 1-based */, rect) {
     "z-index: 10000",
     "background: #1f1f1f",
     "color: #d8d8d8",
-    `border: ${borderPx}px solid ${BRAND}`,
+    `border: ${borderPx}px solid var(--pix-acc,#f66744)`,
     "border-radius: 3px",
     `padding: 0 ${padX}px`,
     `font: ${fontPx}px 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif`,

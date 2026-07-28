@@ -33,8 +33,8 @@ function injectCSS() {
       font: 11px 'Segoe UI', -apple-system, sans-serif;
       padding: 2px 8px;
       background: rgba(20, 20, 20, 0.92);
-      color: var(--pix-acc,var(--pix-acc,#f66744));
-      border: 1px solid var(--pix-acc,var(--pix-acc,#f66744));
+      color: var(--pix-acc,#f66744);
+      border: 1px solid var(--pix-acc,#f66744);
       border-radius: 3px;
       cursor: pointer;
       opacity: 0;
@@ -49,7 +49,7 @@ function injectCSS() {
     }
     .pix-st-copy:hover {
       opacity: 1 !important;
-      background: var(--pix-acc,var(--pix-acc,#f66744));
+      background: var(--pix-acc,#f66744);
       color: #fff;
     }
     .pix-st-copy.copied {

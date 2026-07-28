@@ -2,6 +2,7 @@ import { app } from "/scripts/app.js";
 import { applyAdaptiveCanvasOnly,
   installCanvasZoomPassthrough,
 } from "../shared/index.mjs";
+import { installNodeAccent, registerNodeAccent } from "../shared/node_settings.mjs";
 
 // Switch WH Pixaroma - two big A/B buttons that pick which width/height
 // pair flows through. State lives on node.properties.switchWhState and is
@@ -62,9 +63,9 @@ function injectCSS() {
       color: #fff;
     }
     .pix-swh-btn.active {
-      background: ${BRAND};
+      background: var(--pix-acc,#f66744);
       color: #fff;
-      border-color: ${BRAND};
+      border-color: var(--pix-acc,#f66744);
     }
   `;
   document.head.appendChild(style);
@@ -125,6 +126,7 @@ function setupNode(node) {
   const measureHeight = () => WIDGET_H;
 
   installCanvasZoomPassthrough(root);
+  installNodeAccent(node, root);   // the face follows this node's accent colour
   const _swhWidget = node.addDOMWidget("pixaroma_switch_wh_ui", "custom", root, {
     // canvasOnly set adaptively below (CLAUDE.md Nodes 2.0): true in legacy
     // (out of the Parameters tab), false in Nodes 2.0 (renders in Vue body).
@@ -242,3 +244,7 @@ app.graphToPrompt = async function (...args) {
   }
   return result;
 };
+
+// The colour option: a right-click "Switch WH settings" entry, the gear in the
+// selection toolbar, and the shared colour panel behind both.
+registerNodeAccent("PixaromaSwitchWH", { title: "Switch WH" });

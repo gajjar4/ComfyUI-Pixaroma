@@ -9,6 +9,7 @@ import { drawSwitchRows, hitToggle, hitLabel, labelScreenRect } from "./render.m
 import { openLabelEditor, cancelEditorForNode } from "./editor.mjs";
 import { buildSwitchVueList } from "./vue_list.mjs";
 import { isVueNodes } from "../shared/nodes2.mjs";
+import { registerNodeAccent } from "../shared/node_settings.mjs";
 
 // Switch Pixaroma - dynamic N-to-1 switch with per-row toggles.
 // Rendering follows the Image Compare Pixaroma pattern: onDrawForeground
@@ -384,3 +385,7 @@ if (!api._pixSwQueueWrapped) {
     return _origQueuePrompt(...args);
   };
 }
+
+// The colour option: a right-click "Switch settings" entry, the gear in the
+// selection toolbar, and the shared colour panel behind both.
+registerNodeAccent("PixaromaSwitch", { title: "Switch" });

@@ -72,7 +72,7 @@ function injectCSS() {
       resize: none;
       outline: none;
     }
-    .pix-text-ta:focus { border-color: var(--pix-acc,var(--pix-acc,#f66744)); }
+    .pix-text-ta:focus { border-color: var(--pix-acc,#f66744); }
     .pix-text-bottombar {
       display: flex;
       align-items: center;
@@ -103,8 +103,8 @@ function injectCSS() {
       transition: background 0.1s, color 0.1s, border-color 0.1s;
     }
     .pix-text-actbtn:hover {
-      background: var(--pix-acc,var(--pix-acc,#f66744));
-      border-color: var(--pix-acc,var(--pix-acc,#f66744));
+      background: var(--pix-acc,#f66744);
+      border-color: var(--pix-acc,#f66744);
       color: #fff;
     }
     .pix-text-actbtn[disabled] {
@@ -135,7 +135,7 @@ function injectCSS() {
       background: #161616;
     }
     .pix-text-lockhint {
-      color: var(--pix-acc,var(--pix-acc,#f66744));
+      color: var(--pix-acc,#f66744);
       font: 10px sans-serif;
       font-style: italic;
       padding: 0 2px;
@@ -166,7 +166,7 @@ function injectCSS() {
       transition: background 0.1s, color 0.1s, border-color 0.1s;
     }
     .pix-text-switch:hover {
-      border-color: var(--pix-acc,var(--pix-acc,#f66744));
+      border-color: var(--pix-acc,#f66744);
       color: rgba(255, 255, 255, 0.92);
     }
     .pix-text-switch-dot {
@@ -179,8 +179,8 @@ function injectCSS() {
       box-sizing: border-box;
     }
     .pix-text-switch.is-on {
-      background: var(--pix-acc,var(--pix-acc,#f66744));
-      border-color: var(--pix-acc,var(--pix-acc,#f66744));
+      background: var(--pix-acc,#f66744);
+      border-color: var(--pix-acc,#f66744);
       color: #fff;
     }
     .pix-text-switch.is-on .pix-text-switch-dot {

@@ -535,7 +535,7 @@ function injectCSS() {
     ".pix-gs-top{display:flex;align-items:center;gap:6px;padding:4px 8px 6px;}",
     // min-width:0 + ellipsis so a hand-narrowed node clips the TAG rather than
     // pushing the buttons out of the node frame.
-    ".pix-gs-tag{font-size:11px;padding:2px 8px;border-radius:5px;background:rgba(246,103,68,0.18);color:#f99877;flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}",
+    ".pix-gs-tag{font-size:11px;padding:2px 8px;border-radius:5px;background:color-mix(in srgb, var(--pix-acc,#f66744) 18%, transparent);color:#f99877;flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}",
     // The All on / All off pair carries the margin-left:auto (it used to be on the
     // gear), so the whole control cluster sits together on the right. The default
     // node (250) fits the strip comfortably; MIN_W stays 120, so a hand-narrowed
