@@ -796,7 +796,7 @@ function injectCSS() {
       resize: vertical;
       min-height: 44px;
     }
-    .pix-to-textarea:focus { outline: none; border-color: ${BRAND}; }
+    .pix-to-textarea:focus { outline: none; border-color: var(--pix-acc,#f66744); }
     .pix-to-textarea-locked {
       color: #666 !important;
       background: #1a1a1a !important;
@@ -805,7 +805,7 @@ function injectCSS() {
     }
     .pix-to-text-lockhint {
       font: 10px ui-sans-serif, system-ui, sans-serif;
-      color: ${BRAND};
+      color: var(--pix-acc,#f66744);
       letter-spacing: 0.3px;
       margin-top: -2px;
       margin-bottom: 2px;
@@ -826,7 +826,7 @@ function injectCSS() {
     }
     .pix-to-dropdown:hover { border-color: #666; }
     .pix-to-dropdown .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .pix-to-dropdown .arrow { color: ${BRAND}; font-size: 11px; margin-left: 6px; }
+    .pix-to-dropdown .arrow { color: var(--pix-acc,#f66744); font-size: 11px; margin-left: 6px; }
 
     /* Font row: dropdown grows, B + I toggle buttons on the right */
     .pix-to-font-row {
@@ -852,7 +852,7 @@ function injectCSS() {
       justify-content: center;
     }
     .pix-to-style-btn:hover { border-color: #666; color: #ddd; }
-    .pix-to-style-btn.active { background: ${BRAND}; color: #fff; border-color: ${BRAND}; }
+    .pix-to-style-btn.active { background: var(--pix-acc,#f66744); color: #fff; border-color: var(--pix-acc,#f66744); }
     .pix-to-italic-btn { font-style: italic; font-family: serif; }
 
     /* Small row caption (disambiguates Text align vs Position on canvas) */
@@ -891,10 +891,10 @@ function injectCSS() {
       min-height: 26px;
     }
     .pix-to-chip:hover { border-color: #666; color: #ddd; }
-    .pix-to-chip.active { background: ${BRAND}; color: #fff; border-color: ${BRAND}; }
+    .pix-to-chip.active { background: var(--pix-acc,#f66744); color: #fff; border-color: var(--pix-acc,#f66744); }
     /* Brief click acknowledgement for the momentary "Position on canvas"
        buttons (they have no persistent active state). */
-    .pix-to-chip.is-flashing { background: ${BRAND}; border-color: ${BRAND}; }
+    .pix-to-chip.is-flashing { background: var(--pix-acc,#f66744); border-color: var(--pix-acc,#f66744); }
     /* Direction row: 2 chips. Reuse .pix-to-chip (hover/active/height) so the
        row visually matches the align row directly below it; this class only
        sets the 2-column grid. */
@@ -938,13 +938,13 @@ function injectCSS() {
       min-height: 28px;
       overflow: hidden;   /* clip the recessed spinner column to the rounded corner */
     }
-    .pix-to-input-cell:focus-within { border-color: ${BRAND}; }
+    .pix-to-input-cell:focus-within { border-color: var(--pix-acc,#f66744); }
     .pix-to-input-label {
       display: flex;
       align-items: center;
       padding-left: 8px;
       font: 10px ui-sans-serif, system-ui, sans-serif;
-      color: ${BRAND};
+      color: var(--pix-acc,#f66744);
       text-transform: uppercase;
       letter-spacing: 0.5px;
       flex-shrink: 0;
@@ -954,7 +954,7 @@ function injectCSS() {
       background: transparent;
       border: none;
       outline: none;
-      color: ${BRAND};
+      color: var(--pix-acc,#f66744);
       font: 600 13px ui-sans-serif, system-ui, sans-serif;
       line-height: 1.2;   /* explicit vertical centering (don't rely on input auto-center) */
       text-align: right;
@@ -988,7 +988,7 @@ function injectCSS() {
       position: relative;
       outline: none;
     }
-    .pix-to-spin > button:hover { color: ${BRAND}; }
+    .pix-to-spin > button:hover { color: var(--pix-acc,#f66744); }
     .pix-to-spin-up::before,
     .pix-to-spin-down::before {
       position: absolute;
@@ -1039,7 +1039,7 @@ function injectCSS() {
       text-align: right;
       white-space: nowrap;
       font: 600 11px ui-sans-serif, system-ui, sans-serif;
-      color: ${BRAND};
+      color: var(--pix-acc,#f66744);
       letter-spacing: 0;
     }
     .pix-to-swatch-checker {
@@ -1055,8 +1055,8 @@ function injectCSS() {
     }
     .pix-to-reset-btn {
       grid-column: 2;
-      background: ${BRAND};
-      border: 1px solid ${BRAND};
+      background: var(--pix-acc,#f66744);
+      border: 1px solid var(--pix-acc,#f66744);
       border-radius: 4px;
       color: #fff;
       padding: 5px 0;
@@ -1115,7 +1115,7 @@ function injectCSS() {
       font-size: 13px;
       flex-shrink: 0;
     }
-    .pix-to-popup-refresh:hover { border-color: ${BRAND}; color: #fff; }
+    .pix-to-popup-refresh:hover { border-color: var(--pix-acc,#f66744); color: #fff; }
     .pix-to-popup-refresh:disabled { opacity: 0.5; cursor: default; }
     .pix-to-popup-list { overflow-y: auto; flex: 1; }
     .pix-to-popup-empty { padding: 10px 12px; color: #777; font: 12px ui-sans-serif, system-ui, sans-serif; }
@@ -1126,7 +1126,7 @@ function injectCSS() {
     }
     .pix-to-popup-item:last-child { border-bottom: none; }
     .pix-to-popup-item:hover { background: #2a2a2a; }
-    .pix-to-popup-item.active { color: ${BRAND}; font-weight: 600; }
+    .pix-to-popup-item.active { color: var(--pix-acc,#f66744); font-weight: 600; }
     .pix-to-popup-sep { height: 1px; background: #333; margin: 4px 0; }
 
     /* Watermark: Pixels / %-width size-unit toggle (2-segment) */
@@ -1142,7 +1142,7 @@ function injectCSS() {
       min-height: 26px;
     }
     .pix-to-seg:hover { border-color: #666; color: #ddd; }
-    .pix-to-seg.active { background: ${BRAND}; color: #fff; border-color: ${BRAND}; }
+    .pix-to-seg.active { background: var(--pix-acc,#f66744); color: #fff; border-color: var(--pix-acc,#f66744); }
 
     /* Watermark position row: Rotate + Margin X/Y on the left, compact 3x3
        anchor square on the right (mirrors Load Image's crop anchor). */
@@ -1169,7 +1169,7 @@ function injectCSS() {
       transition: background 0.08s;
     }
     .pix-to-anchor-cell:hover { background: rgba(255, 255, 255, 0.18); }
-    .pix-to-anchor-cell.active { background: ${BRAND}; }
+    .pix-to-anchor-cell.active { background: var(--pix-acc,#f66744); }
   `;
   document.head.appendChild(s);
 }

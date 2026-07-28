@@ -15,6 +15,7 @@ import { createTextEditorPanel } from "../framework/text_editor.mjs";
 import { loadFontForLayer, canvasFontString } from "../framework/fonts.mjs";
 import { measureTextDims } from "../framework/text_render.mjs";
 import { DEFAULT_STATE, resetStateInPlace } from "./defaults.mjs";
+import { installNodeAccent, registerNodeAccent } from "../shared/node_settings.mjs";
 import "./interaction.mjs"; // side-effect: registers prototype methods
 
 const NODE_CLASS = "PixaromaTextOverlay";
@@ -182,6 +183,7 @@ function setupTextOverlayNode(node) {
   node._textOverlayPanelHeight = panelHeight;
 
   installCanvasZoomPassthrough(root);
+  installNodeAccent(node, root);   // the face follows this node's accent colour
   const _toWidget = node.addDOMWidget("pix_text_overlay_ui", "div", root, {
     // canvasOnly set adaptively below (CLAUDE.md Nodes 2.0): true in legacy
     // (out of the Parameters tab), false in Nodes 2.0 (renders in Vue body).
@@ -309,7 +311,7 @@ function refreshOpenButton(node) {
   if (!btn) return;
   if (isUpstreamImageReady(node)) {
     btn.classList.remove("disabled");
-    btn.style.background = "#f66744";
+    btn.style.background = "var(--pix-acc,#f66744)";
     btn.style.color = "#fff";
     btn.style.cursor = "pointer";
     btn.textContent = "Open Text Editor";
@@ -317,7 +319,7 @@ function refreshOpenButton(node) {
   } else {
     btn.classList.add("disabled");
     btn.style.background = "#2a2a2a";
-    btn.style.color = "#f66744";   // orange text so the hint is legible
+    btn.style.color = "var(--pix-acc,#f66744)";   // orange text so the hint is legible
     btn.style.cursor = "not-allowed";
     const link = node.inputs?.find((i) => i.name === "image")?.link;
     if (link == null) {
@@ -608,8 +610,14 @@ function showTextOverlayToast(msg) {
   try {
     const banner = document.createElement("div");
     banner.textContent = msg;
-    banner.style.cssText = "position:fixed;top:60px;right:20px;background:#1d1d1d;color:#fff;font:14px sans-serif;padding:10px 14px;border-radius:6px;border:2px solid #f66744;z-index:99999;";
+    banner.style.cssText = "position:fixed;top:60px;right:20px;background:#1d1d1d;color:#fff;font:14px sans-serif;padding:10px 14px;border-radius:6px;border:2px solid var(--pix-acc,#f66744);z-index:99999;";
     document.body.appendChild(banner);
     setTimeout(() => banner.remove(), 3500);
   } catch { /* no-op */ }
 }
+
+// The colour option: a right-click "Text Overlay settings" entry, the gear in the
+// selection toolbar, and the shared colour panel behind both. The shared text
+// panel reads --pix-acc, so only the copy mounted on the NODE recolours - the
+// same panel in a fullscreen editor sidebar keeps the Pixaroma orange.
+registerNodeAccent("PixaromaTextOverlay", { title: "Text Overlay" });

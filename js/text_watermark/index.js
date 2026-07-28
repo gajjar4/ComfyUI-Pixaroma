@@ -12,6 +12,7 @@ import { applyAdaptiveCanvasOnly,
 } from "../shared/index.mjs";
 import { createTextEditorPanel } from "../framework/text_editor.mjs";
 import { DEFAULT_STATE, resetStateInPlace } from "./defaults.mjs";
+import { installNodeAccent, registerNodeAccent } from "../shared/node_settings.mjs";
 
 const NODE_CLASS = "PixaromaTextWatermark";
 const STATE_PROP = "textWatermarkState";
@@ -116,6 +117,7 @@ function setupWatermarkNode(node) {
   }
 
   installCanvasZoomPassthrough(root);
+  installNodeAccent(node, root);   // the face follows this node's accent colour
   const _wmWidget = node.addDOMWidget("pix_text_watermark_ui", "div", root, {
     // canvasOnly set adaptively below (CLAUDE.md Nodes 2.0): true in legacy
     // (out of the Parameters tab), false in Nodes 2.0 (renders in Vue body).
@@ -222,3 +224,9 @@ app.graphToPrompt = async function (...args) {
   }
   return result;
 };
+
+// The colour option: a right-click "Text Watermark settings" entry, the gear in the
+// selection toolbar, and the shared colour panel behind both. The shared text
+// panel reads --pix-acc, so only the copy mounted on the NODE recolours - the
+// same panel in a fullscreen editor sidebar keeps the Pixaroma orange.
+registerNodeAccent("PixaromaTextWatermark", { title: "Text Watermark" });
