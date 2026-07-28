@@ -2,6 +2,7 @@ import { app } from "/scripts/app.js";
 import { isVueNodes } from "../shared/nodes2.mjs";
 import { isGraphLoading } from "../shared/graph_loading.mjs";
 import { isQueueLoopActive } from "../shared/queue_drivers.mjs";
+import { registerNodeSettings } from "../shared/node_settings.mjs";
 import { CLASS, BRAND, ACCENT_SETTING, ACCENT_PROP, widgetOf } from "./core.mjs";
 import {
   injectCSS, installSliders, uninstallSliders, paintRows, bindInputDots,
@@ -210,3 +211,11 @@ app.graphToPrompt = async function (...args) {
   }
   return result;
 };
+
+// The gear in the node selection toolbar opens the same panel the right-click
+// entry does. ownMenuItem: this node already adds its own menu line.
+registerNodeSettings(CLASS, {
+  title: "Outpaint Stitch",
+  ownMenuItem: true,
+  open: (node) => openOpsPanel(node, () => paintRows(node)),
+});

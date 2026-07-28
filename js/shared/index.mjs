@@ -58,3 +58,25 @@ export {
   registerNodeHelp,
   getNodeHelp,
 } from "./help.mjs";
+
+export {
+  ACC,
+  ACCENT_VAR,
+  GLOBAL_ACCENT_SETTING,
+  DEFAULT_ACCENT_PROP,
+  registerNodeSettings,
+  registerNodeAccent,
+  getNodeSettings,
+  openNodeSettings,
+  openAccentPanel,
+  closeNodeSettingsPanel,
+  closeNodeSettingsFor,
+  accentOf,
+  setNodeAccent,
+  applyAccent,
+  installNodeAccent,
+  repaintAccent,
+  repaintAllAccents,
+  globalAccent,
+  classAccentSetting,
+} from "./node_settings.mjs";

@@ -2,6 +2,7 @@ import { app } from "/scripts/app.js";
 import { isVueNodes } from "../shared/nodes2.mjs";
 import { isGraphLoading } from "../shared/graph_loading.mjs";
 import { registerNodeHelp } from "../shared/help.mjs";
+import { registerNodeSettings } from "../shared/node_settings.mjs";
 import {
   ACCENT_SETTING, BRAND, MAX_SLIDERS,
   readState, normalizeSliders, syncOutputs, addSlider, resolveAutoType, resetRowOnDisconnect,
@@ -424,4 +425,12 @@ registerNodeHelp(CLASS, {
     },
   ],
   footer: "Up to 16 controls per node - sliders, switches, dropdowns, seeds and text, mixed freely.",
+});
+
+// The gear in the node selection toolbar opens the same panel the right-click
+// entry does. ownMenuItem: this node already adds its own menu line.
+registerNodeSettings(CLASS, {
+  title: "Control Panel",
+  ownMenuItem: true,
+  open: (node) => openSlidersPanel(node, () => { refresh(node); fitNode(node); }),
 });

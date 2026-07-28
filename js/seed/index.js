@@ -2,6 +2,7 @@ import { app } from "/scripts/app.js";
 import { BRAND, hideJsonWidget, applyAdaptiveCanvasOnly, isVueNodes, measureRootContent,
   installCanvasZoomPassthrough,
 } from "../shared/index.mjs";
+import { registerNodeSettings } from "../shared/node_settings.mjs";
 import { openSeedSettings, closeSeedSettingsFor } from "./settings.mjs";
 import { openSeedHistory, closeSeedHistoryFor, refreshSeedHistory } from "./history.mjs";
 
@@ -1136,19 +1137,7 @@ app.registerExtension({
         // the full panel: size (this node + new-node default) + seed digits.
         // Gear icon to match the other Pixaroma settings panels (Save Image etc.)
         content: "⚙ Seed settings",
-        callback: () =>
-          openSeedSettings(node, {
-            readState,
-            writeState,
-            applyResize: (n) => {
-              renderUI(n);
-              refitSeedNode(n);
-            },
-            settingId: DEFAULT_SIZE_SETTING,
-            MIN_DIGITS,
-            MAX_DIGITS,
-            clampDigits,
-          }),
+        callback: () => openSeedPanel(node),
       },
       {
         // recent seeds (global), with Use / Copy / Export .txt. A clock glyph,
@@ -1326,3 +1315,25 @@ app.graphToPrompt = async function (...args) {
   }
   return result;
 };
+
+// One opener shared by the right-click entry and the selection-toolbar gear.
+function openSeedPanel(node) {
+  openSeedSettings(node, {
+    readState,
+    writeState,
+    applyResize: (n) => {
+      renderUI(n);
+      refitSeedNode(n);
+    },
+    settingId: DEFAULT_SIZE_SETTING,
+    MIN_DIGITS,
+    MAX_DIGITS,
+    clampDigits,
+  });
+}
+
+registerNodeSettings("PixaromaSeed", {
+  title: "Seed",
+  ownMenuItem: true,   // the node already adds its own "⚙ Seed settings" line
+  open: (node) => openSeedPanel(node),
+});

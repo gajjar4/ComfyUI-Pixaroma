@@ -4,6 +4,7 @@ import { api } from "/scripts/api.js";
 import { isVueNodes, applyAdaptiveCanvasOnly } from "../shared/nodes2.mjs";
 import { installResizeFloor } from "../shared/resize_floor.mjs";
 import { isGraphLoading } from "../shared/graph_loading.mjs";
+import { registerNodeSettings } from "../shared/node_settings.mjs";
 import { registerNodeHelp } from "../shared/help.mjs";
 import { createPixaromaColorPicker } from "../shared/color_picker.mjs";
 import { openRunHistory, closeRunHistoryFor, refreshRunHistory } from "./history.mjs";
@@ -1099,3 +1100,11 @@ app.registerExtension({
 });
 
 registerNodeHelp(NODE_NAME, HELP);
+
+// The gear in the node selection toolbar opens the same panel the right-click
+// entry does. ownMenuItem: this node already adds its own menu line.
+registerNodeSettings(NODE_NAME, {
+  title: "Run Timer",
+  ownMenuItem: true,
+  open: (node) => openPanel(node),
+});

@@ -4,6 +4,7 @@ import {
   installResizeFloor, installCanvasZoomPassthrough,
 } from "../shared/index.mjs";
 import { isGraphLoading } from "../shared/graph_loading.mjs";
+import { registerNodeSettings } from "../shared/node_settings.mjs";
 import {
   getTags, getCategories, findTag, subscribe, tagLines, isListTag, isListCat, catOf,
   tagMode, catMode, TEXT_BUCKET, LIST_BUCKET,
@@ -1309,3 +1310,11 @@ app.graphToPrompt = async function (...args) {
   return result;
 };
 }
+
+// Settings live on the node's own gear button, so there was no right-click way
+// in. Registering here gives BOTH the toolbar gear and a right-click entry (no
+// ownMenuItem flag, so the central hook adds the line for us).
+registerNodeSettings("PixaromaPrompt", {
+  title: "Prompt",
+  open: (node) => openPromptSettings(node, () => { applyAccent(node); refreshBody(node); }),
+});

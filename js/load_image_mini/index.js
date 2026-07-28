@@ -16,6 +16,7 @@
 import { app } from "/scripts/app.js";
 import { hideJsonWidget, installResizeFloor, installCanvasZoomPassthrough } from "../shared/index.mjs";
 import { isGraphLoading } from "../shared/graph_loading.mjs";
+import { registerNodeSettings } from "../shared/node_settings.mjs";
 import { applyAdaptiveCanvasOnly, isVueNodes, canvasBackingScale, installZoomRepaint } from "../shared/nodes2.mjs";
 import {
   setSelectedImage, updateNativePreview, pickAndUploadFile, pasteFromClipboard,
@@ -901,3 +902,11 @@ if (!app._pixLmPromptPatched) {
     return result;
   };
 }
+
+// The gear in the node selection toolbar opens the same panel the right-click
+// entry does. ownMenuItem: this node already adds its own menu line.
+registerNodeSettings(CLASS, {
+  title: "Load Image Mini",
+  ownMenuItem: true,
+  open: (node) => openMiniSettings(node, { onChange: () => refreshFace(node) }),
+});

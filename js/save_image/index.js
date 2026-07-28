@@ -15,6 +15,7 @@ import {
   installCanvasZoomPassthrough,
 } from "../shared/index.mjs";
 import { isGraphLoading } from "../shared/graph_loading.mjs";
+import { registerNodeSettings } from "../shared/node_settings.mjs";
 import { applyFilenameTokenRefs } from "../shared/filename_tokens.mjs";
 import {
   COMFY_CLASS,
@@ -1100,12 +1101,7 @@ app.registerExtension({
       null,
       {
         content: "⚙ Save Image settings",
-        callback: () =>
-          openSettingsPanel(node, () => {
-            syncFace(node);
-            updatePreview(node);
-            applyFold(node, true); // resizes only if "hide toolbar" flips while folded
-          }),
+        callback: () => openSaveImagePanel(node),
       },
       {
         // one-click escape from a stale oversized saved size (e.g. a size
@@ -1228,4 +1224,19 @@ app.registerExtension({
       return origRemoved?.apply(this, arguments);
     };
   },
+});
+
+// One opener shared by the right-click entry and the selection-toolbar gear.
+function openSaveImagePanel(node) {
+  openSettingsPanel(node, () => {
+    syncFace(node);
+    updatePreview(node);
+    applyFold(node, true); // resizes only if "hide toolbar" flips while folded
+  });
+}
+
+registerNodeSettings(COMFY_CLASS, {
+  title: "Save Image",
+  ownMenuItem: true,   // the node already adds its own "⚙ Save Image settings" line
+  open: (node) => openSaveImagePanel(node),
 });

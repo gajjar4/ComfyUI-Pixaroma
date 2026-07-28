@@ -15,6 +15,7 @@ import { app } from "/scripts/app.js";
 import { api } from "/scripts/api.js";
 import { applyAdaptiveCanvasOnly, canvasBackingScale, installZoomRepaint, isVueNodes } from "../shared/nodes2.mjs";
 import { isGraphLoading } from "../shared/graph_loading.mjs";
+import { registerNodeSettings } from "../shared/node_settings.mjs";
 import { installCanvasZoomPassthrough } from "../shared/canvas_zoom.mjs";
 import {
   ACCENT_SETTING, BRAND, DEFAULT_STATE, MAX_PAD, STATE_PROP,
@@ -1519,3 +1520,11 @@ if (!app._pixOpPromptPatched) {
     return result;
   };
 }
+
+// The gear in the node selection toolbar opens the same panel the right-click
+// entry does. ownMenuItem: this node already adds its own menu line.
+registerNodeSettings(CLASS, {
+  title: "Outpaint",
+  ownMenuItem: true,
+  open: (node) => openSettings(node),
+});

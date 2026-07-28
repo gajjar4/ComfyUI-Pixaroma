@@ -3,6 +3,7 @@ import { installCanvasZoomPassthrough } from "../shared/canvas_zoom.mjs";
 import { isVueNodes, applyAdaptiveCanvasOnly } from "../shared/nodes2.mjs";
 import { installResizeFloor } from "../shared/resize_floor.mjs";
 import { isGraphLoading } from "../shared/graph_loading.mjs";
+import { registerNodeSettings } from "../shared/node_settings.mjs";
 import { registerNodeHelp } from "../shared/help.mjs";
 
 // ╔══════════════════════════════════════════════════════════════════════╗
@@ -707,3 +708,11 @@ app.registerExtension({
 });
 
 registerNodeHelp(NODE_NAME, HELP);
+
+// The gear button in the node selection toolbar opens the same panel the
+// right-click entry does. ownMenuItem: this node already adds its own line.
+registerNodeSettings(NODE_NAME, {
+  title: "Group Switch",
+  ownMenuItem: true,
+  open: (node) => openPanel(node, null),
+});

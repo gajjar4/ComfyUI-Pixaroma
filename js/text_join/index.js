@@ -1,5 +1,6 @@
 import { app } from "/scripts/app.js";
 import { isVueNodes, registerNodeHelp } from "../shared/index.mjs";
+import { registerNodeSettings } from "../shared/node_settings.mjs";
 import { HIDDEN_INPUT, promptState, widgetOf } from "./core.mjs";
 import {
   injectCSS, installFields, uninstallFields, reseedFields, paintRows,
@@ -268,3 +269,16 @@ registerNodeHelp("PixaromaTextJoinFour", {
   sections: HELP_SECTIONS,
   footer: "Need fewer pieces? Use Text Join Two or Three Pixaroma.",
 });
+
+// The gear in the node selection toolbar opens the same panel the right-click
+// entry does, for all three sizes. ownMenuItem: the node adds its own line.
+for (const cls of Object.keys(CLASSES)) {
+  registerNodeSettings(cls, {
+    title: "Text Join",
+    ownMenuItem: true,
+    open: (node) => openTextJoinPanel(node, () => {
+      paintRows(node);
+      node.setDirtyCanvas?.(true, true);
+    }),
+  });
+}

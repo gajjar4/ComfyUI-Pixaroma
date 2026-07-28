@@ -11,6 +11,7 @@ import { hideJsonWidget, applyAdaptiveCanvasOnly, installCanvasZoomPassthrough }
 import { isVueNodes } from "../shared/nodes2.mjs";
 import { isGraphLoading } from "../shared/graph_loading.mjs";
 import { registerNodeHelp } from "../shared/help.mjs";
+import { registerNodeSettings } from "../shared/node_settings.mjs";
 import {
   BRAND, ACCENT_SETTING, STATE_PROP, HIDDEN_INPUT, MAX_SIZES,
   readState, writeState, fmtRow, accentOf, DEFAULT_STATE,
@@ -448,4 +449,12 @@ registerNodeHelp(CLASS, {
     },
   ],
   footer: "A fresh node starts with one size (1024 x 1024). Add up to " + MAX_SIZES + " per node.",
+});
+
+// The gear in the node selection toolbar opens the same panel the right-click
+// entry does. ownMenuItem: this node already adds its own menu line.
+registerNodeSettings(CLASS, {
+  title: "Sizes",
+  ownMenuItem: true,
+  open: (node) => openSizesPanel(node, onPanelChange(node)),
 });

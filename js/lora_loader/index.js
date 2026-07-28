@@ -12,6 +12,7 @@ import { listLoras, invalidateList, invalidateAllInfo } from "./api.mjs";
 import { isVueNodes } from "../shared/nodes2.mjs";
 import { isGraphLoading } from "../shared/graph_loading.mjs";
 import { registerNodeHelp } from "../shared/help.mjs";
+import { registerNodeSettings } from "../shared/node_settings.mjs";
 import {
   HIDDEN_INPUT, DEFAULT_STATE,
   readState, loadDefaults, promptState,
@@ -310,4 +311,12 @@ registerNodeHelp(CLASS, {
     },
   ],
   footer: "Trigger words are read from the file, so it works offline. Civitai is optional and off until you click it.",
+});
+
+// The gear in the node selection toolbar opens the same panel the right-click
+// entry does. ownMenuItem: this node already adds its own menu line.
+registerNodeSettings(CLASS, {
+  title: "LoRA Loader",
+  ownMenuItem: true,
+  open: (node) => openLoraPanel(node, makeRefresh(node)),
 });
