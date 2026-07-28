@@ -31,7 +31,7 @@ function injectMenuCSS() {
       font:12px 'Segoe UI',system-ui,sans-serif; color:#e0e0e0; padding:3px 0; }
     .pix-ll-menu .it { display:flex; align-items:center; gap:9px; padding:7px 12px; cursor:pointer; }
     .pix-ll-menu .it .k { width:14px; text-align:center; color:#8a8a8a; }
-    .pix-ll-menu .it:hover { background:#f66744; color:#fff; } .pix-ll-menu .it:hover .k { color:#fff; }
+    .pix-ll-menu .it:hover { background:var(--acc,#f66744); color:#fff; } .pix-ll-menu .it:hover .k { color:#fff; }
     .pix-ll-menu .it.danger:hover { background:#e2504a; }
     .pix-ll-menu .it.dis { opacity:.35; pointer-events:none; }
     .pix-ll-menu .sep { height:1px; background:#1b1b1b; margin:3px 0; }
@@ -49,6 +49,9 @@ function openRowMenu(node, id, x, y, refresh) {
 
   const menu = document.createElement("div");
   menu.className = "pix-ll-menu";
+  // the menu is fixed-positioned on <body>, so it inherits nothing - hand it
+  // this node's accent explicitly or its hover stays the brand orange
+  menu.style.setProperty("--acc", accentOf(node));
   const item = (k, label, cb, { danger = false, dis = false } = {}) => {
     const it = document.createElement("div");
     it.className = "it" + (danger ? " danger" : "") + (dis ? " dis" : "");

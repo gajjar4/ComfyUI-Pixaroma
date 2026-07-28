@@ -86,7 +86,7 @@ function injectCSS() {
       font:11px 'Segoe UI',sans-serif; cursor:pointer; transition:background .1s,color .1s; }
     .pix-prmset-seg button + button { border-left:1px solid #444; }
     .pix-prmset-seg button:hover:not(.on) { color:#fff; }
-    .pix-prmset-seg button.on { background:#f66744; color:#fff; }
+    .pix-prmset-seg button.on { background:var(--acc,#f66744); color:#fff; }
     .pix-prmset-f { display:flex; gap:8px; padding:10px 12px; border-top:1px solid #333; background:#1f1f1f; }
     .pix-prmset-btn { border:1px solid #444; background:rgba(255,255,255,.04); color:#d8d8d8; border-radius:5px; padding:5px 12px;
       font:12px 'Segoe UI',sans-serif; cursor:pointer; }
@@ -168,6 +168,7 @@ export function openPromptSettings(node, onChange) {
   _panelNode = node;
 
   const panel = el("div", "pix-prmset");
+  panel.style.setProperty("--acc", accentOf(node));   // the panel follows this node's accent
   const title = el("div", "pix-prmset-t");
   title.append(el("span", null, "⚙"), el("span", null, "Prompt settings"));
   const x = el("span", "x", "✕");
@@ -218,6 +219,7 @@ export function openPromptSettings(node, onChange) {
       onPick: (c) => {
         setNodeAccent(node, c || null);
         sw.style.background = accentOf(node);
+        panel.style.setProperty("--acc", accentOf(node));
         _onChange?.();
       },
     });
@@ -235,7 +237,7 @@ export function openPromptSettings(node, onChange) {
   });
   const reset = el("button", "pix-prmset-btn", "Reset");
   reset.title = "Follow the global default colour";
-  reset.addEventListener("click", () => { setNodeAccent(node, null); sw.style.background = accentOf(node); _onChange?.(); });
+  reset.addEventListener("click", () => { setNodeAccent(node, null); sw.style.background = accentOf(node); panel.style.setProperty("--acc", accentOf(node)); _onChange?.(); });
   const done = el("button", "pix-prmset-btn pix-prmset-push", "Done");
   done.addEventListener("click", closePromptSettings);
 
