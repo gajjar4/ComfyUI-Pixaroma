@@ -2,6 +2,7 @@ import { app } from "/scripts/app.js";
 import { installCanvasZoomPassthrough } from "../shared/canvas_zoom.mjs";
 import { api } from "/scripts/api.js";
 import { BRAND } from "../shared/utils.mjs";
+import { registerNodeAccent, accentOf, installNodeAccent } from "../shared/node_settings.mjs";
 import { applyAdaptiveCanvasOnly, isVueNodes, canvasBackingScale, installZoomRepaint } from "../shared/nodes2.mjs";
 import { applyFilenameTokenRefs, installFilenameTokenResolver } from "../shared/filename_tokens.mjs";
 
@@ -49,9 +50,11 @@ const MIN_H = 260;
 const DEFAULT_W = 360;
 const DEFAULT_H = 380;
 
-const COLOR_ACTIVE_FILL = BRAND;
+// The accent of the node currently being painted. A canvas cannot read a CSS
+// variable and paintBtn takes no node argument, so each draw() sets this once
+// per pass. Painting is synchronous per node, so it is never read for another.
+let _acc = BRAND;
 const COLOR_ACTIVE_FILL_HOVER = "#ff8a5e";
-const COLOR_ACTIVE_STROKE = BRAND;
 const COLOR_ACTIVE_TEXT = "#fff";
 const COLOR_DISABLED_FILL = "#2a2c2e";
 const COLOR_DISABLED_STROKE = "#444";
@@ -236,9 +239,9 @@ function paintBtn(ctx, rect, active, hovered) {
   const { x, y, w, h, label } = rect;
   ctx.save();
   ctx.fillStyle = active
-    ? (hovered ? COLOR_ACTIVE_FILL_HOVER : COLOR_ACTIVE_FILL)
+    ? (hovered ? COLOR_ACTIVE_FILL_HOVER : _acc)
     : COLOR_DISABLED_FILL;
-  ctx.strokeStyle = active ? COLOR_ACTIVE_STROKE : COLOR_DISABLED_STROKE;
+  ctx.strokeStyle = active ? _acc : COLOR_DISABLED_STROKE;
   ctx.lineWidth = 1;
   ctx.beginPath();
   ctx.roundRect(x, y, w, h, 4);
@@ -261,7 +264,7 @@ function paintToast(ctx, rects, text) {
   const h = rects[0].h;
   ctx.save();
   ctx.fillStyle = "rgba(0,0,0,0.86)";
-  ctx.strokeStyle = BRAND;
+  ctx.strokeStyle = _acc;
   ctx.lineWidth = 1;
   ctx.beginPath();
   ctx.roundRect(x, y, w, h, 4);
@@ -652,6 +655,7 @@ function createButtonsWidget() {
       return [width, BTN_H + STRIP_V_PAD * 2];
     },
     draw(ctx, node, widget_width, y) {
+      _acc = accentOf(node);   // the paint helpers below read this
       // Enforce minimum width at draw time. onResize is unreliable on the Vue
       // frontend (Compat #13) and Align Pixaroma's resize intercept (Align
       // Pattern #6) can bypass it entirely — both can leave the node narrower
@@ -931,6 +935,7 @@ function createStripWidget() {
     },
     draw(ctx, node, widget_width, y, h) {
       this._node = node;
+      _acc = accentOf(node);   // the selected-frame border reads this
       const frames = node._pixaromaFrames || [];
       if (!frames.length) return;
       // Height resolution:
@@ -1096,7 +1101,7 @@ function createStripWidget() {
           // content, even when the image is letterboxed inside the slot.
           if (isSel) {
             ctx.save();
-            ctx.strokeStyle = BRAND;
+            ctx.strokeStyle = _acc;
             ctx.lineWidth = IMG_STRIP_BORDER_W;
             ctx.strokeRect(
               imgRect.x + IMG_STRIP_BORDER_W / 2,
@@ -1164,7 +1169,7 @@ function injectButtonsCSS() {
     .pix-pv-btns-row { display:flex; gap:${BTN_GAP}px; }
     .pix-pv-btn {
       flex:1 1 0; min-width:0; height:${BTN_H}px; line-height:${BTN_H - 2}px;
-      border:1px solid ${BRAND}; border-radius:4px; background:${BRAND}; color:#fff;
+      border:1px solid var(--pix-acc,#f66744); border-radius:4px; background:var(--pix-acc,#f66744); color:#fff;
       font:12px sans-serif; padding:0 6px; box-sizing:border-box; cursor:pointer;
       overflow:hidden; text-overflow:ellipsis; white-space:nowrap; user-select:none;
     }
@@ -1173,7 +1178,7 @@ function injectButtonsCSS() {
     .pix-pv-toast {
       position:absolute; left:${SIDE_PAD}px; right:${SIDE_PAD}px; top:0; height:${BTN_H}px;
       display:none; align-items:center; justify-content:center;
-      background:rgba(0,0,0,0.86); border:1px solid ${BRAND}; border-radius:4px;
+      background:rgba(0,0,0,0.86); border:1px solid var(--pix-acc,#f66744); border-radius:4px;
       color:#fff; font:11px sans-serif; pointer-events:none;
     }
     .pix-pv-toast.show { display:flex; }
@@ -1185,6 +1190,7 @@ function createButtonsDOMWidget(node) {
   injectButtonsCSS();
   const root = document.createElement("div");
   root.className = "pix-pv-btns";
+  installNodeAccent(node, root);   // the buttons follow this node's accent colour
   const row = document.createElement("div");
   row.className = "pix-pv-btns-row";
   const defs = [
@@ -1677,4 +1683,13 @@ api.addEventListener("executed", ({ detail }) => {
   // restored/older node instance missed the onNodeCreated assignment.
   node.hideOutputImages = true;
   hydrateFrames(node, node.properties.pixaromaFrames);
+});
+
+// The colour option: a right-click "Preview Image settings" entry, the gear in
+// the selection toolbar, and the shared colour panel behind both. onChange goes
+// through repaint() because the buttons and strip are canvas-painted, and in
+// Nodes 2.0 a bridged canvas only redraws via widget.triggerDraw.
+registerNodeAccent("PixaromaPreview", {
+  title: "Preview Image",
+  onChange: (node) => repaint(node),
 });

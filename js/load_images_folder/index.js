@@ -8,7 +8,7 @@ import {
   isVueNodes,
   installResizeFloor,
   hideJsonWidget,
-  installCanvasZoomPassthrough,
+  installCanvasZoomPassthrough, installNodeAccent, registerNodeAccent,
 } from "../shared/index.mjs";
 import { isGraphLoading } from "../shared/graph_loading.mjs";
 import {
@@ -231,6 +231,7 @@ function setupNode(node) {
   node._pixLifUI = ui;
 
   installCanvasZoomPassthrough(ui.root);
+  installNodeAccent(node, ui.root);   // the face follows this node's accent colour
   const widget = node.addDOMWidget("pixaroma_lif_ui", "custom", ui.root, {
     getValue: () => null,
     setValue: () => {},
@@ -448,3 +449,7 @@ app.registerExtension({
     };
   },
 });
+
+// The colour option: a right-click "Load Images from Folder settings" entry, the gear in the
+// selection toolbar, and the shared colour panel behind both.
+registerNodeAccent("PixaromaLoadImagesFolder", { title: "Load Images from Folder" });

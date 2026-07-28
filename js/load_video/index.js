@@ -1,6 +1,6 @@
 import { app } from "/scripts/app.js";
 import { applyAdaptiveCanvasOnly,
-  installCanvasZoomPassthrough,
+  installCanvasZoomPassthrough, installNodeAccent, registerNodeAccent,
 } from "../shared/index.mjs";
 
 // Load Video Pixaroma — upload/pick a video and preview the SOURCE clip right
@@ -26,10 +26,10 @@ function injectCSS() {
 .pix-lv-ico { width:15px; height:15px; pointer-events:none; background-color:rgba(255,255,255,0.85); -webkit-mask:var(--ico) center/contain no-repeat; mask:var(--ico) center/contain no-repeat; }
 .pix-lv-btn:hover .pix-lv-ico { background-color:#fff; }
 .pix-lv-scrub { flex:1 1 auto; min-width:30px; height:6px; position:relative; border-radius:3px; background:rgba(255,255,255,0.16); cursor:pointer; }
-.pix-lv-scrub-fill { position:absolute; left:0; top:0; height:100%; width:0%; border-radius:3px; background:#f66744; pointer-events:none; }
+.pix-lv-scrub-fill { position:absolute; left:0; top:0; height:100%; width:0%; border-radius:3px; background:var(--pix-acc,#f66744); pointer-events:none; }
 .pix-lv-scrub-handle { position:absolute; top:50%; left:0%; width:11px; height:11px; border-radius:50%; background:#fff; transform:translate(-50%,-50%); pointer-events:none; box-shadow:0 0 2px rgba(0,0,0,0.6); }
 .pix-lv-time { flex:0 0 auto; font:11px monospace; color:rgba(255,255,255,0.70); white-space:nowrap; user-select:none; }
-.pix-lv-toast { position:fixed; left:50%; bottom:40px; transform:translateX(-50%); background:#1d1d1d; color:#fff; border:1px solid #f66744; border-radius:6px; padding:8px 14px; font:13px sans-serif; z-index:99999; box-shadow:0 4px 12px rgba(0,0,0,0.5); pointer-events:none; }
+.pix-lv-toast { position:fixed; left:50%; bottom:40px; transform:translateX(-50%); background:#1d1d1d; color:#fff; border:1px solid var(--pix-acc,#f66744); border-radius:6px; padding:8px 14px; font:13px sans-serif; z-index:99999; box-shadow:0 4px 12px rgba(0,0,0,0.5); pointer-events:none; }
 `;
   document.head.appendChild(style);
 }
@@ -404,6 +404,7 @@ app.registerExtension({
       refreshBar(node); // initial grayed state
 
       installCanvasZoomPassthrough(wrap);
+      installNodeAccent(this, wrap);   // the face follows this node's accent colour
       const widget = this.addDOMWidget(
         "pixaroma_video_source",
         "video_preview",
@@ -471,3 +472,7 @@ app.registerExtension({
     };
   },
 });
+
+// The colour option: a right-click "Load Video settings" entry, the gear in the
+// selection toolbar, and the shared colour panel behind both.
+registerNodeAccent("PixaromaLoadVideo", { title: "Load Video" });

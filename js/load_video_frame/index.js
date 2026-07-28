@@ -1,6 +1,6 @@
 import { app } from "/scripts/app.js";
 import { applyAdaptiveCanvasOnly,
-  installCanvasZoomPassthrough,
+  installCanvasZoomPassthrough, installNodeAccent, registerNodeAccent,
 } from "../shared/index.mjs";
 
 // Load Video Frame Pixaroma — pick ONE exact frame out of a video and output it
@@ -25,12 +25,12 @@ function injectCSS() {
 .pix-lvf-bar { flex:0 0 auto; display:flex; align-items:center; gap:8px; padding:6px 8px; box-sizing:border-box; background:rgba(0,0,0,0.30); }
 .pix-lvf-bar.is-disabled { opacity:0.40; pointer-events:none; }
 .pix-lvf-step { width:26px; height:24px; flex:0 0 auto; display:inline-flex; align-items:center; justify-content:center; padding:0; border:1px solid rgba(255,255,255,0.16); border-radius:4px; background:rgba(255,255,255,0.05); color:rgba(255,255,255,0.85); font:13px/1 sans-serif; cursor:pointer; user-select:none; }
-.pix-lvf-step:hover { border-color:#f66744; color:#fff; }
+.pix-lvf-step:hover { border-color:var(--pix-acc,#f66744); color:#fff; }
 .pix-lvf-scrub { flex:1 1 auto; min-width:30px; height:6px; position:relative; border-radius:3px; background:rgba(255,255,255,0.16); cursor:pointer; }
-.pix-lvf-scrub-fill { position:absolute; left:0; top:0; height:100%; width:0%; border-radius:3px; background:#f66744; pointer-events:none; }
+.pix-lvf-scrub-fill { position:absolute; left:0; top:0; height:100%; width:0%; border-radius:3px; background:var(--pix-acc,#f66744); pointer-events:none; }
 .pix-lvf-scrub-handle { position:absolute; top:50%; left:0%; width:12px; height:12px; border-radius:50%; background:#fff; transform:translate(-50%,-50%); pointer-events:none; box-shadow:0 0 2px rgba(0,0,0,0.6); }
 .pix-lvf-frame { flex:0 0 auto; font:11px monospace; color:rgba(255,255,255,0.72); white-space:pre; user-select:none; }
-.pix-lvf-toast { position:fixed; left:50%; bottom:40px; transform:translateX(-50%); background:#1d1d1d; color:#fff; border:1px solid #f66744; border-radius:6px; padding:8px 14px; font:13px sans-serif; z-index:99999; box-shadow:0 4px 12px rgba(0,0,0,0.5); pointer-events:none; }
+.pix-lvf-toast { position:fixed; left:50%; bottom:40px; transform:translateX(-50%); background:#1d1d1d; color:#fff; border:1px solid var(--pix-acc,#f66744); border-radius:6px; padding:8px 14px; font:13px sans-serif; z-index:99999; box-shadow:0 4px 12px rgba(0,0,0,0.5); pointer-events:none; }
 `;
   document.head.appendChild(style);
 }
@@ -416,6 +416,7 @@ app.registerExtension({
       updateBar(node); // initial grayed state
 
       installCanvasZoomPassthrough(wrap);
+      installNodeAccent(this, wrap);   // the face follows this node's accent colour
       const widget = this.addDOMWidget(
         "pixaroma_video_frame_source", "pixaroma_video_frame", wrap,
         { serialize: false, hideOnZoom: false, getMinHeight: () => PREVIEW_MIN_H }
@@ -489,3 +490,7 @@ app.registerExtension({
     };
   },
 });
+
+// The colour option: a right-click "Load Video Frame settings" entry, the gear in the
+// selection toolbar, and the shared colour panel behind both.
+registerNodeAccent("PixaromaLoadVideoFrame", { title: "Load Video Frame" });

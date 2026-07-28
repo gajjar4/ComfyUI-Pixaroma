@@ -73,6 +73,7 @@ export {
   closeNodeSettingsPanel,
   closeNodeSettingsFor,
   accentOf,
+  accentRgba,
   setNodeAccent,
   applyAccent,
   installNodeAccent,

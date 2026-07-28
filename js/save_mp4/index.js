@@ -1,7 +1,7 @@
 import { app } from "/scripts/app.js";
 import { api } from "/scripts/api.js";
 import { applyAdaptiveCanvasOnly,
-  installCanvasZoomPassthrough,
+  installCanvasZoomPassthrough, installNodeAccent, registerNodeAccent,
 } from "../shared/index.mjs";
 import { installFilenameTokenResolver } from "../shared/filename_tokens.mjs";
 
@@ -28,7 +28,7 @@ function injectCSS() {
 .pix-mp4-ico { width:15px; height:15px; pointer-events:none; background-color:rgba(255,255,255,0.85); -webkit-mask:var(--ico) center/contain no-repeat; mask:var(--ico) center/contain no-repeat; }
 .pix-mp4-btn:hover .pix-mp4-ico { background-color:#fff; }
 .pix-mp4-scrub { flex:1 1 auto; min-width:30px; height:6px; position:relative; border-radius:3px; background:rgba(255,255,255,0.16); cursor:pointer; }
-.pix-mp4-scrub-fill { position:absolute; left:0; top:0; height:100%; width:0%; border-radius:3px; background:#f66744; pointer-events:none; }
+.pix-mp4-scrub-fill { position:absolute; left:0; top:0; height:100%; width:0%; border-radius:3px; background:var(--pix-acc,#f66744); pointer-events:none; }
 .pix-mp4-scrub-handle { position:absolute; top:50%; left:0%; width:11px; height:11px; border-radius:50%; background:#fff; transform:translate(-50%,-50%); pointer-events:none; box-shadow:0 0 2px rgba(0,0,0,0.6); }
 .pix-mp4-time { flex:0 0 auto; font:11px monospace; color:rgba(255,255,255,0.70); white-space:nowrap; user-select:none; }
 `;
@@ -393,6 +393,7 @@ app.registerExtension({
       refreshBar(node); // initial grayed state
 
       installCanvasZoomPassthrough(wrap);
+      installNodeAccent(this, wrap);   // the face follows this node's accent colour
       const widget = this.addDOMWidget(
         "pixaroma_video_preview",
         "video_preview",
@@ -483,3 +484,7 @@ api.addEventListener("executed", ({ detail }) => {
   // here). applyVideoEntry sets the Download basename + kicks the re-fit.
   applyVideoEntry(node, entry);
 });
+
+// The colour option: a right-click "Save Mp4 settings" entry, the gear in the
+// selection toolbar, and the shared colour panel behind both.
+registerNodeAccent("PixaromaSaveMp4", { title: "Save Mp4" });

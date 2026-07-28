@@ -11,7 +11,7 @@
 
 import { app } from "/scripts/app.js";
 import { BRAND, applyAdaptiveCanvasOnly,
-  installCanvasZoomPassthrough,
+  installCanvasZoomPassthrough, installNodeAccent, registerNodeAccent,
 } from "../shared/index.mjs";
 import { isGraphLoading } from "../shared/graph_loading.mjs";
 
@@ -66,7 +66,7 @@ function injectCSS() {
     }
     .pix-pr-upload-btn {
       width: 100%;
-      background: ${BRAND};
+      background: var(--pix-acc,var(--pix-acc,#f66744));
       border: none;
       border-radius: 4px;
       padding: 9px 8px;
@@ -112,8 +112,8 @@ function injectCSS() {
       transition: background 0.08s, border-color 0.08s, color 0.08s;
       flex-shrink: 0;
     }
-    .pix-pr-nav:hover:not(.disabled) { border-color: ${BRAND}; color: ${BRAND}; }
-    .pix-pr-nav:active:not(.disabled) { background: ${BRAND}; color: #fff; }
+    .pix-pr-nav:hover:not(.disabled) { border-color: var(--pix-acc,var(--pix-acc,#f66744)); color: var(--pix-acc,var(--pix-acc,#f66744)); }
+    .pix-pr-nav:active:not(.disabled) { background: var(--pix-acc,var(--pix-acc,#f66744)); color: #fff; }
     .pix-pr-nav.disabled { opacity: 0.3; cursor: default; }
     .pix-pr-dropdown .counter {
       color: #777;
@@ -145,7 +145,7 @@ function injectCSS() {
        orange, naming the connected image. */
     .pix-pr-wired .pix-pr-upload-btn,
     .pix-pr-wired .pix-pr-filerow { opacity: 0.45; }
-    .pix-pr-hint.pix-pr-wired-hint { color: ${BRAND}; font-weight: 600; }
+    .pix-pr-hint.pix-pr-wired-hint { color: var(--pix-acc,var(--pix-acc,#f66744)); font-weight: 600; }
     .pix-pr-dropdown {
       background: #1d1d1d;
       border: 1px solid #444;
@@ -163,7 +163,7 @@ function injectCSS() {
     .pix-pr-dropdown .name {
       overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     }
-    .pix-pr-dropdown .arrow { color: ${BRAND}; font-size: 10px; margin-left: 6px; }
+    .pix-pr-dropdown .arrow { color: var(--pix-acc,var(--pix-acc,#f66744)); font-size: 10px; margin-left: 6px; }
     .pix-pr-status {
       display: flex;
       align-items: center;
@@ -178,12 +178,12 @@ function injectCSS() {
       background: #555;
       flex-shrink: 0;
     }
-    .pix-pr-status.found .pix-pr-status-dot { background: ${BRAND}; }
+    .pix-pr-status.found .pix-pr-status-dot { background: var(--pix-acc,var(--pix-acc,#f66744)); }
     .pix-pr-status.empty .pix-pr-status-dot { background: #555; }
     .pix-pr-status-label { flex: 1; }
     .pix-pr-copy {
-      background: ${BRAND};
-      border: 1px solid ${BRAND};
+      background: var(--pix-acc,var(--pix-acc,#f66744));
+      border: 1px solid var(--pix-acc,var(--pix-acc,#f66744));
       color: #fff;
       font-weight: 600;
       border-radius: 3px;
@@ -197,7 +197,7 @@ function injectCSS() {
     .pix-pr-copy:disabled {
       opacity: 0.35; cursor: default;
     }
-    .pix-pr-copy:disabled:hover { background: ${BRAND}; border-color: ${BRAND}; }
+    .pix-pr-copy:disabled:hover { background: var(--pix-acc,var(--pix-acc,#f66744)); border-color: var(--pix-acc,var(--pix-acc,#f66744)); }
     .pix-pr-readout {
       width: 100%;
       box-sizing: border-box;
@@ -241,7 +241,7 @@ function injectCSS() {
       border-bottom: 1px solid #2a2a2a;
     }
     .pix-pr-popup-item:hover { background: #2a2a2a; }
-    .pix-pr-popup-item.active { color: ${BRAND}; font-weight: 600; }
+    .pix-pr-popup-item.active { color: var(--pix-acc,var(--pix-acc,#f66744)); font-weight: 600; }
     .pix-pr-popup-empty { padding: 8px; color: #666; }
   `;
   document.head.appendChild(style);
@@ -858,6 +858,7 @@ function setupNode(node) {
   }
 
   installCanvasZoomPassthrough(root);
+  installNodeAccent(node, root);   // the face follows this node's accent colour
   const _prWidget = node.addDOMWidget("pixaroma_prompt_reader_ui", "custom", root, {
     // canvasOnly set adaptively below (CLAUDE.md Nodes 2.0): true in legacy
     // (out of the Parameters tab), false in Nodes 2.0 (renders in Vue body).
@@ -1095,3 +1096,7 @@ window.addEventListener("keydown", (e) => {
   e.stopPropagation();
   pickByOffset(_activePromptReaderNode, e.key === "PageUp" ? -1 : +1);
 }, true);
+
+// The colour option: a right-click "Prompt Reader settings" entry, the gear in the
+// selection toolbar, and the shared colour panel behind both.
+registerNodeAccent("PixaromaPromptReader", { title: "Prompt Reader" });

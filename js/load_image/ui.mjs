@@ -38,7 +38,7 @@ export function injectCSS() {
     }
     .pix-li-upload-btn {
       width: 100%;
-      background: ${BRAND};
+      background: var(--pix-acc,var(--pix-acc,#f66744));
       border: none;
       border-radius: 4px;
       padding: 7px 8px;
@@ -86,7 +86,7 @@ export function injectCSS() {
       background: #1d1d1d;
       border: 1px solid #444;
       border-radius: 4px;
-      color: ${BRAND};
+      color: var(--pix-acc,var(--pix-acc,#f66744));
       font-size: 11px;
       font-weight: 700;
       cursor: pointer;
@@ -98,7 +98,7 @@ export function injectCSS() {
       transition: background 0.08s, border-color 0.08s, color 0.08s;
       flex-shrink: 0;
     }
-    .pix-li-nav:hover:not(.disabled) { border-color: ${BRAND}; }
+    .pix-li-nav:hover:not(.disabled) { border-color: var(--pix-acc,var(--pix-acc,#f66744)); }
     .pix-li-nav.disabled { opacity: 0.3; cursor: default; }
     .pix-li-dropdown {
       background: #1d1d1d;
@@ -113,9 +113,9 @@ export function injectCSS() {
       align-items: center;
       user-select: none;
     }
-    .pix-li-dropdown:hover { border-color: ${BRAND}; }
+    .pix-li-dropdown:hover { border-color: var(--pix-acc,var(--pix-acc,#f66744)); }
     .pix-li-dropdown .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .pix-li-dropdown .arrow { color: ${BRAND}; font-size: 13px; margin-left: 6px; line-height: 1; }
+    .pix-li-dropdown .arrow { color: var(--pix-acc,var(--pix-acc,#f66744)); font-size: 13px; margin-left: 6px; line-height: 1; }
     .pix-li-dropdown .counter {
       color: #777;
       font-size: 9px;
@@ -140,11 +140,11 @@ export function injectCSS() {
       user-select: none;
       transition: background 0.08s, border-color 0.08s;
     }
-    .pix-li-chip:hover { border-color: ${BRAND}; color: #ddd; }
+    .pix-li-chip:hover { border-color: var(--pix-acc,var(--pix-acc,#f66744)); color: #ddd; }
     .pix-li-chip.active {
-      background: ${BRAND};
+      background: var(--pix-acc,var(--pix-acc,#f66744));
       color: #fff;
-      border-color: ${BRAND};
+      border-color: var(--pix-acc,var(--pix-acc,#f66744));
     }
     .pix-li-panel {
       background: #1d1d1d;
@@ -155,21 +155,21 @@ export function injectCSS() {
     .pix-li-panel-row { display: flex; align-items: center; gap: 8px; }
     .pix-li-panel-label {
       font-size: 9px;
-      color: ${BRAND};
+      color: var(--pix-acc,var(--pix-acc,#f66744));
       text-transform: uppercase;
       letter-spacing: 0.5px;
       margin-bottom: 6px;
     }
     .pix-li-panel input[type="range"] {
       flex: 1;
-      accent-color: ${BRAND};
+      accent-color: var(--pix-acc,var(--pix-acc,#f66744));
     }
     .pix-li-panel input[type="text"], .pix-li-panel input[type="number"] {
       background: #2a2a2a;
       border: 1px solid #444;
       border-radius: 3px;
       padding: 4px 6px;
-      color: ${BRAND};
+      color: var(--pix-acc,var(--pix-acc,#f66744));
       font-size: 12px;
       font-weight: 600;
       text-align: center;
@@ -178,7 +178,7 @@ export function injectCSS() {
     }
     .pix-li-panel input[type="text"]:focus, .pix-li-panel input[type="number"]:focus {
       outline: none;
-      border-color: ${BRAND};
+      border-color: var(--pix-acc,var(--pix-acc,#f66744));
     }
     .pix-li-panel-readout {
       font-size: 9px;
@@ -205,14 +205,14 @@ export function injectCSS() {
     }
     .pix-li-quickpick:hover { border-color: #666; color: #ddd; }
     .pix-li-quickpick.active {
-      background: ${BRAND};
+      background: var(--pix-acc,var(--pix-acc,#f66744));
       color: #fff;
-      border-color: ${BRAND};
+      border-color: var(--pix-acc,var(--pix-acc,#f66744));
     }
     .pix-li-value {
       font-family: inherit;
       font-size: 12px;
-      color: ${BRAND};
+      color: var(--pix-acc,var(--pix-acc,#f66744));
       font-weight: 600;
       min-width: 50px;
       text-align: right;
@@ -236,9 +236,9 @@ export function injectCSS() {
     }
     .pix-li-ratio-chip:hover { border-color: #666; color: #ddd; }
     .pix-li-ratio-chip.active {
-      background: ${BRAND};
+      background: var(--pix-acc,var(--pix-acc,#f66744));
       color: #fff;
-      border-color: ${BRAND};
+      border-color: var(--pix-acc,var(--pix-acc,#f66744));
     }
     .pix-li-cropped {
       display: grid;
@@ -258,7 +258,7 @@ export function injectCSS() {
       cursor: pointer;
       user-select: none;
     }
-    .pix-li-cropped > div.active { background: ${BRAND}; color: #fff; }
+    .pix-li-cropped > div.active { background: var(--pix-acc,var(--pix-acc,#f66744)); color: #fff; }
     .pix-li-pad-row {
       display: flex;
       align-items: center;
@@ -303,7 +303,7 @@ export function injectCSS() {
               mask: url("/pixaroma/assets/icons/ui/swap.svg") center/14px 14px no-repeat;
       pointer-events: none;
     }
-    .pix-li-custom-ratio-swap:hover { color: ${BRAND}; border-color: ${BRAND}; }
+    .pix-li-custom-ratio-swap:hover { color: var(--pix-acc,var(--pix-acc,#f66744)); border-color: var(--pix-acc,var(--pix-acc,#f66744)); }
     /* Center single-input panel rows (Max MP / Longest side / Scale by ×). */
     .pix-li-panel-row.pix-li-centered { justify-content: center; }
     .pix-li-input-wide {
@@ -320,14 +320,14 @@ export function injectCSS() {
       overflow: hidden;
       box-sizing: border-box;
     }
-    .pix-li-numinput:focus-within { border-color: ${BRAND}; }
+    .pix-li-numinput:focus-within { border-color: var(--pix-acc,var(--pix-acc,#f66744)); }
     .pix-li-numinput input {
       flex: 1;
       background: transparent;
       border: none;
       outline: none;
       padding: 2px 6px;
-      color: ${BRAND};
+      color: var(--pix-acc,var(--pix-acc,#f66744));
       font-size: 11px;
       font-weight: 600;
       text-align: center;
@@ -352,7 +352,7 @@ export function injectCSS() {
       line-height: 1;
       position: relative;
     }
-    .pix-li-spin > button:hover { background: #333; color: ${BRAND}; }
+    .pix-li-spin > button:hover { background: #333; color: var(--pix-acc,var(--pix-acc,#f66744)); }
     .pix-li-spin-up { border-bottom: 1px solid #444; }
     /* CSS chevron arrows (no extra SVG needed). */
     .pix-li-spin-up::before,
@@ -418,7 +418,7 @@ export function injectCSS() {
               mask: url("/pixaroma/assets/icons/ui/swap.svg") center/12px 12px no-repeat;
       pointer-events: none;
     }
-    .pix-li-swap:hover { color: ${BRAND}; border-color: ${BRAND}; }
+    .pix-li-swap:hover { color: var(--pix-acc,var(--pix-acc,#f66744)); border-color: var(--pix-acc,var(--pix-acc,#f66744)); }
     /* Aspect-ratio preview block under W / H fields. */
     .pix-li-wh-preview {
       display: flex;
@@ -429,7 +429,7 @@ export function injectCSS() {
     }
     .pix-li-wh-rect {
       background: rgba(246,103,68,0.18);
-      border: 1px solid ${BRAND};
+      border: 1px solid var(--pix-acc,var(--pix-acc,#f66744));
       border-radius: 2px;
       transition: width 0.12s ease, height 0.12s ease;
     }
@@ -488,7 +488,7 @@ export function injectCSS() {
     }
     .pix-li-rs-item:last-child { border-bottom: none; }
     .pix-li-rs-item:hover { background: #2a2a2a; }
-    .pix-li-rs-item.active .pix-li-rs-item-label { color: ${BRAND}; font-weight: 600; }
+    .pix-li-rs-item.active .pix-li-rs-item-label { color: var(--pix-acc,var(--pix-acc,#f66744)); font-weight: 600; }
     .pix-li-rs-item-label { font-size: 11px; }
     .pix-li-rs-item-hint { font-size: 9px; color: #777; }
     /* ── Image Resize design language, scoped to .pix-li-root ── */
@@ -501,23 +501,23 @@ export function injectCSS() {
     .pix-li-snap-lbl { font-size:9px; color:#7d7d7d; text-transform:uppercase; letter-spacing:.5px; }
     .pix-li-schip { background:#1d1d1d; border:1px solid #444; border-radius:3px; color:#aaa;
       font-size:8.5px; padding:3px 5px; min-width:16px; text-align:center; cursor:pointer; user-select:none; }
-    .pix-li-schip:hover { border-color:${BRAND}; color:#ddd; }
-    .pix-li-schip.active { background:${BRAND}; color:#fff; border-color:${BRAND}; }
+    .pix-li-schip:hover { border-color:var(--pix-acc,var(--pix-acc,#f66744)); color:#ddd; }
+    .pix-li-schip.active { background:var(--pix-acc,var(--pix-acc,#f66744)); color:#fff; border-color:var(--pix-acc,var(--pix-acc,#f66744)); }
     /* Resample picker: [◀] [ Resample: Auto ▾ ] [▶] */
     .pix-li-rs2-row { display:flex; align-items:stretch; gap:6px; }
     .pix-li-rs2-nav { flex:0 0 30px; background:#1d1d1d; border:1px solid #444; border-radius:4px;
-      color:${BRAND}; font-size:11px; cursor:pointer; display:flex; align-items:center; justify-content:center; padding:0; }
-    .pix-li-rs2-nav:hover { border-color:${BRAND}; }
+      color:var(--pix-acc,var(--pix-acc,#f66744)); font-size:11px; cursor:pointer; display:flex; align-items:center; justify-content:center; padding:0; }
+    .pix-li-rs2-nav:hover { border-color:var(--pix-acc,var(--pix-acc,#f66744)); }
     .pix-li-rs2-dd { flex:1; display:flex; align-items:center; justify-content:space-between;
       background:#1d1d1d; border:1px solid #444; border-radius:4px; padding:6px 10px; cursor:pointer; user-select:none; }
-    .pix-li-rs2-dd:hover { border-color:${BRAND}; }
+    .pix-li-rs2-dd:hover { border-color:var(--pix-acc,var(--pix-acc,#f66744)); }
     .pix-li-rs2-value { color:#ddd; font-size:11px; }
-    .pix-li-rs2-arrow { color:${BRAND}; font-size:13px; margin-left:6px; line-height:1; }
+    .pix-li-rs2-arrow { color:var(--pix-acc,var(--pix-acc,#f66744)); font-size:13px; margin-left:6px; line-height:1; }
     /* Upscaling toggle button. */
     .pix-li-upbtn { align-self:center; background:#1d1d1d; border:1px solid #444; border-radius:5px;
       color:#aaa; font-size:11px; padding:7px 18px; cursor:pointer; user-select:none; transition:background .08s,border-color .08s; }
-    .pix-li-upbtn:hover { border-color:${BRAND}; color:#ddd; }
-    .pix-li-upbtn.is-on, .pix-li-upbtn.is-on:hover { background:${BRAND}; border-color:${BRAND}; color:#fff; }
+    .pix-li-upbtn:hover { border-color:var(--pix-acc,var(--pix-acc,#f66744)); color:#ddd; }
+    .pix-li-upbtn.is-on, .pix-li-upbtn.is-on:hover { background:var(--pix-acc,var(--pix-acc,#f66744)); border-color:var(--pix-acc,var(--pix-acc,#f66744)); color:#fff; }
     /* Per-mode panel overrides (mirror image_resize .pix-ir-root .pix-li-* block). */
     .pix-li-root .pix-li-panel { background:rgba(255,255,255,.04); border:none; border-radius:6px; padding:9px 10px; }
     .pix-li-root .pix-li-panel-readout { display:none; }
@@ -527,7 +527,7 @@ export function injectCSS() {
     .pix-li-root .pix-li-numinput { background:#1d1d1d !important; align-items:center; min-height:28px; }
     .pix-li-root .pix-li-numinput .pix-li-spin { align-self:stretch; }
     .pix-li-root .pix-li-numinput input { line-height:1.2; background:transparent !important; border:none !important; border-radius:0 !important; }
-    .pix-li-root .pix-li-inline-label { display:flex; align-items:center; color:${BRAND}; font-size:9px; font-weight:600;
+    .pix-li-root .pix-li-inline-label { display:flex; align-items:center; color:var(--pix-acc,var(--pix-acc,#f66744)); font-size:9px; font-weight:600;
       text-transform:uppercase; letter-spacing:.5px; padding:0 4px 0 9px; white-space:nowrap; flex:none; }
     .pix-li-root .pix-li-num-labeled input { text-align:right !important; padding-right:8px !important; }
     .pix-li-root .pix-li-swap { background:#1d1d1d !important; }
@@ -552,17 +552,17 @@ export function injectCSS() {
     .pix-li-root .pix-li-fillcrop { flex:1; display:grid; grid-template-columns:1fr 1fr; background:#1d1d1d; border:1px solid #444; border-radius:4px; overflow:hidden; }
     .pix-li-root .pix-li-fillcrop > div { display:flex; align-items:center; justify-content:center; font-size:9.5px; padding:5px 0; color:#aaa; cursor:pointer; user-select:none; }
     .pix-li-root .pix-li-fillcrop > div:hover { color:#ddd; background:rgba(255,255,255,.08); }
-    .pix-li-root .pix-li-fillcrop > div.active { background:${BRAND}; color:#fff; }
+    .pix-li-root .pix-li-fillcrop > div.active { background:var(--pix-acc,var(--pix-acc,#f66744)); color:#fff; }
     .pix-li-root .pix-li-anchor { display:grid; grid-template-columns:repeat(3,1fr); grid-template-rows:repeat(3,1fr); gap:3px;
       width:100%; max-width:96px; aspect-ratio:1; margin:0 auto; background:#1d1d1d; border:1px solid #444; border-radius:5px; padding:5px; box-sizing:border-box; }
     .pix-li-root .pix-li-anchor-cell { background:rgba(255,255,255,.07); border-radius:2px; cursor:pointer; transition:background .08s; }
     .pix-li-root .pix-li-anchor-cell:hover { background:rgba(255,255,255,.18); }
-    .pix-li-root .pix-li-anchor-cell.active { background:${BRAND}; }
+    .pix-li-root .pix-li-anchor-cell.active { background:var(--pix-acc,var(--pix-acc,#f66744)); }
     /* Bring shared quick-pick + ratio chips in line (orange hover). */
     .pix-li-root .pix-li-quickpick { box-sizing:border-box; }
-    .pix-li-root .pix-li-quickpick:hover { border-color:${BRAND}; color:#ddd; }
+    .pix-li-root .pix-li-quickpick:hover { border-color:var(--pix-acc,var(--pix-acc,#f66744)); color:#ddd; }
     .pix-li-root .pix-li-ratio-chip { box-sizing:border-box; }
-    .pix-li-root .pix-li-ratio-chip:hover { border-color:${BRAND}; color:#ddd; }
+    .pix-li-root .pix-li-ratio-chip:hover { border-color:var(--pix-acc,var(--pix-acc,#f66744)); color:#ddd; }
     /* ── B2 thumbnail dropdown popup ── */
     .pix-li-popup {
       background:#1d1d1d; border:1px solid #444; border-radius:6px;
@@ -579,16 +579,16 @@ export function injectCSS() {
     .pix-li-pop-search input::placeholder { color:#777; }
     .pix-li-pop-sizetoggle { flex:none; display:flex; border:1px solid #444; border-radius:4px; overflow:hidden; }
     .pix-li-pop-sizetoggle span { padding:2px 7px; font-size:10px; color:#aaa; cursor:pointer; user-select:none; line-height:1.4; }
-    .pix-li-pop-sizetoggle span.on { background:${BRAND}; color:#fff; }
+    .pix-li-pop-sizetoggle span.on { background:var(--pix-acc,var(--pix-acc,#f66744)); color:#fff; }
     .pix-li-pop-sizetoggle span:not(.on):hover { color:#ddd; }
     .pix-li-bsplit { display:flex; max-height:320px; }
     .pix-li-bfolders { width:104px; flex:none; border-right:1px solid #333; background:#141414; overflow:auto; }
     .pix-li-bfolder { padding:8px 9px; font-size:10.5px; color:#aaa; cursor:pointer; display:flex;
       justify-content:space-between; gap:4px; align-items:center; }
     .pix-li-bfolder:hover { background:#2a2a2a; }
-    .pix-li-bfolder.on { background:rgba(246,103,68,.16); color:${BRAND}; border-left:2px solid ${BRAND}; padding-left:7px; }
+    .pix-li-bfolder.on { background:rgba(246,103,68,.16); color:var(--pix-acc,var(--pix-acc,#f66744)); border-left:2px solid var(--pix-acc,var(--pix-acc,#f66744)); padding-left:7px; }
     .pix-li-bfolder.all { border-bottom:1px solid #333; color:#cfcfcf; }
-    .pix-li-bfolder.all.on { color:${BRAND}; }
+    .pix-li-bfolder.all.on { color:var(--pix-acc,var(--pix-acc,#f66744)); }
     .pix-li-bfolder-n { color:#888; font-size:9px; flex:none; }
     .pix-li-bfolder > span:first-child { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; }
     .pix-li-bpane { flex:1; min-width:0; overflow:auto; max-height:320px; }
@@ -598,7 +598,7 @@ export function injectCSS() {
     .pix-li-imgrow { display:flex; align-items:center; gap:9px; padding:4px 10px; cursor:pointer; }
     .pix-li-imgrow:hover { background:#2a2a2a; }
     .pix-li-imgrow.cur { background:rgba(246,103,68,.12); }
-    .pix-li-imgrow.cur .pix-li-imgrow-lbl { color:${BRAND}; font-weight:600; }
+    .pix-li-imgrow.cur .pix-li-imgrow-lbl { color:var(--pix-acc,var(--pix-acc,#f66744)); font-weight:600; }
     .pix-li-imgrow-lbl { flex:1; min-width:0; font-size:11px; color:#ccc; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
     .pix-li-pop-thumb { position:relative; flex:none; border-radius:4px; overflow:hidden;
       background:linear-gradient(135deg,#3a3f4a,#222); }

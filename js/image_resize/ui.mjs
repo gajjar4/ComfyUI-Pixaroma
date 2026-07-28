@@ -14,14 +14,14 @@ export function injectCSS() {
     .pix-ir-chip{background:#1d1d1d;border:1px solid #444;
       border-radius:4px;padding:6px 3px;font-size:9.5px;color:#ccc;
       text-align:center;cursor:pointer;user-select:none;transition:background .08s,border-color .08s;}
-    .pix-ir-chip:hover{border-color:${BRAND};color:#ddd;}
-    .pix-ir-chip.active{background:${BRAND};color:#fff;border-color:${BRAND};}
+    .pix-ir-chip:hover{border-color:var(--pix-acc,var(--pix-acc,#f66744));color:#ddd;}
+    .pix-ir-chip.active{background:var(--pix-acc,var(--pix-acc,#f66744));color:#fff;border-color:var(--pix-acc,var(--pix-acc,#f66744));}
     /* Disabled while width/height are wired (mode doesn't apply). */
     .pix-ir-chip.disabled{opacity:.32;pointer-events:none;}
     /* Single-wire summary panel: read-only W / H rows. */
     .pix-ir-root .pix-ir-wirerow{display:flex;align-items:center;gap:8px;padding:7px 10px;background:#1d1d1d;border:1px solid #444;border-radius:4px;margin-bottom:6px;}
     .pix-ir-root .pix-ir-wirerow:last-child{margin-bottom:0;}
-    .pix-ir-root .pix-ir-wirelbl{color:${BRAND};font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;width:14px;flex:none;}
+    .pix-ir-root .pix-ir-wirelbl{color:var(--pix-acc,var(--pix-acc,#f66744));font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;width:14px;flex:none;}
     /* Wide variant for full-word labels (e.g. "LONGEST SIDE") so they stay on
        one line instead of wrapping into the 14px W/H slot. */
     .pix-ir-root .pix-ir-wirelbl.is-wide{width:auto;white-space:nowrap;}
@@ -40,35 +40,35 @@ export function injectCSS() {
     .pix-ir-schip{background:#1d1d1d;border:1px solid #444;
       border-radius:3px;color:#aaa;font-size:8.5px;padding:3px 5px;
       min-width:16px;text-align:center;cursor:pointer;user-select:none;}
-    .pix-ir-schip:hover{border-color:${BRAND};color:#ddd;}
-    .pix-ir-schip.active{background:${BRAND};color:#fff;border-color:${BRAND};}
+    .pix-ir-schip:hover{border-color:var(--pix-acc,var(--pix-acc,#f66744));color:#ddd;}
+    .pix-ir-schip.active{background:var(--pix-acc,var(--pix-acc,#f66744));color:#fff;border-color:var(--pix-acc,var(--pix-acc,#f66744));}
     /* Custom resample picker: [◀] [ Resample: Auto ▾ ] [▶] — native <select>
        renders with OS chrome (blue highlight etc), so we use our own dark
        dropdown to match the rest of the node. */
     .pix-ir-rs-row{display:flex;align-items:stretch;gap:6px;}
     .pix-ir-rs-nav{flex:0 0 30px;background:#1d1d1d;border:1px solid #444;border-radius:4px;
-      color:${BRAND};font-size:11px;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;}
-    .pix-ir-rs-nav:hover{border-color:${BRAND};}
+      color:var(--pix-acc,var(--pix-acc,#f66744));font-size:11px;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;}
+    .pix-ir-rs-nav:hover{border-color:var(--pix-acc,var(--pix-acc,#f66744));}
     .pix-ir-rs-dd{flex:1;display:flex;align-items:center;justify-content:space-between;
       background:#1d1d1d;border:1px solid #444;border-radius:4px;padding:6px 10px;cursor:pointer;user-select:none;}
-    .pix-ir-rs-dd:hover{border-color:${BRAND};}
+    .pix-ir-rs-dd:hover{border-color:var(--pix-acc,var(--pix-acc,#f66744));}
     .pix-ir-rs-value{color:#ddd;font-size:11px;}
-    .pix-ir-rs-arrow{color:${BRAND};font-size:13px;margin-left:6px;line-height:1;}
+    .pix-ir-rs-arrow{color:var(--pix-acc,var(--pix-acc,#f66744));font-size:13px;margin-left:6px;line-height:1;}
     /* Popup is appended to document.body, so these are NOT scoped to .pix-ir-root. */
     .pix-ir-rs-popup{position:fixed;z-index:99999;background:#181818;border:1px solid #555;
       border-radius:6px;box-shadow:0 8px 24px rgba(0,0,0,.5);overflow:hidden;}
     .pix-ir-rs-item{padding:9px 14px;cursor:pointer;display:flex;align-items:baseline;justify-content:space-between;gap:14px;border-bottom:1px solid #2a2a2a;}
     .pix-ir-rs-item:last-child{border-bottom:none;}
     .pix-ir-rs-item:hover{background:#2a2a2a;}
-    .pix-ir-rs-item.active .pix-ir-rs-item-label{color:${BRAND};font-weight:600;}
+    .pix-ir-rs-item.active .pix-ir-rs-item-label{color:var(--pix-acc,var(--pix-acc,#f66744));font-weight:600;}
     .pix-ir-rs-item-label{font-size:13px;color:#ddd;white-space:nowrap;}
     .pix-ir-rs-item-hint{font-size:11px;color:#888;text-align:right;}
     /* Allow-upscaling toggle button: orange "On", gray "Off". Centered. */
     .pix-ir-upbtn{align-self:center;background:#1d1d1d;border:1px solid #444;border-radius:5px;
       color:#aaa;font-size:11px;padding:7px 18px;cursor:pointer;user-select:none;transition:background .08s,border-color .08s;}
-    .pix-ir-upbtn:hover{border-color:${BRAND};color:#ddd;}
-    .pix-ir-upbtn.is-on{background:${BRAND};border-color:${BRAND};color:#fff;}
-    .pix-ir-upbtn.is-on:hover{background:${BRAND};border-color:${BRAND};color:#fff;}
+    .pix-ir-upbtn:hover{border-color:var(--pix-acc,var(--pix-acc,#f66744));color:#ddd;}
+    .pix-ir-upbtn.is-on{background:var(--pix-acc,var(--pix-acc,#f66744));border-color:var(--pix-acc,var(--pix-acc,#f66744));color:#fff;}
+    .pix-ir-upbtn.is-on:hover{background:var(--pix-acc,var(--pix-acc,#f66744));border-color:var(--pix-acc,var(--pix-acc,#f66744));color:#fff;}
     /* Image-Resize-only restyle of the shared mode panels (Option A — soft
        card): a faint borderless raised panel groups the active mode's
        settings, full-width inputs align with the chip grid, and a wider/bolder
@@ -98,7 +98,7 @@ export function injectCSS() {
     /* Inline label inside the input (single-input modes): orange name on the
        left, value pushed to the right next to the arrows. The section header
        is removed in JS to save vertical space. */
-    .pix-ir-root .pix-ir-inline-label{display:flex;align-items:center;color:${BRAND};font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;padding:0 4px 0 9px;white-space:nowrap;flex:none;}
+    .pix-ir-root .pix-ir-inline-label{display:flex;align-items:center;color:var(--pix-acc,var(--pix-acc,#f66744));font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;padding:0 4px 0 9px;white-space:nowrap;flex:none;}
     .pix-ir-root .pix-ir-num-labeled input{text-align:right !important;padding-right:8px !important;}
     /* Fit / Crop (W x H) panel: dark swap button, centered light-gray title,
        more-visible aspect rectangle, and a two-column reflow - W/H stacked in a
@@ -133,18 +133,18 @@ export function injectCSS() {
     .pix-ir-root .pix-ir-fillcrop{flex:1;display:grid;grid-template-columns:1fr 1fr;background:#1d1d1d;border:1px solid #444;border-radius:4px;overflow:hidden;}
     .pix-ir-root .pix-ir-fillcrop>div{display:flex;align-items:center;justify-content:center;font-size:9.5px;padding:5px 0;color:#aaa;cursor:pointer;user-select:none;}
     .pix-ir-root .pix-ir-fillcrop>div:hover{color:#ddd;background:rgba(255,255,255,.08);}
-    .pix-ir-root .pix-ir-fillcrop>div.active{background:${BRAND};color:#fff;}
+    .pix-ir-root .pix-ir-fillcrop>div.active{background:var(--pix-acc,var(--pix-acc,#f66744));color:#fff;}
     .pix-ir-root .pix-ir-anchor{display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(3,1fr);gap:3px;width:100%;max-width:96px;aspect-ratio:1;margin:0 auto;background:#1d1d1d;border:1px solid #444;border-radius:5px;padding:5px;box-sizing:border-box;}
     .pix-ir-root .pix-ir-anchor-cell{background:rgba(255,255,255,.07);border-radius:2px;cursor:pointer;transition:background .08s;}
     .pix-ir-root .pix-ir-anchor-cell:hover{background:rgba(255,255,255,.18);}
-    .pix-ir-root .pix-ir-anchor-cell.active{background:${BRAND};}
+    .pix-ir-root .pix-ir-anchor-cell.active{background:var(--pix-acc,var(--pix-acc,#f66744));}
     /* Consistent interaction system across the node: bordered controls hover to
        an ORANGE border (brand cue) and fill orange when selected/active;
        borderless cells (anchor, Fill/Crop) use a white bg-tint on hover and
        orange fill when active; inputs go orange on focus. These two overrides
        bring the shared quick-pick + ratio chips in line (they hovered gray). */
-    .pix-ir-root .pix-li-quickpick:hover{border-color:${BRAND};color:#ddd;}
-    .pix-ir-root .pix-li-ratio-chip:hover{border-color:${BRAND};color:#ddd;}
+    .pix-ir-root .pix-li-quickpick:hover{border-color:var(--pix-acc,var(--pix-acc,#f66744));color:#ddd;}
+    .pix-ir-root .pix-li-ratio-chip:hover{border-color:var(--pix-acc,var(--pix-acc,#f66744));color:#ddd;}
   `;
   const s = document.createElement("style");
   s.id = "pix-ir-css";

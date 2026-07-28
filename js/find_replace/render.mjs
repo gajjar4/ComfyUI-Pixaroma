@@ -161,7 +161,7 @@ const CSS = `
   flex: none;
   padding: 0;
 }
-.pix-fr-delete:hover { color: var(--pix-acc,#f66744); background: rgba(246,103,68,0.12); }
+.pix-fr-delete:hover { color: var(--pix-acc,#f66744); background: color-mix(in srgb, var(--pix-acc,#f66744) 12%, transparent); }
 .pix-fr-delete:disabled { color: #444; cursor: not-allowed; background: transparent; }
 
 /* ---- action row ---- */
@@ -180,7 +180,7 @@ const CSS = `
   padding: 5px 12px;
   transition: background 0.1s, color 0.1s, border-color 0.1s;
 }
-.pix-fr-add { color: var(--pix-acc,#f66744); border-color: rgba(246,103,68,0.5); }
+.pix-fr-add { color: var(--pix-acc,#f66744); border-color: color-mix(in srgb, var(--pix-acc,#f66744) 50%, transparent); }
 .pix-fr-add:hover { background: var(--pix-acc,#f66744); border-color: var(--pix-acc,#f66744); color: #fff; }
 .pix-fr-reset:hover { background: var(--pix-acc,#f66744); border-color: var(--pix-acc,#f66744); color: #fff; }
 .pix-fr-reset:disabled {

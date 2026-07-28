@@ -213,6 +213,27 @@ export function setNodeAccent(node, hex) {
   else delete node.properties[prop];
 }
 
+/**
+ * The node's accent as an rgba() string at the given alpha - for the translucent
+ * washes a canvas paints behind a selected card. CSS can use
+ * `color-mix(in srgb, var(--pix-acc,#f66744) 20%, transparent)` instead; a canvas
+ * has no such option, hence this.
+ * Falls back to the brand orange for any colour it cannot parse.
+ */
+export function accentRgba(node, alpha = 1) {
+  const hex = String(accentOf(node) || BRAND).trim();
+  const m = /^#?([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(hex);
+  let r = 246, g = 103, b = 68;
+  if (m) {
+    let h = m[1];
+    if (h.length === 3) h = h[0] + h[0] + h[1] + h[1] + h[2] + h[2];
+    r = parseInt(h.slice(0, 2), 16);
+    g = parseInt(h.slice(2, 4), 16);
+    b = parseInt(h.slice(4, 6), 16);
+  }
+  return `rgba(${r},${g},${b},${alpha})`;
+}
+
 /** Put the node's accent on a DOM element as the --pix-acc custom property. */
 export function applyAccent(el, node) {
   if (el?.style) el.style.setProperty(ACCENT_VAR, accentOf(node));

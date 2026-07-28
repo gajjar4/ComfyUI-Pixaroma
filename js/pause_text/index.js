@@ -3,6 +3,7 @@ import { api } from "/scripts/api.js";
 import { applyAdaptiveCanvasOnly, isVueNodes } from "../shared/nodes2.mjs";
 import { installResizeFloor } from "../shared/resize_floor.mjs";
 import { installCanvasZoomPassthrough } from "../shared/canvas_zoom.mjs";
+import { installNodeAccent, registerNodeAccent } from "../shared/node_settings.mjs";
 import {
   getState, setGate, setText, setModelText, revertText, STATE_PROP,
 } from "./state.mjs";
@@ -248,6 +249,7 @@ function setupNode(node) {
   // The text box keeps its own scroll: the helper yields to a scrollable region
   // that still has room to scroll in the wheel's direction.
   installCanvasZoomPassthrough(root);
+  installNodeAccent(node, root);   // the face follows this node's accent colour
 
   // Pin a content floor WHILE a resize handle is dragged (Nodes 2.0; a no-op in
   // Classic, which floors via getMinHeight + the onResize clamp). Stops the node
@@ -451,3 +453,7 @@ app.graphToPrompt = async function (...args) {
   }
   return result;
 };
+
+// The colour option: a right-click "Pause Text settings" entry, the gear in the
+// selection toolbar, and the shared colour panel behind both.
+registerNodeAccent("PixaromaPauseText", { title: "Pause Text" });

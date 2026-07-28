@@ -1,7 +1,7 @@
 import { app } from "/scripts/app.js";
 import { api } from "/scripts/api.js";
 import { hideJsonWidget, BRAND,
-  installCanvasZoomPassthrough,
+  installCanvasZoomPassthrough, installNodeAccent, registerNodeAccent, accentOf, accentRgba,
 } from "../shared/index.mjs";
 import { isVueNodes, applyAdaptiveCanvasOnly, canvasBackingScale } from "../shared/nodes2.mjs";
 import { buildModePanel, previewResize, injectResizePanelCSS } from "../shared/resize_panel.mjs";
@@ -617,6 +617,7 @@ function refreshReadout(node) {
 // SHARED by the legacy slot-dead-space paint (W = node.size[0], midY = 54) and
 // the Nodes 2.0 cards canvas (W = canvas width, midY = canvas center).
 function paintReadout(ctx, node, W, midY, info) {
+  const acc = accentOf(node);   // a canvas cannot read the CSS variable
   const cx = W / 2;
   const fam = "ui-sans-serif, system-ui, sans-serif";
   const capFont = `8px ${fam}`;
@@ -631,7 +632,7 @@ function paintReadout(ctx, node, W, midY, info) {
     const bw = tw + 26, bh = 28;
     roundRectPath(ctx, cx - bw / 2, midY - bh / 2, bw, bh, 8);
     ctx.fillStyle = "#1d1d1d"; ctx.fill();
-    ctx.textAlign = "center"; ctx.fillStyle = BRAND;
+    ctx.textAlign = "center"; ctx.fillStyle = acc;
     ctx.fillText(info.text, cx, midY);
     ctx.restore();
     return;
@@ -685,12 +686,12 @@ function paintReadout(ctx, node, W, midY, info) {
     const maxTxt = cardW - 8; // keep text inside the card (5-digit dims, etc.)
     ctx.font = capFont; ctx.fillStyle = "#9a9a9a";
     ctx.fillText(label, ccx, cardY + 15, maxTxt);
-    ctx.font = dimsFont; ctx.fillStyle = BRAND;
+    ctx.font = dimsFont; ctx.fillStyle = acc;
     ctx.fillText(`${w}×${h}`, ccx, cardY + 27, maxTxt);
     const { rw, rh } = aspectRectDims(w, h, rectMaxW, rectMaxH);
     const rx = Math.round(ccx - rw / 2) + 0.5, ry = Math.round(cardY + 53 - rh / 2) + 0.5;
-    if (accent) { ctx.fillStyle = "rgba(246,103,68,0.20)"; ctx.fillRect(rx, ry, rw, rh); }
-    ctx.strokeStyle = accent ? BRAND : "rgba(200,200,200,0.7)"; ctx.lineWidth = 1;
+    if (accent) { ctx.fillStyle = accentRgba(node, 0.20); ctx.fillRect(rx, ry, rw, rh); }
+    ctx.strokeStyle = accent ? acc : "rgba(200,200,200,0.7)"; ctx.lineWidth = 1;
     ctx.strokeRect(rx, ry, rw, rh);
     ctx.font = ratioFont; ctx.fillStyle = "#9a9a9a";
     ctx.fillText(ratioLabel(w, h), ccx, cardY + 77, maxTxt);
@@ -770,6 +771,7 @@ app.registerExtension({
       const root = document.createElement("div");
       root.className = "pix-ir-root";
       installCanvasZoomPassthrough(root);
+      installNodeAccent(this, root);   // the face follows this node's accent colour
       const w = this.addDOMWidget("image_resize_ui", "custom", root, {
         serialize: false,
         getMinHeight: () => measureContentHeight(root),
@@ -939,3 +941,7 @@ app.graphToPrompt = async function (...args) {
   }
   return result;
 };
+
+// The colour option: a right-click "Image Resize settings" entry, the gear in the
+// selection toolbar, and the shared colour panel behind both.
+registerNodeAccent("PixaromaImageResize", { title: "Image Resize" });

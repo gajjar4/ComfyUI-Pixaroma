@@ -1,8 +1,14 @@
 import { app } from "/scripts/app.js";
 import { BRAND, registerNodeHelp,
-  installCanvasZoomPassthrough,
+  installCanvasZoomPassthrough, registerNodeAccent, accentOf,
 } from "../shared/index.mjs";
 import { applyAdaptiveCanvasOnly, isVueNodes } from "../shared/nodes2.mjs";
+
+// The accent of the node currently being painted. A canvas cannot read a CSS
+// variable, and the small paint helpers below take no node argument, so
+// paintCompare sets this once per pass and they all read it. Painting is
+// synchronous per node, so it can never be read for the wrong node.
+let _acc = BRAND;
 
 // Help shown by the selection-toolbar Help button (js/help_toolbar) when an
 // Image Compare node is selected. Registered at module load.
@@ -261,11 +267,11 @@ function cmpHideTooltip() {
 }
 
 function paintBtn(ctx, r, label, on, hovered) {
-  ctx.fillStyle = on ? BRAND : "#2a2c2e";
-  // Hover on a non-active bordered control: border -> BRAND + text brightens,
+  ctx.fillStyle = on ? _acc : "#2a2c2e";
+  // Hover on a non-active bordered control: border -> accent + text brightens,
   // no fill change (the Pixaroma node UI convention, CLAUDE.md #13). Active
-  // buttons keep the solid BRAND fill.
-  ctx.strokeStyle = on ? BRAND : (hovered ? BRAND : "#444");
+  // buttons keep the solid accent fill.
+  ctx.strokeStyle = on ? _acc : (hovered ? _acc : "#444");
   ctx.lineWidth = 1;
   ctx.beginPath();
   if (ctx.roundRect) ctx.roundRect(r.x, r.y, r.w, r.h, 3);
@@ -281,13 +287,13 @@ function paintBtn(ctx, r, label, on, hovered) {
 
 // Like paintBtn but for the row-2 utility buttons (Save / Disk / Copy), with a
 // 700ms green "Saved" / "Copied" flash after a successful action. Hover lights
-// the border BRAND + brightens the text (Pixaroma node UI convention #13).
+// the border accent + brightens the text (Pixaroma node UI convention #13).
 function paintUtilBtn(ctx, r, label, hover, flash) {
   ctx.save();
-  // Hover = border BRAND + brighter text, NO fill (same as the mode buttons /
+  // Hover = border accent + brighter text, NO fill (same as the mode buttons /
   // Pixaroma convention #13). Fill is reserved for state: green flash = success.
   ctx.fillStyle = flash ? "#3ec371" : "#2a2c2e";
-  ctx.strokeStyle = flash ? "#3ec371" : (hover ? BRAND : "#444");
+  ctx.strokeStyle = flash ? "#3ec371" : (hover ? _acc : "#444");
   ctx.lineWidth = 1;
   ctx.beginPath();
   if (ctx.roundRect) ctx.roundRect(r.x, r.y, r.w, r.h, 3);
@@ -326,12 +332,12 @@ function fillTextVCenter(ctx, text, x, yMid) {
   }
 }
 
-// A small filled BRAND-orange circle with a white number — the image1 / image2
+// A small filled accent-orange circle with a white number — the image1 / image2
 // marker. Always orange (it's an identity badge, not a state badge); the SIZE
 // text next to it carries the match/mismatch colour.
 function drawSizeBadge(ctx, cx, cy, n) {
   ctx.save();
-  ctx.fillStyle = BRAND;
+  ctx.fillStyle = _acc;
   ctx.beginPath();
   ctx.arc(cx, cy, BADGE_R, 0, Math.PI * 2);
   ctx.fill();
@@ -354,7 +360,7 @@ function drawSizeLabels(ctx, node, W) {
   const full = row2Full(W);
   const rightEdge = full.x + full.w;
   const yMid = ROW2_Y + BTN_H / 2;
-  const sizeCol = sizesDiffer(node) ? BRAND : "#cfcfcf";
+  const sizeCol = sizesDiffer(node) ? _acc : "#cfcfcf";
   if (has1) {
     ctx.save();
     ctx.beginPath();
@@ -617,6 +623,7 @@ function restoreCompareFromProperties(node) {
 // Nodes 2.0 DOM canvas passes its CSS box + the last DOM pointer position.
 // `mouse` = {x, y} in the SAME local coords as the draw, or null (no hover).
 function paintCompare(ctx, node, W, H, mouse) {
+  _acc = accentOf(node);   // every paint helper below reads this
   // ── Row 1: Show toggle + mode buttons ──
   ctx.save();
   const showLabel = node._cmpShowWhich === 1 ? "Show 1" : node._cmpShowWhich === 2 ? "Show 2" : "Show 1";
@@ -655,7 +662,7 @@ function paintCompare(ctx, node, W, H, mouse) {
     ctx.fill();
 
     // Track fill
-    ctx.fillStyle = BRAND;
+    ctx.fillStyle = _acc;
     ctx.beginPath();
     if (ctx.roundRect)
       ctx.roundRect(trackX, trackY, Math.max(0, trackW * pct), trackH, 3);
@@ -663,7 +670,7 @@ function paintCompare(ctx, node, W, H, mouse) {
     ctx.fill();
 
     // Thumb
-    ctx.fillStyle = BRAND;
+    ctx.fillStyle = _acc;
     ctx.beginPath();
     ctx.arc(thumbX, mid.y + mid.h / 2, 6, 0, Math.PI * 2);
     ctx.fill();
@@ -1306,4 +1313,12 @@ app.registerExtension({
       return _origRemoved ? _origRemoved.apply(this, arguments) : undefined;
     };
   },
+});
+
+// The colour option: a right-click "Image Compare settings" entry, the gear in
+// the selection toolbar, and the shared colour panel behind both. onChange
+// repaints because the node body is a canvas, which cannot read a CSS variable.
+registerNodeAccent("PixaromaCompare", {
+  title: "Image Compare",
+  onChange: (node) => cmpRepaint(node),
 });

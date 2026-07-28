@@ -1,6 +1,6 @@
 import { app } from "/scripts/app.js";
 import { hideJsonWidget, BRAND, installResizeFloor,
-  installCanvasZoomPassthrough,
+  installCanvasZoomPassthrough, installNodeAccent, registerNodeAccent, accentOf, accentRgba,
 } from "../shared/index.mjs";
 import { isGraphLoading } from "../shared/graph_loading.mjs";
 import { applyAdaptiveCanvasOnly, isVueNodes, canvasBackingScale, installZoomRepaint } from "../shared/nodes2.mjs";
@@ -118,6 +118,7 @@ function getCardInfo(node) {
 // skipped). All coordinates are in the ctx's own CSS-pixel space.
 function paintCardsInto(ctx, node, leftPad, midY, pairW) {
   const info = getCardInfo(node);
+  const acc = accentOf(node);   // a canvas cannot read the CSS variable
   const fam = "ui-sans-serif, system-ui, sans-serif";
   ctx.save();
   ctx.textBaseline = "middle";
@@ -129,7 +130,7 @@ function paintCardsInto(ctx, node, leftPad, midY, pairW) {
     const bx = leftPad, by = midY - bh / 2;
     roundRectPathLi(ctx, bx, by, bw, bh, 8);
     ctx.fillStyle = "#1d1d1d"; ctx.fill();
-    ctx.textAlign = "left"; ctx.fillStyle = BRAND;
+    ctx.textAlign = "left"; ctx.fillStyle = acc;
     ctx.fillText(info.text, bx + 12, midY);
     ctx.restore();
     return;
@@ -170,12 +171,12 @@ function paintCardsInto(ctx, node, leftPad, midY, pairW) {
     const maxTxt = cardW - 8;
     ctx.font = `9px ${fam}`; ctx.fillStyle = "#9a9a9a";
     ctx.fillText(label, ccx, cardY + 18, maxTxt);
-    ctx.font = `bold 11px ${fam}`; ctx.fillStyle = BRAND;
+    ctx.font = `bold 11px ${fam}`; ctx.fillStyle = acc;
     ctx.fillText(`${w}×${h}`, ccx, cardY + 36, maxTxt);
     const { rw, rh } = aspectRectDimsLi(w, h, rectMaxW, rectMaxH);
     const rx = Math.round(ccx - rw / 2) + 0.5, ry = Math.round(cardY + 72 - rh / 2) + 0.5;
     if (accent) { ctx.fillStyle = "rgba(246,103,68,0.20)"; ctx.fillRect(rx, ry, rw, rh); }
-    ctx.strokeStyle = accent ? BRAND : "rgba(200,200,200,0.7)"; ctx.lineWidth = 1;
+    ctx.strokeStyle = accent ? acc : "rgba(200,200,200,0.7)"; ctx.lineWidth = 1;
     ctx.strokeRect(rx, ry, rw, rh);
     ctx.font = `8px ${fam}`; ctx.fillStyle = "#9a9a9a";
     ctx.fillText(ratioLabelLi(w, h), ccx, cardY + 104, maxTxt);
@@ -667,6 +668,7 @@ function setupLoadImageNode(node) {
   node._pixLiMeasureHeight = measureContentHeight;
 
   installCanvasZoomPassthrough(root);
+  installNodeAccent(node, root);   // the face follows this node's accent colour
   const widget = node.addDOMWidget("pixaroma_load_image_ui", "custom", root, {
     // canvasOnly made adaptive below (applyAdaptiveCanvasOnly): true in legacy
     // (hide from Parameters tab, Vue Compat #15), false in Nodes 2.0 (else the
@@ -1202,3 +1204,7 @@ app.graphToPrompt = async function (...args) {
   }
   return result;
 };
+
+// The colour option: a right-click "Load Image settings" entry, the gear in the
+// selection toolbar, and the shared colour panel behind both.
+registerNodeAccent("PixaromaLoadImage", { title: "Load Image" });

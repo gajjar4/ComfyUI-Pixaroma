@@ -1,5 +1,6 @@
 import { app } from "/scripts/app.js";
 import { installCanvasZoomPassthrough } from "../shared/canvas_zoom.mjs";
+import { installNodeAccent, registerNodeAccent } from "../shared/node_settings.mjs";
 import { api } from "/scripts/api.js";
 import { applyAdaptiveCanvasOnly, isVueNodes } from "../shared/nodes2.mjs";
 import { isGraphLoading } from "../shared/graph_loading.mjs";
@@ -201,6 +202,7 @@ function setupNode(node) {
     onOpen: () => openSnapshot(node),
   });
   installCanvasZoomPassthrough(root);
+  installNodeAccent(node, root);   // the face follows this node's accent colour
   const widget = node.addDOMWidget(WIDGET_TYPE, WIDGET_TYPE, root, {
     serialize: false,
     getMinHeight: () => NODE_MIN_H,  // constant (Vue Compat #18)
@@ -387,3 +389,7 @@ app.graphToPrompt = async function (...args) {
   }
   return result;
 };
+
+// The colour option: a right-click "Pause Image settings" entry, the gear in the
+// selection toolbar, and the shared colour panel behind both.
+registerNodeAccent("PixaromaPauseImage", { title: "Pause Image" });
