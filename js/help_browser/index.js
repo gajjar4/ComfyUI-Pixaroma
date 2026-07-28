@@ -32,7 +32,6 @@ import {
   copyText, versionLine, helpAsText, openExternal, LINKS,
 } from "./actions.mjs";
 import { exampleFor, openExample } from "./examples.mjs";
-import { captureCanvas } from "./screenshot.mjs";
 
 const PINS_SETTING = "Pixaroma.Help.Pins";
 const LAST_SETTING = "Pixaroma.Help.Last";
@@ -413,21 +412,6 @@ export function toggleHelpBrowser() {
   else openHelpBrowser();
 }
 
-// The screenshot button works whether or not the help window is open, so its
-// message cannot live inside that window. ComfyUI's own toast is the right
-// surface: it is always available and already where people look for feedback.
-function notify(html) {
-  const plain = String(html).replace(/<[^>]+>/g, "");
-  try {
-    app.extensionManager?.toast?.add({
-      severity: "success", summary: "Pixaroma", detail: plain, life: 4000,
-    });
-    return;
-  } catch { /* fall through */ }
-  if (S.win?.isOpen()) toast(S.win.el, html);
-  else console.log("[Pixaroma]", plain);
-}
-
 // ── the toolbar button ───────────────────────────────────────
 function mountToolbarButton() {
   if (S.toolbarBtn?.isConnected) return;
@@ -449,33 +433,9 @@ function mountToolbarButton() {
   btn.innerHTML = `<span class="pixhb-btn-icon"></span>`;
   btn.addEventListener("click", toggleHelpBrowser);
 
-  // Screenshot, in the same group so the two read as a pair.
-  const shot = document.createElement("button");
-  shot.className = "comfyui-button pixhb-shot-btn";
-  shot.title = "Screenshot the canvas: saves to your output folder and copies it, ready to paste into a question";
-  shot.innerHTML = `<span class="pixhb-shot-icon"></span>`;
-  shot.addEventListener("click", async () => {
-    if (shot.classList.contains("pixhb-busy")) return;      // one capture at a time
-    shot.classList.add("pixhb-busy");
-    try {
-      const res = await captureCanvas();
-      if (res.ok) {
-        const where = res.filename
-          ? `Saved as <b>${res.filename}</b> in your output folder`
-          : "Captured";
-        notify(`${where}${res.copied ? ", and copied ready to paste." : "."}`);
-      } else if (!res.cancelled) {
-        notify(res.reason);
-      }
-    } finally {
-      shot.classList.remove("pixhb-busy");
-    }
-  });
-
   const group = document.createElement("div");
   group.className = "comfyui-button-group pixhb-group-btn";
   group.appendChild(btn);
-  group.appendChild(shot);
 
   settingsGroupEl.before(group);
   S.toolbarBtn = btn;
