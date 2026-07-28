@@ -25,6 +25,7 @@ const ACC = "var(--pix-acc, #f66744)";
 // entirely - it computes as "a mask is present" while painting nothing.
 const QUESTION_ICON = "/pixaroma/assets/icons/note/question-mark.svg";
 const LOGO_ICON = PIXAROMA_LOGO;
+const SHOT_ICON = "/pixaroma/assets/icons/ui/image.svg";
 
 export function injectHelpBrowserCSS() {
   if (document.getElementById(CSS_ID)) return;
@@ -49,6 +50,23 @@ export function injectHelpBrowserCSS() {
   background-color: #2a2c2e !important; color: #ddd !important; border-color: #444 !important;
 }
 .pixhb-btn.pixhb-btn-off:hover { background-color: #3a3d40 !important; filter: none; }
+
+/* The screenshot button sits in the same toolbar group as the ? so the two
+   read as a pair. Unfilled by default, like the bookmark icon, so the orange
+   ? stays the thing the eye lands on. */
+.pixhb-shot-btn .pixhb-shot-icon {
+  display: inline-block; width: 18px; height: 18px;
+  background-color: currentColor; pointer-events: none;
+  mask-image: url(${SHOT_ICON}); -webkit-mask-image: url(${SHOT_ICON});
+  mask-size: contain; -webkit-mask-size: contain;
+  mask-repeat: no-repeat; -webkit-mask-repeat: no-repeat;
+  mask-position: center; -webkit-mask-position: center;
+}
+.pixhb-shot-btn {
+  background-color: #2a2c2e !important; color: #ddd !important; border-color: #444 !important;
+}
+.pixhb-shot-btn:hover { background-color: ${ACC} !important; border-color: ${ACC} !important; color: #fff !important; }
+.pixhb-shot-btn.pixhb-busy { opacity: .55; }
 
 /* ── the floating window ────────────────────────────────────── */
 .pixhb-win {
