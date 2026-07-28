@@ -436,12 +436,14 @@ function renderPanelBody(node, body) {
       renderNode(node); renderPanelBody(node, body);
     }));
   }
-  body.appendChild(sSec);
-
-  // the shared colour block, so this node offers the same option as the rest
-  body.appendChild(createAccentSection(node, {
+  // Inside the section, not a bare sibling of it: .pix-gs-pbody has no padding
+  // of its own (the sections carry it), so a sibling would sit flush against
+  // the panel's edges.
+  sSec.appendChild(createAccentSection(node, {
     onChange: () => { applyAccent(_panel, node); renderNode(node); },
   }));
+
+  body.appendChild(sSec);
 
   // Keep the (possibly taller) panel fully on-screen after a structural change.
   requestAnimationFrame(reclampPanel);

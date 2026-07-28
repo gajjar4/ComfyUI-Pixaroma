@@ -605,15 +605,18 @@ function renderPanelBody(node, body) {
   node._pixRtPicker = picker;
   dSec.appendChild(picker.element);
 
-  body.appendChild(dSec);
-
-  // The shared colour block. Distinct from the clock colour above: that paints
-  // the big digits, this paints the buttons, toggles and the status dot.
-  body.appendChild(createAccentSection(node, {
+  // The shared colour block goes INSIDE the Display section, not as a bare
+  // sibling of it: .pix-rt-pbody has no padding of its own (the sections carry
+  // it), so a sibling would sit flush against the panel's edges.
+  // Distinct from the clock colour above: that paints the big digits, this
+  // paints the buttons, toggles and the status dot.
+  dSec.appendChild(createAccentSection(node, {
     label: "Button colour",
     hint: "Toggles, the volume slider and the status dot. This node only.",
     onChange: () => { applyAccent(_panel, node); applyState(node); },
   }));
+
+  body.appendChild(dSec);
 
   requestAnimationFrame(reclampPanel);
 }

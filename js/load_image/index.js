@@ -175,7 +175,11 @@ function paintCardsInto(ctx, node, leftPad, midY, pairW) {
     ctx.fillText(`${w}×${h}`, ccx, cardY + 36, maxTxt);
     const { rw, rh } = aspectRectDimsLi(w, h, rectMaxW, rectMaxH);
     const rx = Math.round(ccx - rw / 2) + 0.5, ry = Math.round(cardY + 72 - rh / 2) + 0.5;
-    if (accent) { ctx.fillStyle = "color-mix(in srgb, var(--pix-acc,#f66744) 20%, transparent)"; ctx.fillRect(rx, ry, rw, rh); }
+    // accentRgba, NOT a CSS color-mix/var: a canvas parses fillStyle with no
+    // element or cascade, so a var() silently FAILS to parse and leaves the
+    // previous fillStyle (the opaque accent) in place - the wash then paints as
+    // a solid block instead of a 20% tint.
+    if (accent) { ctx.fillStyle = accentRgba(node, 0.20); ctx.fillRect(rx, ry, rw, rh); }
     ctx.strokeStyle = accent ? acc : "rgba(200,200,200,0.7)"; ctx.lineWidth = 1;
     ctx.strokeRect(rx, ry, rw, rh);
     ctx.font = `8px ${fam}`; ctx.fillStyle = "#9a9a9a";
