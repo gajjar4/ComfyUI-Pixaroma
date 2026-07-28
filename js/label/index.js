@@ -7,10 +7,22 @@ import { isGraphLoading } from "../shared/graph_loading.mjs";
 import { DEFAULTS, fontStr, measureLabel, applyLabelToDom, injectVueLabelCSS } from "./render.mjs";
 import { parseCfg, LabelEditor, LABEL_HELP } from "./core.mjs";
 import { registerNodeHelp } from "../shared/help.mjs";
+import { registerNodeSettings } from "../shared/node_settings.mjs";
 
 // Register help for the selection-toolbar ? button (convention #16). The same
 // LABEL_HELP is shown by the in-editor ? button.
 registerNodeHelp("PixaromaLabel", LABEL_HELP);
+
+// The gear in the node selection toolbar opens the SAME editor the right-click
+// "Edit Label" entry does - that editor IS this node's settings (its colours and
+// text live there), so there is no separate colour block to offer.
+// ownMenuItem: the node already adds its own line above.
+registerNodeSettings("PixaromaLabel", {
+  title: "Label",
+  ownMenuItem: true,
+  menuLabel: "Edit Label",
+  open: (node) => openLabelEditor(node),
+});
 
 // ─── Setup helpers ───────────────────────────────────────────
 const NO_TITLE = (typeof LiteGraph !== "undefined" && LiteGraph.NO_TITLE) || 1;

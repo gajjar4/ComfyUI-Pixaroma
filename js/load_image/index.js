@@ -1206,6 +1206,10 @@ app.graphToPrompt = async function (...args) {
 // selection toolbar, and the shared colour panel behind both.
 registerNodeAccent("PixaromaLoadImage", {
   title: "Load Image",
+  // The INPUT->OUTPUT cards are painted into a canvas this node owns, which a
+  // canvas-redraw request does not reach in Nodes 2.0 - repaint it by hand or
+  // the cards keep the old colour until the node is resized or reloaded.
+  onChange: (node) => renderLoadPreviewCanvas(node),
   rows: [
     { kind: "combo", setting: "Pixaroma.LoadImage.ThumbSize", options: ["Small", "Large"],
       defaultValue: "Large", label: "Thumbnail size",

@@ -328,4 +328,6 @@ registerNodeHelp(NODE, {
 
 // The colour option: a right-click "Krea LoRA Convert settings" entry, the gear in the
 // selection toolbar, and the shared colour panel behind both.
-registerNodeAccent("KreaLoraConvertPixaroma", { title: "Krea LoRA Convert" });
+// "Converter", matching this node's display name and its own help title - the
+// title drives the right-click label and the "New ... nodes" button text.
+registerNodeAccent("KreaLoraConvertPixaroma", { title: "Krea LoRA Converter" });

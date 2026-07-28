@@ -944,4 +944,9 @@ app.graphToPrompt = async function (...args) {
 
 // The colour option: a right-click "Image Resize settings" entry, the gear in the
 // selection toolbar, and the shared colour panel behind both.
-registerNodeAccent("PixaromaImageResize", { title: "Image Resize" });
+registerNodeAccent("PixaromaImageResize", {
+  title: "Image Resize",
+  // Explicit rather than relying on this node's repaint poll to happen to catch
+  // it - the cards canvas cannot read the CSS variable.
+  onChange: (node) => node._pixIrRenderCards?.(true),
+});
