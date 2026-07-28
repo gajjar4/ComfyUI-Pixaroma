@@ -1163,6 +1163,8 @@ app.registerExtension({
     nodeType.prototype.onDrawForeground = function (ctx) {
       if (origDraw) origDraw.call(this, ctx);
       if (this.flags?.collapsed || isVueNodes()) return;
+      // isGraphLoading gate - see the same clamp in load_image_mini (convention #7)
+      if (isGraphLoading()) return;
       if (this.size[0] < MIN_W) this.size[0] = MIN_W;
       if (this.size[1] < MIN_H) this.size[1] = MIN_H;
     };

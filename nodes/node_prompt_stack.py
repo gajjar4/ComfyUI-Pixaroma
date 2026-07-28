@@ -19,8 +19,9 @@ class PixaromaPromptStack:
     DESCRIPTION = (
         "Prompt Stack Pixaroma - hold an ordered list of prompt chunks you "
         "can toggle on or off, label, and reorder. All enabled chunks are "
-        "joined into one STRING output using your chosen separator (default "
-        "comma+space, configurable in settings).\n\n"
+        "joined into one STRING output using your chosen separator (a comma "
+        "and a space to start with, changed in this node's own settings, "
+        "opened with the gear button on the node toolbar or by right-clicking the node).\n\n"
         "Click + Add row to add a chunk. Click the toggle pill to mute or "
         "unmute a chunk. Drag the handle on the left to reorder."
     )

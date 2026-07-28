@@ -215,7 +215,7 @@ export function openSeedSettings(node, ctx) {
       }
     )
   );
-  r2.appendChild(el("div", "pix-seed-psub", "The size every NEW Seed node starts at. Saved globally, the same as ComfyUI Settings > Pixaroma > Seed."));
+  r2.appendChild(el("div", "pix-seed-psub", "The size every new Seed node starts at. Remembered across all your workflows, not just this one."));
   body.appendChild(r2);
 
   // ── Random seed digits ──

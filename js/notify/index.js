@@ -37,7 +37,7 @@ const ID_PROP = "pixNotifyId";
 const TIMING_PROP = "pixNotifyTiming"; // per-node: false = timing off (default on)
 const FOLD_PROP = "pixNotifyCollapsed"; // per-node, UI-only; Python ignores it
 const READOUT_NAME = "pixaroma_notify_time";
-const MASTER_ID = "Pixaroma.Notify.Enabled"; // master sound switch (registered below)
+const MASTER_ID = "Pixaroma.Notify.Enabled"; // master sound switch (a row in the node's panel)
 
 // Per-node time history lives in an unregistered ComfyUI setting (these persist
 // - Vue Compat #20). One object keyed by pixNotifyId: { [id]: {ms,name,at}[] }.
@@ -74,7 +74,7 @@ function setTiming(node, on) {
 }
 
 // ── master sound switch (GLOBAL) ─────────────────────────────────────────────
-// The same switch as Settings -> Pixaroma -> Notify -> Enabled, also offered on
+// The same switch offered as a row in this node's own settings panel, and on
 // the node's right-click menu (Run Timer does the same with its global mute, and
 // the node menu is simply quicker to reach than the Settings dialog). It lives in
 // a setting, never node.properties, so muting can't dirty a workflow.

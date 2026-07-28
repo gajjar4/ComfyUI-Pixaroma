@@ -21,8 +21,8 @@ class PixaromaRunTimer:
         "Chime sounds are the same library as Notify Pixaroma - drop a .mp3, "
         ".wav, or .ogg with a simple name (letters, numbers, dashes) into "
         "assets/sounds/ to add more (restart ComfyUI to pick up new files). A "
-        "master mute for all run-timer chimes lives in Settings -> Pixaroma -> "
-        "Run Timer."
+        "master mute for every run timer chime sits at the top of this "
+        "node's own settings, opened with the gear button on the node toolbar or by right-clicking the node."
     )
 
     @classmethod

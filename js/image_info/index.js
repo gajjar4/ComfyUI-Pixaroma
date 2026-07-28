@@ -12,6 +12,7 @@
 import { app } from "/scripts/app.js";
 import { api } from "/scripts/api.js";
 import { isVueNodes } from "../shared/nodes2.mjs";
+import { isGraphLoading } from "../shared/graph_loading.mjs";
 
 const CLASS = "PixaromaImageInfo";
 const MIN_W = 190;
@@ -87,7 +88,8 @@ app.registerExtension({
     nodeType.prototype.onDrawForeground = function (ctx) {
       const r = _origDraw?.apply(this, arguments);
       if (isVueNodes()) return r;
-      if (this.size[0] < MIN_W) { this.size[0] = MIN_W; this.setDirtyCanvas(true, true); }
+      // isGraphLoading gate - see the same clamp in load_image_mini (convention #7)
+      if (!isGraphLoading() && this.size[0] < MIN_W) { this.size[0] = MIN_W; this.setDirtyCanvas(true, true); }
       paintReadout(this, ctx);
       return r;
     };

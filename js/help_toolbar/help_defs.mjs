@@ -700,7 +700,7 @@ const HELP = {
     sections: [
       {
         heading: "What it does",
-        body: "Holds an ordered list of prompt pieces. All enabled pieces are joined into a single string using your chosen separator (default: comma + space, configurable in Settings under `Pixaroma`).\n\nUseful for building prompts modularly: you can mute a style chunk, a color description, or a quality suffix without deleting it.",
+        body: "Holds an ordered list of prompt pieces. All enabled pieces are joined into a single string using your chosen separator (a comma and a space to start with, changed in this node's own settings, opened with the gear button on the node toolbar, or by right-clicking the node).\n\nUseful for building prompts modularly: you can mute a style chunk, a color description, or a quality suffix without deleting it.",
       },
       {
         heading: "How to use",
@@ -1526,7 +1526,7 @@ const HELP = {
           ["Collapse / Expand", "Folds the node down to just the clock, or brings the sound controls back. The same thing the arrow on the clock row does."],
           ["Record time", "Turns the checkpoint timer on or off for this one node. While it is off the clock reads `timer off` and nothing is added to this node's history. The sound is unaffected."],
           ["Notify time history", "Opens this node's list of the last 10 times, with Copy, Export .txt, and Clear."],
-          ["Mute all Notify sounds", "The master mute: no Notify node plays a sound, in any workflow. It is the same switch as the one in ComfyUI Settings, under Pixaroma, Notify, Enabled, so flipping either one flips both. Checkpoint timers keep recording while it is on."],
+          ["Mute all Notify sounds", "The master mute: no Notify node plays a sound, in any workflow. It is the same switch as the one in this node's own settings, so flipping either one flips both. Checkpoint timers keep recording while it is on."],
         ],
       },
       {
@@ -1552,7 +1552,7 @@ const HELP = {
         ],
       },
     ],
-    footer: "The `Preview` button plays the sound now, ignoring the toggles. A global on/off lives in Settings - Pixaroma - Notify.",
+    footer: "The `Preview` button plays the sound now, ignoring the toggles. The on and off switch for every Notify node lives in this node's own settings, opened with the gear button on the node toolbar, or by right-clicking the node.",
   },
 
   "PixaromaReferenceNode": {

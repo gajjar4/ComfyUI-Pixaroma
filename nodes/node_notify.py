@@ -51,8 +51,9 @@ class NotifyPixaroma:
         "you want it compact, and folds it back out again (also on the right-click "
         "menu as Collapse / Expand).\n\n"
         "Each node has its own sound toggle, and a master sound switch covers every "
-        "Notify node at once - it lives in Settings -> Pixaroma -> Notify -> Enabled "
-        "and on the right-click menu as Mute all Notify sounds. The Preview button "
+        "Notify node at once - it lives in this node's own settings, "
+        "opened with the gear button on the node toolbar or by right-clicking the node, and on the right-click "
+        "menu as Mute all Notify sounds. The Preview button "
         "bypasses both toggles, since clicking it is a manual request to hear the "
         "sound right now."
     )

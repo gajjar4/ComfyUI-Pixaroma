@@ -43,7 +43,7 @@ const COMPARE_HELP = {
       ],
     },
   ],
-  footer: "Set the default view mode in Settings -> Pixaroma -> Image Compare.",
+  footer: "Set the view mode a new Compare node starts in from this node's own settings, opened with the gear button on the node toolbar, or by right-clicking the node.",
 };
 registerNodeHelp("PixaromaCompare", COMPARE_HELP);
 // Buttons: Show 1 | Left Right | Up Down | Overlay | Difference

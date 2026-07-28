@@ -493,10 +493,10 @@ function renderPanelBody(node, body) {
   const cSec = section("Chime");
 
   // Master mute FIRST — it overrides everything below it. Global (every Run Timer,
-  // every workflow) and the same switch as ComfyUI Settings → 👑 Pixaroma → Run
-  // Timer, so the two stay in lockstep. Both surfaces use the SAME label.
+  // every workflow). This panel is now the one place to change it, and the
+  // right-click menu entry uses the SAME label.
   const mRow = row("Mute all Run Timers");
-  mRow.title = "Master switch: no Run Timer plays its finish chime, in any workflow. Same switch as Settings, Pixaroma, Run Timer. The Preview button below still plays, so you can keep trying sounds out.";
+  mRow.title = "Master switch: no Run Timer plays its finish chime, in any workflow. The Preview button below still plays, so you can keep trying sounds out.";
   const mTog = liveToggle(isMuted, (on) => { setMuted(on); syncMute(); });
   mRow.appendChild(mTog);
   cSec.appendChild(mRow);
@@ -998,7 +998,7 @@ const HELP = {
     ]},
     { heading: "Run time history", body: "Right-click the node and pick 'Run time history' to see the last 10 finished runs, newest first. Each line shows the workflow name and the time of day it ran, next to how long it took, and the fastest one is marked with a lightning bolt - handy for comparing how quick different workflows are. The list is shared across every workflow and is remembered between sessions (it is not saved inside any one workflow). You can copy a single line, export the whole list as a text file, or clear it. Each run is filed under whichever workflow was active when it started. Only completed runs are listed; a run you stop or that errors out is skipped." },
     { heading: "Settings (right-click the node)", defs: [
-      ["Mute all Run Timers", "The master mute: no Run Timer plays its finish chime, in any workflow. It is the same switch as the one in ComfyUI Settings, under Pixaroma, Run Timer, so flipping either one flips both. While it is on, the rows below it are dimmed to show they are being ignored."],
+      ["Mute all Run Timers", "The master mute: no Run Timer plays its finish chime, in any workflow. It is the same switch wherever you reach it, so flipping it in one place flips it everywhere. While it is on, the rows below it are dimmed to show they are being ignored."],
       ["Chime on finish (this timer)", "Turns the finish sound on or off for this one timer only. Other Run Timers keep chiming."],
       ["Sound and Volume", "Pick the chime from the sound library and set how loud it is. The Preview button plays it right now, even while muted, so you can still try sounds out."],
       ["Decimals", "Show hundredths (2), milliseconds (3), or just minutes and seconds (Off)."],

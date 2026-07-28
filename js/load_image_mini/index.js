@@ -746,7 +746,11 @@ app.registerExtension({
     nodeType.prototype.onDrawForeground = function (ctx) {
       const r = _origDraw?.apply(this, arguments);
       if (isVueNodes() || this.flags?.collapsed) return r;
-      if (this.size[0] < MIN_W) { this.size[0] = MIN_W; this.setDirtyCanvas(true, true); }
+      // isGraphLoading gate: node.size is serialized and this is the one clamp
+      // that runs on the first frame of a LOAD (convention #7). Without it, a node
+      // saved narrower in Nodes 2.0 is rewritten on open and the untouched
+      // workflow asks to be saved.
+      if (!isGraphLoading() && this.size[0] < MIN_W) { this.size[0] = MIN_W; this.setDirtyCanvas(true, true); }
       const pairW = this.size[0] - CARDS_LEFT - CARDS_RIGHT_RESERVE;
       // Too narrow to say anything useful - better blank than clipped smears.
       if (pairW >= 120) paintCardsInto(ctx, this, CARDS_LEFT, CARDS_MID_Y, pairW);

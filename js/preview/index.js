@@ -116,7 +116,7 @@ function setActivePreview(node) {
 }
 
 // Layout mode helpers. The default for new nodes comes from the
-// Pixaroma.Preview.DefaultLayout setting (registered below); per-node
+// Pixaroma.Preview.DefaultLayout option (a row in the node's own settings); per-node
 // overrides live on node.properties.pixaromaLayout so they persist
 // across workflow saves and Vue tab switches.
 function getDefaultLayout() {
