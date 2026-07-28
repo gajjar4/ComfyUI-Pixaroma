@@ -1317,16 +1317,12 @@ function setupNode(node) {
 app.registerExtension({
   name: "Pixaroma.Outpaint",
 
-  // The global default accent, so a fresh node without its own colour has one.
-  // Per-node overrides live in state; accentOf reads this only as the fallback.
-  settings: [{
-    id: ACCENT_SETTING,
-    name: "Default button colour",
-    type: "text",
-    defaultValue: BRAND,
-    tooltip: "The accent for new Outpaint nodes. Each node can override it in its own settings.",
-    category: ["👑 Pixaroma", "Outpaint"],
-  }],
+  // No Settings-panel row: this node's colour lives in its OWN panel (the gear /
+  // right-click entry). It used to be registered here with defaultValue BRAND,
+  // which made getSettingValue ALWAYS return the orange - so the node-type
+  // default permanently outranked the master accent and "Every Pixaroma node"
+  // could never reach this node. Unregistered, the key is written ONLY by an
+  // explicit "New Outpaint nodes" press, so stored == deliberately chosen.
 
   beforeRegisterNodeDef(nodeType, nodeData) {
     if (nodeData.name !== CLASS) return;

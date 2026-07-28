@@ -25,7 +25,7 @@ import {
 import { openImageDropdown, injectCSS as injectLiCSS } from "../load_image/ui.mjs";
 import { previewResize } from "../load_image/resize_modes.mjs";
 import {
-  ACCENT_SETTING, BRAND, CLASS, DEFAULT_STATE, HIDDEN_INPUT, STATE_PROP,
+  BRAND, CLASS, DEFAULT_STATE, HIDDEN_INPUT, STATE_PROP,
   accentOf, readState, writeState,
 } from "./core.mjs";
 import { openMiniSettings, closeMiniSettingsFor } from "./settings.mjs";
@@ -710,14 +710,12 @@ function setupNode(node) {
 app.registerExtension({
   name: "Pixaroma.LoadImageMini",
 
-  settings: [{
-    id: ACCENT_SETTING,
-    name: "Default button colour",
-    type: "text",
-    defaultValue: BRAND,
-    tooltip: "The accent for new Load Image Mini nodes. Each node can override it in its own gear settings.",
-    category: ["👑 Pixaroma", "Load Image Mini"],
-  }],
+  // No Settings-panel row: this node's colour lives in its OWN gear panel. It
+  // used to be registered here with defaultValue BRAND, which made
+  // getSettingValue ALWAYS return the orange - so the node-type default
+  // permanently outranked the master accent and "Every Pixaroma node" could
+  // never reach this node. Unregistered, the key is written ONLY by an explicit
+  // "New Load Image Mini nodes" press, so stored == deliberately chosen.
 
   beforeRegisterNodeDef(nodeType, nodeData) {
     if (nodeData.name !== CLASS) return;

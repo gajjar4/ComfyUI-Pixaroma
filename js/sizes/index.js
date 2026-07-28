@@ -13,7 +13,7 @@ import { isGraphLoading } from "../shared/graph_loading.mjs";
 import { registerNodeHelp } from "../shared/help.mjs";
 import { registerNodeSettings } from "../shared/node_settings.mjs";
 import {
-  BRAND, ACCENT_SETTING, STATE_PROP, HIDDEN_INPUT, MAX_SIZES,
+  BRAND, STATE_PROP, HIDDEN_INPUT, MAX_SIZES,
   readState, writeState, fmtRow, accentOf, DEFAULT_STATE,
 } from "./core.mjs";
 import { openSizesPanel, closeSizesPanelFor } from "./settings.mjs";
@@ -296,31 +296,12 @@ function setupNode(node) {
 
 app.registerExtension({
   name: "Pixaroma.Sizes",
-
-  // Plain hex field (ComfyUI's settings dialog has no colour input); the pretty
-  // picker lives in the node's own settings panel, which also writes this.
-  settings: [
-    {
-      id: ACCENT_SETTING,
-      name: "Default sizes accent colour (hex)",
-      type: "text",
-      defaultValue: BRAND,
-      tooltip: "The colour new Sizes nodes highlight with, e.g. #f66744. Each node can override it in its settings.",
-      category: ["👑 Pixaroma", "Sizes"],
-      // Repaint every node that FOLLOWS the default (no per-node accent) so a
-      // changed default is visible immediately, not at the next interaction.
-      onChange: () => {
-        try {
-          for (const n of app.graph?._nodes || []) {
-            if (n?.comfyClass !== CLASS) continue;
-            let accent = null;
-            try { const st = n.properties?.[STATE_PROP]; accent = st ? JSON.parse(st).accent : null; } catch {}
-            if (!accent) render(n);
-          }
-        } catch {}
-      },
-    },
-  ],
+  // No Settings-panel row: this node's colour lives in its OWN panel (the
+  // gear / right-click entry). It used to be registered here with
+  // defaultValue BRAND, which made getSettingValue ALWAYS return the orange -
+  // so the node-type default permanently outranked the master accent and
+  // "Every Pixaroma node" could never reach this node. Unregistered, the key
+  // is written ONLY by an explicit "New ... nodes" press, so stored == chosen.
 
   beforeRegisterNodeDef(nodeType, nodeData) {
     if (nodeData.name !== CLASS) return;

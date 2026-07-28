@@ -3,7 +3,7 @@ import { isVueNodes } from "../shared/nodes2.mjs";
 import { isGraphLoading } from "../shared/graph_loading.mjs";
 import { isQueueLoopActive } from "../shared/queue_drivers.mjs";
 import { registerNodeSettings } from "../shared/node_settings.mjs";
-import { CLASS, BRAND, ACCENT_SETTING, ACCENT_PROP, widgetOf } from "./core.mjs";
+import { CLASS, BRAND, ACCENT_PROP, widgetOf } from "./core.mjs";
 import {
   injectCSS, installSliders, uninstallSliders, paintRows, bindInputDots,
   alignInputsLegacy, bodyComputeSize, bodyHeight, MIN_W, DEFAULT_W, SLIDERS,
@@ -47,24 +47,12 @@ function scheduleAlignLegacy(node) {
 
 app.registerExtension({
   name: "Pixaroma.OutpaintStitch",
-
-  settings: [
-    {
-      id: ACCENT_SETTING,
-      name: "Default slider colour (hex)",
-      type: "text",
-      defaultValue: BRAND,
-      tooltip: "The colour new Outpaint Stitch sliders paint with, e.g. #f66744. Each node can override it in its own settings.",
-      category: ["👑 Pixaroma", "Outpaint Stitch"],
-      onChange: () => {
-        try {
-          for (const n of app.graph?._nodes || []) {
-            if (n?.comfyClass === CLASS && !n.properties?.[ACCENT_PROP]) paintRows(n);
-          }
-        } catch {}
-      },
-    },
-  ],
+  // No Settings-panel row: this node's colour lives in its OWN panel (the
+  // gear / right-click entry). It used to be registered here with
+  // defaultValue BRAND, which made getSettingValue ALWAYS return the orange -
+  // so the node-type default permanently outranked the master accent and
+  // "Every Pixaroma node" could never reach this node. Unregistered, the key
+  // is written ONLY by an explicit "New ... nodes" press, so stored == chosen.
 
   async beforeRegisterNodeDef(nodeType, nodeData) {
     if (nodeData.name !== CLASS) return;

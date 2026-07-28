@@ -4,7 +4,7 @@ import { isGraphLoading } from "../shared/graph_loading.mjs";
 import { registerNodeHelp } from "../shared/help.mjs";
 import { registerNodeSettings } from "../shared/node_settings.mjs";
 import {
-  ACCENT_SETTING, BRAND, MAX_SLIDERS,
+  BRAND, MAX_SLIDERS,
   readState, normalizeSliders, syncOutputs, addSlider, resolveAutoType, resetRowOnDisconnect,
   comboOptionsOf, randomSeed,
 } from "./core.mjs";
@@ -95,29 +95,12 @@ function fitNode(node) {
 
 app.registerExtension({
   name: "Pixaroma.Sliders",
-
-  // A plain hex field: ComfyUI's settings dialog has no colour input, and the
-  // pretty picker lives in the node's own settings panel anyway (which also
-  // writes this value via its "Colour as default" button).
-  settings: [
-    {
-      id: ACCENT_SETTING,
-      name: "Default control colour (hex)",
-      type: "text",
-      defaultValue: BRAND,
-      tooltip: "The colour new Control Panel nodes paint with, e.g. #f66744. Each node can override it in its own settings.",
-      category: ["👑 Pixaroma", "Sliders"],
-      // Repaint every node that FOLLOWS the default (accent unset), so changing
-      // it is visible immediately instead of at the next interaction.
-      onChange: () => {
-        try {
-          for (const n of app.graph?._nodes || []) {
-            if (n?.comfyClass === CLASS && !n.properties?.slidersState?.accent) renderAll(n);
-          }
-        } catch {}
-      },
-    },
-  ],
+  // No Settings-panel row: this node's colour lives in its OWN panel (the
+  // gear / right-click entry). It used to be registered here with
+  // defaultValue BRAND, which made getSettingValue ALWAYS return the orange -
+  // so the node-type default permanently outranked the master accent and
+  // "Every Pixaroma node" could never reach this node. Unregistered, the key
+  // is written ONLY by an explicit "New ... nodes" press, so stored == chosen.
 
   async beforeRegisterNodeDef(nodeType, nodeData) {
     if (nodeData.name !== CLASS) return;
