@@ -261,22 +261,24 @@ export function renderArticle(main, entry, onNav, ctx) {
     // loads, so `error` never fires and the empty box just sits there), and the
     // element starts display:none rather than being removed on error, so the
     // page never reflows under the reader.
-    // .webp first (smaller), then .png, because a snipping tool gives you PNG
-    // and nobody should have to convert a file to add a picture.
+    // Try .webp, then .png, then .jpg. Whatever your screenshot tool gives you
+    // works straight away, and converting to webp later just makes the first
+    // one win. Nobody should have to convert a file to add a picture.
+    const EXTS = ["webp", "png", "jpg"];
     const img = el("img", "pixhb-pic");
     img.alt = entry.title;
     img.style.display = "none";
-    let triedPng = false;
+    let attempt = 0;
     img.addEventListener("load", () => { img.style.display = ""; });
     img.addEventListener("error", () => {
-      if (!triedPng) {
-        triedPng = true;
-        img.src = `/pixaroma/assets/help/${encodeURIComponent(entry.cls)}.png`;
+      attempt += 1;
+      if (attempt < EXTS.length) {
+        img.src = `/pixaroma/assets/help/${encodeURIComponent(entry.cls)}.${EXTS[attempt]}`;
         return;
       }
       img.remove();
     });
-    img.src = `/pixaroma/assets/help/${encodeURIComponent(entry.cls)}.webp`;
+    img.src = `/pixaroma/assets/help/${encodeURIComponent(entry.cls)}.${EXTS[0]}`;
     pad.appendChild(img);
 
     const dia = buildSchematic(entry.cls, help.title || entry.title);
