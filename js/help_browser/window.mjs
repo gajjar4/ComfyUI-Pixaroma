@@ -51,7 +51,11 @@ const HOME_Y = 70;
 // is try to drag the divider, which did nothing. SIDE_DEF is the width it opens
 // at; SIDE_MIN keeps it usable; the max is a share of the window so the article
 // can never be squeezed to nothing on a small screen.
-const SIDE_DEF = 200;
+// 204 is the width the divider was actually settled at in use, and it is the
+// number that matters: it is the point where every name under "Start here"
+// fits, which is the first thing anyone reads. Long node names still clip and
+// that is deliberate (see pattern #23) - the divider is there to be dragged.
+const SIDE_DEF = 204;
 const SIDE_MIN = 130;
 const SIDE_MAX_FRAC = 0.55;
 const sideMax = (winW) => Math.max(SIDE_MIN, Math.round(winW * SIDE_MAX_FRAC));
