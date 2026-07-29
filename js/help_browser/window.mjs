@@ -20,7 +20,8 @@
 // ids persist fine and add no rows to the Settings panel).
 
 import { app } from "/scripts/app.js";
-import { nodeSetting, setNodeSetting, globalAccent, BRAND } from "../shared/index.mjs";
+import { globalAccent, BRAND } from "../shared/index.mjs";
+import { el, makeRect, startDrag } from "../shared/floating_window.mjs";
 import { injectHelpBrowserCSS } from "./css.mjs";
 
 // No icon constants here on purpose. css.mjs injects its stylesheet ONCE and
@@ -58,66 +59,22 @@ const HOME_Y = 70;
 const SIDE_DEF = 204;
 const SIDE_MIN = 130;
 const SIDE_MAX_FRAC = 0.55;
-const sideMax = (winW) => Math.max(SIDE_MIN, Math.round(winW * SIDE_MAX_FRAC));
 
-export const el = (tag, cls, text) => {
-  const e = document.createElement(tag);
-  if (cls) e.className = cls;
-  if (text != null) e.textContent = text;
-  return e;
-};
+// Sizing, position, sidebar width and the viewport clamping that keeps a window
+// saved on a big monitor reachable on a laptop. The behaviour lives in
+// js/shared/floating_window.mjs so the Workflows panel cannot get it subtly
+// wrong; the NUMBERS stay here, because they are this window's own.
+const RECT = makeRect({
+  settingKey: RECT_SETTING,
+  minW: MIN_W, minH: MIN_H,
+  prefW: PREF_W, prefH: PREF_H,
+  edge: EDGE, homeX: HOME_X, homeY: HOME_Y,
+  sideDef: SIDE_DEF, sideMin: SIDE_MIN, sideMaxFrac: SIDE_MAX_FRAC,
+});
+const { clampRect, readRect, saveRect, sideMax } = RECT;
 
-// The size to open at when nothing has been saved yet: the roomy size on a big
-// screen, shrunk to whatever actually fits on a small one, and never below the
-// minimum. Read fresh each time rather than baked in as a constant, because the
-// same person may open ComfyUI on a laptop tomorrow.
-function defaultRect() {
-  const vw = window.innerWidth, vh = window.innerHeight;
-  const w = Math.max(MIN_W, Math.min(PREF_W, vw - EDGE * 2));
-  const h = Math.max(MIN_H, Math.min(PREF_H, vh - EDGE * 2));
-  return {
-    x: Math.max(EDGE, Math.min(HOME_X, vw - w - EDGE)),
-    y: Math.max(EDGE, Math.min(HOME_Y, vh - h - EDGE)),
-    w, h, sw: SIDE_DEF,
-  };
-}
-
-// Bring a saved rect back onto a screen that may be a different size than the
-// one it was saved on. It SHRINKS to fit rather than only keeping a sliver of
-// the title bar reachable: a window saved on a wide monitor and reopened on a
-// laptop used to hang off the right edge with its resize grip out of reach.
-function clampRect(r) {
-  const d = defaultRect();
-  const vw = window.innerWidth, vh = window.innerHeight;
-  const w = Math.round(Math.max(MIN_W, Math.min(r?.w ?? d.w, vw - EDGE)));
-  const h = Math.round(Math.max(MIN_H, Math.min(r?.h ?? d.h, vh - EDGE)));
-  // The sidebar is re-clamped against the CURRENT window width, so a sidebar
-  // widened on a big window cannot swallow the article after the window shrinks.
-  const sw = Math.round(Math.max(SIDE_MIN, Math.min(r?.sw ?? d.sw, sideMax(w))));
-  return {
-    x: Math.round(Math.max(0, Math.min(r?.x ?? d.x, vw - w))),
-    y: Math.round(Math.max(0, Math.min(r?.y ?? d.y, vh - h))),
-    w, h, sw,
-  };
-}
-
-function readRect() {
-  const raw = nodeSetting(RECT_SETTING, null);
-  if (raw && typeof raw === "object") return clampRect(raw);
-  if (typeof raw === "string") {
-    try { return clampRect(JSON.parse(raw)); } catch { /* fall through to the default */ }
-  }
-  return defaultRect();
-}
-
-// Debounced so a drag does not write a setting on every pointermove.
-let saveTimer = null;
-function saveRect(rect) {
-  clearTimeout(saveTimer);
-  saveTimer = setTimeout(() => {
-    try { setNodeSetting(RECT_SETTING, rect); } catch { /* never break the UI over a saved rect */ }
-  }, 350);
-}
+// Re-exported: actions/content/controls/index all import `el` from here.
+export { el };
 
 export function createHelpWindow({ onRender, onClose }) {
   injectHelpBrowserCSS();
@@ -177,46 +134,16 @@ export function createHelpWindow({ onRender, onClose }) {
   };
   applyRect();
 
-  // ── dragging, for both the title bar and the resize grip ──
+  // ── dragging, for the title bar, the resize grip and the sidebar divider ──
   //
-  // Listening for pointermove/pointerup on `window` is NOT reliable here: with
-  // a real mouse the release can go missing (the pointer leaves the viewport,
-  // another element takes pointer capture, or a handler upstream stops the
-  // event), and then the panel keeps following the cursor forever - it "sticks"
-  // and can never be put down.
-  //
-  // Two defences, and we want both:
-  //   1. setPointerCapture on the handle, so every event for this pointer is
-  //      delivered to THAT element until we release it, even off-window.
-  //   2. the buttons-are-up guard that js/align/index.js already relies on:
-  //      if a move arrives with no button held, the release was missed, so end
-  //      the drag there and then.
-  function startDrag(handle, e, onMove) {
-    if (e.button !== 0) return false;
-    let done = false;
-    const end = () => {
-      if (done) return;
-      done = true;
-      handle.removeEventListener("pointermove", move);
-      handle.removeEventListener("pointerup", end);
-      handle.removeEventListener("pointercancel", end);
-      handle.removeEventListener("lostpointercapture", end);
-      try { handle.releasePointerCapture(e.pointerId); } catch { /* already gone */ }
-      title.classList.remove("pixhb-dragging");
-      saveRect(rect);
-    };
-    const move = (ev) => {
-      if (!(ev.buttons & 1)) { end(); return; }   // the release went missing
-      onMove(ev);
-    };
-    try { handle.setPointerCapture(e.pointerId); } catch { /* older build: the guard still covers us */ }
-    handle.addEventListener("pointermove", move);
-    handle.addEventListener("pointerup", end);
-    handle.addEventListener("pointercancel", end);
-    handle.addEventListener("lostpointercapture", end);
-    e.preventDefault();
-    return true;
-  }
+  // startDrag itself is shared (js/shared/floating_window.mjs): it holds the
+  // pointer capture plus the buttons-are-up guard, without which a drag whose
+  // release goes missing leaves the panel stuck to the cursor forever. All that
+  // belongs to this window is what happens when a drag FINISHES.
+  const onDragEnd = () => {
+    title.classList.remove("pixhb-dragging");
+    saveRect(rect);
+  };
 
   title.addEventListener("pointerdown", (e) => {
     if (e.target.closest(".pixhb-wbtn")) return;
@@ -226,7 +153,7 @@ export function createHelpWindow({ onRender, onClose }) {
       rect.x = Math.max(0, Math.min(ev.clientX - ox, window.innerWidth - Math.min(rect.w, 160)));
       rect.y = Math.max(0, Math.min(ev.clientY - oy, window.innerHeight - 40));
       applyRect();
-    })) return;
+    }, onDragEnd)) return;
     title.classList.add("pixhb-dragging");
   });
 
@@ -241,7 +168,7 @@ export function createHelpWindow({ onRender, onClose }) {
       rect.w = Math.max(MIN_W, Math.min(ev.clientX - ox - left, window.innerWidth - left));
       rect.h = Math.max(MIN_H, Math.min(ev.clientY - oy - top, window.innerHeight - top));
       applyRect();
-    });
+    }, onDragEnd);
     e.stopPropagation();
   });
 
@@ -255,7 +182,7 @@ export function createHelpWindow({ onRender, onClose }) {
     startDrag(sideGrip, e, (ev) => {
       rect.sw = Math.round(Math.max(SIDE_MIN, Math.min(ev.clientX - bodyLeft, sideMax(rect.w))));
       side.style.width = rect.sw + "px";
-    });
+    }, onDragEnd);
     sideGrip.classList.add("pixhb-dragging");
     e.stopPropagation();
   });

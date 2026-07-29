@@ -40,6 +40,11 @@ from .nodes.node_krea_lora_convert import (
     inspect_lora as _krea_lora_inspect,
     resolve_and_convert as _krea_lora_convert,
 )
+from .nodes._workflow_index_helpers import (
+    build_index as _wf_build_index,
+    collections as _wf_collections,
+    detect_issues as _wf_detect_issues,
+)
 
 # Ensure ComfyUI/models/fonts/ exists so users have a place to drop fonts.
 try:
@@ -2226,3 +2231,269 @@ async def api_lora_civitai_delete(request):
     loop = asyncio.get_event_loop()
     ok = await loop.run_in_executor(None, _lora_delete_sidecar, path)
     return web.json_response({"ok": bool(ok)})
+
+
+# ── Pixaroma Workflows ───────────────────────────────────────────────────────
+# Back the workflow browser: one cached index of the user's workflow folder, a
+# sidecar for the things ComfyUI has nowhere to keep (notes, chosen covers,
+# folder colours), folder create/rename/delete, and reveal-in-explorer.
+#
+# Opening, renaming, moving and deleting WORKFLOWS is deliberately NOT here:
+# that all goes through ComfyUI's own workflow store in the browser, so its open
+# tabs and modified flags stay correct. These routes only do what core has no
+# API for.
+
+
+def _wf_user_dir(request):
+    """The user folder ComfyUI is actually using. Single-user installs are
+    'default'; a multi-user setup sends the id in the comfy-user header, which
+    is how core resolves it too."""
+    base = folder_paths.get_user_directory()
+    uid = "default"
+    try:
+        header = request.headers.get("comfy-user")
+        if header and _sanitize_id(header, "") == header:
+            uid = header
+    except Exception:
+        pass
+    return os.path.join(base, uid)
+
+
+def _wf_root(request):
+    return os.path.join(_wf_user_dir(request), "workflows")
+
+
+def _wf_cache_path(request):
+    # Kept OUTSIDE the workflows folder, or the cache would index itself.
+    return os.path.join(_wf_user_dir(request), "pixaroma_workflows_cache.json")
+
+
+def _wf_meta_path(request):
+    return os.path.join(_wf_user_dir(request), "pixaroma_workflows_meta.json")
+
+
+def _wf_resolve(root, rel):
+    """A relative path from the browser turned into a real one inside the
+    workflows folder, or None. Returns None for empty, so a caller can never
+    accidentally operate on the root itself."""
+    rel = (rel or "").replace("\\", "/").strip("/")
+    if not rel or rel == ".":
+        return None
+    parts = [p for p in rel.split("/") if p not in ("", ".")]
+    if not parts:
+        return None
+    p = os.path.normpath(os.path.join(root, *parts))
+    if not _is_path_under(p, root):
+        return None
+    return p
+
+
+def _wf_registered_types():
+    """Class names ComfyUI has actually loaded, for the missing-node check."""
+    try:
+        import nodes as _comfy_nodes
+        return set(_comfy_nodes.NODE_CLASS_MAPPINGS.keys())
+    except Exception:
+        return set()
+
+
+def _wf_list_folders(root):
+    """Every folder under the workflows root, including empty ones - those hold
+    no entries, so they would otherwise be invisible in the browser."""
+    out = []
+    for dirpath, dirnames, _files in os.walk(root):
+        dirnames[:] = [d for d in dirnames if not d.startswith(".")]
+        if os.path.abspath(dirpath) == os.path.abspath(root):
+            continue
+        out.append(os.path.relpath(dirpath, root).replace(os.sep, "/"))
+    out.sort(key=lambda s: s.lower())
+    return out
+
+
+def _wf_read_meta(path):
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        if isinstance(data, dict):
+            return data
+    except (OSError, ValueError, UnicodeDecodeError):
+        pass
+    return {}
+
+
+def _wf_write_meta(path, data):
+    tmp = path + ".tmp"
+    try:
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(data, f)
+        os.replace(tmp, path)
+        return True
+    except OSError:
+        try:
+            os.remove(tmp)
+        except OSError:
+            pass
+        return False
+
+
+def _wf_build_payload(root, cache_path, registered):
+    """Runs off the event loop - it stats and parses every workflow file, and
+    blocking here would stall image generation progress for everyone."""
+    entries = _wf_build_index(root, cache_path)
+    return {
+        "ok": True,
+        "entries": entries,
+        "folders": _wf_list_folders(root),
+        "collections": _wf_collections(entries),
+        "issues": _wf_detect_issues(entries, registered),
+    }
+
+
+@PromptServer.instance.routes.get("/pixaroma/api/workflows/index")
+async def api_workflows_index(request):
+    """Everything the browser needs to draw itself, in one request."""
+    root = _wf_root(request)
+    if not os.path.isdir(root):
+        return web.json_response(
+            {"ok": True, "entries": [], "folders": [], "collections": [],
+             "issues": {"unsaved_names": [], "duplicates": [], "missing_nodes": []}},
+            headers={"Cache-Control": "no-store"},
+        )
+    import asyncio
+    loop = asyncio.get_event_loop()
+    try:
+        payload = await loop.run_in_executor(
+            None, _wf_build_payload, root, _wf_cache_path(request), _wf_registered_types()
+        )
+    except Exception as e:
+        return web.json_response(
+            {"ok": False, "message": str(e), "entries": [], "folders": [],
+             "collections": [], "issues": {}},
+            headers={"Cache-Control": "no-store"},
+        )
+    # no-store, or a browser can heuristically cache this and show a workflow
+    # list that no longer matches the disk (convention #18).
+    return web.json_response(payload, headers={"Cache-Control": "no-store"})
+
+
+@PromptServer.instance.routes.get("/pixaroma/api/workflows/meta")
+async def api_workflows_meta_get(request):
+    data = _wf_read_meta(_wf_meta_path(request))
+    data.setdefault("notes", {})
+    data.setdefault("covers", {})
+    data.setdefault("folderColors", {})
+    return web.json_response({"ok": True, "meta": data},
+                             headers={"Cache-Control": "no-store"})
+
+
+@PromptServer.instance.routes.post("/pixaroma/api/workflows/meta")
+async def api_workflows_meta_post(request):
+    """Merges rather than replaces, key by key. Two panels open at once must not
+    be able to wipe each other's notes."""
+    try:
+        patch = await request.json()
+    except Exception:
+        patch = {}
+    if not isinstance(patch, dict):
+        return web.json_response({"ok": False, "message": "bad payload"})
+
+    path = _wf_meta_path(request)
+    data = _wf_read_meta(path)
+    for section in ("notes", "covers", "folderColors"):
+        incoming = patch.get(section)
+        if not isinstance(incoming, dict):
+            continue
+        current = data.get(section)
+        if not isinstance(current, dict):
+            current = {}
+        for k, v in incoming.items():
+            if v is None:
+                current.pop(k, None)      # an explicit null clears one entry
+            else:
+                current[k] = v
+        data[section] = current
+
+    ok = _wf_write_meta(path, data)
+    return web.json_response({"ok": ok, "meta": data})
+
+
+@PromptServer.instance.routes.post("/pixaroma/api/workflows/folder")
+async def api_workflows_folder(request):
+    """Create, rename or delete a folder. Core has no API for this; workflow
+    FILES are never touched here - those go through ComfyUI's own store."""
+    try:
+        data = await request.json()
+    except Exception:
+        data = {}
+    action = str(data.get("action", ""))
+    root = _wf_root(request)
+    path = _wf_resolve(root, data.get("path", ""))
+
+    if action == "create":
+        if not path:
+            return web.json_response({"ok": False, "message": "Give the folder a name."})
+        if os.path.exists(path):
+            return web.json_response({"ok": False, "message": "That folder already exists."})
+        try:
+            os.makedirs(path)
+        except OSError as e:
+            return web.json_response({"ok": False, "message": str(e)})
+        return web.json_response({"ok": True})
+
+    if action == "rename":
+        new_path = _wf_resolve(root, data.get("newPath", ""))
+        if not path or not new_path:
+            return web.json_response({"ok": False, "message": "Bad folder name."})
+        if not os.path.isdir(path):
+            return web.json_response({"ok": False, "message": "That folder is gone."})
+        if os.path.exists(new_path):
+            return web.json_response({"ok": False, "message": "A folder with that name already exists."})
+        try:
+            os.rename(path, new_path)
+        except OSError as e:
+            return web.json_response({"ok": False, "message": str(e)})
+        return web.json_response({"ok": True})
+
+    if action == "delete":
+        if not path or not os.path.isdir(path):
+            return web.json_response({"ok": False, "message": "That folder is gone."})
+        try:
+            # Deliberately os.rmdir, never a recursive delete: refusing a folder
+            # that still holds work is the whole safety story here, and there is
+            # no undo in this version.
+            os.rmdir(path)
+        except OSError:
+            return web.json_response(
+                {"ok": False, "message": "That folder still has things in it. Empty it first."})
+        return web.json_response({"ok": True})
+
+    return web.json_response({"ok": False, "message": "Unknown action."})
+
+
+@PromptServer.instance.routes.post("/pixaroma/api/workflows/reveal")
+async def api_workflows_reveal(request):
+    """Open the OS file explorer at a workflow's folder. Same trust level as the
+    Save Image reveal: the server IS the user's machine."""
+    try:
+        data = await request.json()
+    except Exception:
+        data = {}
+    root = _wf_root(request)
+    target = _wf_resolve(root, data.get("path", "")) or root
+    folder = target if os.path.isdir(target) else os.path.dirname(target)
+    if not os.path.isdir(folder) or not _is_path_under(folder, root):
+        return web.json_response({"ok": False, "message": "Folder not found."})
+    try:
+        import subprocess
+        import sys
+        if sys.platform == "win32":
+            # Plain open only - see the Save Image reveal route for why a
+            # bring-to-front script must never be re-added here.
+            os.startfile(folder)
+        elif sys.platform == "darwin":
+            subprocess.Popen(["open", folder])
+        else:
+            subprocess.Popen(["xdg-open", folder])
+        return web.json_response({"ok": True})
+    except Exception as e:
+        return web.json_response({"ok": False, "message": str(e)})
