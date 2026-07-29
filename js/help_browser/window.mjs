@@ -45,6 +45,17 @@ const EDGE = 24;
 const HOME_X = 60;
 const HOME_Y = 70;
 
+// The sidebar is DRAGGABLE. Several page names are longer than any sensible
+// default width ("Buttons or nodes missing?", "Image Composer Pixaroma"), so
+// they were ellipsed with no way to read them - and the first thing anyone does
+// is try to drag the divider, which did nothing. SIDE_DEF is the width it opens
+// at; SIDE_MIN keeps it usable; the max is a share of the window so the article
+// can never be squeezed to nothing on a small screen.
+const SIDE_DEF = 200;
+const SIDE_MIN = 130;
+const SIDE_MAX_FRAC = 0.55;
+const sideMax = (winW) => Math.max(SIDE_MIN, Math.round(winW * SIDE_MAX_FRAC));
+
 export const el = (tag, cls, text) => {
   const e = document.createElement(tag);
   if (cls) e.className = cls;
@@ -63,7 +74,7 @@ function defaultRect() {
   return {
     x: Math.max(EDGE, Math.min(HOME_X, vw - w - EDGE)),
     y: Math.max(EDGE, Math.min(HOME_Y, vh - h - EDGE)),
-    w, h,
+    w, h, sw: SIDE_DEF,
   };
 }
 
@@ -76,10 +87,13 @@ function clampRect(r) {
   const vw = window.innerWidth, vh = window.innerHeight;
   const w = Math.round(Math.max(MIN_W, Math.min(r?.w ?? d.w, vw - EDGE)));
   const h = Math.round(Math.max(MIN_H, Math.min(r?.h ?? d.h, vh - EDGE)));
+  // The sidebar is re-clamped against the CURRENT window width, so a sidebar
+  // widened on a big window cannot swallow the article after the window shrinks.
+  const sw = Math.round(Math.max(SIDE_MIN, Math.min(r?.sw ?? d.sw, sideMax(w))));
   return {
     x: Math.round(Math.max(0, Math.min(r?.x ?? d.x, vw - w))),
     y: Math.round(Math.max(0, Math.min(r?.y ?? d.y, vh - h))),
-    w, h,
+    w, h, sw,
   };
 }
 
@@ -127,8 +141,13 @@ export function createHelpWindow({ onRender, onClose }) {
   // ── body ──
   const body = el("div", "pixhb-body");
   const side = el("div", "pixhb-side");
+  // The divider between the list and the page. It is a real handle because
+  // people TRY to drag it: several page names are longer than any default width
+  // and were ellipsed with no way to widen the column and read them.
+  const sideGrip = el("div", "pixhb-sidegrip");
+  sideGrip.title = "Drag to resize the list. Double-click to reset.";
   const main = el("div", "pixhb-main");
-  body.append(side, main);
+  body.append(side, sideGrip, main);
 
   // ── footer bar (filled by index.js) ──
   // Part of the FRAME, not of the home screen, so the version and the places to
@@ -147,6 +166,10 @@ export function createHelpWindow({ onRender, onClose }) {
     win.style.top = rect.y + "px";
     win.style.width = rect.w + "px";
     win.style.height = rect.h + "px";
+    // Re-clamped on every apply, not just on drag: making the WINDOW narrower
+    // must also pull the sidebar in, or the article ends up with no room.
+    rect.sw = Math.max(SIDE_MIN, Math.min(rect.sw ?? SIDE_DEF, sideMax(rect.w)));
+    side.style.width = rect.sw + "px";
   };
   applyRect();
 
@@ -216,6 +239,29 @@ export function createHelpWindow({ onRender, onClose }) {
       applyRect();
     });
     e.stopPropagation();
+  });
+
+  // The sidebar divider. Goes through the SAME startDrag as the other two, so
+  // it inherits pointer capture and the buttons-are-up guard - a drag that
+  // loses its release must not leave the divider stuck to the cursor either
+  // (pattern #4: synthetic events do not reproduce that, so do not hand-roll a
+  // third copy of the drag logic here).
+  sideGrip.addEventListener("pointerdown", (e) => {
+    const bodyLeft = body.getBoundingClientRect().left;
+    startDrag(sideGrip, e, (ev) => {
+      rect.sw = Math.round(Math.max(SIDE_MIN, Math.min(ev.clientX - bodyLeft, sideMax(rect.w))));
+      side.style.width = rect.sw + "px";
+    });
+    sideGrip.classList.add("pixhb-dragging");
+    e.stopPropagation();
+  });
+  // startDrag's own end() clears the window-drag class; this one is ours.
+  ["pointerup", "pointercancel", "lostpointercapture"].forEach((t) =>
+    sideGrip.addEventListener(t, () => sideGrip.classList.remove("pixhb-dragging")));
+  sideGrip.addEventListener("dblclick", () => {
+    rect.sw = SIDE_DEF;
+    applyRect();
+    saveRect(rect);
   });
 
   // Keep the window reachable if the browser window shrinks under it.

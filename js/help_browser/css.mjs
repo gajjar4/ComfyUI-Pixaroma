@@ -118,9 +118,24 @@ export function injectHelpBrowserCSS() {
 /* position:relative so the toast can anchor to the BODY rather than to the
    window. See the toast rule at the bottom for why that matters. */
 .pixhb-body { flex: 1; display: flex; min-height: 0; position: relative; }
+/* Width is set inline from the saved rect and is user-draggable, so no width
+   here - only the floor, in case the inline value is ever missing. */
 .pixhb-side {
-  width: 186px; flex: none; border-right: 1px solid #302d2b; background: #1d1c1b;
+  width: 200px; min-width: 130px; flex: none; background: #1d1c1b;
   overflow-y: auto; padding: 8px 5px; min-height: 0;
+}
+/* The draggable divider. Visually a 1px line like the old border, with a wider
+   invisible grab area either side so it is easy to hit. */
+.pixhb-sidegrip {
+  flex: none; width: 7px; margin: 0 -3px; cursor: ew-resize; position: relative;
+  background: transparent; z-index: 2;
+}
+.pixhb-sidegrip::before {
+  content: ""; position: absolute; top: 0; bottom: 0; left: 3px; width: 1px;
+  background: #302d2b; transition: background .12s;
+}
+.pixhb-sidegrip:hover::before, .pixhb-sidegrip.pixhb-dragging::before {
+  background: ${ACC}; left: 2px; width: 3px;
 }
 .pixhb-main { flex: 1; overflow-y: auto; min-height: 0; }
 .pixhb-pad { padding: 14px 18px 28px; }

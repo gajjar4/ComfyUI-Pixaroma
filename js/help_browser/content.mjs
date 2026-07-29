@@ -145,7 +145,11 @@ export function renderNav(side, index, current, onNav) {
     for (const e of g.items) {
       const i = el("button", "pixhb-item" + (current === e ? " pixhb-on" : ""), e.title);
       i.type = "button";
-      i.title = e.tagline || e.title;
+      // Lead with the NAME, not the tagline. A long name is ellipsed here (the
+      // divider is draggable, but there is always a name longer than whatever
+      // width you chose), and the tooltip is then the only way to read it - so
+      // showing only the tagline answered a question nobody was asking.
+      i.title = e.tagline ? `${e.title}\n${e.tagline}` : e.title;
       i.addEventListener("click", () => onNav(e));
       list.appendChild(i);
     }
