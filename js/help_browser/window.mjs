@@ -20,11 +20,13 @@
 // ids persist fine and add no rows to the Settings panel).
 
 import { app } from "/scripts/app.js";
-import { nodeSetting, setNodeSetting, globalAccent, BRAND, PIXAROMA_LOGO } from "../shared/index.mjs";
+import { nodeSetting, setNodeSetting, globalAccent, BRAND } from "../shared/index.mjs";
 import { injectHelpBrowserCSS } from "./css.mjs";
 
+// No icon constants here on purpose. css.mjs injects its stylesheet ONCE and
+// therefore owns every value in it (see pattern #2) - a second copy sitting
+// here is an invitation to pass one in again and get `url("undefined")`.
 const RECT_SETTING = "Pixaroma.Help.Rect";
-const QUESTION_ICON = "/pixaroma/assets/icons/note/question-mark.svg";
 
 const MIN_W = 420;
 const MIN_H = 280;
