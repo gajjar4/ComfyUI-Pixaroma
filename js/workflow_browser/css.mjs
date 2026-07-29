@@ -219,10 +219,15 @@ export function injectWorkflowCSS() {
 
 /* ── right-click menu (folders) ──────────────────────────────── */
 .pixwb-menu {
-  position: fixed; z-index: 1500; min-width: 150px; padding: 4px;
+  position: fixed; z-index: 1500; min-width: 150px; max-width: 300px; padding: 4px;
   background: #232120; border: 1px solid #3d3936; border-radius: 7px;
   box-shadow: 0 12px 30px rgba(0,0,0,.62);
+  /* The "move to folder" list is as long as the user has folders, so it has to
+     be able to scroll rather than run off the bottom of the screen. */
+  max-height: 60vh; overflow-y: auto;
 }
+.pixwb-menu button.pixwb-menudanger { color: #e08a6e; }
+.pixwb-menu button.pixwb-menudanger:hover { background: #a33f27; color: #fff; }
 .pixwb-menu button {
   display: block; width: 100%; text-align: left; background: none; border: none;
   color: #cfcac7; font-family: inherit; font-size: 11.5px; padding: 5px 9px;

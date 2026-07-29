@@ -14,9 +14,9 @@ import { app } from "/scripts/app.js";
 import { createWorkflowWindow, el } from "./window.mjs";
 import { injectWorkflowCSS } from "./css.mjs";
 import {
-  renderFolders, orderedFolders, siblingsOf,
-  beginFolderRename, openFolderMenu, closeFolderMenu,
+  renderFolders, orderedFolders, siblingsOf, beginFolderRename,
 } from "./folders.mjs";
+import { openContextMenu, closeContextMenu } from "./menu.mjs";
 import { renderGrid, beginRename, showHover, hideHover } from "./grid.mjs";
 import { renderDetail } from "./detail.mjs";
 import { searchEntries } from "./search.mjs";
@@ -384,10 +384,13 @@ const HANDLERS = {
   },
 
   onContext(entry, e) {
-    void e;
-    S.selected = new Set([entry.rel]);
+    // Right-clicking OUTSIDE the current selection acts on that card alone;
+    // right-clicking INSIDE it keeps the selection, so a menu opened on one of
+    // several chosen workflows still acts on all of them.
+    if (!S.selected.has(entry.rel)) S.selected = new Set([entry.rel]);
     S.kbdRel = entry.rel;
     render();
+    showCardMenu(entry, e.clientX, e.clientY);
   },
 
   onDragStart(entry, e) {
@@ -417,6 +420,76 @@ function shrinkToDataURL(file, maxW) {
     img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("That file is not a picture.")); };
     img.src = url;
   });
+}
+
+// ── the card menu ────────────────────────────────────────────────────────────
+
+/** Everything the detail pane offers, on the card itself - because the detail
+ *  pane is hidden on a narrow window and absent in list view, and right-click
+ *  is where people look for rename anyway. */
+function showCardMenu(entry, x, y) {
+  const many = [...S.selected];
+  const multi = many.length > 1 && S.selected.has(entry.rel);
+  const fav = S.favourites.has(entry.rel);
+
+  if (multi) {
+    openContextMenu(x, y, [
+      { label: `${many.length} workflows selected`, disabled: true },
+      null,
+      { label: "Move to folder…", fn: () => promptMoveTo(many) },
+      null,
+      { label: `Delete ${many.length}…`, danger: true, fn: () => HANDLERS.onDeleteMany(many) },
+    ]);
+    return;
+  }
+
+  openContextMenu(x, y, [
+    { label: "Open", fn: () => HANDLERS.onOpen(entry) },
+    { label: fav ? "Remove from favourites" : "Add to favourites", fn: () => HANDLERS.onStar(entry) },
+    null,
+    { label: "Rename", fn: () => HANDLERS.onRename(entry) },
+    { label: "Duplicate", fn: () => HANDLERS.onDuplicate(entry) },
+    { label: "Move to folder…", fn: () => promptMoveTo([entry.rel]) },
+    { label: "Set cover…", fn: () => HANDLERS.onSetCover(entry) },
+    null,
+    { label: "Reveal in explorer", fn: () => guard(() => A.reveal(entry.rel)) },
+    null,
+    { label: "Delete…", danger: true, fn: () => HANDLERS.onDelete(entry) },
+  ]);
+}
+
+/** Move without dragging. Dragging is faster once you know it exists, but it is
+ *  not discoverable and it is awkward when the target folder is scrolled away. */
+function promptMoveTo(rels) {
+  const folders = ["", ...S.folders];
+  openContextMenuFolderList(folders, (target) => moveWorkflowsTo(rels, target));
+}
+
+function openContextMenuFolderList(folders, pick) {
+  const r = S.win.el.getBoundingClientRect();
+  openContextMenu(r.left + 60, r.top + 90, [
+    { label: "Move to which folder?", disabled: true },
+    null,
+    ...folders.map((f) => ({
+      label: f === "" ? "(no folder)" : f,
+      fn: () => pick(f),
+    })),
+  ]);
+}
+
+function moveWorkflowsTo(rels, folderPath) {
+  guard(async () => {
+    let moved = 0;
+    for (const rel of rels) {
+      const file = rel.slice(rel.lastIndexOf("/") + 1);
+      const target = joinRel(folderPath, file);
+      if (target === rel) continue;
+      await A.renameOrMove(rel, target);
+      moved++;
+    }
+    S.selected = new Set();
+    if (!moved) throw new Error("Already in that folder.");
+  }, `Moved to ${folderPath || "the workflows folder"}`);
 }
 
 // ── folder actions ───────────────────────────────────────────────────────────
@@ -499,7 +572,7 @@ function showFolderMenu(path, ev) {
   const sibs = siblingsOf(path, S.folders, S.meta.folderOrder);
   const at = sibs.indexOf(path);
   const rowEl = ev.currentTarget;
-  openFolderMenu(ev.clientX, ev.clientY, [
+  openContextMenu(ev.clientX, ev.clientY, [
     { label: "Rename", fn: () => startFolderRename(path, rowEl) },
     { label: "Move up", fn: () => moveFolder(path, -1), disabled: at <= 0 },
     { label: "Move down", fn: () => moveFolder(path, 1), disabled: at < 0 || at >= sibs.length - 1 },
@@ -539,18 +612,11 @@ function onPickFolder(pick) {
   render();
 }
 
+/** Cards dropped on a folder row. Same work as the menu's "Move to folder",
+ *  so it goes through the same function rather than a second copy. */
 function onDropOnFolder(folderPath) {
   const rels = [...S.selected];
-  if (!rels.length) return;
-  guard(async () => {
-    for (const rel of rels) {
-      const file = rel.slice(rel.lastIndexOf("/") + 1);
-      const target = joinRel(folderPath, file);
-      if (target === rel) continue;
-      await A.renameOrMove(rel, target);
-    }
-    S.selected = new Set();
-  }, `Moved ${rels.length} to ${folderPath || "the workflows folder"}`);
+  if (rels.length) moveWorkflowsTo(rels, folderPath);
 }
 
 // ── toolbar row inside the window ────────────────────────────────────────────
@@ -688,7 +754,7 @@ function ensureWindow() {
     },
     onClose: () => {
       hideHover();
-      closeFolderMenu();
+      closeContextMenu();
       syncButton();
     },
   });
