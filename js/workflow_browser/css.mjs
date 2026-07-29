@@ -194,9 +194,44 @@ export function injectWorkflowCSS() {
 .pixwb-kv b { color: #cfcac7; font-weight: 500; margin-left: auto; text-align: right; }
 .pixwb-warn { color: #d98b5f; }
 .pixwb-modlist { margin: 6px 0 9px; }
+/* The model list is the thing people scan this pane for, so it carries the
+   accent rather than sitting in the same grey as everything else. */
 .pixwb-mod {
-  background: #232120; border: 1px solid #302d2b; border-radius: 4px; padding: 3px 6px;
-  font-size: 9.5px; color: #a49d99; margin-bottom: 3px; word-break: break-all;
+  background: color-mix(in srgb, ${ACC} 9%, #232120); border: 1px solid color-mix(in srgb, ${ACC} 28%, #302d2b);
+  border-radius: 4px; padding: 3px 6px;
+  font-size: 9.5px; color: ${ACC}; margin-bottom: 3px; word-break: break-all;
+}
+
+/* A control that would do nothing in the current view says so, rather than
+   silently ignoring the click. */
+.pixwb-tbtn:disabled, .pixwb-tbtn[disabled] {
+  opacity: .4; cursor: default;
+}
+.pixwb-tbtn:disabled:hover, .pixwb-tbtn[disabled]:hover {
+  border-color: #3d3936; color: #cfcac7;
+}
+
+/* ── right-click menu (folders) ──────────────────────────────── */
+.pixwb-menu {
+  position: fixed; z-index: 1500; min-width: 150px; padding: 4px;
+  background: #232120; border: 1px solid #3d3936; border-radius: 7px;
+  box-shadow: 0 12px 30px rgba(0,0,0,.62);
+}
+.pixwb-menu button {
+  display: block; width: 100%; text-align: left; background: none; border: none;
+  color: #cfcac7; font-family: inherit; font-size: 11.5px; padding: 5px 9px;
+  border-radius: 5px; cursor: pointer;
+}
+.pixwb-menu button:hover { background: ${ACC}; color: #fff; }
+.pixwb-menu button:disabled { opacity: .35; cursor: default; }
+.pixwb-menu button:disabled:hover { background: none; color: #cfcac7; }
+.pixwb-menu .pixwb-menusep { height: 1px; background: #3d3936; margin: 4px 2px; }
+
+/* inline folder rename */
+.pixwb-foldrename {
+  width: 100%; box-sizing: border-box; background: #141312; border: 1px solid ${ACC};
+  border-radius: 4px; color: #fff; font-family: inherit; font-size: 11.5px;
+  padding: 3px 6px; outline: none; margin: 1px 0;
 }
 .pixwb-note {
   width: 100%; box-sizing: border-box; background: #141312; border: 1px solid #3d3936;

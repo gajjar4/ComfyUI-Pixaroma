@@ -2376,12 +2376,21 @@ async def api_workflows_index(request):
     return web.json_response(payload, headers={"Cache-Control": "no-store"})
 
 
+# The sidecar's shape, in one place. Anything not listed here is IGNORED on
+# write - which silently swallowed folderOrder when it was first added and made
+# "Move up" look like it did nothing at all. Add the key here as well as at the
+# call site.
+_WF_META_DICTS = ("notes", "covers", "folderColors")
+_WF_META_LISTS = ("folderOrder",)
+
+
 @PromptServer.instance.routes.get("/pixaroma/api/workflows/meta")
 async def api_workflows_meta_get(request):
     data = _wf_read_meta(_wf_meta_path(request))
-    data.setdefault("notes", {})
-    data.setdefault("covers", {})
-    data.setdefault("folderColors", {})
+    for k in _WF_META_DICTS:
+        data.setdefault(k, {})
+    for k in _WF_META_LISTS:
+        data.setdefault(k, [])
     return web.json_response({"ok": True, "meta": data},
                              headers={"Cache-Control": "no-store"})
 
@@ -2399,7 +2408,9 @@ async def api_workflows_meta_post(request):
 
     path = _wf_meta_path(request)
     data = _wf_read_meta(path)
-    for section in ("notes", "covers", "folderColors"):
+
+    # Dict sections merge key by key, so two panels cannot wipe each other.
+    for section in _WF_META_DICTS:
         incoming = patch.get(section)
         if not isinstance(incoming, dict):
             continue
@@ -2412,6 +2423,13 @@ async def api_workflows_meta_post(request):
             else:
                 current[k] = v
         data[section] = current
+
+    # List sections REPLACE. An order is meaningless merged key by key - the
+    # whole point of sending it is that the sequence changed.
+    for section in _WF_META_LISTS:
+        incoming = patch.get(section)
+        if isinstance(incoming, list):
+            data[section] = [x for x in incoming if isinstance(x, str)]
 
     ok = _wf_write_meta(path, data)
     return web.json_response({"ok": ok, "meta": data})

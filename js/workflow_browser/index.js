@@ -13,7 +13,10 @@
 import { app } from "/scripts/app.js";
 import { createWorkflowWindow, el } from "./window.mjs";
 import { injectWorkflowCSS } from "./css.mjs";
-import { renderFolders } from "./folders.mjs";
+import {
+  renderFolders, orderedFolders, siblingsOf,
+  beginFolderRename, openFolderMenu, closeFolderMenu,
+} from "./folders.mjs";
 import { renderGrid, beginRename, showHover, hideHover } from "./grid.mjs";
 import { renderDetail } from "./detail.mjs";
 import { searchEntries } from "./search.mjs";
@@ -30,7 +33,9 @@ const S = {
   btn: null,
   loading: false,
   entries: [],
+  rawFolders: [],
   folders: [],
+  sortBtn: null,
   collections: [],
   issues: {},
   tidyRels: new Set(),
@@ -57,10 +62,13 @@ async function loadData() {
     // reading the list before that reports none - see ensureFavouritesLoaded.
     const [idx, meta] = await Promise.all([A.fetchIndex(), A.fetchMeta(), A.ensureFavouritesLoaded()]);
     S.entries = idx.entries || [];
-    S.folders = idx.folders || [];
+    S.rawFolders = idx.folders || [];
     S.collections = idx.collections || [];
     S.issues = idx.issues || {};
     S.meta = meta.meta || { notes: {}, covers: {}, folderColors: {} };
+    // The server lists folders alphabetically; the user's chosen order lives in
+    // the sidecar and is applied here, once, rather than on every render.
+    S.folders = orderedFolders(S.rawFolders, S.meta.folderOrder);
 
     // Which nodes are actually missing has to be worked out HERE, not on the
     // server. Python's node list holds only Python-backed nodes, so checking
@@ -166,9 +174,16 @@ function render() {
   refreshLive();
   computeVisible();
 
-  renderFolders(S.win.side, S, { onPick: onPickFolder, onDropOn: onDropOnFolder });
+  renderFolders(S.win.side, S, {
+    onPick: onPickFolder,
+    onDropOn: onDropOnFolder,
+    onRenameFolder: startFolderRename,
+    onFolderMenu: showFolderMenu,
+  });
   renderGrid(S.win.main, S, HANDLERS);
   if (S.win.isDetailVisible()) renderDetail(S.win.detail, S, HANDLERS);
+
+  refreshSortButton();
 
   const total = S.entries.length;
   S.win.setCount(S.visible.length === total
@@ -176,6 +191,23 @@ function render() {
     : `${S.visible.length} of ${total}`);
 
   wireHover();
+}
+
+/** Search results are ranked by relevance and Recent is ordered by date, so in
+ *  both the sort control genuinely does nothing and is disabled rather than
+ *  left looking live. */
+function sortDisabledReason() {
+  if (S.query) return "Search results are ordered by how well they match, so sorting is off.";
+  if (S.sel.kind === "recent") return "Recent is already ordered by when you last changed a workflow.";
+  return "";
+}
+
+function refreshSortButton() {
+  const b = S.sortBtn;
+  if (!b) return;
+  const why = sortDisabledReason();
+  b.disabled = !!why;
+  b.title = why || "Change the order";
 }
 
 function wireHover() {
@@ -386,6 +418,75 @@ function shrinkToDataURL(file, maxW) {
   });
 }
 
+// ── folder actions ───────────────────────────────────────────────────────────
+
+const parentOf = (p) => (p.includes("/") ? p.slice(0, p.lastIndexOf("/")) : "");
+
+function startFolderRename(path, row) {
+  beginFolderRename(row, path, (newName) => {
+    const clean = newName.replace(/[\\/:*?"<>|]/g, "").trim();
+    if (!clean) { S.win.toast("That name cannot be used."); return; }
+    const target = parentOf(path) ? `${parentOf(path)}/${clean}` : clean;
+    guard(async () => {
+      const res = await A.folderAction({ action: "rename", path, newPath: target });
+      if (!res.ok) throw new Error(res.message || "Could not rename that folder.");
+      // Carry the folder's place in the order and its colour across, or a rename
+      // would quietly send it back to alphabetical and change its dot.
+      const patch = {};
+      const order = (S.meta.folderOrder || []).map((p) => (p === path ? target : p));
+      if (order.length) patch.folderOrder = order;
+      const col = S.meta.folderColors?.[path];
+      if (col) patch.folderColors = { [path]: null, [target]: col };
+      if (Object.keys(patch).length) await A.saveMeta(patch);
+      if (S.sel.kind === "folder" && S.sel.value === path) S.sel = { kind: "folder", value: target };
+    }, "Folder renamed");
+  });
+}
+
+/** Move a folder one place among its OWN siblings. Order is a sidecar list of
+ *  paths; folders not in it fall back to alphabetical. */
+function moveFolder(path, delta) {
+  const sibs = siblingsOf(path, S.folders, S.meta.folderOrder);
+  const at = sibs.indexOf(path);
+  const to = at + delta;
+  if (at < 0 || to < 0 || to >= sibs.length) return;
+  const reordered = sibs.slice();
+  reordered.splice(to, 0, reordered.splice(at, 1)[0]);
+
+  // Keep every other folder's recorded position and rewrite only this group,
+  // so re-ordering one folder cannot shuffle an unrelated branch.
+  const others = (S.meta.folderOrder || []).filter((p) => !sibs.includes(p));
+  const folderOrder = [...others, ...reordered];
+  guard(async () => {
+    await A.saveMeta({ folderOrder });
+    S.meta.folderOrder = folderOrder;
+  });
+}
+
+function showFolderMenu(path, ev) {
+  const sibs = siblingsOf(path, S.folders, S.meta.folderOrder);
+  const at = sibs.indexOf(path);
+  const rowEl = ev.currentTarget;
+  openFolderMenu(ev.clientX, ev.clientY, [
+    { label: "Rename", fn: () => startFolderRename(path, rowEl) },
+    { label: "Move up", fn: () => moveFolder(path, -1), disabled: at <= 0 },
+    { label: "Move down", fn: () => moveFolder(path, 1), disabled: at < 0 || at >= sibs.length - 1 },
+    null,
+    { label: "Reveal in explorer", fn: () => guard(() => A.reveal(path)) },
+    null,
+    {
+      label: "Delete folder",
+      fn: () => guard(async () => {
+        const res = await A.folderAction({ action: "delete", path });
+        // The server refuses a folder that still holds anything - that refusal
+        // IS the safety net, since there is no undo.
+        if (!res.ok) throw new Error(res.message || "Could not delete that folder.");
+        if (S.sel.kind === "folder" && S.sel.value === path) S.sel = { kind: "all" };
+      }, "Folder deleted"),
+    },
+  ]);
+}
+
 function onPickFolder(pick) {
   if (pick.kind === "newfolder") {
     ask({ title: "New folder", message: "It is created inside the workflows folder.", value: "", okLabel: "Create" })
@@ -454,8 +555,13 @@ function buildBar(bar) {
 
   const sort = el("button", "pixwb-tbtn", "Sort: " + { recent: "Recent", name: "Name", nodes: "Nodes", size: "Size" }[S.sort]);
   sort.type = "button";
-  sort.title = "Change the order";
+  // Two views impose their own order, so the control would do nothing. Say so
+  // by disabling it, rather than letting it look live and silently ignore the
+  // click - that reads as a broken button.
+  const why = sortDisabledReason();
+  if (why) { sort.disabled = true; sort.title = why; } else { sort.title = "Change the order"; }
   sort.addEventListener("click", () => {
+    if (sort.disabled) return;
     const order = ["recent", "name", "nodes", "size"];
     S.sort = order[(order.indexOf(S.sort) + 1) % order.length];
     try { app.ui.settings.setSettingValueAsync(SORT_SETTING, S.sort); } catch { /* cosmetic */ }
@@ -463,6 +569,9 @@ function buildBar(bar) {
     render();
   });
   bar.append(sort);
+  // Kept so render() can refresh just this button. Rebuilding the whole bar on
+  // every keystroke would throw away the search box's focus and caret.
+  S.sortBtn = sort;
 
   const saveHere = el("button", "pixwb-tbtn pixwb-primary", "Save open workflow here");
   saveHere.type = "button";
@@ -547,6 +656,7 @@ function ensureWindow() {
     },
     onClose: () => {
       hideHover();
+      closeFolderMenu();
       syncButton();
     },
   });
