@@ -81,18 +81,24 @@ export function readControls(comfyClass) {
   return { inputs, settings, outputs, isOutput: !!def.output_node };
 }
 
-// The def's own token is written for code, not for a reader: BOOLEAN in
-// particular is a word nobody sees anywhere on the node itself, and the caps
-// sat oddly next to the lowercase "choice" we derive. The WIRE types (IMAGE,
-// MASK, LATENT) are left exactly as they are, because those ARE what is printed
-// beside the dots on the node, and renaming them here would break the match.
+// The def's own token is written for code, not for a reader: BOOLEAN is a word
+// that appears nowhere on the node itself, and the caps sat oddly beside the
+// lowercase "choice" we derive.
+//
+// **These plain words are for the SETTINGS group ONLY.** The same tokens are
+// also WIRE types the moment they appear as a forced input or as an output, and
+// there the chip has to match the label printed beside the dot on the node:
+// "What you wire in" and "What comes out" exist to answer what plugs into what,
+// so `width_a` must read INT there, exactly as Switch WH shows it, and Seed's
+// output must read INT, not "number". A field you type into has no dot to
+// match, so it is free to be readable.
 const TYPE_WORDS = {
   BOOLEAN: "on / off",
   INT: "number",
   FLOAT: "number",
   STRING: "text",
 };
-const typeWord = (t) => TYPE_WORDS[t] || t;
+const typeWord = (t, plain) => (plain && TYPE_WORDS[t]) || t;
 
 // "default false" is the same problem in the value column.
 function defaultWord(item) {
@@ -100,11 +106,11 @@ function defaultWord(item) {
   return String(item.dflt);
 }
 
-function row(item, showDefault) {
+function row(item, showDefault, plainTypes) {
   const r = el("div", "pixhb-ctl");
   const head = el("div", "pixhb-ctl-h");
   head.appendChild(el("span", "pixhb-ctl-n", item.name));
-  head.appendChild(el("span", "pixhb-ctl-t", typeWord(item.type)));
+  head.appendChild(el("span", "pixhb-ctl-t", typeWord(item.type, plainTypes)));
   if (item.optional) head.appendChild(el("span", "pixhb-ctl-opt", "optional"));
   // A false default has to survive this test, or every off-by-default switch
   // silently loses its default line.
@@ -188,13 +194,15 @@ function collapseNumbered(items) {
   return out;
 }
 
-function group(title, items, showDefault, note) {
+// `plainTypes` is true ONLY for the settings group. See TYPE_WORDS: the wired
+// groups must keep the real type name so the chip matches the node's own dot.
+function group(title, items, showDefault, plainTypes, note) {
   if (!items.length) return null;
   const sec = el("div", "pixhb-sect");
   sec.appendChild(el("p", "pixhb-h", title));
   if (note) sec.appendChild(el("p", "pixhb-ctl-note", note));
   const box = el("div", "pixhb-ctls");
-  collapseNumbered(items).forEach((it) => box.appendChild(row(it, showDefault)));
+  collapseNumbered(items).forEach((it) => box.appendChild(row(it, showDefault, plainTypes)));
   sec.appendChild(box);
   return sec;
 }
@@ -207,9 +215,10 @@ export function buildControls(comfyClass, covered = {}) {
   const c = readControls(comfyClass);
   if (!c) return [];
   const out = [];
-  const inputs = covered.inputs ? null : group("What you wire in", c.inputs, false);
-  const settings = covered.settings ? null : group("The settings on the node", c.settings, true);
-  const outputs = covered.outputs ? null : group("What comes out", c.outputs, false);
+  //                                                    showDefault, plainTypes
+  const inputs = covered.inputs ? null : group("What you wire in", c.inputs, false, false);
+  const settings = covered.settings ? null : group("The settings on the node", c.settings, true, true);
+  const outputs = covered.outputs ? null : group("What comes out", c.outputs, false, false);
   if (inputs) out.push(inputs);
   if (settings) out.push(settings);
   if (outputs) out.push(outputs);

@@ -173,8 +173,12 @@ export function helpAsText(entry) {
   const lines = [h.title || entry.title];
   if (h.tagline) lines.push(h.tagline);
   for (const s of (Array.isArray(h.sections) ? h.sections : []).filter((x) => x && typeof x === "object")) {
-    lines.push("", (s.heading || "").toUpperCase());
-    if (s.body) lines.push(s.body);
+    // String() on both, matching content.mjs. A non-string heading would make
+    // .toUpperCase throw, and because this runs in an async click handler the
+    // throw is invisible: Copy as text would just quietly do nothing. A
+    // non-string body would paste as "[object Object]".
+    lines.push("", String(s.heading || "").toUpperCase());
+    if (s.body) lines.push(String(s.body));
     // Array.isArray on every one of these, matching content.mjs and search.mjs.
     // `for (const x of (s.bullets || []))` throws on a non-array, and because
     // this runs inside an async click handler the throw is SILENT: no flash, no
