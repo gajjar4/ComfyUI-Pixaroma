@@ -78,6 +78,31 @@ export function startDrag(handle, e, onMove, onEnd) {
   return true;
 }
 
+// ComfyUI's floating action bar - the row holding Run, Manager, and the
+// Pixaroma toggles. A panel opening at y=60 lands ON TOP of it, which hides the
+// very button that would close the panel again: "it covers that W and i can not
+// click on it again to close if i want".
+//
+// Measured rather than assumed, and re-measured on every open, because the row
+// can be moved and its height is not ours to hardcode. The bar is draggable in
+// ComfyUI, so the floor only applies while it is actually near the top - parked
+// anywhere else it is not in our way and must not push the panel around.
+const TOOLBAR_GAP = 10;
+const TOOLBAR_MAX_TOP = 220;   // below this it is not "the top bar" any more
+
+function toolbarFloor() {
+  try {
+    const bar = document.querySelector(".actionbar-container")
+      || document.querySelector(".pixwb-btn, .pixhb-btn")?.closest(".comfyui-button-group");
+    if (!bar) return 0;
+    const b = bar.getBoundingClientRect();
+    if (!b.height || b.bottom > TOOLBAR_MAX_TOP) return 0;
+    return Math.round(b.bottom + TOOLBAR_GAP);
+  } catch {
+    return 0;   // never let a missing toolbar stop a panel from opening
+  }
+}
+
 /**
  * Size/position/sidebar-width persistence for one panel.
  *
@@ -91,18 +116,21 @@ export function makeRect({
   edge = 24, homeX = 60, homeY = 70,
   sideDef = 204, sideMin = 130, sideMaxFrac = 0.55,
   saveDelay = 350,
+  clearToolbar = true,
 } = {}) {
   const sideMax = (winW) => Math.max(sideMin, Math.round(winW * sideMaxFrac));
+  const floorY = () => (clearToolbar ? toolbarFloor() : 0);
 
   // Computed from the viewport on every open rather than baked in, because the
   // same person may open ComfyUI on a laptop tomorrow.
   function defaultRect() {
     const vw = window.innerWidth, vh = window.innerHeight;
+    const top = Math.max(edge, floorY());
     const w = Math.max(minW, Math.min(prefW, vw - edge * 2));
-    const h = Math.max(minH, Math.min(prefH, vh - edge * 2));
+    const h = Math.max(minH, Math.min(prefH, vh - top - edge));
     return {
       x: Math.max(edge, Math.min(homeX, vw - w - edge)),
-      y: Math.max(edge, Math.min(homeY, vh - h - edge)),
+      y: Math.max(top, Math.min(Math.max(homeY, top), vh - h - edge)),
       w, h, sw: sideDef,
     };
   }
@@ -110,14 +138,18 @@ export function makeRect({
   function clampRect(r) {
     const d = defaultRect();
     const vw = window.innerWidth, vh = window.innerHeight;
+    // The toolbar floor applies to a SAVED rect too, not just a fresh one: a
+    // panel positioned over the top bar before this existed would otherwise
+    // keep reopening on top of its own toggle forever.
+    const top = Math.max(0, floorY());
     const w = Math.round(Math.max(minW, Math.min(r?.w ?? d.w, vw - edge)));
-    const h = Math.round(Math.max(minH, Math.min(r?.h ?? d.h, vh - edge)));
+    const h = Math.round(Math.max(minH, Math.min(r?.h ?? d.h, vh - top - edge)));
     // Re-clamped against the CURRENT width, so a sidebar widened on a big
     // window cannot swallow the article after the window shrinks.
     const sw = Math.round(Math.max(sideMin, Math.min(r?.sw ?? d.sw, sideMax(w))));
     return {
       x: Math.round(Math.max(0, Math.min(r?.x ?? d.x, vw - w))),
-      y: Math.round(Math.max(0, Math.min(r?.y ?? d.y, vh - h))),
+      y: Math.round(Math.max(top, Math.min(r?.y ?? d.y, Math.max(top, vh - h)))),
       w, h, sw,
     };
   }
@@ -140,5 +172,9 @@ export function makeRect({
     }, saveDelay);
   }
 
-  return { defaultRect, clampRect, readRect, saveRect, sideMax, minW, minH };
+  // floorY is exported so the title-bar DRAG can honour the same limit. Without
+  // that the panel could be dragged back over the toolbar and would then be
+  // silently moved down again on the next open, which reads as the window
+  // wandering off on its own.
+  return { defaultRect, clampRect, readRect, saveRect, sideMax, floorY, minW, minH };
 }

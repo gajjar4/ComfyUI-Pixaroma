@@ -71,7 +71,7 @@ const RECT = makeRect({
   edge: EDGE, homeX: HOME_X, homeY: HOME_Y,
   sideDef: SIDE_DEF, sideMin: SIDE_MIN, sideMaxFrac: SIDE_MAX_FRAC,
 });
-const { clampRect, readRect, saveRect, sideMax } = RECT;
+const { clampRect, readRect, saveRect, sideMax, floorY } = RECT;
 
 // Re-exported: actions/content/controls/index all import `el` from here.
 export { el };
@@ -151,7 +151,7 @@ export function createHelpWindow({ onRender, onClose }) {
     const oy = e.clientY - win.offsetTop;
     if (!startDrag(title, e, (ev) => {
       rect.x = Math.max(0, Math.min(ev.clientX - ox, window.innerWidth - Math.min(rect.w, 160)));
-      rect.y = Math.max(0, Math.min(ev.clientY - oy, window.innerHeight - 40));
+      rect.y = Math.max(floorY(), Math.min(ev.clientY - oy, window.innerHeight - 40));
       applyRect();
     }, onDragEnd)) return;
     title.classList.add("pixhb-dragging");
