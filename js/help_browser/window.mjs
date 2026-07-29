@@ -128,8 +128,15 @@ export function createHelpWindow({ onRender, onClose }) {
   const main = el("div", "pixhb-main");
   body.append(side, main);
 
+  // ── footer bar (filled by index.js) ──
+  // Part of the FRAME, not of the home screen, so the version and the places to
+  // ask are visible on every page. It used to live at the bottom of the home
+  // screen only, which meant a page telling someone to include their version
+  // had to send them to another screen to find it.
+  const foot = el("div", "pixhb-foot");
+
   const grip = el("div", "pixhb-grip");
-  win.append(title, bar, body, grip);
+  win.append(title, bar, body, foot, grip);
   document.body.appendChild(win);
 
   let rect = readRect();
@@ -227,7 +234,7 @@ export function createHelpWindow({ onRender, onClose }) {
   win.addEventListener("pointerdown", (e) => e.stopPropagation());
 
   const api = {
-    el: win, bar, side, main, title,
+    el: win, bar, side, main, title, foot,
     isOpen: () => win.style.display !== "none",
     open() {
       // Re-read the accent every open so the window follows a colour the user

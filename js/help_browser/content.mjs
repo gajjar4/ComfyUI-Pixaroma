@@ -20,6 +20,7 @@ import { el } from "./window.mjs";
 import { GUIDES } from "./guides.mjs";
 import { CANVAS_FEATURES } from "./canvas_defs.mjs";
 import { buildControls, nodeDefFor } from "./controls.mjs";
+import { openExternal } from "./actions.mjs";
 import { KEYWORDS } from "./keywords.mjs";
 
 // Category order and icons mirror the "👑 Pixaroma/..." menu, so the browser
@@ -214,6 +215,22 @@ function buildSection(section) {
       dl.append(dt, dd);
     }
     sec.appendChild(dl);
+  }
+  // `links: [[label, url, cssClass?], ...]` - a real button rather than a bare
+  // address written in the text. Telling someone "ask on Discord" and making
+  // them go and find Discord is most of the reason a question never gets asked.
+  if (Array.isArray(section.links) && section.links.length) {
+    const row = el("div", "pixhb-linkrow");
+    for (const entry of section.links) {
+      const [label, url, cls] = Array.isArray(entry) ? entry : [entry, ""];
+      if (!url) continue;
+      const b = el("button", "pixhb-flink" + (cls ? " " + cls : ""), label);
+      b.type = "button";
+      b.title = url;
+      b.addEventListener("click", () => openExternal(url));
+      row.appendChild(b);
+    }
+    if (row.childElementCount) sec.appendChild(row);
   }
   if (section.table && Array.isArray(section.table.rows)) {
     const table = el("table", "pixhb-table");

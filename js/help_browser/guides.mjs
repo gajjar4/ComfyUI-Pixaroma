@@ -13,6 +13,12 @@
 //
 // All of this text ships with the plugin, so it works with no internet and
 // behind a company proxy - the same offline-first rule as the rest of Pixaroma.
+//
+// Addresses come from LINKS so there is ONE place to change them: the same
+// three appear in the window footer, and a Discord invite that had been updated
+// in one place and not the other would send half the readers nowhere.
+
+import { LINKS } from "./actions.mjs";
 
 export const GUIDES = [
   {
@@ -44,7 +50,7 @@ export const GUIDES = [
       },
       {
         heading: "Which version am I on?",
-        body: "The footer of this window shows it, and so does the Version Check Pixaroma node. Either is worth copying into any question you ask, because it is the first thing anyone will need to know.",
+        body: "The footer of this window shows it on every page, and clicking it copies the full details. The Version Check Pixaroma node shows it too. Either is worth putting in any question you ask, because it is the first thing anyone will need to know.",
       },
     ],
     footer: "Installing for the very first time is covered on the Pixaroma website. This page is for people who already have the nodes, which is everyone who can read it.",
@@ -104,7 +110,8 @@ export const GUIDES = [
       },
       {
         heading: "Still not right?",
-        body: "Add a Version Check Pixaroma node. If it warns that the browser is running older files than the plugin, the cache is still the problem. If the versions match, it is something else and worth asking about on Discord.",
+        body: "Add a Version Check Pixaroma node. If it warns that the browser is running older files than the plugin, the cache is still the problem. If the versions match, it is something else, so ask in #pixaroma-nodes on Discord and say which node.",
+        links: [["💬 Ask in #pixaroma-nodes", LINKS.DISCORD_URL, "pixhb-discord"]],
       },
     ],
     footer: "This one fix solves most reports that start with \"it looks broken\", so it is always worth trying before anything else.",
@@ -115,20 +122,27 @@ export const GUIDES = [
     icon: "💬",
     title: "Need help?",
     tagline: "Where to ask, and what to include so you get an answer quickly.",
-    keywords: "support discord youtube question ask tutorial video community",
+    keywords: "support discord youtube question ask tutorial video community channel invite link",
     sections: [
       {
-        heading: "Two good places",
+        heading: "On Discord, pick the right channel",
+        body: "Both are on the same server, and asking in the right one gets you a faster answer from people who know that part.",
         defs: [
-          ["Discord", "The #pixaroma-nodes channel. Best for something that looks broken, or a question with a screenshot."],
-          ["YouTube", "The tutorial episodes. Often the better answer to a how do I question, because you can watch it being done."],
+          ["#pixaroma-nodes", "Anything about these nodes: something looks broken, a node is not doing what you expected, or you are not sure which node to use."],
+          ["#comfyui", "Anything about ComfyUI itself: models, installing, updates, and errors that are not coming from a Pixaroma node."],
         ],
+        links: [["💬 Open Discord", LINKS.DISCORD_URL, "pixhb-discord"]],
+      },
+      {
+        heading: "Or watch it instead",
+        body: "The tutorial episodes are often the better answer to a how do I question, because you can watch it being done rather than read it.",
+        links: [["▶️ YouTube tutorials", LINKS.YOUTUBE_URL, "pixhb-yt"]],
       },
       {
         heading: "What to include",
         bullets: [
           "Which node, and what you expected to happen instead",
-          "Your version line: the button at the bottom of the home screen copies it for you",
+          "Your version, shown in the footer of this window. Clicking it copies the full details",
           "A screenshot of the node if it looks wrong",
         ],
       },
@@ -137,6 +151,6 @@ export const GUIDES = [
         body: "If buttons are missing or a node looks half drawn, try the cache fix first. It solves most of these, and it takes five seconds.",
       },
     ],
-    footer: "The Ask about this button on any node page puts the node name and all your version details on the clipboard in one press.",
+    footer: "The Ask about this button on any node page puts the node name and all your version details on the clipboard in one press, then opens Discord for you.",
   },
 ];

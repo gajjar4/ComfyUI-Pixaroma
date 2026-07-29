@@ -29,7 +29,7 @@ import {
 import { buildSearchIndex, searchIndex, highlight } from "./search.mjs";
 import {
   toast, flash, createNodeAt, selectedNode, autoWire, couldWire, graphPointFromClient,
-  copyText, versionLine, helpAsText, openExternal, LINKS, escText,
+  copyText, versionLine, versionShort, helpAsText, openExternal, LINKS, escText,
 } from "./actions.mjs";
 
 const PINS_SETTING = "Pixaroma.Help.Pins";
@@ -291,31 +291,51 @@ function renderHome() {
   for (const e of shown) grid.appendChild(buildCard(e, (x) => navigate(x), ctx));
   pad.appendChild(grid);
 
-  // Footer: where to get help, and the version line for a support question.
-  const foot = el("div", "pixhb-foot");
-  const mkLink = (cls, label, url) => {
+  main.appendChild(pad);
+  main.scrollTop = 0;
+}
+
+// ── the footer bar ───────────────────────────────────────────
+// Where to ask, and which version you are on. Built ONCE into the window frame
+// rather than into the home screen, so it is on every page: a guide that tells
+// someone to include their version should not then send them to a different
+// screen to find it.
+function buildFooter(foot) {
+  const mkLink = (cls, label, url, tip) => {
     const b = el("button", "pixhb-flink " + cls, label);
     b.type = "button";
+    b.title = tip || url;
     b.addEventListener("click", () => openExternal(url));
     return b;
   };
   foot.append(
-    mkLink("pixhb-discord", "💬 Discord", LINKS.DISCORD_URL),
-    mkLink("pixhb-yt", "▶️ YouTube tutorials", LINKS.YOUTUBE_URL),
-    mkLink("", "🌐 Workflows site", LINKS.SITE_URL),
+    mkLink("pixhb-discord", "💬 Discord", LINKS.DISCORD_URL,
+      "#pixaroma-nodes for the nodes, #comfyui for ComfyUI itself"),
+    mkLink("pixhb-yt", "▶️ YouTube", LINKS.YOUTUBE_URL, "The tutorial episodes"),
+    mkLink("", "🌐 Workflows", LINKS.SITE_URL, "The Pixaroma workflows site"),
   );
-  const ver = el("button", "pixhb-ver", versionLine() + " · click to copy");
+  foot.appendChild(el("div", "pixhb-fsp"));
+
+  // The version, spelled out rather than hidden behind a button. The short form
+  // is what people are asked for; the click copies the FULL line (frontend
+  // version, renderer, platform) which is what actually answers a support
+  // question.
+  const ver = el("button", "pixhb-ver", versionShort());
   ver.type = "button";
-  ver.title = "Copies your version details, ready to paste into a question";
   ver.addEventListener("click", async () => {
     const ok = await copyText(versionLine());
     toast(S.win.el, ok ? "Version details copied. Paste them with your question." : "Could not reach the clipboard.");
   });
   foot.appendChild(ver);
-  pad.appendChild(foot);
+  S.verBtn = ver;
+  refreshFooter();
+}
 
-  main.appendChild(pad);
-  main.scrollTop = 0;
+// The renderer can be switched without reloading the page, so the full line is
+// re-read on every open rather than baked in when the window was built.
+function refreshFooter() {
+  if (!S.verBtn) return;
+  S.verBtn.title = versionLine() + "  ·  click to copy";
 }
 
 // ── search ───────────────────────────────────────────────────
@@ -386,6 +406,7 @@ function ensureWindow() {
   homeBtn.addEventListener("click", () => { input.value = ""; navigate("home"); });
 
   S.win.bar.append(back, fwd, search, homeBtn);
+  buildFooter(S.win.foot);
   return S.win;
 }
 
@@ -394,6 +415,7 @@ function ensureWindow() {
 function refresh() {
   S.index = buildIndex();
   S.records = buildSearchIndex(S.index);
+  refreshFooter();
   if (S.hi < 0) {
     const last = nodeSetting(LAST_SETTING, "home");
     const found = last && last !== "home" ? S.index.find((e) => e.key === last) : null;

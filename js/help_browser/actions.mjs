@@ -174,6 +174,15 @@ export async function copyText(text) {
   }
 }
 
+// Just the Pixaroma version, for the footer bar. Shown on EVERY page rather
+// than made available behind a button somewhere else: "which version are you
+// on" is the first question any support answer needs, and sending someone off
+// to another screen to find it is exactly the friction this window exists to
+// remove. The full line is still one click away (and in the tooltip).
+export function versionShort() {
+  return `Pixaroma ${PIXAROMA_JS_VERSION}`;
+}
+
 // The line every support question needs, so nobody has to ask "which version".
 export function versionLine() {
   const bits = [`Pixaroma ${PIXAROMA_JS_VERSION}`];
@@ -202,6 +211,12 @@ export function helpAsText(entry) {
     for (const d of (s.defs || [])) {
       const [t, v] = Array.isArray(d) ? d : [d, ""];
       lines.push(`- ${t}: ${v}`);
+    }
+    // A pasted copy of the page has to carry the addresses, or someone reading
+    // it outside the window has a button they cannot press.
+    for (const l of (s.links || [])) {
+      const [label, url] = Array.isArray(l) ? l : [l, ""];
+      lines.push(`- ${label}: ${url}`);
     }
   }
   if (h.footer) lines.push("", h.footer);

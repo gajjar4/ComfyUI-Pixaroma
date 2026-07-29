@@ -236,22 +236,27 @@ export function injectHelpBrowserCSS() {
   color: #4b4643; font-size: 12px; line-height: 1; padding: 2px;
 }
 .pixhb-star:hover, .pixhb-star.pixhb-on { color: ${ACC}; }
+/* ── footer bar (part of the FRAME, so it is on every page) ──── */
+/* flex:none and a right pad that clears the resize grip in the corner. */
 .pixhb-foot {
-  display: flex; gap: 6px; flex-wrap: wrap; align-items: center;
-  margin-top: 16px; padding-top: 12px; border-top: 1px solid #302d2b;
+  display: flex; gap: 6px; flex-wrap: wrap; align-items: center; flex: none;
+  padding: 7px 20px 7px 10px; background: #1d1c1b; border-top: 1px solid #302d2b;
 }
+.pixhb-foot .pixhb-fsp { flex: 1; min-width: 4px; }
 .pixhb-flink {
-  display: flex; align-items: center; gap: 6px; font: 11.5px inherit; padding: 6px 10px;
+  display: flex; align-items: center; gap: 6px; font: 11.5px inherit; padding: 5px 9px;
   border-radius: 6px; border: 1px solid #3d3936; color: #cfcac7; cursor: pointer; background: transparent;
 }
 .pixhb-flink:hover { border-color: ${ACC}; color: #fff; }
 .pixhb-flink.pixhb-discord:hover { background: #5865F2; border-color: #5865F2; color: #fff; }
 .pixhb-flink.pixhb-yt:hover { background: #ff0033; border-color: #ff0033; color: #fff; }
 .pixhb-ver {
-  font-family: monospace; font-size: 9.5px; color: #8e8783; white-space: nowrap; cursor: pointer;
-  border: 1px dashed #3d3936; padding: 5px 8px; border-radius: 5px; background: none;
+  font-family: monospace; font-size: 10px; color: #a49d99; white-space: nowrap; cursor: pointer;
+  border: 1px dashed #3d3936; padding: 5px 9px; border-radius: 5px; background: none;
 }
 .pixhb-ver:hover { border-color: ${ACC}; color: #fff; }
+/* Links inside an article body, same look as the footer ones. */
+.pixhb-linkrow { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
 
 /* ── article ────────────────────────────────────────────────── */
 .pixhb-crumb {
@@ -318,8 +323,10 @@ export function injectHelpBrowserCSS() {
 .pixhb-res-t .pixhb-rd { color: #8e8783; font-size: 10.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 /* ── toast ──────────────────────────────────────────────────── */
+/* Sits ABOVE the footer bar, not over it - the footer is now part of the frame
+   and the version chip must stay readable while a toast is up. */
 .pixhb-toast {
-  position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%) translateY(8px);
+  position: absolute; left: 50%; bottom: 54px; transform: translateX(-50%) translateY(8px);
   background: #111010; border: 1px solid ${ACC}; color: #fff; padding: 8px 14px; border-radius: 7px;
   font-size: 12px; opacity: 0; pointer-events: none; transition: opacity .16s, transform .16s;
   z-index: 60; max-width: 82%; box-shadow: 0 10px 30px rgba(0,0,0,.5);

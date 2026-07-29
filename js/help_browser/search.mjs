@@ -23,6 +23,9 @@ function textOf(help) {
     bits.push(s.heading, s.body);
     if (Array.isArray(s.bullets)) bits.push(...s.bullets);
     if (Array.isArray(s.defs)) for (const d of s.defs) bits.push(...(Array.isArray(d) ? d : [d]));
+    // Only the LABEL, never the address: indexing urls would make a search for
+    // "com" or "http" match half the pages.
+    if (Array.isArray(s.links)) for (const l of s.links) bits.push(Array.isArray(l) ? l[0] : l);
     if (s.table) {
       if (Array.isArray(s.table.headers)) bits.push(...s.table.headers);
       if (Array.isArray(s.table.rows)) for (const r of s.table.rows) bits.push(...(Array.isArray(r) ? r : [r]));
