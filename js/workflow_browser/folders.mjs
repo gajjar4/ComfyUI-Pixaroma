@@ -36,7 +36,7 @@ export function folderColor(path, meta) {
  */
 export function renderFolders(side, state, { onPick, onDropOn }) {
   side.textContent = "";
-  const { entries, folders, collections, issues, meta, favourites, sel } = state;
+  const { entries, folders, collections, meta, favourites, sel, tidyRels } = state;
 
   const is = (kind, value) => sel.kind === kind && (value === undefined || sel.value === value);
 
@@ -83,9 +83,9 @@ export function renderFolders(side, state, { onPick, onDropOn }) {
   addRow({ label: "★ Favourites", count: favourites.size, on: is("fav") }, { kind: "fav" });
   addRow({ label: "Recent", count: Math.min(20, entries.length), on: is("recent") }, { kind: "recent" });
 
-  const issueCount = (issues?.unsaved_names?.length || 0)
-    + (issues?.duplicates?.length || 0)
-    + (issues?.missing_nodes?.length || 0);
+  // The count is the number of WORKFLOWS the click will show, not the number of
+  // issue groups - see collectTidyRels in index.js for why that distinction bit.
+  const issueCount = tidyRels?.size || 0;
   if (issueCount) {
     addRow({
       label: "Needs tidying", count: issueCount, on: is("tidy"),

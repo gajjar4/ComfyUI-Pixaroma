@@ -361,6 +361,19 @@ def build_index(root, cache_path):
 
 # ── what is wrong with this folder ───────────────────────────────────────────
 
+# Node types the FRONTEND registers, which therefore never appear in Python's
+# NODE_CLASS_MAPPINGS. Without this, every workflow containing a sticky note
+# looks broken - it flagged 108 of one user's 143 workflows on the first run.
+#
+# This list only covers ComfyUI's own; a custom pack can register frontend-only
+# nodes too (rgthree does), which is why the BROWSER recomputes this against
+# LiteGraph.registered_node_types and overrides whatever comes from here. Treat
+# the value below as a fallback, not the answer.
+_FRONTEND_ONLY = frozenset({
+    "Note", "MarkdownNote", "PrimitiveNode", "Reroute", "GroupNode",
+})
+
+
 def detect_issues(index, registered_types):
     """The three things worth telling someone about their workflow folder."""
     unsaved, missing = [], []
@@ -372,7 +385,8 @@ def detect_issues(index, registered_types):
         if e.get("name", "").lower().startswith("unsaved workflow"):
             unsaved.append({"rel": e["rel"], "name": e["name"]})
 
-        gone = sorted(t for t in e.get("class_types", []) if t not in registered_types)
+        gone = sorted(t for t in e.get("class_types", [])
+                      if t not in registered_types and t not in _FRONTEND_ONLY)
         if gone:
             missing.append({"rel": e["rel"], "name": e["name"], "missing": gone})
 

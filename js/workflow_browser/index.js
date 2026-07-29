@@ -12,6 +12,7 @@
 
 import { app } from "/scripts/app.js";
 import { createWorkflowWindow, el } from "./window.mjs";
+import { injectWorkflowCSS } from "./css.mjs";
 import { renderFolders } from "./folders.mjs";
 import { renderGrid, beginRename, showHover, hideHover } from "./grid.mjs";
 import { renderDetail } from "./detail.mjs";
@@ -32,6 +33,7 @@ const S = {
   folders: [],
   collections: [],
   issues: {},
+  tidyRels: new Set(),
   meta: { notes: {}, covers: {}, folderColors: {} },
   favourites: new Set(),
   openPaths: [],
@@ -58,16 +60,26 @@ async function loadData() {
     S.issues = idx.issues || {};
     S.meta = meta.meta || { notes: {}, covers: {}, folderColors: {} };
 
-    // Fold the per-file extras onto each entry once, so search and the detail
-    // pane do not have to look them up per keystroke.
-    const missingByRel = new Map();
-    for (const m of S.issues.missing_nodes || []) missingByRel.set(m.rel, m.missing);
+    // Which nodes are actually missing has to be worked out HERE, not on the
+    // server. Python's node list holds only Python-backed nodes, so checking
+    // against it flagged 108 of 143 workflows as broken - every one containing
+    // a Note, a MarkdownNote, a Primitive or any of rgthree's nodes, all of
+    // which are registered by the FRONTEND and are perfectly fine. The
+    // browser's registry has both kinds, so it is the only honest answer to
+    // "will this workflow open on this machine".
+    const registry = window.LiteGraph?.registered_node_types || null;
+    const missingNodes = [];
     S.byRel = new Map();
     for (const e of S.entries) {
       e._note = S.meta.notes?.[e.rel] || "";
-      e._missing = missingByRel.get(e.rel) || [];
+      e._missing = registry
+        ? (e.class_types || []).filter((t) => !(t in registry))
+        : [];
+      if (e._missing.length) missingNodes.push({ rel: e.rel, name: e.name, missing: e._missing });
       S.byRel.set(e.rel, e);
     }
+    S.issues.missing_nodes = missingNodes;
+    S.tidyRels = collectTidyRels(S.issues);
   } catch (err) {
     S.entries = [];
     S.win?.toast("Could not read the workflows folder: " + err.message);
@@ -75,6 +87,20 @@ async function loadData() {
     S.loading = false;
   }
   refreshLive();
+}
+
+/** Every workflow that needs attention, as one set of paths.
+ *
+ *  The badge and the view MUST come from this same set. Counting issue GROUPS
+ *  instead said "18" beside a view holding 35 cards, because 16 duplicate
+ *  groups are 33 files. A count that does not match what the click shows is
+ *  worse than no count. */
+function collectTidyRels(issues) {
+  const rels = new Set();
+  for (const u of issues.unsaved_names || []) rels.add(u.rel);
+  for (const g of issues.duplicates || []) for (const d of g) rels.add(d.rel);
+  for (const m of issues.missing_nodes || []) rels.add(m.rel);
+  return rels;
 }
 
 /** The bits that change without the disk changing: which workflows are open
@@ -111,11 +137,7 @@ function computeVisible() {
     const set = new Set(c?.items || []);
     list = list.filter((e) => set.has(e.rel));
   } else if (sel.kind === "tidy") {
-    const rels = new Set();
-    for (const u of S.issues.unsaved_names || []) rels.add(u.rel);
-    for (const g of S.issues.duplicates || []) for (const d of g) rels.add(d.rel);
-    for (const m of S.issues.missing_nodes || []) rels.add(m.rel);
-    list = list.filter((e) => rels.has(e.rel));
+    list = list.filter((e) => S.tidyRels.has(e.rel));
   }
 
   list = searchEntries(list, S.query);
@@ -547,6 +569,12 @@ function syncButton() {
 
 function mountToolbarButton() {
   if (document.querySelector(".pixwb-btn")) return;
+  // The button mounts at startup but the WINDOW is not built until it is first
+  // opened, so injecting the stylesheet only from the window left the button
+  // unstyled: 20x36, no background, and a 0x0 icon with no mask. Inject here
+  // too. It is idempotent, and css.mjs owns its own constants precisely so it
+  // does not matter which caller gets there first (help-browser pattern #2).
+  injectWorkflowCSS();
   const settingsGroupEl = app.menu?.settingsGroup?.element;
   if (!settingsGroupEl) {
     // The menu is not up yet on a cold start. Retry a few times, then give up
