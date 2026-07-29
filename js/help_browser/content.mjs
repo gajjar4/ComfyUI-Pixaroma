@@ -259,7 +259,15 @@ export function renderArticle(main, entry, onNav, ctx) {
   // The control reference goes after the node's own explanation: read what it
   // does first, then look up the individual field.
   if (entry.kind === "node") {
-    for (const sec of buildControls(entry.cls)) pad.appendChild(sec);
+    // Do not print a group the help def already covers by hand, or the page
+    // says the same thing twice. Matched on the section heading.
+    const heads = sections.map((s) => String(s.heading || "").toLowerCase());
+    const covered = {
+      inputs: heads.some((t) => /^(inputs?|what you wire in)/.test(t)),
+      settings: heads.some((t) => /^(settings?|the settings)/.test(t)),
+      outputs: heads.some((t) => /^(outputs?|what comes out)/.test(t)),
+    };
+    for (const sec of buildControls(entry.cls, covered)) pad.appendChild(sec);
   }
 
   if (help.footer) {

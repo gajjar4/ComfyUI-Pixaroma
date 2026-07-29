@@ -87,6 +87,12 @@ registerNodeHelp("PixaromaGetNode", {
       body:
         "When expanded, a plain number, text, or true/false shows as a small grey readout (for example = 81), mirroring the chosen Set. A value calculated by another node is only known once you run, so the line stays blank until then. Display only, never saved, never changes the value that flows.",
     },
+    {
+      heading: "The controls on the node",
+      defs: [
+        ["name", "A list of every Set Pixaroma name in this workflow. Pick one to read that value out here."],
+      ],
+    },
   ],
   footer: "If the dropdown is empty, add a Set Pixaroma node first and give it a name.",
 });

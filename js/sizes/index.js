@@ -428,6 +428,19 @@ registerNodeHelp(CLASS, {
         "reorder sizes by dragging, load a set of common sizes in one click, pick the highlight colour, and snap " +
         "width and height to a multiple of 8, 16, 32, or 64 so the numbers stay friendly for the VAE. Snapping is off by default.",
     },
+    {
+      heading: "The buttons on the node",
+      defs: [
+        ["The fold arrow", "Collapses the list down to just the chosen size, or opens it again."],
+        ["Portrait and Landscape", "Shows the chosen size tall or wide, swapping which number is the width."],
+        ["The gear", "Opens the settings panel, where you add, remove, reorder and recolour your sizes."],
+        ["A size in the list", "Click any one to make it the size this node sends out."],
+        ["Add, in settings", "Type a width and height, then add it to your list."],
+        ["The drag handles, in settings", "Drag a size up or down to reorder the list."],
+        ["Snap, in settings", "Rounds every size to a multiple of 8, 16, 32 or 64."],
+        ["Add common sizes, in settings", "Adds a set of popular square sizes from 512 up to 2048 in one click."],
+      ],
+    },
   ],
   footer: "A fresh node starts with one size (1024 x 1024). Add up to " + MAX_SIZES + " per node.",
 });

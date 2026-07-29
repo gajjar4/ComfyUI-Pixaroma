@@ -612,6 +612,13 @@ const HELP = {
           "Right-click the node to change its background and title color via the standard Colors menu.",
         ],
       },
+      {
+        heading: "The buttons on the node",
+        defs: [
+          ["Edit", "Opens the full note editor, where you can format text and add links, images, icons and code blocks."],
+          ["Copy", "Appears on any code block in the note and copies just that code to your clipboard."],
+        ],
+      },
     ],
     footer: "This node never runs during a workflow - it is pure decoration and shows no timing badge.",
   },
@@ -690,6 +697,17 @@ const HELP = {
           ["text", "The current prompt for this queue run - one entry from the block."],
         ],
       },
+      {
+        heading: "The buttons on the node",
+        defs: [
+          ["Paragraph", "Treats a block of text separated by a blank line as one prompt."],
+          ["Line", "Treats every single line as its own prompt. Use this for a long list of short prompts."],
+          ["Copy all", "Copies everything in the box to your clipboard."],
+          ["Replace", "Overwrites the box with whatever text is on your clipboard."],
+          ["Clear", "Empties the box straight away, with no confirmation."],
+          ["The counter", "Shows how many prompts are in the box, and counts down while a run works through them."],
+        ],
+      },
     ],
     footer: "If the textarea is empty when you click Run, nothing queues and a message appears.",
   },
@@ -715,6 +733,18 @@ const HELP = {
         heading: "Outputs",
         defs: [
           ["text", "All enabled chunks joined into one string, in top-to-bottom order."],
+        ],
+      },
+      {
+        heading: "The buttons on the node",
+        defs: [
+          ["The drag handle", "Drag it to move a row up or down and change the order the pieces are joined in."],
+          ["ON / OFF", "Leaves a row out of the combined prompt without deleting it, so you can try a version quickly."],
+          ["The label field", "An optional name to remind you what a row is for. It is never sent as part of the prompt."],
+          ["The delete cross", "Removes that row. It is greyed out on the last row, since one always has to remain."],
+          ["Add row", "Adds a new empty row at the bottom."],
+          ["Clear all", "Empties the text in every row but keeps the rows, their names and their on/off state."],
+          ["Reset", "Puts the node back to a single empty row, as if it were new."],
         ],
       },
     ],
@@ -770,6 +800,12 @@ const HELP = {
           ["text", "The text shown in the box, passed through unchanged so you can keep wiring it downstream."],
         ],
       },
+      {
+        heading: "The buttons on the node",
+        defs: [
+          ["Copy", "Appears when you hover the box, and copies the text currently shown to your clipboard."],
+        ],
+      },
     ],
     footer: "Useful for checking what a text node produces, or confirming an image tensor's dimensions before a sampler.",
   },
@@ -805,6 +841,15 @@ const HELP = {
         heading: "Outputs",
         defs: [
           ["text", "The recovered prompt, or an explanatory message when none was found."],
+        ],
+      },
+      {
+        heading: "The buttons on the node",
+        defs: [
+          ["Upload Image", "Opens a file picker so you can choose a PNG and read the prompt saved inside it."],
+          ["The arrows", "Step to the previous or next uploaded image and read its prompt automatically."],
+          ["The file name", "Click it to pick a different uploaded image from a list."],
+          ["Copy", "Copies the prompt it found to your clipboard."],
         ],
       },
     ],
@@ -934,6 +979,17 @@ const HELP = {
           ["image", "The image(s) passed through unchanged so you can keep wiring downstream."],
         ],
       },
+      {
+        heading: "The buttons on the node",
+        defs: [
+          ["Save Disk", "Saves the picture to a folder on your computer, letting you choose where and what to call it."],
+          ["Save Output", "Saves it straight into ComfyUI's output folder using your filename prefix."],
+          ["Copy", "Copies the picture to your clipboard, ready to paste into another app."],
+          ["Open", "Opens the picture in a new browser tab for a closer look."],
+          ["The layout button", "Switches a batch between Grid and Strip."],
+          ["A thumbnail", "Click one to blow it up inside the node. Click again to step to the next frame."],
+        ],
+      },
     ],
     footer: "Preview state (selected frame, layout) survives switching workflow tabs.",
   },
@@ -968,6 +1024,15 @@ const HELP = {
       {
         heading: "Workflow inside the video",
         body: "The full workflow is saved inside the mp4 (in its comment metadata), the same way it is saved inside a PNG. So you can drag a saved mp4 back into ComfyUI later to rebuild the whole graph. Reading it back needs a video pack such as Video Helper Suite installed (it adds the drag-a-video support). The frame width and height must be even numbers.",
+      },
+      {
+        heading: "The buttons on the node",
+        defs: [
+          ["Play and Pause", "Starts or stops the preview. Clicking the picture itself does the same."],
+          ["The scrub bar", "Click or drag anywhere along it to jump to that point in the clip."],
+          ["Download", "Saves the finished mp4 to your computer."],
+          ["Fullscreen", "Opens the preview full screen."],
+        ],
       },
     ],
     footer: "This is a terminal save node, it has no outputs.",
@@ -1093,6 +1158,17 @@ const HELP = {
           ["width", "Final output width in pixels."],
           ["height", "Final output height in pixels."],
           ["longest_side", "The longer of the output width and height."],
+        ],
+      },
+      {
+        heading: "The buttons on the node",
+        defs: [
+          ["The mode chips", "Off, Max MP, Longest side, Scale by, Fit inside, Crop to fill, Match ratio and Pad. Pick how the image is resized."],
+          ["Snap", "Rounds the final width and height to a multiple of 8, 16, 32 or 64, which most models prefer."],
+          ["Resample", "How the pixels are recalculated when scaling. Auto suits almost everything."],
+          ["Upscaling", "Whether the image is allowed to grow beyond its original size."],
+          ["Fill and Crop", "In Crop to fill: Fill scales to cover then trims, Crop takes a piece at original size with no scaling."],
+          ["The anchor grid", "Which part of the picture to keep when something has to be trimmed."],
         ],
       },
     ],
@@ -1290,6 +1366,13 @@ const HELP = {
           ["output", "The value from the active row, passed through unchanged. The output type adapts to whatever is connected."],
         ],
       },
+      {
+        heading: "The controls on the node",
+        defs: [
+          ["The toggle", "Click the oval beside a wired row to send that one through. Only one row can be on at a time."],
+          ["The row name", "Click a row to make it the active one. Double-click its name to call it something of your own."],
+        ],
+      },
     ],
   },
 
@@ -1342,6 +1425,17 @@ const HELP = {
         heading: "Outputs",
         defs: [
           ["output_1 ... output_N", "Each row's output carries its A or B input, depending on the active toggle."],
+        ],
+      },
+      {
+        heading: "The controls on the node",
+        defs: [
+          ["Rows", "How many A and B pairs the node shows, from 1 to 16."],
+          ["A", "Sends every row through its A input. Use it to swap the whole node to one setup."],
+          ["B", "Sends every row through its B input, the other setup."],
+          ["Allow empty", "Leaves an output blank instead of erroring when the active side of a row has no wire."],
+          ["Show error", "Warns when the active side is empty but the other side is wired, which usually means the wrong bank."],
+          ["The output names", "Click one to give that row a name of your own instead of the type name."],
         ],
       },
     ],
@@ -1597,6 +1691,14 @@ const HELP = {
           "Click the `Network` tab.",
           "Tick the `Disable cache` checkbox at the top of that tab.",
           "Keep the tools open and refresh the page (`Ctrl+Shift+R` / `Cmd+Shift+R`).",
+        ],
+      },
+      {
+        heading: "The buttons on the node",
+        defs: [
+          ["Node UI", "Shows which node renderer you are on, and switches between them. The page reloads to rebuild every node."],
+          ["Copy", "Copies all the version lines as text, ready to paste into a question."],
+          ["Refresh", "Clears the cache and reloads. For a guaranteed refresh use Ctrl+Shift+R instead."],
         ],
       },
     ],

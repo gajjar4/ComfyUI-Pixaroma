@@ -101,29 +101,75 @@ function row(item, showDefault) {
   return r;
 }
 
+// A node with 16 numbered rows (Switch Source has a_1..a_16, b_1..b_16 and
+// output_1..output_16) would otherwise print 48 near-identical entries, which
+// buries everything else on the page. A run of three or more controls sharing a
+// name prefix and differing only by a trailing number collapses to one entry,
+// with the row number written as N so the sentence still reads correctly.
+// Split "a_12" into ["a_", "12"], or null when the name does not end in digits.
+function splitNumbered(name) {
+  const m = /^(.*?)(\d+)$/.exec(name);
+  return m ? { prefix: m[1], num: m[2] } : null;
+}
+
+function collapseNumbered(items) {
+  const out = [];
+  let i = 0;
+  while (i < items.length) {
+    const head = splitNumbered(items[i].name);
+    if (!head) { out.push(items[i]); i += 1; continue; }
+    // Walk the run of following controls sharing this prefix. Compared by
+    // string, not by a built regex, so a prefix containing regex characters
+    // cannot break the match.
+    let j = i;
+    while (j < items.length) {
+      const p = splitNumbered(items[j].name);
+      if (!p || p.prefix !== head.prefix) break;
+      j += 1;
+    }
+    const run = items.slice(i, j);
+    if (run.length >= 3) {
+      const first = run[0], last = run[run.length - 1];
+      // "row 1" -> "row N" and "output_1" -> "output_N", while leaving a number
+      // that is part of something larger (16, 2048) alone.
+      const generalise = (s) => String(s || "").split(head.num).join("N")
+        .replace(/N(\d)/g, head.num + "$1").replace(/(\d)N/g, "$1" + head.num);
+      out.push({ ...first, name: `${first.name} to ${last.name}`,
+                 tip: generalise(first.tip), choices: null, dflt: undefined });
+    } else {
+      out.push(...run);
+    }
+    i = j;
+  }
+  return out;
+}
+
 function group(title, items, showDefault, note) {
   if (!items.length) return null;
   const sec = el("div", "pixhb-sect");
   sec.appendChild(el("p", "pixhb-h", title));
   if (note) sec.appendChild(el("p", "pixhb-ctl-note", note));
   const box = el("div", "pixhb-ctls");
-  items.forEach((it) => box.appendChild(row(it, showDefault)));
+  collapseNumbered(items).forEach((it) => box.appendChild(row(it, showDefault)));
   sec.appendChild(box);
   return sec;
 }
 
 // Returns an array of sections, or [] when the node has nothing to list.
-export function buildControls(comfyClass) {
+// The help def may already have its own "Outputs" or "Inputs" section written
+// by hand. Printing the generated one as well says the same thing twice on the
+// same page, which reads as a mistake. `covered` names the roles to skip.
+export function buildControls(comfyClass, covered = {}) {
   const c = readControls(comfyClass);
   if (!c) return [];
   const out = [];
-  const inputs = group("What you wire in", c.inputs, false);
-  const settings = group("The settings on the node", c.settings, true);
-  const outputs = group("What comes out", c.outputs, false);
+  const inputs = covered.inputs ? null : group("What you wire in", c.inputs, false);
+  const settings = covered.settings ? null : group("The settings on the node", c.settings, true);
+  const outputs = covered.outputs ? null : group("What comes out", c.outputs, false);
   if (inputs) out.push(inputs);
   if (settings) out.push(settings);
   if (outputs) out.push(outputs);
-  else if (c.isOutput) {
+  else if (c.isOutput && !covered.outputs) {
     const sec = el("div", "pixhb-sect");
     sec.appendChild(el("p", "pixhb-h", "What comes out"));
     sec.appendChild(el("p", "pixhb-ctl-note", "Nothing. This is the end of a chain - it shows or saves what reaches it."));
