@@ -88,6 +88,9 @@ export function renderGrid(main, state, H) {
     const star = el("div", "pixwb-star" + (fav ? " on" : ""), fav ? "★" : "☆");
     star.title = fav ? "Remove from favourites" : "Add to favourites";
     star.addEventListener("click", (e) => { e.stopPropagation(); H.onStar(entry); });
+    // Two quick clicks on the star would otherwise reach the card's dblclick
+    // and open the workflow, which is not what anyone means by tapping a star.
+    star.addEventListener("dblclick", (e) => e.stopPropagation());
     if (state.view !== "list") card.append(star);
 
     card.addEventListener("click", (e) => H.onSelect(entry, e));

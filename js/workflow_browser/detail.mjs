@@ -103,6 +103,11 @@ export function renderDetail(pane, state, H) {
     return b;
   };
   btn("Open", () => H.onOpen(entry), "pixwb-primary");
+  // A full-size favourite control, so the little star on the card is never the
+  // only way to do it - and it works in list view, where cards have no star.
+  const fav = state.favourites.has(entry.rel);
+  btn(fav ? "★ Favourite" : "☆ Favourite", () => H.onStar(entry), null,
+      fav ? "Remove from favourites" : "Add to favourites");
   btn("Rename", () => H.onRename(entry));
   btn("Duplicate", () => H.onDuplicate(entry));
   btn("Set cover", () => H.onSetCover(entry), null, "Choose a picture for this card");

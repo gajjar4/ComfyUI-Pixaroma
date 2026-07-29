@@ -53,7 +53,9 @@ const S = {
 async function loadData() {
   S.loading = true;
   try {
-    const [idx, meta] = await Promise.all([A.fetchIndex(), A.fetchMeta()]);
+    // Favourites are not in memory until ComfyUI is asked to read them, and
+    // reading the list before that reports none - see ensureFavouritesLoaded.
+    const [idx, meta] = await Promise.all([A.fetchIndex(), A.fetchMeta(), A.ensureFavouritesLoaded()]);
     S.entries = idx.entries || [];
     S.folders = idx.folders || [];
     S.collections = idx.collections || [];
@@ -274,10 +276,7 @@ const HANDLERS = {
   },
 
   onStar(entry) {
-    guard(async () => {
-      const ok = await A.toggleFavourite(entry.rel);
-      if (!ok) throw new Error("This ComfyUI build does not expose favourites.");
-    });
+    guard(() => A.toggleFavourite(entry.rel));
   },
 
   onRename(entry) {

@@ -146,11 +146,20 @@ export function injectWorkflowCSS() {
   overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
 }
 .pixwb-cardmeta { padding: 0 6px 6px; font-size: 9px; color: #6e6764; }
+/* The star was a 12px glyph in the corner and was genuinely hard to hit. It is
+   now a proper 26x26 target with its own backdrop, so it is both visible on a
+   pale cover and clickable without aiming. */
 .pixwb-star {
-  position: absolute; top: 3px; right: 4px; font-size: 12px; line-height: 1;
-  color: rgba(255,255,255,.5); text-shadow: 0 1px 3px #000; cursor: pointer;
+  position: absolute; top: 3px; right: 3px;
+  width: 26px; height: 26px; display: flex; align-items: center; justify-content: center;
+  font-size: 15px; line-height: 1; cursor: pointer; border-radius: 6px;
+  color: rgba(255,255,255,.72); background: rgba(0,0,0,.34);
+  transition: background .12s, color .12s, transform .08s;
 }
-.pixwb-star.on { color: ${ACC}; }
+.pixwb-card:hover .pixwb-star { background: rgba(0,0,0,.55); color: #fff; }
+.pixwb-star:hover { background: ${ACC} !important; color: #fff !important; transform: scale(1.08); }
+.pixwb-star.on { color: ${ACC}; background: rgba(0,0,0,.5); }
+.pixwb-star.on:hover { color: #fff !important; }
 .pixwb-openmark {
   position: absolute; top: 4px; left: 5px; width: 6px; height: 6px; border-radius: 50%;
   background: ${ACC}; box-shadow: 0 0 0 2px rgba(0,0,0,.45);

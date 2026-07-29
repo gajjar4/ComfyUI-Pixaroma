@@ -155,22 +155,73 @@ export async function duplicate(rel, newRel) {
   await store()?.syncWorkflows?.();
 }
 
-/** Favourites are ComfyUI's own bookmarks, so its sidebar shows the same stars. */
+/**
+ * ComfyUI does NOT read the favourites file at startup. Its bookmark store is
+ * empty until something calls loadBookmarks() - normally its own Workflows
+ * sidebar being opened. Two consequences, and the second one destroys data:
+ *
+ *   1. reading the list straight away reports NO favourites even when the file
+ *      has some, so every star showed as unset;
+ *   2. toggling in that state appends to an EMPTY in-memory list and saves it,
+ *      which overwrites the file and wipes every favourite that was on disk.
+ *      This wiped a real one during development.
+ *
+ * So the store is loaded from disk before the list is read AND before anything
+ * is toggled. It is one small local file, and being right matters more than the
+ * few milliseconds.
+ */
+export async function ensureFavouritesLoaded() {
+  const bm = bookmarkStore();
+  if (typeof bm?.loadBookmarks !== "function") return false;
+  try {
+    await bm.loadBookmarks();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Favourites are ComfyUI's own bookmarks, so its sidebar shows the same stars.
+ *  Only meaningful after ensureFavouritesLoaded() has resolved. */
 export function favourites() {
   return new Set((store()?.bookmarkedWorkflows || []).map((w) => fromStorePath(w.path)));
 }
 
+/**
+ * Favourites live in ComfyUI's `workflowBookmark` store, which persists them to
+ * `user/default/workflows/.index.json` - the same file and the same stars its
+ * own sidebar shows.
+ *
+ * That store is NOT on `app.extensionManager` (which exposes only a read-only
+ * `bookmarkedWorkflows` list), so it has to be reached through pinia.
+ *
+ * There is deliberately NO fallback that writes `.index.json` ourselves. It was
+ * tried and it DESTROYS DATA: the store holds its own copy in memory, so a
+ * direct write drifts from it, the star does not light up, and the app's next
+ * save overwrites the file from its stale copy. During development that silently
+ * wiped a real favourite. Failing honestly is better than a fallback that can
+ * delete the other favourites as a side effect.
+ */
+function bookmarkStore() {
+  try {
+    const pinia = document.querySelector("#vue-app")?.__vue_app__?.config?.globalProperties?.$pinia;
+    return pinia?._s?.get("workflowBookmark") || null;
+  } catch {
+    return null;
+  }
+}
+
 export async function toggleFavourite(rel) {
-  const s = store();
-  const wf = s?.getWorkflowByPath?.(toStorePath(rel));
-  if (!wf) return false;
-  // The bookmark flag has moved around between frontend versions, so try the
-  // documented shapes in turn and report honestly if none of them exist.
-  if (typeof s.bookmarkWorkflow === "function") { await s.bookmarkWorkflow(wf); return true; }
-  if (typeof wf.toggleBookmark === "function") { await wf.toggleBookmark(); return true; }
-  const bm = app.extensionManager?.workflowBookmark;
-  if (typeof bm?.toggle === "function") { await bm.toggle(toStorePath(rel)); return true; }
-  return false;
+  const bm = bookmarkStore();
+  if (typeof bm?.toggleBookmarked !== "function") {
+    throw new Error("This ComfyUI build keeps favourites somewhere this panel cannot reach. "
+      + "Use the star in ComfyUI's own Workflows sidebar.");
+  }
+  // MUST come first. Toggling against a store that has not read the file yet
+  // saves a list built from nothing and erases every existing favourite.
+  await ensureFavouritesLoaded();
+  await bm.toggleBookmarked(toStorePath(rel));
+  return true;
 }
 
 export async function refreshStore() {
