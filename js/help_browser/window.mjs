@@ -196,9 +196,14 @@ export function createHelpWindow({ onRender, onClose }) {
 
   grip.addEventListener("pointerdown", (e) => {
     const left = win.offsetLeft, top = win.offsetTop;
+    // Where inside the grip the pointer actually landed. Without this the
+    // corner jumps to sit exactly under the cursor the moment you grab it,
+    // which reads as the window twitching. The title drag already does this.
+    const ox = e.clientX - (left + win.offsetWidth);
+    const oy = e.clientY - (top + win.offsetHeight);
     startDrag(grip, e, (ev) => {
-      rect.w = Math.max(MIN_W, Math.min(ev.clientX - left, window.innerWidth - left));
-      rect.h = Math.max(MIN_H, Math.min(ev.clientY - top, window.innerHeight - top));
+      rect.w = Math.max(MIN_W, Math.min(ev.clientX - ox - left, window.innerWidth - left));
+      rect.h = Math.max(MIN_H, Math.min(ev.clientY - oy - top, window.innerHeight - top));
       applyRect();
     });
     e.stopPropagation();
@@ -235,7 +240,14 @@ export function createHelpWindow({ onRender, onClose }) {
       // Focus something inside so Esc and typing land here, not on the canvas.
       setTimeout(() => bar.querySelector("input")?.focus(), 20);
     },
-    close() { win.style.display = "none"; onClose?.(); },
+    close() {
+      win.style.display = "none";
+      // Clear the search box, or reopening shows a leftover query above an
+      // unrelated article and the next keystroke jumps back to old results.
+      const q = bar.querySelector("input");
+      if (q) q.value = "";
+      onClose?.();
+    },
     toggle() { api.isOpen() ? api.close() : api.open(); },
     destroy() { win.remove(); },
   };

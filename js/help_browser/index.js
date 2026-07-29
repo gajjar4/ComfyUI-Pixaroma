@@ -29,7 +29,7 @@ import {
 import { buildSearchIndex, searchIndex, highlight } from "./search.mjs";
 import {
   toast, flash, createNodeAt, selectedNode, autoWire, couldWire, graphPointFromClient,
-  copyText, versionLine, helpAsText, openExternal, LINKS,
+  copyText, versionLine, helpAsText, openExternal, LINKS, escText,
 } from "./actions.mjs";
 
 const PINS_SETTING = "Pixaroma.Help.Pins";
@@ -62,13 +62,23 @@ function savePins() {
 function navigate(entry, push = true) {
   if (push) { S.hist.splice(S.hi + 1); S.hist.push(entry); S.hi = S.hist.length - 1; }
   updateNavButtons();
-  try {
-    setNodeSetting(LAST_SETTING, entry === "home" ? "home" : entry.key);
-  } catch { /* remembering the page is a nicety */ }
+  rememberPage(entry === "home" ? "home" : entry.key);
   renderNav(S.win.side, S.index, entry, (e) => navigate(e));
   if (entry === "home") renderHome();
   else renderArticle(S.win.main, entry, (e) => navigate(e), articleCtx());
 }
+// Debounced: navigate() runs on every page view including Back and Forward, and
+// each setNodeSetting POSTs to the server. Clicking through twenty pages should
+// not be twenty requests. The rect save next door is debounced for the same
+// reason.
+let _rememberTimer = null;
+function rememberPage(key) {
+  clearTimeout(_rememberTimer);
+  _rememberTimer = setTimeout(() => {
+    try { setNodeSetting(LAST_SETTING, key); } catch { /* remembering the page is a nicety */ }
+  }, 400);
+}
+
 function updateNavButtons() {
   if (S.back) S.back.disabled = S.hi <= 0;
   if (S.fwd) S.fwd.disabled = S.hi >= S.hist.length - 1;
@@ -86,7 +96,7 @@ function articleCtx() {
         add.title = "Drops it in the middle of your view";
         add.addEventListener("click", () => {
           const n = createNodeAt(entry.cls);
-          if (n) { flash(add, "Added"); toast(S.win.el, `<b>${entry.title}</b> added to your canvas.`); }
+          if (n) { flash(add, "Added"); toast(S.win.el, `<b>${escText(entry.title)}</b> added to your canvas.`); }
           else toast(S.win.el, "Could not create that node here.");
         });
         row.appendChild(add);
@@ -101,9 +111,11 @@ function articleCtx() {
           if (!n) { toast(S.win.el, "Could not create that node here."); return; }
           const wired = autoWire(from, n);
           flash(wire, wired ? "Wired" : "Added");
+          const fromName = escText(from.title || from.comfyClass);
+          const toName = escText(entry.title);
           toast(S.win.el, wired
-            ? `Wired <b>${from.title || from.comfyClass}</b> ${wired.out} into <b>${entry.title}</b> ${wired.in}.`
-            : `Added <b>${entry.title}</b>, but nothing on <b>${from.title || from.comfyClass}</b> fits its inputs, so no wire was made.`);
+            ? `Wired <b>${fromName}</b> ${escText(wired.out)} into <b>${toName}</b> ${escText(wired.in)}.`
+            : `Added <b>${toName}</b>, but nothing on <b>${fromName}</b> fits its inputs, so no wire was made.`);
         });
         row.appendChild(wire);
 
@@ -140,9 +152,9 @@ function makeDraggable(cardEl, entry) {
     const sx = e.clientX, sy = e.clientY;
     let ghost = null;
     const move = (ev) => {
-      // Same lost-pointerup guard as the window drag: without it a missed
-      // release leaves the ghost glued to the cursor forever.
-      if (!(ev.buttons & 1)) { up(ev); return; }
+      // Same lost-pointerup guard as the window drag. A move with no button
+      // held means the release was missed, so this is a CANCEL, not a drop.
+      if (!(ev.buttons & 1)) { end(ev, true); return; }
       if (!ghost && (Math.abs(ev.clientX - sx) > 6 || Math.abs(ev.clientY - sy) > 6)) {
         ghost = el("div", "pixhb-dragghost", entry.title);
         document.body.appendChild(ghost);
@@ -151,17 +163,27 @@ function makeDraggable(cardEl, entry) {
       if (ghost) { ghost.style.left = (ev.clientX + 12) + "px"; ghost.style.top = (ev.clientY + 12) + "px"; }
     };
     let done = false;
-    const up = (ev) => {
+    // `cancelled` is the whole point of the split below. A drag can end two
+    // ways: the user RELEASED (drop, place the node) or the release went
+    // MISSING (pointer left the window, something else took capture). Those
+    // must not share a code path: routing a missed release into the drop path
+    // silently added a node to the workflow at wherever the pointer happened
+    // to re-enter the page, with the user never having dropped anything.
+    const end = (ev, cancelled) => {
       if (done) return;
       done = true;
-      window.removeEventListener("pointermove", move);
-      window.removeEventListener("pointerup", up);
+      cardEl.removeEventListener("pointermove", move);
+      cardEl.removeEventListener("pointerup", onUp);
+      cardEl.removeEventListener("pointercancel", onCancel);
+      cardEl.removeEventListener("lostpointercapture", onCancel);
+      try { cardEl.releasePointerCapture(pointerId); } catch { /* already gone */ }
       cardEl.style.opacity = "";
       if (!ghost) return;
       ghost.remove();
       // Swallow the click that follows this drag, or the card would also open.
       cardEl._pixSkipClick = true;
       setTimeout(() => { cardEl._pixSkipClick = false; }, 80);
+      if (cancelled) return;                       // never place a node on a lost release
       // Dropped back on the window itself? Do nothing rather than place a node
       // somewhere the user cannot see.
       if (S.win.el.contains(document.elementFromPoint?.(ev.clientX, ev.clientY) || null)) {
@@ -169,10 +191,18 @@ function makeDraggable(cardEl, entry) {
         return;
       }
       const n = createNodeAt(entry.cls, graphPointFromClient(ev.clientX, ev.clientY));
-      toast(S.win.el, n ? `<b>${entry.title}</b> dropped where you let go.` : "Could not create that node here.");
+      toast(S.win.el, n ? `<b>${escText(entry.title)}</b> dropped where you let go.` : "Could not create that node here.");
     };
-    window.addEventListener("pointermove", move);
-    window.addEventListener("pointerup", up);
+    const onUp = (ev) => end(ev, false);
+    const onCancel = (ev) => end(ev, true);
+    // Pointer capture keeps the events coming to THIS element even when the
+    // pointer leaves the window, which is what makes a real release reliable.
+    const pointerId = e.pointerId;
+    try { cardEl.setPointerCapture(pointerId); } catch { /* older build: the guard still covers us */ }
+    cardEl.addEventListener("pointermove", move);
+    cardEl.addEventListener("pointerup", onUp);
+    cardEl.addEventListener("pointercancel", onCancel);
+    cardEl.addEventListener("lostpointercapture", onCancel);
   });
 }
 
@@ -371,9 +401,13 @@ function refresh() {
   } else {
     // Re-resolve the current entry against the fresh index so a reopened window
     // never renders a stale object.
-    const cur = S.hist[S.hi];
-    const live = cur === "home" ? "home" : (S.index.find((e) => e.key === cur.key) || "home");
-    navigate(live, false);
+    // Re-resolve EVERY history slot against the fresh index, not just the
+    // current one: the arrows replay the others, and an entry from a previous
+    // index renders stale text and fails the identity check the sidebar uses
+    // to highlight the current page.
+    S.hist = S.hist.map((cur) =>
+      cur === "home" ? "home" : (S.index.find((e) => e.key === cur.key) || "home"));
+    navigate(S.hist[S.hi], false);
   }
 }
 

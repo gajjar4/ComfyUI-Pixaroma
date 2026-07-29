@@ -22,6 +22,14 @@ const DISCORD_URL = "https://discord.com/invite/gggpkVgBf3";
 const YOUTUBE_URL = "https://www.youtube.com/@pixaroma";
 const SITE_URL = "https://workflows.pixaroma.com/";
 
+// A node's title is free text restored verbatim from a workflow file, so it is
+// UNTRUSTED: a downloaded workflow can name a node `<img onerror=...>`. Toast
+// takes HTML on purpose (for <b>), so anything interpolated into it must be
+// escaped here first.
+export const escText = (s) => String(s == null ? "" : s)
+  .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+  .replace(/"/g, "&quot;");
+
 // ── toast ────────────────────────────────────────────────────
 let toastTimer = null;
 export function toast(win, html) {
@@ -34,6 +42,10 @@ export function toast(win, html) {
 }
 
 export function flash(btn, word) {
+  // Re-entrancy guard. Double-clicking within the flash window used to capture
+  // "Added" as the label to restore, leaving the button permanently wrong.
+  if (btn._pixFlashing) return;
+  btn._pixFlashing = true;
   const old = btn.textContent;
   btn.textContent = word;
   btn.style.background = "#3ec371";
@@ -42,6 +54,7 @@ export function flash(btn, word) {
   setTimeout(() => {
     btn.textContent = old;
     btn.style.background = btn.style.borderColor = btn.style.color = "";
+    btn._pixFlashing = false;
   }, 850);
 }
 
@@ -182,7 +195,7 @@ export function helpAsText(entry) {
   const h = entry.help || {};
   const lines = [h.title || entry.title];
   if (h.tagline) lines.push(h.tagline);
-  for (const s of (Array.isArray(h.sections) ? h.sections : [])) {
+  for (const s of (Array.isArray(h.sections) ? h.sections : []).filter((x) => x && typeof x === "object")) {
     lines.push("", (s.heading || "").toUpperCase());
     if (s.body) lines.push(s.body);
     for (const b of (s.bullets || [])) lines.push("- " + b);

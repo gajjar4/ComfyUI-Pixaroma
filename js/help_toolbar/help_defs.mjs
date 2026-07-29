@@ -570,7 +570,7 @@ const HELP = {
     sections: [
       {
         heading: "What it does",
-        body: "Opens a fullscreen editor with a live WebGL preview that reacts to audio in real time as you drag sliders. Choose one of 15 motion modes (Pulse Zoom, Camera Shake, Glitch, Pinch, Wave, Tilt, Pixelate, RGB Split, and more) and layer up to 8 overlay effects (chroma shift, bloom, vignette, hue shift, cinematic grade, letterbox, scanlines, film grain).\n\nBoth the image and audio inputs are optional - you can wire upstream sources or load them inline inside the editor by drag-drop or file pick. No extra models are needed; requires WebGL2.",
+        body: "Opens a fullscreen editor with a live WebGL preview that reacts to audio in real time as you drag sliders. Choose one of 15 motion modes (Pulse Zoom, Camera Shake, Glitch, Pinch, Wave, Tilt, Pixelate, RGB Split, and more) and layer up to 8 overlay effects (chroma shift, bloom, vignette, hue shift, cinematic grade, letterbox, scanlines, film grain).\n\nBoth the image and audio inputs are optional - you can wire upstream sources or load them inline inside the editor by drag-drop or file pick. No extra models are needed. It needs a browser with 3D graphics support, which almost every current browser has.",
       },
       {
         heading: "How to use",
@@ -586,7 +586,7 @@ const HELP = {
         heading: "Outputs",
         defs: [
           ["video_frames", "All rendered animation frames as a batch of images."],
-          ["audio", "The audio track passed through for muxing downstream."],
+          ["audio", "The audio track, passed through so it can be combined into a video later."],
           ["fps", "Frames per second of the render."],
         ],
       },
@@ -779,11 +779,11 @@ const HELP = {
 
   "PixaromaShowText": {
     title: "Show Text Pixaroma",
-    tagline: "Inspect anything flowing through your workflow - tensors, prompts, numbers - in a readable text box.",
+    tagline: "Inspect anything flowing through your workflow - images, prompts, numbers - in a readable text box.",
     sections: [
       {
         heading: "What it does",
-        body: "Displays a compact, human-readable description of whatever you wire in. Strings and numbers print as-is. Image tensors show shape, data type, min, and max values. Latents show their sample shape.\n\nThe text box is read-only and scrollable, so long output never forces the node to grow. Hover over the node to reveal a `Copy` button in the corner.",
+        body: "Displays a compact, human-readable description of whatever you wire in. Strings and numbers print as-is. Images show their size, colour format, and their darkest and brightest values. Latents, the compressed form a sampler works in, show their internal size.\n\nThe text box is read-only and scrollable, so long output never forces the node to grow. Hover over the node to reveal a `Copy` button in the corner.",
       },
       {
         heading: "How to use",
@@ -807,7 +807,7 @@ const HELP = {
         ],
       },
     ],
-    footer: "Useful for checking what a text node produces, or confirming an image tensor's dimensions before a sampler.",
+    footer: "Useful for checking what a text node produces, or confirming an image's size before a sampler.",
   },
 
   "PixaromaPromptReader": {
@@ -937,7 +937,7 @@ const HELP = {
           "Set the folder: type or paste a path into the folder box, or click `Browse` to navigate your drives and folders and pick one.",
           "Click `Pick images` to open the gallery. Use `Select all`, type a number in the `First` box to grab the first few (it selects as you type), or click individual thumbnails to choose exactly what you want.",
           "Wire `image` into your workflow (upscale, restyle, etc.) and `filename` into a Save node so each result keeps its original name.",
-          "Hit Run once and leave the batch count at 1. The node processes every selected image by itself.",
+          "Click Run once and leave the batch count at 1. The node processes every selected image by itself.",
         ],
       },
       {
@@ -1000,7 +1000,7 @@ const HELP = {
     sections: [
       {
         heading: "What it does",
-        body: "Takes an IMAGE batch and an optional AUDIO track and encodes them to a single mp4 using ffmpeg. A video preview plays on the node body so you can check the result without leaving ComfyUI. Audio is muxed in the same pass.\n\nThe ffmpeg binary is auto-located: if imageio-ffmpeg is installed its bundled exe is used; otherwise ffmpeg on your system PATH is tried.",
+        body: "Takes an IMAGE batch and an optional AUDIO track and encodes them to a single mp4 using ffmpeg. A video preview plays on the node body so you can check the result without leaving ComfyUI. Audio is combined in the same pass.\n\nThe ffmpeg binary is auto-located: if imageio-ffmpeg is installed its bundled exe is used; otherwise ffmpeg on your system PATH is tried.",
       },
       {
         heading: "How to use",
@@ -1031,7 +1031,7 @@ const HELP = {
           ["Play and Pause", "Starts or stops the preview. Clicking the picture itself does the same."],
           ["The scrub bar", "Click or drag anywhere along it to jump to that point in the clip."],
           ["Download", "Saves the finished mp4 to your computer."],
-          ["Fullscreen", "Opens the preview full screen."],
+          ["Fullscreen", "Expands the video preview to fill your screen."],
         ],
       },
     ],
@@ -1057,7 +1057,7 @@ const HELP = {
       {
         heading: "Loading controls",
         defs: [
-          ["Max frames", "How many frames to load from the start of the video. 0 = all. The safety valve for long clips: it never reads more than this many. Skip first frames then trims the front (Max 100 with Skip 5 gives 95)."],
+          ["Max frames", "How many frames to load from the start of the video. 0 = all. The safety valve for long clips: it never reads more than this many. Works with Skip first frames, which trims frames off the front of that window (Max 100 with Skip 5 gives 95)."],
           ["Force FPS", "Force a steady frames-per-second by dropping or duplicating frames (a 60fps clip forced to 24). 0 = keep the original rate. AI video models usually expect a fixed rate."],
           ["Skip first frames", "Skip this many frames from the start, like trimming an intro. Trims the front of the loaded frames."],
           ["Custom width / height", "Resize each frame as it loads. 0 = keep original. Set one to scale proportionally; set both to crop-to-fill that exact size (keeps proportions and trims overflow, like Resize Crop). It never stretches."],
@@ -1238,7 +1238,7 @@ const HELP = {
     sections: [
       {
         heading: "What it does",
-        body: "Runs a BiRefNet neural network over the image and returns a cutout with a transparent background (RGBA), plus a foreground mask and an inverted mask - all three in one pass.",
+        body: "Runs a BiRefNet model over the image and returns a cutout with a transparent background (RGBA), plus a foreground mask and an inverted mask - all three in one pass.",
       },
       {
         heading: "How to use",
@@ -1281,8 +1281,8 @@ const HELP = {
         heading: "How to use",
         bullets: [
           "Wire your image source into `image` and wire the output onward.",
-          "Set the toggle to `Pause` and press Run. Review the image.",
-          "Switch to `Continue` and press Run again - only the downstream runs, fed from the image you saw.",
+          "Set the toggle to `Pause` and click Run. Review the image.",
+          "Switch to `Continue` and click Run again - only the downstream runs, fed from the image you saw.",
           "Use `Regenerate` to roll a fresh image at the same point.",
         ],
       },
@@ -1308,7 +1308,7 @@ const HELP = {
         defs: [
           ["Pause", "Run stops here and shows the model's text so you can edit it. Press Continue to make one image from it. The downstream does not run until you continue."],
           ["Pass", "The whole workflow runs end to end with the model's text untouched, as if this node were not there. Each Run writes a fresh prompt. Any edit you made is replaced."],
-          ["Keep", "The model is skipped and your current text is reused. Press Run again and again for more images of the same prompt, each with a new seed. Fast, and your text is never lost. You can still tweak the text and it stays kept."],
+          ["Keep", "The model is skipped and your current text is reused. Click Run again and again for more images of the same prompt, each with a new seed. Fast, and your text is never lost. You can still tweak the text and it stays kept."],
         ],
       },
       {
@@ -1323,8 +1323,8 @@ const HELP = {
         heading: "How to use",
         bullets: [
           "Wire your text source (an LLM / prompt node) into `text` and wire the output onward.",
-          "Set the toggle to `Pause` and press Run. Read the text, fix it in the box, press `Continue`.",
-          "To make many images of the same prompt: flip the toggle to `Keep`, then press Run as often as you like. The prompt stays; only the image changes.",
+          "Set the toggle to `Pause` and click Run. Read the text, fix it in the box, press `Continue`.",
+          "To make many images of the same prompt: flip the toggle to `Keep`, then click Run as often as you like. The prompt stays; only the image changes.",
         ],
       },
       {
@@ -1418,7 +1418,7 @@ const HELP = {
           "Wire your first setup into the A inputs (`a_1`, `a_2`, ...) and your second into the B inputs.",
           "Click `A` or `B` to choose which bank runs.",
           "Click an output label to rename it for the row.",
-          "`Use connected` lets a row fall back to the other side if the active side is empty; `Strict` raises a clear error instead.",
+          "`Allow empty` leaves a row blank when its active side has no wire; `Show error` raises a clear error instead.",
         ],
       },
       {
@@ -1571,7 +1571,7 @@ const HELP = {
     sections: [
       {
         heading: "What it does",
-        body: "Adds a text watermark to an image or a whole batch. Unlike Text Overlay there is no fullscreen editor - you configure everything on the node panel and hit Run. Position is set by choosing one of nine anchor points (a corner, edge midpoint, or center) plus a margin inset, so the watermark lands in the same relative spot on every image regardless of its size.",
+        body: "Adds a text watermark to an image or a whole batch. Unlike Text Overlay there is no fullscreen editor - you configure everything on the node panel and click Run. Position is set by choosing one of nine anchor points (a corner, edge midpoint, or center) plus a margin inset, so the watermark lands in the same relative spot on every image regardless of its size.",
       },
       {
         heading: "Size mode",
@@ -1604,7 +1604,7 @@ const HELP = {
       },
       {
         heading: "The checkpoint timer",
-        body: "The clock starts the moment you press Run and stops when this node is reached, so it answers 'how long did it take to get this far'. One node at the end gives you the whole run; branch several through the graph and the gaps between their times are the per-segment times.\n\nTiming does not depend on the sound. The time is still recorded when this node's `enabled` toggle is off and when the master mute is on, so you can time a workflow in complete silence.",
+        body: "The clock starts the moment you click Run and stops when this node is reached, so it answers 'how long did it take to get this far'. One node at the end gives you the whole run; branch several through the graph and the gaps between their times are the per-segment times.\n\nTiming does not depend on the sound. The time is still recorded when this node's `enabled` toggle is off and when the master mute is on, so you can time a workflow in complete silence.",
       },
       {
         heading: "Reading the node face",
@@ -1651,7 +1651,7 @@ const HELP = {
 
   "PixaromaReferenceNode": {
     title: "Reference Node",
-    tagline: "Developer reference node demonstrating the DOM widget pattern. Not for production workflows.",
+    tagline: "An internal test node used while building Pixaroma. It has no use in a normal workflow.",
     sections: [
       {
         heading: "What it does",
@@ -1662,7 +1662,7 @@ const HELP = {
 
   "Pixaroma_VueReferenceNode": {
     title: "Pixaroma Vue Reference Node",
-    tagline: "Developer reference node for the Nodes 2.0 API. Not for production workflows.",
+    tagline: "An internal test node used while building Pixaroma. It has no use in a normal workflow.",
     sections: [
       {
         heading: "What it does",

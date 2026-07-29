@@ -19,7 +19,7 @@ const norm = (s) => String(s == null ? "" : s).toLowerCase();
 // Flatten one help def into a single searchable blob.
 function textOf(help) {
   const bits = [help.title, help.tagline, help.keywords, help.footer];
-  for (const s of (Array.isArray(help.sections) ? help.sections : [])) {
+  for (const s of (Array.isArray(help.sections) ? help.sections : []).filter((x) => x && typeof x === "object")) {
     bits.push(s.heading, s.body);
     if (Array.isArray(s.bullets)) bits.push(...s.bullets);
     if (Array.isArray(s.defs)) for (const d of s.defs) bits.push(...(Array.isArray(d) ? d : [d]));

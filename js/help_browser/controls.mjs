@@ -132,8 +132,31 @@ function collapseNumbered(items) {
       const first = run[0], last = run[run.length - 1];
       // "row 1" -> "row N" and "output_1" -> "output_N", while leaving a number
       // that is part of something larger (16, 2048) alone.
-      const generalise = (s) => String(s || "").split(head.num).join("N")
-        .replace(/N(\d)/g, head.num + "$1").replace(/(\d)N/g, "$1" + head.num);
+      // Only replace the number when it stands alone. Splitting on the digits
+      // and repairing afterwards mangled anything adjacent: with num "1",
+      // "0.1" became "0.N" and "11" became "NN".
+      const isDigit = (ch) => ch >= "0" && ch <= "9";
+      const generalise = (s) => {
+        const str = String(s || "");
+        let out = "", i = 0;
+        while (i < str.length) {
+          if (str.startsWith(head.num, i)) {
+            const end = i + head.num.length;
+            const before = str[i - 1], after = str[end];
+            // Part of a longer number, so leave it: an adjacent digit (11, 21),
+            // or a decimal point with a digit on its far side (0.1, 1.0). A
+            // full stop that ENDS a sentence is not a decimal, so "Row 1."
+            // still becomes "Row N.".
+            const partOfNumber =
+              isDigit(before) || isDigit(after) ||
+              (before === "." && isDigit(str[i - 2])) ||
+              (after === "." && isDigit(str[end + 1]));
+            if (!partOfNumber) { out += "N"; i = end; continue; }
+          }
+          out += str[i]; i += 1;
+        }
+        return out;
+      };
       out.push({ ...first, name: `${first.name} to ${last.name}`,
                  tip: generalise(first.tip), choices: null, dflt: undefined });
     } else {

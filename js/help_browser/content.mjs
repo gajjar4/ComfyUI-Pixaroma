@@ -53,6 +53,16 @@ const escHtml = (s) => String(s == null ? "" : s)
 // Inline `code` -> a monospace chip, matching the per-node help popup.
 const fmt = (s) => escHtml(s).replace(/`([^`]+)`/g, (_m, c) => `<code>${c}</code>`);
 
+// Every consumer of a help def's `sections` walks the same array, and a hole or
+// a null in it used to throw. renderArticle caught it per section, but the
+// heading scan, the search indexer and Copy as text did not, and a throw there
+// blanks the pane (innerHTML was already cleared) or leaves the window open and
+// empty. One sanitiser, used by all of them.
+export function safeSections(help) {
+  const raw = help && Array.isArray(help.sections) ? help.sections : [];
+  return raw.filter((s) => s && typeof s === "object");
+}
+
 // A category label with its emoji stripped, for the sidebar text.
 function catParts(raw) {
   const leaf = String(raw || "").split("/").pop().trim();
@@ -250,7 +260,7 @@ export function renderArticle(main, entry, onNav, ctx) {
 
   if (ctx?.buildActions) pad.appendChild(ctx.buildActions(entry));
 
-  const sections = Array.isArray(help.sections) ? help.sections : [];
+  const sections = safeSections(help);
   for (const section of sections) {
     try { pad.appendChild(buildSection(section)); }
     catch (e) { console.warn("[Pixaroma.Help] skipped a malformed section", e); }
@@ -263,9 +273,9 @@ export function renderArticle(main, entry, onNav, ctx) {
     // says the same thing twice. Matched on the section heading.
     const heads = sections.map((s) => String(s.heading || "").toLowerCase());
     const covered = {
-      inputs: heads.some((t) => /^(inputs?|what you wire in)/.test(t)),
-      settings: heads.some((t) => /^(settings?|the settings)/.test(t)),
-      outputs: heads.some((t) => /^(outputs?|what comes out)/.test(t)),
+      inputs: heads.some((t) => /^(inputs?|what you wire in)/.test(t)),
+      settings: heads.some((t) => /^(settings?|the settings)/.test(t)),
+      outputs: heads.some((t) => /^(outputs?|what comes out)/.test(t)),
     };
     for (const sec of buildControls(entry.cls, covered)) pad.appendChild(sec);
   }
