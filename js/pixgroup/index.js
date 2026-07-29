@@ -1794,7 +1794,7 @@ const GROUP_HELP = {
   sections: [
     { heading: "Create & move", bullets: [
       "Right-click the canvas and pick \"Add Pixaroma Group\", or select nodes and press G.",
-      "Drag the header to move it (the nodes inside move with it); drag the bottom-right corner to resize. Both snap to the grid when ComfyUI's \"Always snap to grid\" setting is on.",
+      "Drag the header to move it (the nodes inside move with it); drag any of the four corners to resize. Both snap to the grid when ComfyUI's \"Always snap to grid\" setting is on.",
       "Copy with Ctrl+C and paste with Ctrl+V - the pasted copy lands where your mouse is. Alt-drag the header also duplicates it.",
       "Double-click the title to rename. Select it and press Delete to remove it (the nodes stay).",
       "Right-click and pick \"Pin Group\" to lock it so it can't be moved or resized (a pin shows in its title). With several items selected it pins the whole selection, and ComfyUI's own Pin button now locks selected groups too. Unpin the same way.",
@@ -1806,7 +1806,7 @@ const GROUP_HELP = {
       ["Fold", "Collapse the whole group to a slim bar and hide its nodes. Click Unfold to reopen."],
     ]},
     { heading: "Folded bar", body: "While folded the bar turns green and names the node running inside it, so you can watch progress without the nodes showing. Wires that cross to outside nodes stay visible and attach to the bar; right-click the bar to hide them. Wires between hidden nodes stay hidden." },
-    { heading: "Style", body: "Right-click and pick \"Edit Pixaroma Group\" (or press the \\ key with the group selected) to open the color tool: title and body color, title and body opacity, font size, plus your own saved favourites." },
+    { heading: "Style", body: "Right-click and pick \"Pixaroma Group Colors\" (or press the \\ key with the group selected) to open the color tool: title and body color, title and body opacity, font size, plus your own saved favourites." },
   ],
 };
 

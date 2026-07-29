@@ -231,8 +231,8 @@ export function createHelpWindow({ onRender, onClose }) {
     if (e.key === "Escape") { e.stopPropagation(); api.close(); }
   });
 
-  // Clicks inside must not reach the canvas underneath (they would deselect the
-  // very node the user is about to wire to).
+  // Clicks inside must not reach the canvas underneath, or reading the help
+  // would deselect whatever the user had selected before they opened it.
   win.addEventListener("pointerdown", (e) => e.stopPropagation());
 
   const api = {

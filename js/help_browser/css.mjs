@@ -104,7 +104,7 @@ export function injectHelpBrowserCSS() {
 .pixhb-search { position: relative; flex: 1; min-width: 0; }
 .pixhb-search input {
   width: 100%; background: #141312; border: 1px solid #3d3936; color: #cfcac7;
-  border-radius: 5px; padding: 6px 10px 6px 28px; font: 12px inherit; outline: none;
+  border-radius: 5px; padding: 6px 10px 6px 28px; font-size: 12px; font-family: inherit; outline: none;
 }
 .pixhb-search input::placeholder { color: #6e6764; }
 .pixhb-search input:focus { border-color: ${ACC}; }
@@ -115,7 +115,9 @@ export function injectHelpBrowserCSS() {
   mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.4' stroke-linecap='round'><circle cx='11' cy='11' r='7'/><path d='M20 20l-4-4'/></svg>") center/contain no-repeat;
 }
 
-.pixhb-body { flex: 1; display: flex; min-height: 0; }
+/* position:relative so the toast can anchor to the BODY rather than to the
+   window. See the toast rule at the bottom for why that matters. */
+.pixhb-body { flex: 1; display: flex; min-height: 0; position: relative; }
 .pixhb-side {
   width: 186px; flex: none; border-right: 1px solid #302d2b; background: #1d1c1b;
   overflow-y: auto; padding: 8px 5px; min-height: 0;
@@ -133,7 +135,7 @@ export function injectHelpBrowserCSS() {
 .pixhb-group { margin-bottom: 1px; }
 .pixhb-gbtn {
   width: 100%; text-align: left; background: none; border: none; cursor: pointer;
-  color: #cfcac7; font: 600 11.5px inherit; padding: 5px 7px; border-radius: 5px;
+  color: #cfcac7; font-weight: 600; font-size: 11.5px; font-family: inherit; padding: 5px 7px; border-radius: 5px;
   display: flex; align-items: center; gap: 6px;
 }
 .pixhb-gbtn:hover { background: rgba(255,255,255,.05); }
@@ -144,7 +146,7 @@ export function injectHelpBrowserCSS() {
 .pixhb-group.pixhb-open .pixhb-items { display: block; }
 .pixhb-item {
   display: block; width: 100%; text-align: left; background: none; border: none;
-  cursor: pointer; color: #8e8783; font: 11.5px inherit; padding: 3px 7px;
+  cursor: pointer; color: #8e8783; font-size: 11.5px; font-family: inherit; padding: 3px 7px;
   border-radius: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .pixhb-item:hover { color: #cfcac7; background: rgba(255,255,255,.04); }
@@ -159,7 +161,7 @@ export function injectHelpBrowserCSS() {
   letter-spacing: .09em; margin: 0 0 6px; font-family: monospace;
 }
 .pixhb-btn2 {
-  font: 11.5px inherit; padding: 5px 10px; border-radius: 5px; cursor: pointer;
+  font-size: 11.5px; font-family: inherit; padding: 5px 10px; border-radius: 5px; cursor: pointer;
   border: 1px solid #3d3936; background: rgba(255,255,255,.04); color: #cfcac7;
   transition: background .12s, border-color .12s, color .12s; white-space: nowrap;
 }
@@ -179,7 +181,7 @@ export function injectHelpBrowserCSS() {
 .pixhb-mini {
   flex: none; display: flex; align-items: center; gap: 6px; background: #1d1c1b;
   border: 1px solid #302d2b; border-radius: 6px; padding: 5px 9px; cursor: pointer;
-  color: #cfcac7; font: 11px inherit; white-space: nowrap;
+  color: #cfcac7; font-size: 11px; font-family: inherit; white-space: nowrap;
 }
 .pixhb-mini:hover { border-color: ${ACC}; color: #fff; }
 .pixhb-hero {
@@ -202,7 +204,7 @@ export function injectHelpBrowserCSS() {
 .pixhb-rowhead .pixhb-hint { font-size: 10.5px; color: #8e8783; }
 .pixhb-chips { display: flex; gap: 5px; flex-wrap: wrap; }
 .pixhb-chip {
-  font: 11px inherit; padding: 4px 9px; border-radius: 99px; cursor: pointer; white-space: nowrap;
+  font-size: 11px; font-family: inherit; padding: 4px 9px; border-radius: 99px; cursor: pointer; white-space: nowrap;
   border: 1px solid #3d3936; background: transparent; color: #8e8783;
 }
 .pixhb-chip:hover { border-color: ${ACC}; color: #fff; }
@@ -244,7 +246,7 @@ export function injectHelpBrowserCSS() {
 }
 .pixhb-foot .pixhb-fsp { flex: 1; min-width: 4px; }
 .pixhb-flink {
-  display: flex; align-items: center; gap: 6px; font: 11.5px inherit; padding: 5px 9px;
+  display: flex; align-items: center; gap: 6px; font-size: 11.5px; font-family: inherit; padding: 5px 9px;
   border-radius: 6px; border: 1px solid #3d3936; color: #cfcac7; cursor: pointer; background: transparent;
 }
 .pixhb-flink:hover { border-color: ${ACC}; color: #fff; }
@@ -289,7 +291,7 @@ export function injectHelpBrowserCSS() {
 .pixhb-acts { display: flex; gap: 6px; flex-wrap: wrap; margin: 0 0 14px; }
 .pixhb-rel { display: flex; gap: 5px; flex-wrap: wrap; }
 .pixhb-relchip {
-  font: 11px inherit; padding: 4px 9px; border-radius: 99px; cursor: pointer;
+  font-size: 11px; font-family: inherit; padding: 4px 9px; border-radius: 99px; cursor: pointer;
   border: 1px solid #3d3936; background: transparent; color: #8e8783; white-space: nowrap;
 }
 .pixhb-relchip:hover { border-color: ${ACC}; color: #fff; }
@@ -323,10 +325,14 @@ export function injectHelpBrowserCSS() {
 .pixhb-res-t .pixhb-rd { color: #8e8783; font-size: 10.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 /* ── toast ──────────────────────────────────────────────────── */
-/* Sits ABOVE the footer bar, not over it - the footer is now part of the frame
-   and the version chip must stay readable while a toast is up. */
+/* Anchored to .pixhb-body, NOT to the window, so it can never cover the footer
+   bar however tall that gets. A hardcoded "bottom: 54px" measured against a
+   one-row footer was wrong the moment the footer WRAPPED: at the minimum window
+   width the links need two rows (74px) and the toast landed on top of them.
+   Anchoring to the body makes the overlap structurally impossible, so a longer
+   label or a wider version string cannot bring it back. */
 .pixhb-toast {
-  position: absolute; left: 50%; bottom: 54px; transform: translateX(-50%) translateY(8px);
+  position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%) translateY(8px);
   background: #111010; border: 1px solid ${ACC}; color: #fff; padding: 8px 14px; border-radius: 7px;
   font-size: 12px; opacity: 0; pointer-events: none; transition: opacity .16s, transform .16s;
   z-index: 60; max-width: 82%; box-shadow: 0 10px 30px rgba(0,0,0,.5);

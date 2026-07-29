@@ -215,7 +215,7 @@ function renderHome() {
   if (guides.length) {
     const hero = el("div", "pixhb-hero");
     const h3 = el("h3", null, "Start here");
-    const p = el("p", null, "Keeping the nodes up to date, opening a downloaded workflow, and the fix for most “it looks broken” reports.");
+    const p = el("p", null, "Keeping the nodes up to date, opening a downloaded workflow, the fix for most “it looks broken” reports, and where to ask when none of that helps.");
     hero.append(h3, p);
     const grid = el("div", "pixhb-startgrid");
     for (const g of guides) {
@@ -246,7 +246,10 @@ function renderHome() {
 
   // Everything, with category filters.
   const rh = el("div", "pixhb-rowhead");
-  rh.append(el("p", "pixhb-h", "Browse everything"), el("span", "pixhb-hint", "drag a card onto the canvas to place it"));
+  // "node card" on purpose: the Canvas tools cards in this same grid are not
+  // nodes and cannot be dropped (makeDraggable returns early for them), so the
+  // unqualified "card" promised something six of them do not do.
+  rh.append(el("p", "pixhb-h", "Browse everything"), el("span", "pixhb-hint", "drag a node card onto the canvas to place it"));
   pad.appendChild(rh);
 
   const browsable = S.index.filter((e) => e.kind !== "guide");

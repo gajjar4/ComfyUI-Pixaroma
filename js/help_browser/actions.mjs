@@ -33,7 +33,13 @@ export const escText = (s) => String(s == null ? "" : s)
 let toastTimer = null;
 export function toast(win, html) {
   let t = win.querySelector(".pixhb-toast");
-  if (!t) { t = el("div", "pixhb-toast"); win.appendChild(t); }
+  // Lives inside the BODY, not the window, so it is positioned above the footer
+  // bar by structure rather than by a magic offset that goes stale the moment
+  // the footer wraps to two rows. Falls back to the window on an older frame.
+  if (!t) {
+    t = el("div", "pixhb-toast");
+    (win.querySelector(".pixhb-body") || win).appendChild(t);
+  }
   t.innerHTML = html;
   requestAnimationFrame(() => t.classList.add("pixhb-on"));
   clearTimeout(toastTimer);
@@ -169,16 +175,22 @@ export function helpAsText(entry) {
   for (const s of (Array.isArray(h.sections) ? h.sections : []).filter((x) => x && typeof x === "object")) {
     lines.push("", (s.heading || "").toUpperCase());
     if (s.body) lines.push(s.body);
-    for (const b of (s.bullets || [])) lines.push("- " + b);
-    for (const d of (s.defs || [])) {
+    // Array.isArray on every one of these, matching content.mjs and search.mjs.
+    // `for (const x of (s.bullets || []))` throws on a non-array, and because
+    // this runs inside an async click handler the throw is SILENT: no flash, no
+    // toast, the Copy as text button simply does nothing.
+    const arr = (v) => (Array.isArray(v) ? v : []);
+    for (const b of arr(s.bullets)) lines.push("- " + b);
+    for (const d of arr(s.defs)) {
       const [t, v] = Array.isArray(d) ? d : [d, ""];
       lines.push(`- ${t}: ${v}`);
     }
     // A pasted copy of the page has to carry the addresses, or someone reading
-    // it outside the window has a button they cannot press.
-    for (const l of (s.links || [])) {
-      const [label, url] = Array.isArray(l) ? l : [l, ""];
-      lines.push(`- ${label}: ${url}`);
+    // it outside the window has a button they cannot press. Skips a malformed
+    // entry the same way the renderer does, so the two never disagree.
+    for (const l of arr(s.links)) {
+      if (!Array.isArray(l) || !l[1]) continue;
+      lines.push(`- ${l[0]}: ${l[1]}`);
     }
   }
   if (h.footer) lines.push("", h.footer);

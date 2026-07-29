@@ -135,13 +135,13 @@ export const GUIDES = [
       },
       {
         heading: "Or watch it instead",
-        body: "The tutorial episodes are often the better answer to a how do I question, because you can watch it being done rather than read it.",
+        body: "The tutorial episodes are often the better answer to a \"how do I\" question, because you can watch it being done rather than read it.",
         links: [["▶️ YouTube tutorials", LINKS.YOUTUBE_URL, "pixhb-yt"]],
       },
       {
         heading: "What to include",
         bullets: [
-          "Which node, and what you expected to happen instead",
+          "Which node, what happened, and what you expected instead",
           "Your version, shown in the footer of this window. Clicking it copies the full details",
           "A screenshot of the node if it looks wrong",
         ],
@@ -151,6 +151,6 @@ export const GUIDES = [
         body: "If buttons are missing or a node looks half drawn, try the cache fix first. It solves most of these, and it takes five seconds.",
       },
     ],
-    footer: "The Copy as text button on any node page puts that whole page on your clipboard, version line included, ready to paste with your question.",
+    footer: "The Copy as text button on any page puts that page's explanation on your clipboard, version line included, ready to paste with your question.",
   },
 ];

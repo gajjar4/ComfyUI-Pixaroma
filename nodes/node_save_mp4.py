@@ -181,7 +181,7 @@ class PixaromaSaveMp4:
                 "filename_prefix": ("STRING", {"default": "Video",
                     "tooltip": "Filename stem. The node appends a 5-digit counter and .mp4 (e.g. Video_00001.mp4). Use '/' for subfolders, date tokens like %date:yyyy-MM-dd%, and node references like %Seed Pixaroma.seed% that print another node's field value into the name."}),
                 "save_mode": (["save", "preview"], {"default": "save",
-                    "tooltip": "save: write to ComfyUI's output/ folder, kept across restarts. preview: write to ComfyUI's temp/ folder, auto-cleared on restart — use while iterating so you don't clutter output/. The in-node video preview works the same in both modes."}),
+                    "tooltip": "save: write to ComfyUI's output/ folder, kept across restarts. preview: write to ComfyUI's temp/ folder, auto-cleared on restart, so use it while iterating and you will not clutter output/. The in-node video preview works the same in both modes."}),
                 "trim_to_audio": ("BOOLEAN", {"default": False,
                     "tooltip": "Off (default): keep every video frame; the audio simply ends where it ends. On: end the video exactly at the audio's length (ffmpeg -shortest), for when the audio is the master (e.g. with Audio React). On can drop the last frame or two when the audio is slightly shorter than the video."}),
             },

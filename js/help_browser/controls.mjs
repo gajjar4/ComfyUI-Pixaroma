@@ -81,14 +81,35 @@ export function readControls(comfyClass) {
   return { inputs, settings, outputs, isOutput: !!def.output_node };
 }
 
+// The def's own token is written for code, not for a reader: BOOLEAN in
+// particular is a word nobody sees anywhere on the node itself, and the caps
+// sat oddly next to the lowercase "choice" we derive. The WIRE types (IMAGE,
+// MASK, LATENT) are left exactly as they are, because those ARE what is printed
+// beside the dots on the node, and renaming them here would break the match.
+const TYPE_WORDS = {
+  BOOLEAN: "on / off",
+  INT: "number",
+  FLOAT: "number",
+  STRING: "text",
+};
+const typeWord = (t) => TYPE_WORDS[t] || t;
+
+// "default false" is the same problem in the value column.
+function defaultWord(item) {
+  if (item.type === "BOOLEAN") return item.dflt ? "on" : "off";
+  return String(item.dflt);
+}
+
 function row(item, showDefault) {
   const r = el("div", "pixhb-ctl");
   const head = el("div", "pixhb-ctl-h");
   head.appendChild(el("span", "pixhb-ctl-n", item.name));
-  head.appendChild(el("span", "pixhb-ctl-t", item.type));
+  head.appendChild(el("span", "pixhb-ctl-t", typeWord(item.type)));
   if (item.optional) head.appendChild(el("span", "pixhb-ctl-opt", "optional"));
+  // A false default has to survive this test, or every off-by-default switch
+  // silently loses its default line.
   if (showDefault && item.dflt !== undefined && item.dflt !== "") {
-    head.appendChild(el("span", "pixhb-ctl-d", "default " + String(item.dflt)));
+    head.appendChild(el("span", "pixhb-ctl-d", "default " + defaultWord(item)));
   }
   r.appendChild(head);
   if (item.tip) r.appendChild(el("div", "pixhb-ctl-tip", item.tip));

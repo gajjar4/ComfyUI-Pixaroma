@@ -9,7 +9,9 @@
 // exists.
 //
 // Same help-def schema as every node, so the article renderer treats them
-// identically. They carry no wiring diagram (there are no slots to draw).
+// identically. They get no generated control reference, and cannot be dragged
+// onto the canvas, because there is no node definition behind them - both are
+// gated on `entry.kind === "node"`.
 
 export const CANVAS_FEATURES = [
   {

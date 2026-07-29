@@ -144,7 +144,7 @@ const CSS = `
   display: block; width: 100%; margin-top: 14px; padding: 9px 12px;
   border: 1px solid rgba(255,255,255,0.14); border-radius: 5px;
   background: rgba(255,255,255,0.04); color: #cfcfcf;
-  font: 12.5px inherit; cursor: pointer; text-align: center;
+  font-size: 12.5px; font-family: inherit; cursor: pointer; text-align: center;
   transition: background 0.12s, border-color 0.12s, color 0.12s;
 }
 .pix-help-more:hover { background: ${BRAND}; border-color: ${BRAND}; color: #fff; }
