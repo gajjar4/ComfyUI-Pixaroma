@@ -16,6 +16,12 @@ export const LABEL_HELP = {
   title: "Label Pixaroma",
   tagline: "A floating text caption for documenting your workflow. Double-click a label on the canvas to open this editor.",
   sections: [
+    // "What it does" was merged in from a SECOND, competing PixaromaLabel entry
+    // that used to sit in help_toolbar/help_defs.mjs. Two registrations for one
+    // class means the later module load silently wins and the other is dead, so
+    // half the writing was never being shown anywhere. One def now, here, next
+    // to the editor it describes.
+    { heading: "What it does", body: "Draws a single styled caption straight onto the canvas, to label a part of your workflow. It has no inputs and no outputs and never runs, so it costs nothing - it is there to be read. The label resizes itself to hug its text." },
     { heading: "Text", body: "Type any text - multiple lines and emoji are supported." },
     { heading: "Typography", defs: [
       ["Font", "Switch between Arial, Times, Courier and Impact."],
@@ -32,7 +38,7 @@ export const LABEL_HELP = {
     ] },
     { heading: "Add to canvas", body: "Right-click the canvas and pick `Add Label Pixaroma` to drop a new label, then double-click it to edit." },
   ],
-  footer: "Pixaroma - youtube.com/@pixaroma",
+  footer: "This node never runs during a workflow, so it costs nothing to leave in.",
 };
 
 // ─── Config helpers ──────────────────────────────────────────
@@ -598,7 +604,9 @@ export class LabelEditor {
 
   // ── Help (shared themed popup, same style as the Group help) ──
   _showHelp() {
-    openHelpPopup(LABEL_HELP);
+    // Pass the class so "Open the full help" lands on the Label page rather
+    // than the browser's Home screen, matching node_colors and pixgroup.
+    openHelpPopup(LABEL_HELP, { comfyClass: "PixaromaLabel" });
     // The editor overlay is z-index 99999; lift the help card above it.
     const bd = document.querySelector(".pix-help-backdrop");
     if (bd) bd.style.zIndex = "100000";

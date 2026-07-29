@@ -623,26 +623,11 @@ const HELP = {
     footer: "This node never runs during a workflow - it is pure decoration and shows no timing badge.",
   },
 
-  "PixaromaLabel": {
-    title: "Label Pixaroma",
-    tagline: "A clean text label for captioning parts of your workflow.",
-    sections: [
-      {
-        heading: "What it does",
-        body: "Renders a single styled line of text directly on the canvas as a floating caption. No inputs, no outputs - purely decorative. You can pick the font family, font size (up to 256 px), text color, and background pill color.",
-      },
-      {
-        heading: "How to use",
-        bullets: [
-          "Drop the node where you want the label.",
-          "Double-click the node to open the editor.",
-          "Type your text, choose a font and colors, then click `Save`.",
-          "The label resizes itself to hug its text - no manual resizing needed.",
-        ],
-      },
-    ],
-    footer: "This node never runs during a workflow.",
-  },
+  // PixaromaLabel is registered in js/label/index.js instead, next to the
+  // editor it describes. It used to ALSO have an entry here, and a class
+  // registered twice means the later module load silently wins while the
+  // other def becomes dead writing nobody ever sees. The two sections that
+  // lived here were merged into LABEL_HELP in js/label/core.mjs.
 
   "PixaromaPromptMulti": {
     title: "Prompt Multi Pixaroma",
