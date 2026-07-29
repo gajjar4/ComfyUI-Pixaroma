@@ -2,21 +2,20 @@
 // ║  Pixaroma Help browser - the things a page can DO             ║
 // ╚═══════════════════════════════════════════════════════════════╝
 //
-// Add to canvas, add wired to whatever is selected, drag a card out onto the
-// graph, copy the page, and copy a version line for a support question.
+// Add a node to the canvas, drag a card out onto the graph, copy the page, and
+// copy a version line.
 //
-// "Add wired to selection" is the one that changes what the help is FOR: you
-// can read about a node and put it down, correctly connected, without leaving
-// the page. Everything else here is convenience.
+// "Add to canvas" is the one that changes what the help is FOR: you can read
+// about a node and put it down without leaving the page. Everything else here
+// is convenience.
 //
-// These are the ONLY places the browser touches the graph, and each one is an
-// explicit user action, so the resulting "workflow changed" state is correct.
-// Nothing else in the browser writes anything that gets serialized.
+// Adding a node is the ONLY place the browser touches the graph, and it is
+// always an explicit user action, so the resulting "workflow changed" state is
+// correct. Nothing else in the browser writes anything that gets serialized.
 
 import { app } from "/scripts/app.js";
 import { PIXAROMA_JS_VERSION } from "../shared/index.mjs";
 import { el } from "./window.mjs";
-import { readControls } from "./controls.mjs";
 
 const DISCORD_URL = "https://discord.com/invite/gggpkVgBf3";
 const YOUTUBE_URL = "https://www.youtube.com/@pixaroma";
@@ -108,49 +107,12 @@ export function createNodeAt(comfyClass, pos) {
   return node;
 }
 
-// The node the user currently has selected, if exactly one is selected.
-export function selectedNode() {
-  try {
-    const sel = app.canvas?.selected_nodes;
-    if (sel) {
-      const list = Object.values(sel);
-      if (list.length) return list[0];
-    }
-  } catch { /* no selection is a normal state */ }
-  return null;
-}
-
-// Connect the first output of `from` whose type an input of `to` accepts.
-// Returns the pair of names wired, or null when nothing matches - callers must
-// SAY when nothing matched rather than looking like they did nothing.
-export function autoWire(from, to) {
-  try {
-    const outs = from?.outputs || [];
-    const ins = to?.inputs || [];
-    for (let oi = 0; oi < outs.length; oi++) {
-      const ot = outs[oi]?.type;
-      if (!ot) continue;
-      for (let ii = 0; ii < ins.length; ii++) {
-        const it = ins[ii]?.type;
-        if (ins[ii]?.link != null) continue;          // already wired, leave it
-        const match = it === ot || it === "*" || ot === "*";
-        if (!match) continue;
-        from.connect(oi, to, ii);
-        return { out: outs[oi].name || ot, in: ins[ii].name || it };
-      }
-    }
-  } catch { /* a failed wire is not worth breaking the panel over */ }
-  return null;
-}
-
-// A node's inputs are not built until it exists, so this reads the DEFINITION
-// to answer "could this even be wired to the selection" before we place it.
-export function couldWire(fromNode, comfyClass) {
-  const slots = readControls(comfyClass);
-  if (!slots || !fromNode?.outputs?.length) return false;
-  const outTypes = fromNode.outputs.map((o) => o?.type).filter(Boolean);
-  return slots.inputs.some((i) => outTypes.some((t) => t === i.type || i.type === "*" || t === "*"));
-}
+// The auto-wiring helpers that used to live here (selectedNode, autoWire,
+// couldWire) went with the "Add wired" button. Adding a node connected to the
+// selection sounds helpful and mostly is not: the browser has to guess which
+// slot you meant, and a guess that lands on the wrong one is worse than no wire
+// at all. Dragging a card onto the canvas and wiring it yourself is one extra
+// second and always right.
 
 // ── clipboard ────────────────────────────────────────────────
 // document.execCommand is kept as a fallback because navigator.clipboard is

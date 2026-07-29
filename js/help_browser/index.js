@@ -28,7 +28,7 @@ import {
 } from "./content.mjs";
 import { buildSearchIndex, searchIndex, highlight } from "./search.mjs";
 import {
-  toast, flash, createNodeAt, selectedNode, autoWire, couldWire, graphPointFromClient,
+  toast, flash, createNodeAt, graphPointFromClient,
   copyText, versionLine, versionShort, helpAsText, openExternal, LINKS, escText,
 } from "./actions.mjs";
 
@@ -100,27 +100,13 @@ function articleCtx() {
           else toast(S.win.el, "Could not create that node here.");
         });
         row.appendChild(add);
-
-        const wire = el("button", "pixhb-btn2", "+ Add wired");
-        wire.type = "button";
-        wire.title = "Adds it connected to whatever you have selected";
-        wire.addEventListener("click", () => {
-          const from = selectedNode();
-          if (!from) { toast(S.win.el, "Select a node on the canvas first, then press this."); return; }
-          const n = createNodeAt(entry.cls, [from.pos[0] + (from.size?.[0] || 200) + 60, from.pos[1]]);
-          if (!n) { toast(S.win.el, "Could not create that node here."); return; }
-          const wired = autoWire(from, n);
-          flash(wire, wired ? "Wired" : "Added");
-          const fromName = escText(from.title || from.comfyClass);
-          const toName = escText(entry.title);
-          toast(S.win.el, wired
-            ? `Wired <b>${fromName}</b> ${escText(wired.out)} into <b>${toName}</b> ${escText(wired.in)}.`
-            : `Added <b>${toName}</b>, but nothing on <b>${fromName}</b> fits its inputs, so no wire was made.`);
-        });
-        row.appendChild(wire);
-
       }
 
+      // Two buttons, deliberately. "Add wired" and "Ask about this" were both
+      // removed on request: a support button on EVERY node page reads as an
+      // offer of one-to-one help with anything, which is not what is on offer.
+      // Where to ask is covered once, properly, on the Need help? page, and the
+      // Discord button in the footer is on every page anyway.
       const copy = el("button", "pixhb-btn2", "Copy as text");
       copy.type = "button";
       copy.title = "Ready to paste into a question";
@@ -129,16 +115,6 @@ function articleCtx() {
         ok ? flash(copy, "Copied") : toast(S.win.el, "Could not reach the clipboard.");
       });
       row.appendChild(copy);
-
-      const ask = el("button", "pixhb-btn2", "Ask about this");
-      ask.type = "button";
-      ask.title = "Copies the details, then opens Discord";
-      ask.addEventListener("click", async () => {
-        await copyText(`${entry.title}\n${versionLine()}\n\nWhat I did:\nWhat I expected:\nWhat happened:`);
-        flash(ask, "Copied");
-        openExternal(LINKS.DISCORD_URL);
-      });
-      row.appendChild(ask);
       return row;
     },
   };
@@ -349,10 +325,18 @@ function renderResults(query) {
     const e = el("div", "pixhb-empty");
     e.innerHTML = `Nothing matches <b>${highlight(query, "")}</b>.<br>` +
       `<span style="font-size:11px">Try a plainer word. The search reads the whole help text, not just node names.</span><br>`;
-    const ask = el("button", "pixhb-btn2", "Ask on Discord instead");
+    // Routes to the Need help? page rather than straight into Discord. A dead
+    // end in the search is the one place the help genuinely has nothing to
+    // offer, so it should point somewhere - but at the page that explains WHICH
+    // channel to use, not at a door marked "ask me anything".
+    const ask = el("button", "pixhb-btn2", "Where to ask");
     ask.type = "button";
     ask.style.marginTop = "10px";
-    ask.addEventListener("click", () => openExternal(LINKS.DISCORD_URL));
+    ask.addEventListener("click", () => {
+      const help = S.index.find((x) => x.key === "guide:help");
+      if (help) navigate(help);
+      else openExternal(LINKS.DISCORD_URL);
+    });
     e.appendChild(ask);
     pad.appendChild(e);
     main.appendChild(pad);

@@ -151,6 +151,6 @@ export const GUIDES = [
         body: "If buttons are missing or a node looks half drawn, try the cache fix first. It solves most of these, and it takes five seconds.",
       },
     ],
-    footer: "The Ask about this button on any node page puts the node name and all your version details on the clipboard in one press, then opens Discord for you.",
+    footer: "The Copy as text button on any node page puts that whole page on your clipboard, version line included, ready to paste with your question.",
   },
 ];
