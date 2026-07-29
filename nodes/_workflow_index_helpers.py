@@ -15,6 +15,7 @@ fetches the files itself.
 import hashlib
 import json
 import os
+import re
 
 # Files bigger than this are almost certainly not a hand-made workflow, and
 # parsing one blocks the request. 24 MB is far above the largest real workflow
@@ -28,6 +29,11 @@ _MAP_CAP = 60
 # Total prompt text kept per workflow, for searching. Enough to find a phrase
 # somebody remembers; small enough that 144 of them stay a light payload.
 _TEXT_CAP = 2000
+
+# Bumped whenever an entry's SHAPE changes, so a cache written by an older
+# version is thrown away instead of being replayed into code that no longer
+# understands it (v2: the cover map carries a colour string, not a palette index).
+_CACHE_VERSION = 2
 
 _MODEL_EXT = (".safetensors", ".ckpt", ".gguf", ".pt", ".pth", ".sft", ".bin")
 
@@ -136,12 +142,27 @@ def _xy(v):
     return 0.0, 0.0
 
 
-def _color_index(color):
-    """A small stable number per node colour, so the cover can tint boxes
-    without shipping the colour strings themselves. -1 means uncoloured."""
-    if not isinstance(color, str) or not color:
-        return -1
-    return int(hashlib.md5(color.encode("utf-8")).hexdigest()[:2], 16) % 8
+_HEX_RE = re.compile(r"^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$")
+
+
+def _node_color(color):
+    """The node's OWN colour, as a plain hex string, or "" when it has none.
+
+    This used to be a hash of the colour into a fixed 8-swatch palette, which
+    meant a green node could be drawn brown - the cover looked arbitrary
+    because it WAS arbitrary. The real colour is carried instead, and the
+    browser lifts it to a readable brightness (ComfyUI node colours are
+    near-black, being title tints on a dark canvas, so drawing them literally
+    gives an unreadable cover).
+
+    Anything that is not a plain hex value - `rgba(0,0,0,0)`, a css name, junk
+    from a hand-edited file - becomes "" rather than being passed through, so
+    the drawing code only ever has one shape to deal with.
+    """
+    if not isinstance(color, str):
+        return ""
+    c = color.strip()
+    return c.lower() if _HEX_RE.match(c) else ""
 
 
 def _clamp01(v):
@@ -241,7 +262,7 @@ def summarize_workflow(path, root):
         x, y = _xy(n.get("pos"))
         w, h = _xy(n.get("size"))
         boxes.append((x, y, w if w > 0 else 200.0, h if h > 0 else 80.0,
-                      _color_index(n.get("color"))))
+                      _node_color(n.get("color"))))
 
     # ── the cover map: node rectangles normalised into a 0..1 box ──
     cover = []
@@ -258,13 +279,13 @@ def summarize_workflow(path, root):
             span_x = 1.0
         if span_y <= 0:
             span_y = 1.0
-        for (x, y, w, h, ci) in keep:
+        for (x, y, w, h, col) in keep:
             cover.append([
                 round(_clamp01((x - min_x) / span_x), 4),
                 round(_clamp01((y - min_y) / span_y), 4),
                 round(_clamp01(w / span_x), 4),
                 round(_clamp01(h / span_y), 4),
-                ci,
+                col,
             ])
 
     uniq_types = sorted(set(types))
@@ -303,7 +324,7 @@ def _load_cache(cache_path):
     try:
         with open(cache_path, "r", encoding="utf-8") as f:
             c = json.load(f)
-        if isinstance(c, dict) and c.get("version") == 1 and isinstance(c.get("entries"), dict):
+        if isinstance(c, dict) and c.get("version") == _CACHE_VERSION and isinstance(c.get("entries"), dict):
             return c["entries"]
     except (OSError, ValueError, UnicodeDecodeError):
         pass
@@ -318,7 +339,7 @@ def _save_cache(cache_path, entries):
     try:
         os.makedirs(os.path.dirname(cache_path), exist_ok=True)
         with open(tmp, "w", encoding="utf-8") as f:
-            json.dump({"version": 1, "entries": entries}, f)
+            json.dump({"version": _CACHE_VERSION, "entries": entries}, f)
         os.replace(tmp, cache_path)
     except OSError:
         try:

@@ -42,7 +42,7 @@ export function renderDetail(pane, state, H) {
   } else {
     const cv = el("canvas", "pixwb-detcov");
     pane.append(cv);
-    requestAnimationFrame(() => drawMap(cv, entry.map, state.accent));
+    requestAnimationFrame(() => drawMap(cv, entry.map));
   }
 
   pane.append(el("div", "pixwb-detname", entry.name));

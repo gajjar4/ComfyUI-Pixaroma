@@ -34,12 +34,12 @@ function coverEl(entry, state, cls) {
     img.addEventListener("error", () => {
       const cv = el("canvas", cls);
       img.replaceWith(cv);
-      requestAnimationFrame(() => drawMap(cv, entry.map, state.accent));
+      requestAnimationFrame(() => drawMap(cv, entry.map));
     }, { once: true });
     return img;
   }
   const cv = el("canvas", cls);
-  requestAnimationFrame(() => drawMap(cv, entry.map, state.accent));
+  requestAnimationFrame(() => drawMap(cv, entry.map));
   return cv;
 }
 

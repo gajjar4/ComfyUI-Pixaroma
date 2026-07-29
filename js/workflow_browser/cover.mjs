@@ -18,14 +18,68 @@
 import { api } from "/scripts/api.js";
 import * as A from "./api.mjs";
 
-// Muted stand-ins for LiteGraph's node colours. The index comes from the
-// server, which hashes the node's colour string, so the same coloured node
-// always lands on the same swatch without shipping the colour strings.
-const SWATCH = ["#4d7ea8", "#7ea84d", "#a8794d", "#8a4da8", "#a84d4d", "#4da8a0", "#8f8f8f", "#6d78a8"];
+// ── colour ──────────────────────────────────────────────────────────────────
+//
+// The map carries each node's REAL colour. Drawing it literally does not work:
+// ComfyUI node colours are title tints meant to sit on a dark canvas, so they
+// are near-black (#1d1d1d, #342339, #0c2f36) and a cover made of them is an
+// unreadable smudge.
+//
+// So the HUE is kept and the lightness is forced to something legible at 120px.
+// An orange node still looks orange and a green group still looks green - the
+// cover reflects the actual workflow - but it can be read at thumbnail size.
+// The earlier version hashed the colour into a fixed palette, which meant a
+// green node could come out brown: it looked arbitrary because it was.
+
+const LIFT_L = 0.60;    // target lightness
+const LIFT_S = 0.42;    // floor on saturation, so near-greys still show a tint
+const NO_COLOUR = "#6f6a66";
+
+const _liftCache = new Map();
+
+function lift(hex) {
+  if (!hex) return NO_COLOUR;
+  const hit = _liftCache.get(hex);
+  if (hit) return hit;
+
+  let h = hex.slice(1);
+  if (h.length === 3) h = h[0] + h[0] + h[1] + h[1] + h[2] + h[2];
+  if (h.length !== 6) return NO_COLOUR;
+  const r = parseInt(h.slice(0, 2), 16) / 255;
+  const g = parseInt(h.slice(2, 4), 16) / 255;
+  const b = parseInt(h.slice(4, 6), 16) / 255;
+
+  const mx = Math.max(r, g, b), mn = Math.min(r, g, b), d = mx - mn;
+  let hue = 0, sat = 0;
+  const l0 = (mx + mn) / 2;
+  if (d) {
+    sat = l0 > 0.5 ? d / (2 - mx - mn) : d / (mx + mn);
+    hue = mx === r ? ((g - b) / d + (g < b ? 6 : 0))
+        : mx === g ? ((b - r) / d + 2)
+        : ((r - g) / d + 4);
+    hue /= 6;
+  }
+  const s = Math.max(sat, LIFT_S), l = LIFT_L;
+  const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+  const p = 2 * l - q;
+  const ch = (t) => {
+    t = (t + 1) % 1;
+    if (t < 1 / 6) return p + (q - p) * 6 * t;
+    if (t < 0.5) return q;
+    if (t < 2 / 3) return p + (q - p) * (2 / 3 - t) * 6;
+    return p;
+  };
+  const to = (v) => Math.round(v * 255).toString(16).padStart(2, "0");
+  const out = "#" + to(ch(hue + 1 / 3)) + to(ch(hue)) + to(ch(hue - 1 / 3));
+  // 143 workflows x up to 60 nodes is a lot of conversions per render, and the
+  // same handful of colours repeats throughout.
+  _liftCache.set(hex, out);
+  return out;
+}
 
 /** Paint the graph map. Sized to the element's real box at device pixels, or
  *  covers look soft on a high-DPI screen and blocky when the node is zoomed. */
-export function drawMap(canvas, map, accent) {
+export function drawMap(canvas, map) {
   const w = canvas.clientWidth || 120;
   const h = canvas.clientHeight || 64;
   const dpr = Math.min(window.devicePixelRatio || 1, 3);
@@ -75,9 +129,9 @@ export function drawMap(canvas, map, accent) {
     const y = pad + e[1] * ih;
     const bw = Math.max(2, e[2] * iw);
     const bh = Math.max(2, e[3] * ih);
-    const ci = e[4];
-    ctx.fillStyle = ci >= 0 ? SWATCH[ci % SWATCH.length] : (accent || "#5a5a5a");
-    ctx.globalAlpha = ci >= 0 ? 0.92 : 0.5;
+    const col = e[4];
+    ctx.fillStyle = lift(col);
+    ctx.globalAlpha = col ? 0.95 : 0.5;
     const r = Math.min(2, bw / 2, bh / 2);
     ctx.beginPath();
     if (ctx.roundRect) ctx.roundRect(x, y, bw, bh, r);
