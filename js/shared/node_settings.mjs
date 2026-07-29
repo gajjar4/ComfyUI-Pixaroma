@@ -513,12 +513,13 @@ function outsideClose(e) {
   // capture-phase handler runs BEFORE their own - so without the exemption,
   // picking a value closed the panel out from under the user.
   //
-  // The Pixaroma Help window (.pixhb-win) is exempt for a different reason: it
-  // is a PERSISTENT reference panel you read WHILE working, not a popup, so
-  // looking something up should not shut the settings you were about to change.
-  // Its own pointerdown guard cannot save it - that is a BUBBLE listener on the
-  // window, and this one is CAPTURE on the document, so this always runs first.
-  if (e.target.closest?.(".pixhb-win, .pix-cp-popup, .pix-cp-modal-backdrop, .pix-nset-pop")) return;
+  // The Pixaroma Help window (.pixhb-win) and the Workflows panel (.pixwb-win)
+  // are exempt for a different reason: they are PERSISTENT panels you use WHILE
+  // working, not popups, so looking something up or switching workflow should
+  // not shut the settings you were about to change. Their own pointerdown guard
+  // cannot save them - that is a BUBBLE listener on the window, and this one is
+  // CAPTURE on the document, so this always runs first.
+  if (e.target.closest?.(".pixhb-win, .pixwb-win, .pix-cp-popup, .pix-cp-modal-backdrop, .pix-nset-pop")) return;
   closeNodeSettingsPanel();
 }
 
@@ -530,7 +531,7 @@ function escClose(e) {
     // Esc would close the settings panel behind it and, because of the
     // stopPropagation below, leave the help window open - the opposite of what
     // the key was pressed for.
-    if (e.target?.closest?.(".pixhb-win")) return;
+    if (e.target?.closest?.(".pixhb-win, .pixwb-win")) return;
     e.stopPropagation();
     closeNodeSettingsPanel();
   }
