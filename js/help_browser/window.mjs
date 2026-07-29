@@ -99,7 +99,7 @@ function saveRect(rect) {
   }, 350);
 }
 
-export function createHelpWindow({ onRender }) {
+export function createHelpWindow({ onRender, onClose }) {
   injectHelpBrowserCSS();
 
   const win = el("div", "pixhb-win");
@@ -235,7 +235,7 @@ export function createHelpWindow({ onRender }) {
       // Focus something inside so Esc and typing land here, not on the canvas.
       setTimeout(() => bar.querySelector("input")?.focus(), 20);
     },
-    close() { win.style.display = "none"; },
+    close() { win.style.display = "none"; onClose?.(); },
     toggle() { api.isOpen() ? api.close() : api.open(); },
     destroy() { win.remove(); },
   };

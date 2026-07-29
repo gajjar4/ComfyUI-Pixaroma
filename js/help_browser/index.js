@@ -330,7 +330,7 @@ function renderResults(query) {
 // ── build the window once, on first open ─────────────────────
 function ensureWindow() {
   if (S.win) return S.win;
-  S.win = createHelpWindow({ onRender: refresh });
+  S.win = createHelpWindow({ onRender: refresh, onClose: syncToolbarButton });
 
   const back = el("button", "pixhb-nav", "‹");
   back.type = "button"; back.title = "Back";
@@ -383,14 +383,25 @@ export function openHelpBrowser(target) {
   loadPins();
   const w = ensureWindow();
   w.open();
+  syncToolbarButton();
   if (target) {
     const hit = S.index.find((e) => e.cls === target || e.key === target);
     if (hit) navigate(hit);
   }
 }
 export function toggleHelpBrowser() {
-  if (S.win?.isOpen()) S.win.close();
+  if (S.win?.isOpen()) closeHelpBrowser();
   else openHelpBrowser();
+}
+export function closeHelpBrowser() {
+  S.win?.close();
+  syncToolbarButton();
+}
+// The toolbar button shows whether the window is open, so it reads as a toggle
+// rather than a button that sometimes seems to do nothing. Called from every
+// path that opens or closes, including the window's own X.
+function syncToolbarButton() {
+  S.toolbarBtn?.classList.toggle("pixhb-btn-open", !!S.win?.isOpen());
 }
 
 // ── the toolbar button ───────────────────────────────────────

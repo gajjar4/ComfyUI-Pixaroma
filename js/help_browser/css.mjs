@@ -45,10 +45,15 @@ export function injectHelpBrowserCSS() {
   border-color: ${ACC} !important;
 }
 .pixhb-btn:hover { filter: brightness(1.1); }
-.pixhb-btn.pixhb-btn-off {
-  background-color: #2a2c2e !important; color: #ddd !important; border-color: #444 !important;
+/* Pressed while the window is open, so the button visibly reads as a toggle.
+   It stays accent-filled rather than greying out when closed - the ? is the
+   way in to the help and should keep inviting the click - so "open" is shown
+   by darkening and insetting it, the way a held-down button looks. */
+.pixhb-btn.pixhb-btn-open {
+  filter: brightness(0.82);
+  box-shadow: inset 0 2px 5px rgba(0,0,0,.45);
 }
-.pixhb-btn.pixhb-btn-off:hover { background-color: #3a3d40 !important; filter: none; }
+.pixhb-btn.pixhb-btn-open:hover { filter: brightness(0.92); }
 
 
 /* ── the floating window ────────────────────────────────────── */
