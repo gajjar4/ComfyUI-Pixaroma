@@ -16,6 +16,12 @@
 
 import { el } from "./window.mjs";
 
+// Marks a drag as "a folder being re-ordered" rather than "workflow cards being
+// filed". Only the TYPE is readable during dragover - getData is blocked until
+// the drop - so the distinction has to live in the type, not the payload.
+const FOLDER_MIME = "application/x-pixaroma-folder";
+const isFolderDrag = (e) => !!e.dataTransfer && [...e.dataTransfer.types].includes(FOLDER_MIME);
+
 const FOLDER_COLORS = ["#4d7ea8", "#7ea84d", "#a8794d", "#8a4da8", "#a84d4d", "#4da8a0", "#8f8f8f", "#6d78a8"];
 
 /**
@@ -82,7 +88,7 @@ export function folderColor(path, meta) {
  * onPick(sel)          - {kind, value} for the row that was clicked
  * onDropOn(folderPath) - cards were dropped on a real folder row
  */
-export function renderFolders(side, state, { onPick, onDropOn, onRenameFolder, onFolderMenu }) {
+export function renderFolders(side, state, { onPick, onDropOn, onRenameFolder, onFolderMenu, onReorderFolder }) {
   side.textContent = "";
   const { entries, folders, collections, meta, favourites, sel, tidyRels } = state;
 
@@ -109,17 +115,55 @@ export function renderFolders(side, state, { onPick, onDropOn, onRenameFolder, o
     b.addEventListener("click", () => onPick(pick));
 
     if (folderPath !== undefined) {
+      // A folder row is a drop target for TWO different drags: workflow cards
+      // being filed into it, and another folder being re-ordered around it.
+      // They are told apart by the drag's data TYPE, which is the only thing
+      // readable during dragover (getData is blocked until the drop).
+      const clearMarks = () => b.classList.remove(
+        "pixwb-droptarget", "pixwb-insert-above", "pixwb-insert-below");
+
       b.addEventListener("dragover", (e) => {
         e.preventDefault();
         if (e.dataTransfer) e.dataTransfer.dropEffect = "move";
-        b.classList.add("pixwb-droptarget");
+        clearMarks();
+        if (isFolderDrag(e)) {
+          if (folderPath === "") return;              // (loose files) is not a real folder
+          const r = b.getBoundingClientRect();
+          const above = (e.clientY - r.top) < r.height / 2;
+          b.classList.add(above ? "pixwb-insert-above" : "pixwb-insert-below");
+        } else {
+          b.classList.add("pixwb-droptarget");
+        }
       });
-      b.addEventListener("dragleave", () => b.classList.remove("pixwb-droptarget"));
+      b.addEventListener("dragleave", clearMarks);
       b.addEventListener("drop", (e) => {
         e.preventDefault();
-        b.classList.remove("pixwb-droptarget");
-        onDropOn?.(folderPath);
+        const wasFolder = isFolderDrag(e);
+        const r = b.getBoundingClientRect();
+        const above = (e.clientY - r.top) < r.height / 2;
+        clearMarks();
+        if (wasFolder) {
+          const moved = e.dataTransfer.getData(FOLDER_MIME);
+          if (moved && moved !== folderPath && folderPath !== "") {
+            onReorderFolder?.(moved, folderPath, above);
+          }
+        } else {
+          onDropOn?.(folderPath);
+        }
       });
+
+      // Folders themselves are draggable, so they can be re-ordered by hand
+      // rather than only through the right-click menu.
+      b.draggable = true;
+      b.addEventListener("dragstart", (e) => {
+        if (e.target.tagName === "INPUT") { e.preventDefault(); return; }  // mid-rename
+        e.dataTransfer.effectAllowed = "move";
+        e.dataTransfer.setData(FOLDER_MIME, folderPath);
+        // Some browsers refuse a drag with no text/plain payload at all.
+        e.dataTransfer.setData("text/plain", folderPath);
+        b.classList.add("pixwb-dragging-me");
+      });
+      b.addEventListener("dragend", () => b.classList.remove("pixwb-dragging-me"));
     }
 
     side.append(b);

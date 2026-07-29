@@ -179,6 +179,7 @@ function render() {
     onDropOn: onDropOnFolder,
     onRenameFolder: startFolderRename,
     onFolderMenu: showFolderMenu,
+    onReorderFolder: reorderFolderByDrop,
   });
   renderGrid(S.win.main, S, HANDLERS);
   if (S.win.isDetailVisible()) renderDetail(S.win.detail, S, HANDLERS);
@@ -443,8 +444,26 @@ function startFolderRename(path, row) {
   });
 }
 
-/** Move a folder one place among its OWN siblings. Order is a sidecar list of
- *  paths; folders not in it fall back to alphabetical. */
+/** Write a new order for one group of siblings.
+ *
+ *  Every OTHER folder's recorded position is kept as it was and only this group
+ *  is rewritten, so re-ordering one branch cannot shuffle an unrelated one. */
+function commitSiblingOrder(sibs, reordered) {
+  const others = (S.meta.folderOrder || []).filter((p) => !sibs.includes(p));
+  const folderOrder = [...others, ...reordered];
+  guard(async () => {
+    const res = await A.saveMeta({ folderOrder });
+    // The sidecar route ignores keys it does not know, and that silently
+    // swallowed the order once already. If it did not come back, say so rather
+    // than leaving the folder sitting where it was with no explanation.
+    if (!res?.meta?.folderOrder || !res.meta.folderOrder.length) {
+      throw new Error("Folder order could not be saved. Restart ComfyUI - this part needs the newer server files.");
+    }
+    S.meta.folderOrder = folderOrder;
+  });
+}
+
+/** Move a folder one place among its OWN siblings. */
 function moveFolder(path, delta) {
   const sibs = siblingsOf(path, S.folders, S.meta.folderOrder);
   const at = sibs.indexOf(path);
@@ -452,15 +471,28 @@ function moveFolder(path, delta) {
   if (at < 0 || to < 0 || to >= sibs.length) return;
   const reordered = sibs.slice();
   reordered.splice(to, 0, reordered.splice(at, 1)[0]);
+  commitSiblingOrder(sibs, reordered);
+}
 
-  // Keep every other folder's recorded position and rewrite only this group,
-  // so re-ordering one folder cannot shuffle an unrelated branch.
-  const others = (S.meta.folderOrder || []).filter((p) => !sibs.includes(p));
-  const folderOrder = [...others, ...reordered];
-  guard(async () => {
-    await A.saveMeta({ folderOrder });
-    S.meta.folderOrder = folderOrder;
-  });
+/** Drop one folder above or below another. Re-ordering only, never a move on
+ *  disk: dragging a folder INTO another would rewrite every path underneath it,
+ *  which is a different and much more destructive operation than it looks. */
+function reorderFolderByDrop(moved, target, above) {
+  const parent = (p) => (p.includes("/") ? p.slice(0, p.lastIndexOf("/")) : "");
+  if (parent(moved) !== parent(target)) {
+    S.win.toast("Folders can be re-ordered within the same level, not moved into each other.");
+    return;
+  }
+  const sibs = siblingsOf(moved, S.folders, S.meta.folderOrder);
+  const from = sibs.indexOf(moved);
+  if (from < 0) return;
+  const without = sibs.filter((p) => p !== moved);
+  const at = without.indexOf(target);
+  if (at < 0) return;
+  const insert = above ? at : at + 1;
+  without.splice(insert, 0, moved);
+  if (without.join("|") === sibs.join("|")) return;   // nothing actually moved
+  commitSiblingOrder(sibs, without);
 }
 
 function showFolderMenu(path, ev) {

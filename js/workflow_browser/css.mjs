@@ -128,6 +128,11 @@ export function injectWorkflowCSS() {
 .pixwb-fold .pixwb-cnt { margin-left: auto; font-size: 9.5px; color: #7d7673; font-variant-numeric: tabular-nums; }
 .pixwb-fold .pixwb-dot { width: 9px; height: 9px; border-radius: 2px; flex: none; background: #4d7ea8; }
 .pixwb-fold.pixwb-droptarget { outline: 1px dashed ${ACC}; background: color-mix(in srgb, ${ACC} 10%, transparent); }
+/* Dragging a FOLDER shows where it would land instead of highlighting the row,
+   because the row is not the destination - the gap next to it is. */
+.pixwb-fold.pixwb-insert-above { box-shadow: inset 0 2px 0 0 ${ACC}; }
+.pixwb-fold.pixwb-insert-below { box-shadow: inset 0 -2px 0 0 ${ACC}; }
+.pixwb-fold.pixwb-dragging-me { opacity: .45; }
 .pixwb-fold .pixwb-nest { display: inline-block; flex: none; }
 
 /* ── the grid ────────────────────────────────────────────────── */
@@ -195,9 +200,10 @@ export function injectWorkflowCSS() {
 .pixwb-warn { color: #d98b5f; }
 .pixwb-modlist { margin: 6px 0 9px; }
 /* The model list is the thing people scan this pane for, so it carries the
-   accent rather than sitting in the same grey as everything else. */
+   accent - but on a NEAR-BLACK background. An accent-tinted background behind
+   accent text is orange on orange and unreadable at 9.5px. */
 .pixwb-mod {
-  background: color-mix(in srgb, ${ACC} 9%, #232120); border: 1px solid color-mix(in srgb, ${ACC} 28%, #302d2b);
+  background: #131211; border: 1px solid color-mix(in srgb, ${ACC} 32%, #302d2b);
   border-radius: 4px; padding: 3px 6px;
   font-size: 9.5px; color: ${ACC}; margin-bottom: 3px; word-break: break-all;
 }
