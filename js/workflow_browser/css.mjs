@@ -74,7 +74,7 @@ export function injectWorkflowCSS() {
 
 /* ── toolbar row ─────────────────────────────────────────────── */
 .pixwb-bar {
-  display: flex; align-items: center; gap: 7px; flex: none;
+  display: flex; align-items: center; gap: 7px; flex: none; flex-wrap: wrap;
   padding: 8px 10px; background: #1d1c1b; border-bottom: 1px solid #302d2b;
 }
 .pixwb-search { position: relative; flex: 1; min-width: 90px; }
@@ -271,16 +271,6 @@ export function injectWorkflowCSS() {
   content: ""; position: absolute; right: 3px; bottom: 3px; width: 7px; height: 7px;
   border-right: 2px solid #4a4542; border-bottom: 2px solid #4a4542;
 }
-
-/* ── hover preview ───────────────────────────────────────────── */
-.pixwb-hover {
-  position: fixed; z-index: 1400; width: 232px; background: #141312;
-  border: 1px solid ${ACC}; border-radius: 8px; overflow: hidden; pointer-events: none;
-  box-shadow: 0 14px 34px rgba(0,0,0,.7);
-}
-.pixwb-hover .pixwb-hcov { display: block; width: 100%; height: 130px; background: #0f0e0e; object-fit: cover; }
-.pixwb-hover .pixwb-htxt { padding: 7px 9px; font-size: 10.5px; color: #a49d99; line-height: 1.45; }
-.pixwb-hover .pixwb-htxt b { color: #fff; display: block; font-size: 11.5px; margin-bottom: 2px; }
 
 /* ── toast ───────────────────────────────────────────────────── */
 .pixwb-toast {

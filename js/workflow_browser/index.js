@@ -17,7 +17,7 @@ import {
   renderFolders, orderedFolders, siblingsOf, beginFolderRename,
 } from "./folders.mjs";
 import { openContextMenu, closeContextMenu } from "./menu.mjs";
-import { renderGrid, beginRename, showHover, hideHover } from "./grid.mjs";
+import { renderGrid, beginRename } from "./grid.mjs";
 import { renderDetail } from "./detail.mjs";
 import { searchEntries } from "./search.mjs";
 import { installOutputCoverCapture } from "./cover.mjs";
@@ -191,7 +191,6 @@ function render() {
     ? `${total} workflows`
     : `${S.visible.length} of ${total}`);
 
-  wireHover();
 }
 
 /** Search results are ranked by relevance and Recent is ordered by date, so in
@@ -209,18 +208,6 @@ function refreshSortButton() {
   const why = sortDisabledReason();
   b.disabled = !!why;
   b.title = why || "Change the order";
-}
-
-function wireHover() {
-  const main = S.win.main;
-  main.querySelectorAll("[data-rel]").forEach((card) => {
-    card.addEventListener("mouseenter", () => {
-      const e = S.byRel.get(card.dataset.rel);
-      if (e) showHover(e, S, card.getBoundingClientRect());
-    });
-    card.addEventListener("mouseleave", hideHover);
-  });
-  main.addEventListener("scroll", hideHover, { passive: true });
 }
 
 // ── small dialogs, in the panel's own style ──────────────────────────────────
@@ -301,7 +288,6 @@ const HANDLERS = {
   },
 
   onOpen(entry) {
-    hideHover();
     guard(async () => {
       await A.openWorkflow(entry.rel);
       S.win.toast(`Opened ${entry.name}`);
@@ -348,7 +334,11 @@ const HANDLERS = {
   },
 
   onReveal(entry) {
-    guard(() => A.reveal(entry.rel));
+    // The folder really does open, but on Windows it lands BEHIND the browser
+    // and only blinks in the taskbar - which reads as "reveal does nothing".
+    // Bringing it to the front is not an option: the PowerShell needed for that
+    // is flagged as malicious by antivirus (see the Save Image reveal route).
+    guard(() => A.reveal(entry.rel), "Opened the folder - look in your taskbar");
   },
 
   onNote(rel, text) {
@@ -398,7 +388,6 @@ const HANDLERS = {
     if (!S.selected.has(entry.rel)) S.selected = new Set([entry.rel]);
     e.dataTransfer.effectAllowed = "move";
     e.dataTransfer.setData("text/plain", entry.rel);
-    hideHover();
   },
 };
 
@@ -452,7 +441,7 @@ function showCardMenu(entry, x, y) {
     { label: "Move to folder…", fn: () => promptMoveTo([entry.rel]) },
     { label: "Set cover…", fn: () => HANDLERS.onSetCover(entry) },
     null,
-    { label: "Reveal in explorer", fn: () => guard(() => A.reveal(entry.rel)) },
+    { label: "Reveal in explorer", fn: () => guard(() => A.reveal(entry.rel), "Opened the folder - look in your taskbar") },
     null,
     { label: "Delete…", danger: true, fn: () => HANDLERS.onDelete(entry) },
   ]);
@@ -577,7 +566,7 @@ function showFolderMenu(path, ev) {
     { label: "Move up", fn: () => moveFolder(path, -1), disabled: at <= 0 },
     { label: "Move down", fn: () => moveFolder(path, 1), disabled: at < 0 || at >= sibs.length - 1 },
     null,
-    { label: "Reveal in explorer", fn: () => guard(() => A.reveal(path)) },
+    { label: "Reveal in explorer", fn: () => guard(() => A.reveal(path), "Opened the folder - look in your taskbar") },
     null,
     {
       label: "Delete folder",
@@ -633,7 +622,6 @@ function buildBar(bar) {
     S.kbdRel = null;
     render();
   });
-  input.addEventListener("keydown", onSearchKeys);
   search.append(input);
   bar.append(search);
 
@@ -671,6 +659,16 @@ function buildBar(bar) {
   // every keystroke would throw away the search box's focus and caret.
   S.sortBtn = sort;
 
+  // Opens whichever folder is selected, or the workflows folder itself.
+  const openFolder = el("button", "pixwb-tbtn", "Open folder");
+  openFolder.type = "button";
+  openFolder.title = "Open this folder on your computer. It opens behind the browser, so look in your taskbar.";
+  openFolder.addEventListener("click", () => {
+    const path = S.sel.kind === "folder" ? S.sel.value : "";
+    guard(() => A.reveal(path), "Opened the folder - look in your taskbar");
+  });
+  bar.append(openFolder);
+
   const saveHere = el("button", "pixwb-tbtn pixwb-primary", "Save open workflow here");
   saveHere.type = "button";
   saveHere.title = "Save whatever is on the canvas into the selected folder";
@@ -697,7 +695,11 @@ function onSaveHere() {
 
 // ── keyboard ─────────────────────────────────────────────────────────────────
 
-function onSearchKeys(e) {
+function onPanelKeys(e) {
+  // Rename boxes and the note field stopPropagation, so they never reach here
+  // and typing in them is unaffected. The search box deliberately DOES let
+  // arrows through, so you can type and then walk the results without moving
+  // your hands.
   const list = S.visible;
   if (!list.length) return;
   const idx = S.kbdRel ? list.findIndex((x) => x.rel === S.kbdRel) : -1;
@@ -753,11 +755,13 @@ function ensureWindow() {
       loadData().then(render);
     },
     onClose: () => {
-      hideHover();
       closeContextMenu();
       syncButton();
     },
   });
+  // Panel-wide, not on the search input: the hint says the arrows move the
+  // selection, so they have to work wherever the focus happens to be.
+  S.win.el.addEventListener("keydown", onPanelKeys);
   return S.win;
 }
 
