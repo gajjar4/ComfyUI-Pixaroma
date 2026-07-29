@@ -16,7 +16,7 @@
 import { app } from "/scripts/app.js";
 import { PIXAROMA_JS_VERSION } from "../shared/index.mjs";
 import { el } from "./window.mjs";
-import { readSlots } from "./schematic.mjs";
+import { readControls } from "./controls.mjs";
 
 const DISCORD_URL = "https://discord.com/invite/gggpkVgBf3";
 const YOUTUBE_URL = "https://www.youtube.com/@pixaroma";
@@ -133,7 +133,7 @@ export function autoWire(from, to) {
 // A node's inputs are not built until it exists, so this reads the DEFINITION
 // to answer "could this even be wired to the selection" before we place it.
 export function couldWire(fromNode, comfyClass) {
-  const slots = readSlots(comfyClass);
+  const slots = readControls(comfyClass);
   if (!slots || !fromNode?.outputs?.length) return false;
   const outTypes = fromNode.outputs.map((o) => o?.type).filter(Boolean);
   return slots.inputs.some((i) => outTypes.some((t) => t === i.type || i.type === "*" || t === "*"));

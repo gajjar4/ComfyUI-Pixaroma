@@ -40,20 +40,17 @@ export function injectHelpBrowserCSS() {
   mask-repeat: no-repeat; -webkit-mask-repeat: no-repeat;
   mask-position: center; -webkit-mask-position: center;
 }
+/* Off / on exactly like the Align button beside it: grey when the window is
+   closed, accent when it is open. Same values as js/align/index.js so the two
+   toggles in that toolbar are visibly the same control. */
 .pixhb-btn {
-  background-color: ${ACC} !important; color: #fff !important;
-  border-color: ${ACC} !important;
+  background-color: #2a2c2e !important; color: #ddd !important; border-color: #444 !important;
 }
-.pixhb-btn:hover { filter: brightness(1.1); }
-/* Pressed while the window is open, so the button visibly reads as a toggle.
-   It stays accent-filled rather than greying out when closed - the ? is the
-   way in to the help and should keep inviting the click - so "open" is shown
-   by darkening and insetting it, the way a held-down button looks. */
+.pixhb-btn:hover { background-color: #3a3d40 !important; }
 .pixhb-btn.pixhb-btn-open {
-  filter: brightness(0.82);
-  box-shadow: inset 0 2px 5px rgba(0,0,0,.45);
+  background-color: ${ACC} !important; color: #fff !important; border-color: ${ACC} !important;
 }
-.pixhb-btn.pixhb-btn-open:hover { filter: brightness(0.92); }
+.pixhb-btn.pixhb-btn-open:hover { background-color: ${ACC} !important; filter: brightness(1.08); }
 
 
 /* ── the floating window ────────────────────────────────────── */
@@ -83,7 +80,6 @@ export function injectHelpBrowserCSS() {
   mask: url("${LOGO_ICON}") center / contain no-repeat;
   -webkit-mask: url("${LOGO_ICON}") center / contain no-repeat;
 }
-.pixhb-sbar .pixhb-crown { color: ${ACC}; }
 .pixhb-title .pixhb-sp { flex: 1; }
 .pixhb-wbtn {
   width: 22px; height: 22px; border-radius: 4px; border: none; flex: none;
@@ -293,54 +289,24 @@ export function injectHelpBrowserCSS() {
 }
 .pixhb-relchip:hover { border-color: ${ACC}; color: #fff; }
 
-/* ── the generated wiring diagram ───────────────────────────── */
-.pixhb-shot {
-  border: 1px solid #302d2b; border-radius: 8px; background: #111010;
-  padding: 14px 12px 10px; margin: 0 0 14px; text-align: center;
+/* ── what each control does ─────────────────────────────────── */
+.pixhb-ctls { display: flex; flex-direction: column; gap: 7px; }
+.pixhb-ctl { border-left: 2px solid #3a3a3a; padding: 1px 0 1px 10px; }
+.pixhb-ctl-h { display: flex; align-items: baseline; gap: 7px; flex-wrap: wrap; }
+.pixhb-ctl-n { color: #fff; font-weight: 600; font-size: 12.5px; }
+.pixhb-ctl-t {
+  font-family: monospace; font-size: 9px; letter-spacing: .05em; color: #8e8783;
+  background: rgba(255,255,255,.06); border-radius: 3px; padding: 1px 5px;
 }
-/* These two colours are the REAL Pixaroma node defaults from js/brand/index.js
-   (title #1d1d1d, body #2a2a2a). The diagram is meant to look like the node the
-   reader will actually see, so it uses the node's own colours rather than an
-   invented palette - and carries NO crown, because a real node title has none.
-   The crown lives in the Add Node menu path, not on the node. */
-.pixhb-scard {
-  display: inline-block; min-width: 230px; max-width: 330px; background: #2a2a2a;
-  border: 1px solid #3a3a3a; border-radius: 8px; text-align: left; box-shadow: 0 6px 20px rgba(0,0,0,.45);
+.pixhb-ctl-opt { font-size: 9.5px; color: #8e8783; font-style: italic; }
+.pixhb-ctl-d { font-family: monospace; font-size: 9.5px; color: #8e8783; margin-left: auto; }
+.pixhb-ctl-tip { color: #cfcac7; font-size: 12px; margin-top: 2px; }
+.pixhb-ctl-ch { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+.pixhb-ctl-chv {
+  font-size: 9.5px; padding: 1px 6px; border-radius: 3px;
+  background: rgba(255,255,255,.05); color: #b4aeab;
 }
-.pixhb-sbar {
-  background: #1d1d1d; padding: 6px 11px; font-size: 11.5px; color: #fff; font-weight: 600;
-  border-bottom: 1px solid #3a3a3a; border-radius: 7px 7px 0 0;
-  display: flex; align-items: center; gap: 6px;
-}
-.pixhb-srows { padding: 6px 0; }
-.pixhb-srow { display: flex; align-items: center; gap: 6px; min-height: 18px; padding: 1px 10px; }
-.pixhb-side-in, .pixhb-side-out { display: flex; align-items: center; gap: 5px; min-width: 0; }
-.pixhb-side-out { margin-left: auto; flex-direction: row-reverse; }
-.pixhb-dot { width: 9px; height: 9px; border-radius: 50%; flex: none; border: 1px solid rgba(0,0,0,.45); }
-.pixhb-side-in .pixhb-dot { margin-left: -15px; }
-.pixhb-side-out .pixhb-dot { margin-right: -15px; }
-.pixhb-sname { font-size: 11px; color: #e2e2e2; white-space: nowrap; }
-.pixhb-stype { font-family: monospace; font-size: 8px; letter-spacing: .05em; color: #7d7673; white-space: nowrap; }
-/* A ComfyUI widget is a full-width rounded row inside the node body, not a
-   little chip floating in it. Drawing them the same way is most of what makes
-   the diagram read as the node rather than as an abstract picture of it. */
-.pixhb-swid { margin: 5px 9px 9px; display: flex; flex-direction: column; gap: 4px; }
-.pixhb-wp {
-  font-size: 10px; padding: 3px 10px; border-radius: 9px; background: #353535;
-  color: #ddd; border: none; display: flex; gap: 8px; align-items: baseline;
-  white-space: nowrap; overflow: hidden;
-}
-.pixhb-wp-n { overflow: hidden; text-overflow: ellipsis; }
-.pixhb-wp-v { margin-left: auto; color: #fff; font-variant-numeric: tabular-nums; }
-.pixhb-send { margin: 5px 10px 8px; font-size: 9.5px; color: #7d7673; font-style: italic; }
-.pixhb-slegend {
-  display: flex; gap: 9px; justify-content: center; flex-wrap: wrap; margin-top: 7px;
-  font-family: monospace; font-size: 8.5px; color: #8e8783;
-}
-.pixhb-slegend span { display: flex; align-items: center; gap: 4px; }
-.pixhb-slegend i { width: 7px; height: 7px; border-radius: 50%; display: block; }
-.pixhb-scap { font-family: monospace; font-size: 9.5px; letter-spacing: .05em; color: #8e8783; margin-top: 10px; }
-.pixhb-pic { max-width: 100%; border-radius: 8px; border: 1px solid #302d2b; display: block; margin: 0 0 14px; }
+.pixhb-ctl-note { color: #8e8783; font-size: 11.5px; margin: 0 0 7px; font-style: italic; }
 
 /* ── search results ─────────────────────────────────────────── */
 .pixhb-res { display: flex; align-items: center; gap: 9px; padding: 7px 9px; border-radius: 6px;

@@ -19,7 +19,7 @@ import { allNodeHelp } from "../shared/index.mjs";
 import { el } from "./window.mjs";
 import { GUIDES } from "./guides.mjs";
 import { CANVAS_FEATURES } from "./canvas_defs.mjs";
-import { buildSchematic, nodeDefFor } from "./schematic.mjs";
+import { buildControls, nodeDefFor } from "./controls.mjs";
 import { KEYWORDS } from "./keywords.mjs";
 
 // Category order and icons mirror the "👑 Pixaroma/..." menu, so the browser
@@ -250,25 +250,16 @@ export function renderArticle(main, entry, onNav, ctx) {
 
   if (ctx?.buildActions) pad.appendChild(ctx.buildActions(entry));
 
-  // A real picture, only for the handful of nodes whose FACE is the subject.
-  // Absent file -> no picture and no error; the diagram below still explains
-  // the wiring. Same drop-in habit as the custom fonts and note icons.
-  if (entry.kind === "node") {
-    // Hidden until it actually loads, so a node with no picture leaves NO gap.
-    // Three details that all matter: the listeners go on BEFORE `src` (a cached
-    // failure can fire before a later-attached handler), there is no
-    // loading="lazy" (a lazy image that is never scrolled into view never
-    // loads, so `error` never fires and the empty box just sits there), and the
-    // element starts display:none rather than being removed on error, so the
-    // page never reflows under the reader.
-    const dia = buildSchematic(entry.cls, help.title || entry.title);
-    if (dia) pad.appendChild(dia);
-  }
-
   const sections = Array.isArray(help.sections) ? help.sections : [];
   for (const section of sections) {
     try { pad.appendChild(buildSection(section)); }
     catch (e) { console.warn("[Pixaroma.Help] skipped a malformed section", e); }
+  }
+
+  // The control reference goes after the node's own explanation: read what it
+  // does first, then look up the individual field.
+  if (entry.kind === "node") {
+    for (const sec of buildControls(entry.cls)) pad.appendChild(sec);
   }
 
   if (help.footer) {
