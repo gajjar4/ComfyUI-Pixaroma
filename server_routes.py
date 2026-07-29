@@ -211,41 +211,6 @@ async def serve_pixaroma_asset(request):
     return web.FileResponse(file_path)
 
 
-@PromptServer.instance.routes.get("/pixaroma/assets/help/{filename}")
-async def serve_pixaroma_help_picture(request):
-    """Serve a node picture for the Help browser.
-
-    Its own route because these files are named by a HUMAN taking screenshots,
-    who should be free to use the node's real name - "Load Image Pixaroma.jpg"
-    - rather than a class name. The shared asset guard forbids spaces, so this
-    allows them, plus letters, digits, dot, dash, underscore and parentheses.
-
-    That is still safe: a space cannot build a traversal. Anything that could -
-    a path separator or a '..' segment - is rejected outright, and the resolved
-    path is then confined under assets/help/ by realpath, which is what
-    actually enforces the boundary. Only image extensions are served, so this
-    can never hand out a .py or a .json.
-    """
-    filename = request.match_info["filename"]
-    if (
-        not filename
-        or len(filename) > 160
-        or ".." in filename
-        or "/" in filename
-        or "\\" in filename
-        or not _SAFE_HELP_PIC_RE.match(filename)
-    ):
-        return web.Response(status=400)
-
-    help_dir = os.path.realpath(os.path.join(PIXAROMA_ASSETS_DIR, "help"))
-    file_path = os.path.realpath(os.path.join(help_dir, filename))
-    if not file_path.startswith(help_dir + os.sep):
-        return web.Response(status=403)
-    if not os.path.isfile(file_path):
-        return web.Response(status=404)
-    return web.FileResponse(file_path)
-
-
 @PromptServer.instance.routes.get("/pixaroma/assets/{subdir}/{filename}")
 async def serve_pixaroma_asset_sub(request):
     subdir = request.match_info["subdir"]
@@ -478,11 +443,6 @@ os.makedirs(PIXAROMA_INPUT_ROOT, exist_ok=True)
 _MAX_B64_BYTES = 50 * 1024 * 1024
 # Only alphanumeric, hyphen, underscore allowed in caller-supplied IDs
 _SAFE_ID_RE = re.compile(r"^[a-zA-Z0-9_\-]+$")
-# Node pictures for the Help browser are named by whoever takes the screenshot,
-# so a readable "Load Image Pixaroma.jpg" has to work. Spaces and parentheses
-# are allowed; separators and '..' are rejected by the route before this runs,
-# and realpath confinement is what actually enforces the boundary.
-_SAFE_HELP_PIC_RE = re.compile(r"^[A-Za-z0-9 _().\-]+\.(?:webp|png|jpg|jpeg)$", re.I)
 _MAX_ID_LEN = 64
 
 
