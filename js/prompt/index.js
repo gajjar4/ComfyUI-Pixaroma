@@ -89,9 +89,14 @@ function injectCSS() {
     .pix-prm-tawrap:focus-within { border-color:var(--acc); }
     /* The BACKDROP is the VISIBLE text layer (tags coloured, no boxes); the textarea
        on top has TRANSPARENT text + a visible caret, so there is only ONE text layer
-       that can never double/ghost. scrollbar-gutter:stable on BOTH keeps their
-       wrapping identical so the caret + selection line up with the visible text
-       (the textarea's scrollbar would otherwise narrow it ~15px vs the backdrop). */
+       that can never double/ghost. Their text columns MUST be exactly the same width
+       or the two wrap at different characters and the caret drifts off the visible
+       text, a little more on every wrapped line. scrollbar-gutter:stable on BOTH is
+       the first line of defence (it stops the textarea's ~15px scrollbar narrowing
+       it vs the backdrop) but it is only a GUESS: whether an overflow:hidden box
+       reserves a gutter varies by engine/version, and a ComfyUI theme can restyle
+       ::-webkit-scrollbar to a different width for a textarea than for a div. So
+       syncBackdropBox() MEASURES both columns and corrects any leftover gap. */
     .pix-prm-backdrop { position:absolute; inset:0; padding:6px 8px; border:0;
       font:12px/1.5 monospace; color:#e0e0e0; white-space:pre-wrap; word-wrap:break-word; overflow:hidden; scrollbar-gutter:stable; pointer-events:none; box-sizing:border-box; }
     .pix-prm-ta { flex:1 1 auto; width:100%; height:100%; box-sizing:border-box; background:transparent; color:transparent;
@@ -762,6 +767,32 @@ function readNodeText(src, depth) {
   if (strs.length === 1) return strs[0].value;
   return null;
 }
+// The caret lives in the textarea but the text you SEE is the backdrop, so the two
+// only agree while their text columns are the same width. Anything that reserves a
+// scrollbar gutter on one and not the other (an engine that ignores scrollbar-gutter
+// on an overflow:hidden box, a theme restyling ::-webkit-scrollbar for textareas, an
+// overlay-scrollbar platform) shifts every wrapped line a bit further, so the caret
+// ends up further from the visible text the longer the prompt is - the bug pattern a
+// user reported 2026-07-28. Rather than trusting the CSS, measure both columns and
+// close the gap with the backdrop's right padding (its box stays put; only the text
+// column narrows). Reset to the CSS baseline first so corrections never compound.
+// DOM-only - never touches node.size / properties, so it cannot dirty a workflow.
+function syncBackdropBox(els) {
+  const ta = els?.ta, bd = els?.backdrop;
+  if (!ta || !bd || !ta.isConnected) return;
+  bd.style.paddingRight = "";
+  bd.style.width = "";
+  const cs = getComputedStyle(ta), bs = getComputedStyle(bd);
+  const taText = ta.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+  const padR = parseFloat(bs.paddingRight);
+  const bdText = bd.clientWidth - parseFloat(bs.paddingLeft) - padR;
+  if (!(taText > 0) || !(bdText > 0)) return;      // not laid out yet - the observer retries
+  const gap = bdText - taText;                     // > 0 = the visible text column is too wide
+  if (Math.abs(gap) < 0.5) return;                 // already identical - write nothing
+  if (padR + gap >= 0) bd.style.paddingRight = (padR + gap) + "px";
+  else bd.style.width = Math.max(0, bd.offsetWidth - gap) + "px";  // padding can't go negative
+}
+
 function renderBackdrop(node) {
   const els = node._pixPromptRoot?._els; if (!els) return;
   // Colour the @tags AND *wildcards scanTokens counts (an email's @name / arithmetic
@@ -883,6 +914,11 @@ function wireEvents(node, root) {
     maybeAC(node, els.ta);
   });
   els.ta.addEventListener("scroll", () => { els.backdrop.scrollTop = els.ta.scrollTop; els.backdrop.scrollLeft = els.ta.scrollLeft; });
+  // Belt for the width sync: a theme's stylesheet can land AFTER the node was built
+  // and change the scrollbar width without ever resizing the textarea, so the
+  // ResizeObserver would not hear about it. Re-check when the field is focused - the
+  // moment before the caret matters - which is rare enough to cost nothing.
+  els.ta.addEventListener("focus", () => syncBackdropBox(els));
   // Focus leaves the field -> close the autocomplete (its item clicks preventDefault
   // mousedown so they don't blur; a real click-away does, and should dismiss it).
   els.ta.addEventListener("blur", () => closeAC());
@@ -1091,6 +1127,18 @@ function setupNode(node) {
   applyAdaptiveCanvasOnly(w);
 
   node._pixPromptFloorOff = installResizeFloor(root, measurePromptFloor);
+
+  // Keep the visible text column exactly as wide as the textarea's. A ResizeObserver
+  // (NOT onResize - Vue Compat #13) catches every cause: the node being resized, the
+  // renderer switching, and the textarea's scrollbar appearing or disappearing (that
+  // shrinks its CONTENT box, which is what RO reports). It only ever writes to the
+  // backdrop, which is absolutely positioned, so it cannot feed back into the
+  // textarea's size and loop.
+  if (typeof ResizeObserver === "function") {
+    node._pixPromptBoxRO = new ResizeObserver(() => syncBackdropBox(root._els));
+    node._pixPromptBoxRO.observe(root._els.ta);
+  }
+
   wireEvents(node, root);
 
   // Re-highlight / re-preview when the library changes (edited in the editor).
@@ -1107,6 +1155,7 @@ function setupNode(node) {
     applyOrderUI(node);
     applyExpandSwitch(node);
     refreshWireLock(node);
+    syncBackdropBox(root._els);
     refreshBody(node);
   });
   node.setDirtyCanvas(true, true);
@@ -1178,6 +1227,7 @@ app.registerExtension({
       closeLibraryEditorFor(this);
       closePromptSettingsFor(this);
       this._pixPromptFloorOff?.(); this._pixPromptFloorOff = null;
+      this._pixPromptBoxRO?.disconnect(); this._pixPromptBoxRO = null;
       this._pixPromptUnsub?.(); this._pixPromptUnsub = null;
       stopWiredPoll(this);
       this._pixPromptRoot = null;
