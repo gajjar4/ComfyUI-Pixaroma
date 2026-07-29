@@ -30,6 +30,9 @@
 
 Pixaroma turns ComfyUI into a powerful, easy-to-use design space. It brings professional editing right into your workflow!
 
+### ❓ Pixaroma Help
+Not sure what a node does? Click the orange **?** in the top toolbar, beside Align. A help window opens covering **every Pixaroma node**, the canvas tools that do not add a node at all, and four short guides: updating the nodes, opening a workflow you downloaded, the fix for most "it looks broken" reports, and where to ask when none of that helps. **Search reads the whole text**, not just node names, so you can type the problem ("buttons missing", "make it bigger") instead of guessing the name. Each node page explains what every input, setting and output is for, and you can **drop the node straight onto your canvas** with a button or by dragging its card there. The bar along the bottom always shows **which version you are on** and copies the full details for a support question in one click, with Discord and the tutorials next to it. Drag the divider to widen the list, and click the **?** again to close.
+
 ### ✨ Image Composer
 Easily combine and arrange multiple images. Move, scale, and rotate layers using a simple visual editor. **Per-layer blur** lets you focus or defocus any layer non-destructively with a simple slider. **Shift+Scroll wheel** scales the selected layer in place for quick adjustments. Use the eraser to tweak things by hand, or let our AI background removal tool isolate objects for you instantly.
 
@@ -341,6 +344,11 @@ Master the Pixaroma suite with our video guides and workflow deep-dives:
 ---
 
 ## 🛠 Changelog
+
+### **July 29, 2026 · v1.4.64**
+- **A help button in the top toolbar, next to Align.** Click the orange **?** and a help window opens covering every Pixaroma node, the canvas tools that add no node, and four short guides: updating the nodes, opening a workflow you downloaded, the fix for most "it looks broken" reports, and where to ask when none of that helps. Click the button again to close it. Search reads the whole text, not just node names, so typing a problem like "buttons missing" or "make it bigger" finds the right page. Every node page explains what each input, setting and output is for, and drops straight onto your canvas with a button or by dragging its card there. It is not a node, on purpose: a node would be saved into your workflow and follow it to anyone you shared it with.
+- **Your version is always on screen, and Discord is one click away.** The bar along the bottom of the help window shows which version you are on, on every page, and clicking it copies the full details ready to paste into a question. Beside it are buttons for Discord, the YouTube tutorials and the workflows site. The Need help page now points you at the right Discord channel: **#pixaroma-nodes** for anything about these nodes, **#comfyui** for ComfyUI itself.
+- **Fixed: Label Pixaroma was only showing half its help.** Its help had been written twice in two places, and only one of the two was ever shown, so a chunk of it had been invisible. Both halves are now in one place. Two wrong instructions in the Pixaroma Group help were corrected as well: it named a right-click entry that does not exist, and said only the bottom-right corner resizes a group when all four do.
 
 ### **July 28, 2026 · v1.4.63**
 - **Pick your own colour for almost any Pixaroma node.** Until now only seven nodes let you move away from the Pixaroma orange. Around fifty of them do it now, covering the buttons, switches, sliders and highlights on the node face. Open a node's settings, click the colour square, and choose anything you like. Two buttons decide how far it spreads: use the colour for every new node of that kind, or for every Pixaroma node at once, so you can recolour the whole pack in a click and still give one node its own.
