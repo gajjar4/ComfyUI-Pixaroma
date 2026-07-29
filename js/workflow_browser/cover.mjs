@@ -31,9 +31,17 @@ import * as A from "./api.mjs";
 // The earlier version hashed the colour into a fixed palette, which meant a
 // green node could come out brown: it looked arbitrary because it was.
 
-const LIFT_L = 0.60;    // target lightness
-const LIFT_S = 0.42;    // floor on saturation, so near-greys still show a tint
-const NO_COLOUR = "#6f6a66";
+// A GREY has no hue. Asking for one returns 0, which is red - so an earlier
+// version that forced a saturation floor onto everything turned every plain
+// #1d1d1d node into dusty pink (196,110,110) and the covers came out salmon,
+// while the genuinely orange nodes had been fine all along. Anything below this
+// much saturation is treated as colourless and only has its lightness lifted.
+const ACHROMATIC = 0.06;
+
+const LIFT_L = 0.62;    // target lightness for a node that HAS a colour
+const GREY_L = 0.42;    // plain nodes: visible, clearly neutral, not competing
+const LIFT_S = 0.45;    // saturation floor, applied only to real hues
+const NO_COLOUR = "#57534f";
 
 const _liftCache = new Map();
 
@@ -59,7 +67,10 @@ function lift(hex) {
         : ((r - g) / d + 4);
     hue /= 6;
   }
-  const s = Math.max(sat, LIFT_S), l = LIFT_L;
+  // Grey in, grey out. Only a colour that actually has a hue gets saturated up.
+  const grey = sat < ACHROMATIC;
+  const s = grey ? 0 : Math.max(sat, LIFT_S);
+  const l = grey ? GREY_L : LIFT_L;
   const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
   const p = 2 * l - q;
   const ch = (t) => {
