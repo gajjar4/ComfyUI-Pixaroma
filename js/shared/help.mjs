@@ -274,6 +274,36 @@ function ensureGraphCloseHook() {
 // opts.comfyClass, when given, adds a line at the bottom that opens the full
 // Help browser already on that node's page. Passed by the selection-toolbar
 // button (js/help_toolbar), which knows which node is selected.
+/**
+ * Open help for a node or canvas feature.
+ *
+ * Goes to the FULL browser at that page rather than the small popup. There was
+ * never two sets of writing - one help def, two renderers - but the popup was
+ * the poorer of the two: it cannot show the generated inputs/settings/outputs
+ * reference built from the node's own tooltips, it does not render `links`, and
+ * it has no Add to canvas. Sending both routes to the same page also means one
+ * set of dismiss rules to get right instead of two.
+ *
+ * `target` is a comfyClass ("PixaromaOutpaint") or a page key ("canvas:colors").
+ * The browser is reached through the window global on purpose: js/shared may not
+ * import js/help_browser, which imports shared, and that would be a cycle.
+ *
+ * The popup remains the fallback for a build where the browser did not load,
+ * so a missing browser costs a nicer page rather than all help everywhere.
+ */
+export function openHelpFor(target, helpDef, opts = {}) {
+  const key = target || opts.comfyClass || opts.pageKey;
+  try {
+    const browser = window.PixaromaHelpBrowser;
+    if (key && typeof browser?.open === "function") {
+      browser.open(key);
+      return true;
+    }
+  } catch { /* fall through to the popup */ }
+  if (helpDef) openHelpPopup(helpDef, opts);
+  return false;
+}
+
 export function openHelpPopup(helpDef, opts = {}) {
   helpDef = helpDef || {};
   injectHelpCSS();

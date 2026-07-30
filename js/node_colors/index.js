@@ -1,6 +1,6 @@
 import { app } from "/scripts/app.js";
 import { createPixaromaColorPicker } from "../shared/color_picker.mjs";
-import { openHelpPopup } from "../shared/help.mjs";
+import { openHelpPopup, openHelpFor } from "../shared/help.mjs";
 
 // ── Pixaroma node + group colors: right-click menu + presets + favorites ─
 // NODES — right-click any node:
@@ -910,7 +910,7 @@ function makeHelpBtn() {
   const b = document.createElement("button");
   b.type = "button"; b.title = "What do these do?"; b.textContent = "?";
   b.style.cssText = "width:26px;height:26px;flex:0 0 auto;border-radius:50%;background:#f66744;color:#fff;border:none;font:700 14px system-ui,sans-serif;cursor:pointer;display:flex;align-items:center;justify-content:center;line-height:1;";
-  b.addEventListener("click", (e) => { e.stopPropagation(); openHelpPopup(COLOR_HELP, { pageKey: "canvas:colors" }); });
+  b.addEventListener("click", (e) => { e.stopPropagation(); openHelpFor("canvas:colors", COLOR_HELP, { pageKey: "canvas:colors" }); });
   return b;
 }
 

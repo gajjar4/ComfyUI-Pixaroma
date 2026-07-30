@@ -1,6 +1,6 @@
 import { app } from "/scripts/app.js";
 import { createPixaromaColorPicker, PIXAROMA_PALETTE } from "../shared/color_picker.mjs";
-import { openHelpPopup, closeHelpPopup } from "../shared/help.mjs";
+import { openHelpPopup, openHelpFor, closeHelpPopup } from "../shared/help.mjs";
 import {
   DEFAULTS,
   FONT_CHOICES,
@@ -606,7 +606,7 @@ export class LabelEditor {
   _showHelp() {
     // Pass the class so "Open the full help" lands on the Label page rather
     // than the browser's Home screen, matching node_colors and pixgroup.
-    openHelpPopup(LABEL_HELP, { comfyClass: "PixaromaLabel" });
+    openHelpFor("PixaromaLabel", LABEL_HELP, { comfyClass: "PixaromaLabel" });
     // The editor overlay is z-index 99999; lift the help card above it.
     const bd = document.querySelector(".pix-help-backdrop");
     if (bd) bd.style.zIndex = "100000";

@@ -22,6 +22,7 @@
 import { app } from "/scripts/app.js";
 import { nodeSetting, setNodeSetting } from "../shared/index.mjs";
 import { createHelpWindow, el } from "./window.mjs";
+import { versionParts } from "../shared/version.mjs";
 import { injectHelpBrowserCSS } from "./css.mjs";
 import {
   buildIndex, groupByCategory, renderNav, renderArticle, buildCard, pixaromaOnCanvas,
@@ -29,7 +30,7 @@ import {
 import { buildSearchIndex, searchIndex, highlight } from "./search.mjs";
 import {
   toast, flash, createNodeAt, graphPointFromClient,
-  copyText, versionLine, versionShort, helpAsText, openExternal, LINKS, escText,
+  copyText, versionLine, helpAsText, openExternal, LINKS, escText,
 } from "./actions.mjs";
 
 const PINS_SETTING = "Pixaroma.Help.Pins";
@@ -299,7 +300,9 @@ function buildFooter(foot) {
   // is what people are asked for; the click copies the FULL line (frontend
   // version, renderer, platform) which is what actually answers a support
   // question.
-  const ver = el("button", "pixhb-ver", versionShort());
+  const ver = el("button", "pixhb-ver");
+  const vp = versionParts();
+  ver.append(el("span", "pixhb-vername", vp.name), document.createTextNode(" " + vp.number));
   ver.type = "button";
   ver.addEventListener("click", async () => {
     const ok = await copyText(versionLine());

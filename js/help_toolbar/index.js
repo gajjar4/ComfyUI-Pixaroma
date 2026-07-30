@@ -32,7 +32,7 @@
 // underscores (Pixaroma.ShowHelp -> Pixaroma_ShowHelp).
 
 import { app } from "/scripts/app.js";
-import { openHelpPopup, getNodeHelp } from "../shared/index.mjs";
+import { openHelpPopup, openHelpFor, getNodeHelp } from "../shared/index.mjs";
 import {
   getNodeSettings, openNodeSettings, repaintAllAccents, closeNodeSettingsFor,
   GLOBAL_ACCENT_SETTING, BRAND,
@@ -131,7 +131,7 @@ app.registerExtension({
         const found = firstWith((n) => getNodeHelp(n.comfyClass));
         // Pass the class so the popup can offer a way through to the full Help
         // browser, opened on this node's page.
-        if (found) openHelpPopup(found.hit, { comfyClass: found.node.comfyClass });
+        if (found) openHelpFor(found.node.comfyClass, found.hit, { comfyClass: found.node.comfyClass });
       },
     },
     {

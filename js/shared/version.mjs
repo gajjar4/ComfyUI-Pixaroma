@@ -16,6 +16,12 @@ export function versionShort() {
   return `Pixaroma ${PIXAROMA_JS_VERSION}`;
 }
 
+/** The same thing in two pieces, so a footer can colour the NAME without
+ *  colouring the number with it. One string cannot be two colours. */
+export function versionParts() {
+  return { name: "Pixaroma", number: PIXAROMA_JS_VERSION };
+}
+
 /** The full line worth pasting into a support question. Every part is optional
  *  and guarded: a missing one must not cost the reader the parts that are
  *  there. The renderer is read fresh each time, since it can be switched

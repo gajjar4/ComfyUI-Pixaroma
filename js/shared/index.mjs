@@ -53,6 +53,7 @@ export {
 export {
   createHelpButton,
   openHelpPopup,
+  openHelpFor,
   closeHelpPopup,
   injectHelpCSS,
   registerNodeHelp,

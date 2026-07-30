@@ -285,6 +285,8 @@ export function injectHelpBrowserCSS() {
   margin: 0 0 5px; font-size: 19px; color: #fff; font-weight: 600; letter-spacing: -.01em;
   display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
 }
+.pixhb-vername { color: ${ACC}; font-weight: 600; }
+.pixhb-ver:hover .pixhb-vername { color: #fff; }
 .pixhb-articon {
   display: inline-block; width: 22px; height: 22px; vertical-align: -3px;
   margin-right: 9px; background-color: ${ACC};

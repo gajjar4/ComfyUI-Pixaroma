@@ -22,7 +22,7 @@ import { renderDetail } from "./detail.mjs";
 import { searchEntries } from "./search.mjs";
 import { installOutputCoverCapture, hasHandCover } from "./cover.mjs";
 import { globalAccent, BRAND } from "../shared/index.mjs";
-import { versionShort, versionLine } from "../shared/version.mjs";
+import { versionParts, versionLine } from "../shared/version.mjs";
 import * as A from "./api.mjs";
 
 const CMD_ID = "Pixaroma.OpenWorkflowBrowser";
@@ -966,8 +966,10 @@ function buildFooter(foot) {
     }
   });
   foot.append(help);
-  const ver = el("button", "pixwb-ver", versionShort());
+  const ver = el("button", "pixwb-ver");
   ver.type = "button";
+  const vp = versionParts();
+  ver.append(el("span", "pixwb-vername", vp.name), document.createTextNode(" " + vp.number));
   ver.title = versionLine() + "  ·  click to copy";
   ver.addEventListener("click", async () => {
     const line = versionLine();

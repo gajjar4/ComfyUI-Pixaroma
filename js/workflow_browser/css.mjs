@@ -314,6 +314,8 @@ export function injectWorkflowCSS() {
   transition: background .12s, border-color .12s, color .12s;
 }
 .pixwb-ver:hover { border-color: ${ACC}; color: #fff; }
+.pixwb-vername { color: ${ACC}; font-weight: 600; }
+.pixwb-ver:hover .pixwb-vername { color: #fff; }
 .pixwb-foot b {
   background: #2a2726; border: 1px solid #3d3936; border-radius: 3px; padding: 1px 5px;
   color: #a49d99; font-weight: 500;
