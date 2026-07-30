@@ -27,6 +27,7 @@ A list value of the form [node_id, slot] is a LINK; anything else is a widget
 value.
 """
 
+import json
 import re
 
 _MAX_DEPTH = 32  # deep enough for real graphs, shallow enough to bound a cycle
@@ -68,6 +69,104 @@ def widget_value(prompt, node_id, input_name, default=None):
     if value is None or is_link(value):
         return default
     return value
+
+
+# Pixaroma value nodes keep their rows in a JSON state blob instead of widgets,
+# and the OUTPUT SLOT of the link selects which row. Observed live 2026-07-30 on
+# a workflow feeding KSampler: seed <- PixaromaSeed, and steps / cfg /
+# sampler_name <- PixaromaSliders slots 0 / 1 / 2.
+#   PixaromaSliders  inputs {"SlidersState": '{"version":1,"sliders":[{"type":"int","value":36},...]}'}
+#   PixaromaSeed     inputs {"SeedState": '{"runSeed":1756}'}
+# Each entry: state input name -> (list key or None, value key).
+# A None list key means the blob holds ONE value, so the slot is ignored.
+_STATE_BLOB_NODES = {
+    "PixaromaSliders": ("SlidersState", "sliders", "value"),
+    "PixaromaSeed": ("SeedState", None, "runSeed"),
+}
+# Other Pixaroma value nodes (Control Panel, Number, WH, Resolution, Sizes...)
+# very likely need entries here too, but their blob schemas were NOT verified, so
+# they are deliberately absent rather than guessed: a wrong slot mapping would
+# record a real number that is simply the WRONG one, which is worse than a
+# missing key because nobody can tell it is wrong. Verify each against a live
+# graphToPrompt before adding it.
+
+
+def _from_state_blob(prompt, node_id, slot):
+    """Value a Pixaroma state-blob node emits on `slot`, or None."""
+    ct = class_of(prompt, node_id)
+    spec = _STATE_BLOB_NODES.get(ct)
+    if not spec:
+        return None
+    state_key, list_key, value_key = spec
+    raw = widget_value(prompt, node_id, state_key)
+    if not isinstance(raw, str) or not raw.strip():
+        return None
+    try:
+        state = json.loads(raw)
+    except (ValueError, TypeError):
+        return None
+    if not isinstance(state, dict):
+        return None
+    if list_key is None:
+        v = state.get(value_key)
+        return v if isinstance(v, (int, float, str)) and not isinstance(v, bool) else None
+    rows = state.get(list_key)
+    if not isinstance(rows, list):
+        return None
+    try:
+        row = rows[int(slot)]
+    except (IndexError, TypeError, ValueError):
+        return None
+    if not isinstance(row, dict):
+        return None
+    v = row.get(value_key)
+    return v if isinstance(v, (int, float, str)) and not isinstance(v, bool) else None
+
+
+def resolve_input(prompt, node_id, input_name, _depth=0):
+    """The VALUE of an input, following a wire when there is one.
+
+    widget_value() alone is not enough: a real workflow often drives steps / cfg
+    / seed / sampler_name from another node (a core Primitive, or our Sliders /
+    Seed / Control Panel), in which case the sampler's own input is a LINK and
+    the number lives upstream. Observed live: with Sliders and Seed wired in,
+    reading widgets only would have returned nothing for steps, cfg, seed AND
+    sampler_name, and since "Steps: " is the ONLY thing that makes Civitai parse
+    the metadata at all, the whole feature would have silently done nothing.
+
+    Resolution order at each hop:
+      1. a plain widget value on this node                -> use it
+      2. a Pixaroma state blob, indexed by the link SLOT  -> use it
+      3. a widget of the SAME NAME on the upstream node   -> use it
+      4. a single obvious value widget (value / Value / int / float / number)
+      5. keep following, bounded, so a chain of reroutes still resolves
+    Returns None when nothing usable is found. Never invents a value.
+    """
+    node = (prompt or {}).get(str(node_id))
+    if not isinstance(node, dict) or _depth > 8:
+        return None
+    value = (node.get("inputs") or {}).get(input_name)
+    if value is not None and not is_link(value):
+        return value
+    if not is_link(value):
+        return None
+    src_id, slot = str(value[0]), value[1]
+
+    blob = _from_state_blob(prompt, src_id, slot)
+    if blob is not None:
+        return blob
+
+    same = widget_value(prompt, src_id, input_name)
+    if same is not None:
+        return same
+
+    for key in ("value", "Value", "int", "float", "number", "seed", "text"):
+        v = widget_value(prompt, src_id, key)
+        if v is not None:
+            return v
+
+    # A reroute / passthrough: try the same-named input one hop further up.
+    return resolve_input(prompt, src_id, input_name, _depth + 1)
 
 
 def class_of(prompt, node_id):
@@ -161,18 +260,21 @@ def read_sampler(prompt, sampler_id):
         return {"steps": None, "cfg": None, "seed": None, "denoise": None,
                 "sampler_name": None, "scheduler": None, "class_type": ""}
     ct = class_of(prompt, sampler_id)
+    # resolve_input, NOT widget_value: any of these can be driven by a wire from
+    # a Primitive or from Sliders / Seed / Control Panel Pixaroma, and reading
+    # widgets only returns None for every one of them (verified on a live graph).
     out = {
-        "steps": widget_value(prompt, sampler_id, "steps"),
-        "cfg": widget_value(prompt, sampler_id, "cfg"),
-        "seed": widget_value(prompt, sampler_id, "seed"),
-        "denoise": widget_value(prompt, sampler_id, "denoise"),
-        "sampler_name": widget_value(prompt, sampler_id, "sampler_name"),
-        "scheduler": widget_value(prompt, sampler_id, "scheduler"),
+        "steps": resolve_input(prompt, sampler_id, "steps"),
+        "cfg": resolve_input(prompt, sampler_id, "cfg"),
+        "seed": resolve_input(prompt, sampler_id, "seed"),
+        "denoise": resolve_input(prompt, sampler_id, "denoise"),
+        "sampler_name": resolve_input(prompt, sampler_id, "sampler_name"),
+        "scheduler": resolve_input(prompt, sampler_id, "scheduler"),
         "class_type": ct,
     }
     # KSamplerAdvanced names the seed differently and has no denoise.
     if out["seed"] is None:
-        out["seed"] = widget_value(prompt, sampler_id, "noise_seed")
+        out["seed"] = resolve_input(prompt, sampler_id, "noise_seed")
 
     if out["sampler_name"] is None:
         picker = link_source(prompt, sampler_id, "sampler")
