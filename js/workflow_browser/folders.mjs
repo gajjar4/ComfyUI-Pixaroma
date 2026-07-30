@@ -16,6 +16,14 @@
 
 import { el, markRendering, isRendering } from "./window.mjs";
 
+// Two clicks on the same folder row this close together mean "rename". Module
+// scope on purpose: the row element does not survive the first click, so the
+// state cannot live on it. 400ms is the usual OS double-click window - long
+// enough to catch a real double click, short enough that going back to a folder
+// a moment later just selects it.
+const DBL_MS = 400;
+let lastFoldClick = { path: null, at: 0 };
+
 // Marks a drag as "a folder being re-ordered" rather than "workflow cards being
 // filed". Only the TYPE is readable during dragover - getData is blocked until
 // the drop - so the distinction has to live in the type, not the payload.
@@ -118,7 +126,26 @@ export function renderFolders(side, state, { onPick, onDropOn, onRenameFolder, o
     if (star) b.append(el("span", "pixwb-favstar", "★"));
     b.append(el("span", null, label));
     if (count != null) b.append(el("span", "pixwb-cnt", String(count)));
-    b.addEventListener("click", () => onPick(pick));
+    b.addEventListener("click", () => {
+      // Double click to rename is handled HERE, counting clicks, rather than
+      // with a dblclick listener - because a dblclick listener never fires on
+      // these rows. The FIRST click selects the folder, which re-renders this
+      // whole column and throws this very element away; the second click lands
+      // on its replacement, and the browser then emits NO dblclick at all
+      // (measured - not even on the shared parent, which is where the spec's
+      // "nearest common ancestor" rule would have put it). So the tooltip and
+      // the help page both promised a gesture that could not work.
+      if (folderPath !== undefined && onRenameFolder) {
+        const now = performance.now();
+        if (lastFoldClick.path === folderPath && now - lastFoldClick.at < DBL_MS) {
+          lastFoldClick = { path: null, at: 0 };
+          onRenameFolder(folderPath, b);   // `b` is the LIVE row: this is the
+          return;                          // replacement the first click made
+        }
+        lastFoldClick = { path: folderPath, at: now };
+      }
+      onPick(pick);
+    });
 
     if (folderPath !== undefined) {
       // A folder row is a drop target for TWO different drags: workflow cards
@@ -228,11 +255,11 @@ export function renderFolders(side, state, { onPick, onDropOn, onRenameFolder, o
       title: f + "\nDouble click to rename, right click for more",
     }, { kind: "folder", value: f }, f);
 
-    // Same gesture as a card: double click the name to rename it in place.
-    row.addEventListener("dblclick", (e) => {
-      e.preventDefault();
-      onRenameFolder?.(f, row);
-    });
+    // No dblclick listener here: it never fires, because selecting the folder
+    // rebuilds this column between the two clicks. The gesture is counted in
+    // addRow's click handler instead. Kept only to swallow the browser's own
+    // double-click text selection.
+    row.addEventListener("dblclick", (e) => e.preventDefault());
     row.addEventListener("contextmenu", (e) => {
       e.preventDefault();
       e.stopPropagation();

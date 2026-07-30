@@ -174,6 +174,7 @@ export function injectWorkflowCSS() {
 .pixwb-rowstar {
   position: static; width: 20px; height: 20px; font-size: 13px;
   background: none; border-radius: 4px; margin-left: 4px;
+  flex: none;                 /* never the thing a narrow row squeezes away */
 }
 .pixwb-rowstar:hover { background: rgba(255,255,255,.1); transform: scale(1.12); }
 .pixwb-rowstar.on { background: none; }

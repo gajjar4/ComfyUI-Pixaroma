@@ -2433,8 +2433,17 @@ async def api_workflows_meta_get(request):
 def _wf_read_and_heal_meta(request):
     path = _wf_meta_path(request)
     data = _wf_read_meta(path)
-    dirty = _wf_migrate_embedded_covers(request, data)
-    dirty = _wf_drop_missing_covers(request, data) or dirty
+    # The healing is a courtesy, never a reason to fail the read. A sidecar that
+    # has been hand-edited (or written by a much older version) can hold shapes
+    # these passes do not expect, and this is the one workflow route with no
+    # outer try of its own - an exception here 500s the panel on EVERY open,
+    # permanently, until the file is fixed by hand. Far better to serve the data
+    # unhealed.
+    try:
+        dirty = _wf_migrate_embedded_covers(request, data)
+        dirty = _wf_drop_missing_covers(request, data) or dirty
+    except Exception:
+        return data
     if dirty:
         _wf_write_meta(path, data)
     return data
@@ -2467,22 +2476,35 @@ def _wf_apply_meta_patch(request, patch):
         current = data.get(section)
         if not isinstance(current, dict):
             current = {}
+        # SETS FIRST, then the clears. Both passes matter and the order between
+        # them is load-bearing: a rename sends {newKey: sameCover, oldKey: null},
+        # and the clear consults _wf_cover_referenced to decide whether to delete
+        # the picture. Interleaved in dict order, that check runs against a
+        # HALF-MERGED state - if the null happened to come first it would see no
+        # other reference and delete the jpg the new key was about to need. It
+        # only worked because the client writes the new key first, which is a
+        # promise no caller should have to keep.
         for k, v in incoming.items():
-            if v is None:
-                old = current.pop(k, None)      # an explicit null clears one entry
-                # Clearing a cover should take its picture with it, or the
-                # folder fills up with files nothing points at. Only when no
-                # OTHER workflow still uses it: a rename re-points the same
-                # picture at a new key and clears the old one, and that must not
-                # delete the file the new key now needs.
-                if (section == "covers" and isinstance(old, dict)
-                        and old.get("file") and not _wf_cover_referenced(data, old["file"], skip_key=k)):
-                    try:
-                        os.remove(os.path.join(_wf_covers_dir(request), old["file"]))
-                    except OSError:
-                        pass                     # already gone, or in use - not worth failing over
-            else:
+            if v is not None:
                 current[k] = v
+        data[section] = current
+
+        for k, v in incoming.items():
+            if v is not None:
+                continue
+            old = current.pop(k, None)          # an explicit null clears one entry
+            # Clearing a cover should take its picture with it, or the folder
+            # fills up with files nothing points at. Only when no OTHER workflow
+            # still uses it: a rename re-points the same picture at a new key and
+            # clears the old one, and that must not delete the file the new key
+            # now needs.
+            if (section == "covers" and isinstance(old, dict)
+                    and isinstance(old.get("file"), str) and old["file"]
+                    and not _wf_cover_referenced(data, old["file"], skip_key=k)):
+                try:
+                    os.remove(os.path.join(_wf_covers_dir(request), old["file"]))
+                except OSError:
+                    pass                         # already gone, or in use - not worth failing over
         data[section] = current
 
     # List sections REPLACE. An order is meaningless merged key by key - the
@@ -2600,6 +2622,11 @@ async def api_workflows_reveal(request):
 
 _WF_COVER_DIRNAME = "pixaroma_covers"
 _WF_COVER_MAX_BYTES = 8 * 1024 * 1024
+# The migration path is deliberately far more generous than a fresh upload: the
+# picture is already the user's chosen cover, so the only question is whether we
+# can afford to decode it here, not whether to keep it. Over this, it simply
+# stays embedded.
+_WF_MIGRATE_MAX_CHARS = 64 * 1024 * 1024
 # _wf_looks_like_image is imported at the top - it is pure, so it lives in the
 # helpers module where the test harness can reach it.
 
@@ -2667,6 +2694,12 @@ def _wf_drop_missing_covers(request, data):
         if not isinstance(rec, dict) or rec.get("kind") != "file":
             continue
         name = rec.get("file")
+        # isinstance, not just truthiness: `name not in present` against a SET
+        # raises TypeError for a list or a dict, and a corrupt or hand-edited
+        # sidecar is exactly the situation this healing pass exists for - it
+        # must not be the thing that 500s the route.
+        if not isinstance(name, str):
+            name = None
         if name and name not in present:
             covers.pop(rel, None)
             changed = True
@@ -2695,21 +2728,29 @@ def _wf_migrate_embedded_covers(request, data):
     for rel, rec in list(covers.items()):
         if not isinstance(rec, dict):
             continue
-        url = rec.get("url") or ""
+        # str(), not `or ""`: `or` returns the truthy operand, so a record whose
+        # "url" is a dict or a number reached .startswith and raised
+        # AttributeError - out of this function, out of the healing read, and
+        # out of the meta route, which 500s every panel open from then on.
+        url = rec.get("url")
+        url = url if isinstance(url, str) else ""
         if not (rec.get("kind") == "file" and url.startswith("data:")):
+            continue
+        # Bounded so one absurd leftover cannot be decoded whole on every read.
+        # Generous, because this is an EXISTING cover the user already chose:
+        # over the limit it stays embedded (slow but intact) rather than being
+        # thrown away. Only genuinely unreadable base64 is dropped.
+        if len(url) > _WF_MIGRATE_MAX_CHARS:
             continue
         try:
             payload = url.split(",", 1)[1]
-            # Capped like a fresh upload. This runs on READ, so without a cap a
-            # single oversized leftover would be decoded whole every time the
-            # panel opened, until the migration finally succeeded.
-            if len(payload) > _WF_COVER_MAX_BYTES * 4 // 3 + 8:
-                raise ValueError("oversized")
             raw = base64.b64decode(payload)
-            if not raw or len(raw) > _WF_COVER_MAX_BYTES:
-                raise ValueError("oversized")
         except Exception:
             covers.pop(rel, None)          # unreadable leftover, drop it
+            changed = True
+            continue
+        if not raw:
+            covers.pop(rel, None)
             changed = True
             continue
         name = _wf_cover_name(rel)

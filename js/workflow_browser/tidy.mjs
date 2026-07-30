@@ -34,13 +34,20 @@ function actions(specs) {
   return wrap;
 }
 
-/** One workflow, as a line: picture, name, where it lives, then its fix. */
-function row(entry, state, H, extras, trailing) {
+/** One workflow, as a line: picture, name, where it lives, then its fix.
+ *
+ *  `renamable` tags the row as the one beginRename should edit. It is set for
+ *  the leftover-names section ONLY, because that is the only section offering
+ *  Rename - and one workflow can appear in more than one section at once (still
+ *  called "Unsaved Workflow" AND one of a duplicate set). beginRename resolves
+ *  by data-rel and takes the first match in the document, so tagging every row
+ *  would put the edit box on whichever happened to render first. */
+function row(entry, state, H, extras, trailing, renamable) {
   const r = el("div", "pixwb-tdrow");
   // data-rel plus a .pixwb-rowname is exactly what beginRename looks for, so
   // Rename edits the name in place here just as it does on a card - no dialog,
   // no second code path.
-  r.dataset.rel = entry.rel;
+  if (renamable) r.dataset.rel = entry.rel;
   r.title = entry.rel;
   r.append(coverEl(entry, state, "pixwb-rowcov"));
 
@@ -103,7 +110,7 @@ export function renderTidy(main, state, H) {
           title: "Give it a name you will recognise" },
         { label: "Open", fn: () => H.onOpen(e) },
         { label: "Delete", danger: true, fn: () => H.onDelete(e) },
-      ]));
+      ], null, true));
     }
     wrap.append(s);
   }

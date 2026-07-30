@@ -257,10 +257,19 @@ export function createWorkflowWindow({ onRender, onClose }) {
   // Note this can only be caught with a REAL click. A synthetic MouseEvent does
   // not move focus, so a scripted test of the arrows passes either way.
   win.addEventListener("mousedown", (e) => {
+    // LEFT button only. A right-click means "open the menu", and this handler
+    // fired for it too: the deferred refocus landed a tick AFTER the context
+    // menu had focused its first entry and pulled focus straight back out, so
+    // the menu's arrow keys did nothing. Middle-click is not a click into the
+    // panel either.
+    if (e.button !== 0) return;
     if (e.target.closest("input, textarea, select, [contenteditable]")) return;
     setTimeout(() => {
       const a = document.activeElement;
       if (a && win.contains(a) && a.matches("input, textarea, [contenteditable]")) return;
+      // The context menu lives in document.body, OUTSIDE this window, so the
+      // test above cannot see it. Anything focused in there is deliberate.
+      if (a && a.closest(".pixwb-menu")) return;
       bar.querySelector("input")?.focus({ preventScroll: true });
     }, 0);
   });
@@ -291,6 +300,10 @@ export function createWorkflowWindow({ onRender, onClose }) {
     toast,
     setCount: (text) => { count.textContent = text; },
     isDetailVisible: () => !detail.classList.contains("hidden"),
+    // The panel's "focus home". Anything that takes focus away on purpose -
+    // the context menu is the one so far - hands it back here when it is done,
+    // because focus on document.body means the keyboard stops reaching us.
+    focusSearch: () => bar.querySelector("input")?.focus({ preventScroll: true }),
     open() {
       // Re-read the accent each open, so the panel follows a colour changed
       // while it was shut.
@@ -302,7 +315,12 @@ export function createWorkflowWindow({ onRender, onClose }) {
       setTimeout(() => bar.querySelector("input")?.focus(), 20);
     },
     close() {
-      win.style.display = "none";
+      // Hiding the panel blurs whatever was focused inside it, and if that was
+      // an open rename box the blur would COMMIT the half-typed name. Closing
+      // is not "clicking away" - Alt+W reaches here with no click at all - so
+      // the same flag a re-render uses says "this blur is not the user's
+      // answer". The edit is abandoned, which is what Escape does too.
+      markRendering(() => { win.style.display = "none"; });
       const q = bar.querySelector("input");
       if (q) q.value = "";
       if (toastEl) toastEl.style.display = "none";

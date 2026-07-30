@@ -56,7 +56,7 @@ export function renderGrid(main, state, H) {
     main.append(el("div", "pixwb-empty", state.query
       ? `Nothing matches "${state.query}".`
       : "Nothing in here yet."));
-    activeRename = null;           // no cards, so nothing to put a rename box on
+    dropRename(true);              // no cards, so nothing to put a rename box on
     return;
   }
 
@@ -138,6 +138,20 @@ export function renderGrid(main, state, H) {
 // half-typed name away without a word.
 let activeRename = null;
 
+// Told to the user when a rename is abandoned because its row went away. Set
+// once by the panel; without it the typing just vanished with no explanation.
+let onRenameLost = null;
+export function setRenameLostNotifier(fn) { onRenameLost = fn; }
+
+/** Forget any rename in progress. Used when there are no rows at all to put it
+ *  back on. */
+export function dropRename(reason) {
+  if (!activeRename) return;
+  const { currentName } = activeRename;
+  activeRename = null;
+  if (reason) { try { onRenameLost?.(currentName); } catch { /* no panel */ } }
+}
+
 /** Put the rename box back after a re-render. Called at the end of every grid
  *  render; does nothing when no rename is in progress. */
 export function restoreRename(main) {
@@ -145,8 +159,10 @@ export function restoreRename(main) {
   const { rel, value, currentName, commit } = activeRename;
   // The card may be gone entirely (deleted, filtered out by a search, or in a
   // folder no longer being shown). Renaming something invisible is not a thing,
-  // so drop it rather than leaving a box that can never reappear.
-  if (!main.querySelector(`[data-rel="${CSS.escape(rel)}"]`)) { activeRename = null; return; }
+  // so drop it rather than leaving a box that can never reappear - but SAY so,
+  // because otherwise the half-typed name simply disappears and it looks like
+  // the panel ate it.
+  if (!main.querySelector(`[data-rel="${CSS.escape(rel)}"]`)) { dropRename(true); return; }
   beginRename(main, rel, currentName, commit, value);
 }
 

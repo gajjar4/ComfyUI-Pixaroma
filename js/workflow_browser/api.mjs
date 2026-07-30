@@ -143,6 +143,18 @@ export async function exists(rel) {
  *  that has no prize. */
 export async function renameOrMove(rel, newRel) {
   const leaf = () => newRel.split("/").pop();
+  // Changing only the CAPITALISATION cannot be done, and saying "there is
+  // already a workflow called that" would be describing the file itself. On a
+  // case-insensitive disk the destination resolves to the same file, and
+  // ComfyUI's own move refuses it with a 409 (measured) - so this is a core
+  // limitation to report plainly, not something to route around by moving the
+  // file behind the store's back.
+  const caseOnly = rel !== newRel && rel.toLowerCase() === newRel.toLowerCase();
+  if (caseOnly) {
+    throw new Error("Only the capitalisation changed, and ComfyUI cannot rename a "
+      + "workflow to the same name in a different case. Rename it to something "
+      + "else first, then back.");
+  }
   if (rel !== newRel && await exists(newRel)) {
     throw new Error(`There is already a workflow called "${leaf()}" there.`);
   }

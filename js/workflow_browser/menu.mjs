@@ -11,27 +11,39 @@ import { el } from "./window.mjs";
 
 let menuEl = null;
 let cleanup = null;
-let returnFocusTo = null;
+let returnFocus = null;
+
+// Where focus goes when a menu closes, set once by the panel. A DEFAULT rather
+// than an argument at each call site, because there are four of them and the
+// failure mode of forgetting it at a fifth is silent: the menu still works, the
+// panel just goes deaf to the keyboard afterwards and nobody connects the two.
+let focusHome = null;
+export function setMenuFocusHome(fn) { focusHome = fn; }
 
 export function closeContextMenu() {
   if (menuEl) { menuEl.remove(); menuEl = null; }
   if (cleanup) { cleanup(); cleanup = null; }
-  // Hand focus back where it came from. Without this, dismissing the menu left
-  // focus on a removed button, which lands on document.body - and from there no
-  // keypress reaches the panel, so the arrow keys silently stopped working
-  // after any right-click (the same trap as clicking a card, pattern #9).
-  const back = returnFocusTo;
-  returnFocusTo = null;
-  if (back?.isConnected) { try { back.focus(); } catch { /* gone */ } }
+  // Hand focus back to the panel. Without this, dismissing the menu leaves it
+  // on a button that has just been removed, which means document.body - and
+  // from there no keypress reaches the panel at all, so the arrow keys silently
+  // stop working after any right-click (the same trap as clicking a card).
+  //
+  // A CALLBACK, not the element that had focus when the menu opened: by then it
+  // is already too late to read. mousedown runs before contextmenu and blurs
+  // whatever was focused, so document.activeElement is body by the time the
+  // menu is built, and "restore" restored nothing. Measured, after the arrow
+  // keys worked but Escape still left the panel deaf.
+  const back = returnFocus;
+  returnFocus = null;
+  try { back?.(); } catch { /* the panel went away underneath us */ }
 }
 
 /**
- * @param items [{label, fn, disabled, danger}] - null entries draw a separator
+ * @param items   [{label, fn, disabled, danger}] - null entries draw a separator
+ * @param onClose called once the menu is gone, to put focus back in the panel
  */
-export function openContextMenu(x, y, items) {
+export function openContextMenu(x, y, items, onClose) {
   closeContextMenu();
-  // Read BEFORE the menu is built, so it is where the user actually was.
-  const cameFrom = document.activeElement;
   menuEl = el("div", "pixwb-menu");
   for (const it of items) {
     if (!it) { menuEl.append(el("div", "pixwb-menusep")); continue; }
@@ -84,18 +96,24 @@ export function openContextMenu(x, y, items) {
     }
   };
 
-  cleanup = () => {
-    document.removeEventListener("pointerdown", away, true);
-    document.removeEventListener("keydown", keys, true);
-  };
   // Deferred, or the very pointerdown that opened the menu closes it again.
-  setTimeout(() => {
+  // The id is KEPT so cleanup can cancel it: a menu closed before the timer
+  // fires would otherwise still get its listeners attached afterwards, and
+  // because they close over the shared menuEl rather than a snapshot they come
+  // back to life for the NEXT menu - two live copies, so one ArrowDown moves
+  // two rows. Not reachable at human clicking speed, but free to rule out.
+  const armed = setTimeout(() => {
     document.addEventListener("pointerdown", away, true);
     document.addEventListener("keydown", keys, true);
   }, 0);
+  cleanup = () => {
+    clearTimeout(armed);
+    document.removeEventListener("pointerdown", away, true);
+    document.removeEventListener("keydown", keys, true);
+  };
 
   // Focused only once the listeners are in place, and only now is it worth
-  // remembering where to hand focus back to.
-  returnFocusTo = cameFrom;
+  // arming the hand-back.
+  returnFocus = onClose || focusHome;
   options()[0]?.focus();
 }

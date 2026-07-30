@@ -480,8 +480,18 @@ def looks_like_image(raw):
     raw = bytes(raw)
     if raw.startswith(_IMAGE_MAGIC):
         return True
-    # webp is RIFF....WEBP - the byte length sits between the two markers.
-    return len(raw) >= 12 and raw[:4] == b"RIFF" and raw[8:12] == b"WEBP"
+    if len(raw) < 12:
+        return False
+    # webp is RIFF....WEBP - the byte length sits between the two markers, so
+    # the prefix alone is not enough (a wav file also starts RIFF).
+    if raw[:4] == b"RIFF" and raw[8:12] == b"WEBP":
+        return True
+    # avif and heic are ISO-BMFF: a length, then "ftyp", then the brand. The
+    # cover picker asks for image/*, and phone photos are routinely avif/heic,
+    # so leaving them out would reject a perfectly ordinary picture.
+    return raw[4:8] == b"ftyp" and raw[8:12] in (
+        b"avif", b"avis", b"heic", b"heix", b"hevc", b"mif1", b"msf1",
+    )
 
 
 def reserved_part(root, path):

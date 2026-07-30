@@ -16,8 +16,8 @@ import { injectWorkflowCSS } from "./css.mjs";
 import {
   renderFolders, orderedFolders, siblingsOf, beginFolderRename,
 } from "./folders.mjs";
-import { openContextMenu, closeContextMenu } from "./menu.mjs";
-import { renderGrid, beginRename } from "./grid.mjs";
+import { openContextMenu, closeContextMenu, setMenuFocusHome } from "./menu.mjs";
+import { renderGrid, beginRename, setRenameLostNotifier } from "./grid.mjs";
 import { renderTidy } from "./tidy.mjs";
 import { renderDetail } from "./detail.mjs";
 import { searchEntries } from "./search.mjs";
@@ -311,6 +311,12 @@ const confirmAsk = (title, message, okLabel = "Delete") =>
  *  in that order, because clearing a cover deletes its picture unless another
  *  key already points at it. */
 async function carryMeta(oldRel, newRel) {
+  // Nothing to carry, and carrying it would DESTROY it. The patch below writes
+  // `{ [newRel]: value, [oldRel]: null }`, and when the two keys are the same
+  // string that object literal has one key defined twice - the later null wins,
+  // so the note is cleared and the cover's picture deleted. Reachable whenever
+  // a "rename" resolves back to the original name.
+  if (oldRel === newRel) return;
   const note = S.meta?.notes?.[oldRel];
   const cover = S.meta?.covers?.[oldRel];
   if (!note && !cover) return;
@@ -333,10 +339,27 @@ function forgetRel(rel, replacement) {
  *  Also strips leading and trailing dots, which the character class alone left
  *  through: a folder called "..." or ".." is legal to type, confusing on disk,
  *  and on Windows a name ending in a dot cannot be opened afterwards. */
+const MAX_NAME = 120;
+
 function cleanName(raw) {
   return String(raw || "")
     .replace(/[\\/:*?"<>|]/g, "")
+    // Control characters. Pasting from a terminal or a PDF brings these along
+    // invisibly, and \s only covers tab/newline/formfeed - the rest went
+    // straight to disk in a filename nothing can then open.
+    //
+    // Written as \x ESCAPES, never as the literal bytes. The literal version is
+    // identical on screen, invisible in a diff and invisible in review, and a
+    // real control byte in a regex has already cost this project a full
+    // debugging session once.
+    // eslint-disable-next-line no-control-regex
+    .replace(/[\x00-\x1F\x7F]/g, "")
     .replace(/^[.\s]+|[.\s]+$/g, "")
+    .trim()
+    // Well under the ~255 byte limit every filesystem has, with room for the
+    // folder path and the .json. Truncating HERE means the user sees the name
+    // they will actually get, rather than a write failing deep in the server.
+    .slice(0, MAX_NAME)
     .trim();
 }
 
@@ -431,6 +454,7 @@ const HANDLERS = {
         const bad = nameProblem(clean);
         if (bad) throw new Error(bad);
         const target = joinRel(dirOf(entry.rel), clean + ".json");
+        if (target === entry.rel) return;          // see commitRename
         await A.renameOrMove(entry.rel, target);
         await carryMeta(entry.rel, target);
         // Follow the file. Leaving the old path selected leaves a ghost that a
@@ -641,7 +665,11 @@ function moveWorkflowsTo(rels, folderPath) {
         failed.push(`${file} (${err.message || "failed"})`);
       }
     }
-    S.selected = new Set();
+    // The selection is NOT cleared here. forgetRel above has already pointed
+    // each moved path at where the file went, and wiping it threw that away -
+    // so the items you just moved came back deselected, and so did the ones
+    // that failed and are still sitting at their original, perfectly valid
+    // paths.
     if (failed.length) {
       throw new Error(moved
         ? `Moved ${moved}, but could not move ${failed.length}: ${failed.join("; ")}`
@@ -660,8 +688,14 @@ function commitRename(entry, newName) {
   const clean = cleanName(newName);
   const bad = nameProblem(clean);
   if (bad) { S.win.toast(bad); return; }
+  const target = joinRel(dirOf(entry.rel), clean + ".json");
+  // Nothing actually changed. The rename box only compares the RAW text, so
+  // typing a character cleanName strips (a "?" say) counts as an edit there and
+  // arrives here identical - and a same-path rename is not harmless: it asks
+  // the server to move a file onto itself and makes carryMeta collapse the
+  // note and the cover into a single null.
+  if (target === entry.rel) return;
   guard(async () => {
-    const target = joinRel(dirOf(entry.rel), clean + ".json");
     await A.renameOrMove(entry.rel, target);
     await carryMeta(entry.rel, target);
     forgetRel(entry.rel, target);
@@ -700,6 +734,30 @@ function startFolderRename(path, row) {
         if (moved !== k) { colours[k] = null; colours[moved] = v; }
       }
       if (Object.keys(colours).length) patch.folderColors = colours;
+
+      // The WORKFLOWS inside moved too, and their notes and covers are keyed by
+      // the workflow's path - so without this every one of them is orphaned.
+      // Worse than orphaned for covers: the next read prunes a cover whose
+      // workflow is not where it says, and deletes the picture with it. So
+      // renaming a folder silently destroyed every hand-picked cover inside it.
+      //
+      // carryMeta does exactly this for a single file; this is the same move for
+      // a whole subtree, in ONE patch so it is a single write. New keys and null
+      // clears go in the same object safely: the server applies every set before
+      // any clear, precisely so a re-pointed picture is not deleted first.
+      const notes = {};
+      const covers = {};
+      for (const [k, v] of Object.entries(S.meta.notes || {})) {
+        const moved = reparent(k);
+        if (moved !== k) { notes[moved] = v; notes[k] = null; }
+      }
+      for (const [k, v] of Object.entries(S.meta.covers || {})) {
+        const moved = reparent(k);
+        if (moved !== k) { covers[moved] = v; covers[k] = null; }
+      }
+      if (Object.keys(notes).length) patch.notes = notes;
+      if (Object.keys(covers).length) patch.covers = covers;
+
       if (Object.keys(patch).length) await A.saveMeta(patch);
 
       if (S.sel.kind === "folder" && typeof S.sel.value === "string") {
@@ -1051,6 +1109,16 @@ function ensureWindow() {
   // Panel-wide, not on the search input: the hint says the arrows move the
   // selection, so they have to work wherever the focus happens to be.
   S.win.el.addEventListener("keydown", onPanelKeys);
+  // A closing context menu leaves focus on a button it just deleted, which is
+  // document.body - and the handler above never fires again. Tell the menu
+  // where to put focus back.
+  setMenuFocusHome(() => S.win?.focusSearch());
+  // A rename can be interrupted by the row itself going away - the search
+  // narrowed, the folder changed, the file was removed elsewhere. Say so; the
+  // alternative is the typing silently disappearing.
+  setRenameLostNotifier((name) => {
+    S.win?.toast(`Stopped renaming "${name}" - it is no longer on screen.`);
+  });
   return S.win;
 }
 
