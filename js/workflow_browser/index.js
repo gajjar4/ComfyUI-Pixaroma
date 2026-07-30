@@ -22,11 +22,17 @@ import { renderDetail } from "./detail.mjs";
 import { searchEntries } from "./search.mjs";
 import { installOutputCoverCapture } from "./cover.mjs";
 import { globalAccent, BRAND } from "../shared/index.mjs";
+import { versionShort, versionLine } from "../shared/version.mjs";
 import * as A from "./api.mjs";
 
 const CMD_ID = "Pixaroma.OpenWorkflowBrowser";
 const VIEW_SETTING = "Pixaroma.Workflows.View";
 const SORT_SETTING = "Pixaroma.Workflows.Sort";
+
+// No "size": a workflow is a small json either way, so the biggest file tells
+// you nothing worth ordering by. Node count answers the question people
+// actually meant by it.
+const SORT_LABELS = { recent: "Recent", name: "Name", nodes: "Nodes" };
 
 const S = {
   win: null,
@@ -159,7 +165,6 @@ function computeVisible() {
       recent: (a, b) => (b.modified || 0) - (a.modified || 0),
       name: (a, b) => a.name.localeCompare(b.name),
       nodes: (a, b) => (b.node_count || 0) - (a.node_count || 0),
-      size: (a, b) => (b.size || 0) - (a.size || 0),
     }[S.sort];
     if (by) list = [...list].sort(by);
   }
@@ -639,7 +644,7 @@ function buildBar(bar) {
   }
   bar.append(seg);
 
-  const sort = el("button", "pixwb-tbtn", "Sort: " + { recent: "Recent", name: "Name", nodes: "Nodes", size: "Size" }[S.sort]);
+  const sort = el("button", "pixwb-tbtn", "Sort: " + SORT_LABELS[S.sort]);
   sort.type = "button";
   // Two views impose their own order, so the control would do nothing. Say so
   // by disabling it, rather than letting it look live and silently ignore the
@@ -648,7 +653,7 @@ function buildBar(bar) {
   if (why) { sort.disabled = true; sort.title = why; } else { sort.title = "Change the order"; }
   sort.addEventListener("click", () => {
     if (sort.disabled) return;
-    const order = ["recent", "name", "nodes", "size"];
+    const order = Object.keys(SORT_LABELS);
     S.sort = order[(order.indexOf(S.sort) + 1) % order.length];
     try { app.ui.settings.setSettingValueAsync(SORT_SETTING, S.sort); } catch { /* cosmetic */ }
     buildBar(bar);
@@ -765,6 +770,22 @@ function buildFooter(foot) {
   hint("double click", "open");
   hint("drag", "onto a folder to move");
   hint("Esc", "close");
+
+  // Right-aligned, and on the panel rather than tucked away: "which version are
+  // you on" is the first thing any support answer needs, and the Help window
+  // already puts it here for the same reason. Click copies the full line.
+  foot.append(el("div", "pixwb-footsp"));
+  const ver = el("button", "pixwb-ver", versionShort());
+  ver.type = "button";
+  ver.title = versionLine() + "  ·  click to copy";
+  ver.addEventListener("click", async () => {
+    const line = versionLine();
+    let ok = false;
+    try { await navigator.clipboard.writeText(line); ok = true; }
+    catch { ok = false; }
+    S.win.toast(ok ? "Copied: " + line : line);
+  });
+  foot.append(ver);
 }
 
 // ── open / close ─────────────────────────────────────────────────────────────
@@ -855,7 +876,8 @@ app.registerExtension({
   async setup() {
     try {
       S.view = app.ui.settings.getSettingValue(VIEW_SETTING) || "grid";
-      S.sort = app.ui.settings.getSettingValue(SORT_SETTING) || "recent";
+      const savedSort = app.ui.settings.getSettingValue(SORT_SETTING);
+      S.sort = SORT_LABELS[savedSort] ? savedSort : "recent";
     } catch { /* unregistered settings, absent on a first run */ }
     mountToolbarButton();
     installOutputCoverCapture();

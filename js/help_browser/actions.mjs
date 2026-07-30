@@ -14,8 +14,8 @@
 // correct. Nothing else in the browser writes anything that gets serialized.
 
 import { app } from "/scripts/app.js";
-import { PIXAROMA_JS_VERSION } from "../shared/index.mjs";
 import { el } from "./window.mjs";
+import { versionLine } from "../shared/version.mjs";
 
 const DISCORD_URL = "https://discord.com/invite/gggpkVgBf3";
 const YOUTUBE_URL = "https://www.youtube.com/@pixaroma";
@@ -142,30 +142,10 @@ export async function copyText(text) {
   }
 }
 
-// Just the Pixaroma version, for the footer bar. Shown on EVERY page rather
-// than made available behind a button somewhere else: "which version are you
-// on" is the first question any support answer needs, and sending someone off
-// to another screen to find it is exactly the friction this window exists to
-// remove. The full line is still one click away (and in the tooltip).
-export function versionShort() {
-  return `Pixaroma ${PIXAROMA_JS_VERSION}`;
-}
-
-// The line every support question needs, so nobody has to ask "which version".
-export function versionLine() {
-  const bits = [`Pixaroma ${PIXAROMA_JS_VERSION}`];
-  try {
-    const fe = window.__COMFYUI_FRONTEND_VERSION__;
-    if (fe) bits.push(`frontend ${fe}`);
-  } catch { /* optional */ }
-  try {
-    bits.push(window.LiteGraph?.vueNodesMode ? "Nodes 2.0" : "Classic nodes");
-  } catch { /* optional */ }
-  try {
-    if (navigator.platform) bits.push(navigator.platform);
-  } catch { /* optional */ }
-  return bits.join(" / ");
-}
+// versionShort / versionLine moved to js/shared/version.mjs when the Workflows
+// panel wanted the same footer chip - nothing about them is help-specific.
+// Re-exported here so every existing importer is untouched.
+export { versionShort, versionLine } from "../shared/version.mjs";
 
 // Plain text of a help def, ready to paste into a Discord question.
 export function helpAsText(entry) {

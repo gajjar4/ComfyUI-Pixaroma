@@ -291,6 +291,14 @@ export function injectWorkflowCSS() {
   padding: 6px 12px 6px 10px; background: #1d1c1b; border-top: 1px solid #302d2b;
   font-size: 10px; color: #6e6764;
 }
+.pixwb-footsp { flex: 1; }
+.pixwb-ver {
+  border: 1px solid #3d3936; background: rgba(255,255,255,.04); color: #a49d99;
+  border-radius: 5px; padding: 2px 8px; cursor: pointer;
+  font-family: inherit; font-size: 10px; white-space: nowrap;
+  transition: background .12s, border-color .12s, color .12s;
+}
+.pixwb-ver:hover { border-color: ${ACC}; color: #fff; }
 .pixwb-foot b {
   background: #2a2726; border: 1px solid #3d3936; border-radius: 3px; padding: 1px 5px;
   color: #a49d99; font-weight: 500;
