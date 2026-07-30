@@ -2,6 +2,7 @@ import os
 import io
 import re
 import hashlib
+import time
 import shutil
 import asyncio
 import json
@@ -2413,7 +2414,10 @@ async def api_workflows_meta_get(request):
     # Covers used to be embedded as base64 in this very file. Move any leftover
     # out to a real picture on the way past, so nobody has to do anything and
     # the sidecar stops growing by 30 KB a cover.
-    if _wf_migrate_embedded_covers(request, data):
+    dirty = _wf_migrate_embedded_covers(request, data)
+    # ...and forget any whose picture has since been deleted by hand.
+    dirty = _wf_drop_missing_covers(request, data) or dirty
+    if dirty:
         _wf_write_meta(path, data)
     for k in _WF_META_DICTS:
         data.setdefault(k, {})
@@ -2603,6 +2607,28 @@ def _wf_cover_referenced(meta, filename, skip_key=None):
     return False
 
 
+def _wf_drop_missing_covers(request, data):
+    """Forget covers whose picture is no longer on disk.
+
+    The folder is a normal folder and people delete things in it. Without this
+    the sidecar kept pointing at a file that had gone, the card showed a broken
+    reference, and "Remove cover" was offered for something that did not exist.
+    Returns True when something was dropped."""
+    covers = data.get("covers")
+    if not isinstance(covers, dict):
+        return False
+    folder = _wf_covers_dir(request)
+    changed = False
+    for rel, rec in list(covers.items()):
+        if not isinstance(rec, dict) or rec.get("kind") != "file":
+            continue
+        name = rec.get("file")
+        if name and not os.path.isfile(os.path.join(folder, name)):
+            covers.pop(rel, None)
+            changed = True
+    return changed
+
+
 def _wf_migrate_embedded_covers(request, data):
     """Move any base64 cover left over from the first version out to a file.
     Runs on read, so it happens once, by itself, with nothing for the user to
@@ -2676,10 +2702,12 @@ def _wf_record_cover(request, rel, name):
     covers = meta.get("covers")
     if not isinstance(covers, dict):
         covers = {}
-    prev = covers.get(rel) if isinstance(covers.get(rel), dict) else {}
-    # Bumped so the browser fetches the new picture even though the filename is
-    # unchanged, while still being free to cache it hard between changes.
-    version = int(prev.get("v") or 0) + 1
+    # A TIMESTAMP, not a counter. The filename is derived from the workflow
+    # path, so it is the same every time; a counter restarted at 1 whenever the
+    # entry had been dropped (deleting the picture by hand does exactly that),
+    # producing a url identical to one the browser may still be holding - and
+    # the new cover would show as the old one. A millisecond stamp cannot repeat.
+    version = int(time.time() * 1000)
     covers[rel] = {"kind": "file", "file": name, "v": version}
     meta["covers"] = covers
     _wf_write_meta(meta_path, meta)
@@ -2697,6 +2725,10 @@ async def api_workflows_cover_get(request):
     path = os.path.join(folder, name)
     if not _is_path_under(path, folder) or not os.path.isfile(path):
         return web.Response(status=404, text="Not found")
-    # Cacheable hard: the URL carries a version that changes when the picture
-    # does, which is the whole point of storing it as a file.
-    return web.FileResponse(path, headers={"Cache-Control": "max-age=31536000, immutable"})
+    # NOT "immutable". These are ordinary files in a folder the user can open,
+    # and deleting one by hand left the old picture on screen for a year because
+    # the browser never asked again. "no-cache" still avoids re-downloading -
+    # FileResponse sends a validator, so the usual answer is a cheap 304 - but a
+    # file that has gone now 404s straight away and the card falls back to the
+    # drawn map.
+    return web.FileResponse(path, headers={"Cache-Control": "no-cache"})
