@@ -2,7 +2,7 @@ import { app } from "/scripts/app.js";
 import { installCanvasZoomPassthrough } from "../shared/canvas_zoom.mjs";
 import { api } from "/scripts/api.js";
 import { BRAND } from "../shared/utils.mjs";
-import { registerNodeAccent, accentOf, installNodeAccent } from "../shared/node_settings.mjs";
+import { registerNodeAccent, accentOf, installNodeAccent, nodeSetting } from "../shared/node_settings.mjs";
 import { applyAdaptiveCanvasOnly, isVueNodes, canvasBackingScale, installZoomRepaint } from "../shared/nodes2.mjs";
 import { applyFilenameTokenRefs, installFilenameTokenResolver } from "../shared/filename_tokens.mjs";
 
@@ -1670,5 +1670,41 @@ registerNodeAccent("PixaromaPreview", {
     { kind: "toggle", setting: "Pixaroma.Preview.OmitCounterOnSaveDisk", defaultValue: false,
       label: "Save Disk: no counter in the name",
       hint: "Suggests myimage.png instead of myimage_00001_.png" },
+    { kind: "toggle", setting: "Pixaroma.Preview.CivitaiMeta", defaultValue: false,
+      label: "Add Civitai generation info",
+      hint: "Also writes the model, LoRAs, steps, seed and sampler in the format Civitai reads" },
   ],
 });
+// ── Civitai metadata flag -> the hidden CivitaiMeta input ────────────────────
+// The option lives in the right-click settings panel as a global setting, so it
+// is not a widget and Python cannot see it. Inject it the way the rest of the
+// plugin does (hidden input + graphToPrompt, Vue Compat #9). Read LIVE per call
+// so flipping the toggle applies to the very next Run with no reload.
+function injectCivitaiFlag(result) {
+  const out = result?.output;
+  if (!out) return;
+  const on = !!nodeSetting("Pixaroma.Preview.CivitaiMeta", false);
+  for (const id in out) {
+    const entry = out[id];
+    if (!entry || entry.class_type !== "PixaromaPreview") continue;
+    if (!entry.inputs) entry.inputs = {};
+    entry.inputs.CivitaiMeta = on ? "1" : "0";
+  }
+}
+
+function installCivitaiFlagHook() {
+  if (app._pixPreviewCivitaiPatched) return;
+  app._pixPreviewCivitaiPatched = true;
+  const orig = app.graphToPrompt.bind(app);
+  app.graphToPrompt = async function (...args) {
+    const result = await orig(...args);
+    try {
+      injectCivitaiFlag(result);
+    } catch (e) {
+      console.warn("[Preview Image] Civitai flag inject failed", e);
+    }
+    return result;
+  };
+}
+installCivitaiFlagHook();
+

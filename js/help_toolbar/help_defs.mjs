@@ -981,7 +981,7 @@ const HELP = {
       },
       {
         heading: "Sharing on Civitai",
-        body: "Switch `civitai_meta` on and the saved image also carries its settings in the format Civitai reads, so posting it there fills in the model and every LoRA with its strength, plus steps, seed, sampler and size. The values are read from your workflow, so nothing needs wiring in, including when they come from Control Panel Pixaroma or Seed Pixaroma.\n\nThe first save after adding a new model pauses briefly to fingerprint it, which is what lets Civitai recognise the file; that happens once per model. Left off, nothing about the file changes.",
+        body: "Turn on `Add Civitai generation info` in the node's right-click settings and the saved image also carries its settings in the format Civitai reads, so posting it there fills in the model and every LoRA with its strength, plus steps, seed, sampler and size. The values are read from your workflow, so nothing needs wiring in, including when they come from Control Panel Pixaroma or Seed Pixaroma.\n\nThe first save after adding a new model pauses briefly to fingerprint it, which is what lets Civitai recognise the file; that happens once per model. Left off, nothing about the file changes.",
       },
     ],
     footer: "Preview state (selected frame, layout) survives switching workflow tabs.",
