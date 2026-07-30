@@ -70,15 +70,6 @@ export function renderDetail(pane, state, H) {
     }
   }
 
-  const mods = [...(entry.models || []), ...(entry.loras || [])];
-  if (mods.length) {
-    pane.append(el("div", "pixwb-grouphead", "Needs these files"));
-    const list = el("div", "pixwb-modlist");
-    for (const m of mods.slice(0, 8)) list.append(el("div", "pixwb-mod", m));
-    if (mods.length > 8) list.append(el("div", "pixwb-mod", `and ${mods.length - 8} more`));
-    pane.append(list);
-  }
-
   // ── the user's own note ──
   pane.append(el("div", "pixwb-grouphead", "Your note"));
   const note = el("textarea", "pixwb-note");
@@ -114,4 +105,37 @@ export function renderDetail(pane, state, H) {
   btn("Reveal", () => H.onReveal(entry), null, "Open the folder it is in");
   btn("Delete", () => H.onDelete(entry), "pixwb-danger", "There is no undo yet, so this asks first");
   pane.append(acts);
+
+  // ── what it needs, LAST ──
+  //
+  // Deliberately below the note and the buttons. A video workflow can need a
+  // dozen files, and with this list higher up the buttons were pushed off the
+  // bottom of the pane. The list is complete now rather than cut off at eight
+  // with "and 2 more" - the pane scrolls, and a partial list of requirements is
+  // no use to anyone.
+  const mods = [...(entry.models || []), ...(entry.loras || [])];
+  if (mods.length) {
+    pane.append(el("div", "pixwb-grouphead", `Needs these files (${mods.length})`));
+    const list = el("div", "pixwb-modlist");
+    for (const m of mods) list.append(modChip(m));
+    pane.append(list);
+  }
+}
+
+/** A filename split so it can be read at a glance: the folder dimmed, the name
+ *  plain, the extension in the accent. An accent BORDER round the whole chip
+ *  was tried and made the text harder to read, not easier. */
+function modChip(name) {
+  const d = el("div", "pixwb-mod");
+  const cut = Math.max(name.lastIndexOf("/"), name.lastIndexOf("\\"));
+  const dir = cut >= 0 ? name.slice(0, cut + 1) : "";
+  const file = cut >= 0 ? name.slice(cut + 1) : name;
+  const dot = file.lastIndexOf(".");
+  const base = dot > 0 ? file.slice(0, dot) : file;
+  const ext = dot > 0 ? file.slice(dot) : "";
+  if (dir) d.append(el("span", "pixwb-moddir", dir));
+  d.append(el("span", "pixwb-modname", base));
+  if (ext) d.append(el("span", "pixwb-modext", ext));
+  d.title = name;
+  return d;
 }

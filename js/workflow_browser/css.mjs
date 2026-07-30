@@ -199,14 +199,18 @@ export function injectWorkflowCSS() {
 .pixwb-kv b { color: #cfcac7; font-weight: 500; margin-left: auto; text-align: right; }
 .pixwb-warn { color: #d98b5f; }
 .pixwb-modlist { margin: 6px 0 9px; }
-/* The model list is the thing people scan this pane for, so it carries the
-   accent - but on a NEAR-BLACK background. An accent-tinted background behind
-   accent text is orange on orange and unreadable at 9.5px. */
+/* Filenames read best as plain light text; the accent marks the EXTENSION and
+   the folder is dimmed. Two earlier goes were worse: accent text on an
+   accent-tinted background was orange on orange, and an accent border round
+   every chip crowded the text it was meant to help. */
 .pixwb-mod {
-  background: #131211; border: 1px solid color-mix(in srgb, ${ACC} 32%, #302d2b);
+  background: #131211; border: 1px solid #2b2826;
   border-radius: 4px; padding: 3px 6px;
-  font-size: 9.5px; color: ${ACC}; margin-bottom: 3px; word-break: break-all;
+  font-size: 10px; margin-bottom: 3px; word-break: break-all; line-height: 1.4;
 }
+.pixwb-mod .pixwb-moddir { color: #6e6764; }
+.pixwb-mod .pixwb-modname { color: #e8e3df; }
+.pixwb-mod .pixwb-modext { color: ${ACC}; }
 
 /* A control that would do nothing in the current view says so, rather than
    silently ignoring the click. */

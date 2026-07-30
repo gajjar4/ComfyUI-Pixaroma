@@ -147,6 +147,29 @@ export function createWorkflowWindow({ onRender, onClose }) {
   // whatever was selected before the panel was opened.
   win.addEventListener("pointerdown", (e) => e.stopPropagation());
 
+  // ── keep the keyboard alive ──
+  //
+  // The footer promises the arrow keys move the selection, and they did not:
+  // a card is a plain div, so clicking one BLURS the search box and focus falls
+  // out to the page body, from where no keypress ever reaches this panel. The
+  // arrows then worked only if you clicked back into the search box first,
+  // which is exactly what got reported.
+  //
+  // The rule is simply that the search box holds focus unless you are editing
+  // something. Typing keeps filtering and the arrows keep working, wherever you
+  // last clicked.
+  //
+  // Note this can only be caught with a REAL click. A synthetic MouseEvent does
+  // not move focus, so a scripted test of the arrows passes either way.
+  win.addEventListener("mousedown", (e) => {
+    if (e.target.closest("input, textarea, select, [contenteditable]")) return;
+    setTimeout(() => {
+      const a = document.activeElement;
+      if (a && win.contains(a) && a.matches("input, textarea, [contenteditable]")) return;
+      bar.querySelector("input")?.focus({ preventScroll: true });
+    }, 0);
+  });
+
   // ── toast ──
   let toastEl = null, toastTimer = null;
   function toast(message) {
