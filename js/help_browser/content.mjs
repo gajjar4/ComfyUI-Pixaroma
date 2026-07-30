@@ -275,6 +275,15 @@ export function renderArticle(main, entry, onNav, ctx) {
   pad.appendChild(crumb);
 
   const h = el("h2", "pixhb-arth");
+  // A help def may name an icon, so a page about a toolbar button can show the
+  // button rather than only describing it. Ours, not user input, but validated
+  // to a plain asset path anyway since it goes into a style property.
+  if (typeof help.icon === "string" && /^\/[\w\-./]+$/.test(help.icon)) {
+    const ic = el("span", "pixhb-articon");
+    ic.style.webkitMaskImage = `url(${help.icon})`;
+    ic.style.maskImage = `url(${help.icon})`;
+    h.appendChild(ic);
+  }
   h.appendChild(el("span", null, help.title || entry.title));
   pad.appendChild(h);
   if (help.tagline) pad.appendChild(el("p", "pixhb-arttag", help.tagline));

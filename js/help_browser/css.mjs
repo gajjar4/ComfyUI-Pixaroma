@@ -285,6 +285,13 @@ export function injectHelpBrowserCSS() {
   margin: 0 0 5px; font-size: 19px; color: #fff; font-weight: 600; letter-spacing: -.01em;
   display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
 }
+.pixhb-articon {
+  display: inline-block; width: 22px; height: 22px; vertical-align: -3px;
+  margin-right: 9px; background-color: ${ACC};
+  mask-size: contain; -webkit-mask-size: contain;
+  mask-repeat: no-repeat; -webkit-mask-repeat: no-repeat;
+  mask-position: center; -webkit-mask-position: center;
+}
 .pixhb-arttag { margin: 0 0 13px; color: #e2ddda; font-size: 12.5px; }
 .pixhb-sect { margin-bottom: 14px; }
 .pixhb-sect p { margin: 0 0 6px; color: #cfcac7; font-size: 12.5px; white-space: pre-wrap; }

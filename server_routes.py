@@ -2,6 +2,7 @@ import os
 import io
 import re
 import hashlib
+import threading
 import time
 import shutil
 import asyncio
@@ -2409,22 +2410,33 @@ _WF_META_LOCK = asyncio.Lock()
 
 @PromptServer.instance.routes.get("/pixaroma/api/workflows/meta")
 async def api_workflows_meta_get(request):
-    path = _wf_meta_path(request)
-    data = _wf_read_meta(path)
-    # Covers used to be embedded as base64 in this very file. Move any leftover
-    # out to a real picture on the way past, so nobody has to do anything and
-    # the sidecar stops growing by 30 KB a cover.
-    dirty = _wf_migrate_embedded_covers(request, data)
-    # ...and forget any whose picture has since been deleted by hand.
-    dirty = _wf_drop_missing_covers(request, data) or dirty
-    if dirty:
-        _wf_write_meta(path, data)
+    # This GET can WRITE - it migrates old embedded covers and forgets ones
+    # whose picture has gone - so it takes the same lock as the POST. Without
+    # it, a GET that read before a save landed could write its own older copy
+    # straight back over the top, losing the note that had just been saved.
+    # And it does its disk work off the event loop, like the index route: a
+    # stat per cover on a slow or networked drive would stall generation
+    # progress for everyone.
+    import asyncio
+    async with _WF_META_LOCK:
+        loop = asyncio.get_event_loop()
+        data = await loop.run_in_executor(None, _wf_read_and_heal_meta, request)
     for k in _WF_META_DICTS:
         data.setdefault(k, {})
     for k in _WF_META_LISTS:
         data.setdefault(k, [])
     return web.json_response({"ok": True, "meta": data},
                              headers={"Cache-Control": "no-store"})
+
+
+def _wf_read_and_heal_meta(request):
+    path = _wf_meta_path(request)
+    data = _wf_read_meta(path)
+    dirty = _wf_migrate_embedded_covers(request, data)
+    dirty = _wf_drop_missing_covers(request, data) or dirty
+    if dirty:
+        _wf_write_meta(path, data)
+    return data
 
 
 @PromptServer.instance.routes.post("/pixaroma/api/workflows/meta")
@@ -2618,14 +2630,44 @@ def _wf_drop_missing_covers(request, data):
     if not isinstance(covers, dict):
         return False
     folder = _wf_covers_dir(request)
+
+    # os.path.isfile answers False for "deleted" AND for "could not look" - a
+    # disconnected network drive, an antivirus lock, a permission blip. Treating
+    # those the same would wipe EVERY cover reference on one bad moment. If the
+    # folder itself cannot be listed, assume nothing and change nothing.
+    if not os.path.isdir(folder):
+        return False
+    try:
+        present = set(os.listdir(folder))
+    except OSError:
+        return False
+
+    # Also forget covers whose WORKFLOW has gone. Renaming carries the cover
+    # across to the new path first (the browser does that), so anything still
+    # pointing at a path with no file behind it is genuinely orphaned, and its
+    # picture would otherwise sit there forever.
+    wf_root = _wf_root(request)
+    wf_root_ok = os.path.isdir(wf_root)
+
     changed = False
     for rel, rec in list(covers.items()):
         if not isinstance(rec, dict) or rec.get("kind") != "file":
             continue
         name = rec.get("file")
-        if name and not os.path.isfile(os.path.join(folder, name)):
+        if name and name not in present:
             covers.pop(rel, None)
             changed = True
+            continue
+        if wf_root_ok:
+            wf_path = _wf_resolve(wf_root, rel)
+            if wf_path and not os.path.isfile(wf_path):
+                covers.pop(rel, None)
+                changed = True
+                if name and not _wf_cover_referenced(data, name, skip_key=rel):
+                    try:
+                        os.remove(os.path.join(folder, name))
+                    except OSError:
+                        pass
     return changed
 
 
@@ -2674,8 +2716,14 @@ async def api_workflows_cover_set(request):
     if not rel or "," not in data_url:
         return web.json_response({"ok": False, "message": "Nothing to save."})
 
+    payload = data_url.split(",", 1)[1]
+    # Checked BEFORE decoding: base64 expands by about a third, so decoding
+    # first meant the cap could not bound the memory used to reject an
+    # oversized payload.
+    if len(payload) > _WF_COVER_MAX_BYTES * 4 // 3 + 8:
+        return web.json_response({"ok": False, "message": "That picture is too large."})
     try:
-        raw = base64.b64decode(data_url.split(",", 1)[1])
+        raw = base64.b64decode(payload)
     except Exception:
         return web.json_response({"ok": False, "message": "That picture could not be read."})
     if not raw or len(raw) > _WF_COVER_MAX_BYTES:
@@ -2686,10 +2734,19 @@ async def api_workflows_cover_set(request):
     path = os.path.join(folder, name)
     if not _is_path_under(path, folder):
         return web.json_response({"ok": False, "message": "Bad cover path."})
+    # Written to a temp file and moved into place. The filename is the same
+    # every time for a given workflow, so replacing a cover would otherwise let
+    # a request in flight read a half-written jpg.
+    tmp = "%s.%d.tmp" % (path, threading.get_ident())
     try:
-        with open(path, "wb") as f:
+        with open(tmp, "wb") as f:
             f.write(raw)
+        os.replace(tmp, path)
     except OSError as e:
+        try:
+            os.remove(tmp)
+        except OSError:
+            pass
         return web.json_response({"ok": False, "message": str(e)})
 
     async with _WF_META_LOCK:
@@ -2710,7 +2767,15 @@ def _wf_record_cover(request, rel, name):
     version = int(time.time() * 1000)
     covers[rel] = {"kind": "file", "file": name, "v": version}
     meta["covers"] = covers
-    _wf_write_meta(meta_path, meta)
+    if not _wf_write_meta(meta_path, meta):
+        # The picture is on disk but nothing points at it. Saying "ok" here left
+        # an orphan file and a cover that vanished on the next reload, with no
+        # hint anything had gone wrong.
+        try:
+            os.remove(os.path.join(folder, name))
+        except OSError:
+            pass
+        return web.json_response({"ok": False, "message": "Could not save the cover setting."})
     return web.json_response({"ok": True, "file": name, "v": version})
 
 

@@ -31,7 +31,14 @@ export function renderDetail(pane, state, H) {
   }
 
   const entry = state.byRel.get(rels[0]);
-  if (!entry) return;
+  if (!entry) {
+    // Selected, but no longer in the index - deleted in Explorer, or renamed by
+    // another tab. `pane.textContent = ""` has already run, so returning here
+    // left an entirely blank box with no hint why.
+    pane.append(el("div", "pixwb-empty",
+      "That workflow is not there any more. It may have been renamed or deleted."));
+    return;
+  }
 
   const c = coverFor(entry, state.meta);
   if (c.kind === "image") {

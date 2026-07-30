@@ -85,6 +85,7 @@ export function createWorkflowWindow({ onRender, onClose }) {
   document.body.appendChild(win);
 
   let rect = readRect();
+  let wasNarrow = null;
   const applyRect = () => {
     win.style.left = rect.x + "px";
     win.style.top = rect.y + "px";
@@ -100,6 +101,12 @@ export function createWorkflowWindow({ onRender, onClose }) {
     const narrow = rect.w < 760;
     detail.classList.toggle("hidden", narrow);
     detGrip.classList.toggle("hidden", narrow);
+    // Widening past the threshold REVEALS the detail pane, but the resize path
+    // deliberately skips re-rendering (it fires per pointermove), so the pane
+    // appeared and sat empty until something else happened to redraw it. Ask
+    // for one real render on the frame the visibility actually changes.
+    if (wasNarrow !== null && wasNarrow !== narrow && !narrow) onRender?.();
+    wasNarrow = narrow;
   };
   applyRect();
 
@@ -208,6 +215,13 @@ export function createWorkflowWindow({ onRender, onClose }) {
   // ── toast ──
   let toastEl = null, toastTimer = null;
   function toast(message) {
+    // An empty message HIDES it. Showing a blank box is never what a caller
+    // meant, and one did exactly that after every favourite toggle.
+    if (!message) {
+      if (toastEl) toastEl.style.display = "none";
+      clearTimeout(toastTimer);
+      return;
+    }
     if (!toastEl) {
       toastEl = el("div", "pixwb-toast");
       body.appendChild(toastEl);          // inside the body, so it can never

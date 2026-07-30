@@ -13,6 +13,10 @@
 // onto the canvas, because there is no node definition behind them - both are
 // gated on `entry.kind === "node"`.
 
+// The address comes from actions.mjs, never typed here: one changed in two
+// places and not the third sends half the readers nowhere (pattern #16).
+import { LINKS } from "./actions.mjs";
+
 export const CANVAS_FEATURES = [
   {
     key: "canvas:align",
@@ -142,13 +146,14 @@ export const CANVAS_FEATURES = [
   },
 {
     key: "canvas:workflows",
-    title: "Workflows",
-    tagline: "A panel for finding, opening and organising your workflow files, with a picture of each one.",
-    keywords: "workflow browser organise organize folder rename move delete duplicate cover thumbnail picture favourite favorite star search find open manage tidy duplicates junk sort list grid",
+    title: "Workflows panel",
+    icon: "/pixaroma/assets/icons/ui/workflow.svg",
+    tagline: "A panel for finding, opening and organising the workflow files on your own computer, with a picture of each one.",
+    keywords: "workflow browser panel organise organize folder rename move delete duplicate cover thumbnail picture favourite favorite star search find open manage tidy duplicates junk sort list grid pixaroma workflows website site download example",
     sections: [
       {
         heading: "What it does",
-        body: "Opens from the Workflows button in the top toolbar, next to the Help question mark. Alt+W does the same, and so does right-clicking empty canvas.\n\nIt reads the same folder ComfyUI already keeps your workflows in, so everything you have is there the first time you open it. Nothing is imported and nothing is moved.",
+        body: "Opens from the button shown beside the heading above, in the top toolbar next to the Help question mark. Alt+W does the same, and so does right-clicking empty canvas.\n\nIt reads the same folder ComfyUI already keeps your workflows in, so everything you have is there the first time you open it. Nothing is imported and nothing is moved.",
       },
       {
         heading: "Finding one",
@@ -156,7 +161,7 @@ export const CANVAS_FEATURES = [
           "The cursor starts in the search box, so you can just type.",
           "Search looks INSIDE the files as well as at their names: type a model or LoRA filename, a phrase from a prompt, or your own note, and it finds the workflows that use it.",
           "Arrow keys move the selection: left and right by one card, up and down by a whole row. Enter opens the highlighted one.",
-          "Double click a card to open it. A small orange dot on a card means it is open right now.",
+          "Double click a card to open it. A small coloured dot in the corner of a card means it is open right now.",
         ],
       },
       {
@@ -175,10 +180,11 @@ export const CANVAS_FEATURES = [
       {
         heading: "Organising",
         bullets: [
-          "Double click a name to rename it, on a workflow or a folder. Enter saves, Escape cancels.",
+          "Rename a workflow with F2, or right click it and choose Rename. Enter saves, Escape cancels.",
+          "Rename a FOLDER by double clicking its name, or from its right-click menu.",
           "Drag a card onto a folder to move it. Select several first with Ctrl+click to move them together.",
           "Drag a folder up or down to reorder it. A line shows where it will land. Folders can be reordered within their level, not dragged inside each other.",
-          "Right click a workflow for everything at once: Open, favourite, Rename, Duplicate, Move to folder, Set cover, Reveal, Delete.",
+          "Right click a workflow for everything at once: Open, favourite, Rename, Duplicate, Move to folder, Set or Remove cover, Reveal, Delete.",
           "Right click a folder for Rename, Move up, Move down, Reveal and Delete. A folder is only deleted when it is empty, which is the safety net.",
         ],
       },
@@ -212,6 +218,11 @@ export const CANVAS_FEATURES = [
           "The panel stays open while you work, and while you switch between workflows.",
           "Your notes, chosen covers and folder order are kept beside your workflows, not inside them, so sharing a workflow never carries them along.",
         ],
+      },
+      {
+        heading: "Looking for workflows to download?",
+        body: "This panel organises the workflows already on your computer. If you came here wanting NEW ones, the Pixaroma website has ready-made workflows to download, and anything you save from there lands in the same folder this panel reads.",
+        links: [["Pixaroma workflows website", LINKS.SITE_URL]],
       },
     ],
     footer: "There is deliberately no Workflows node. A node would be saved into the workflow file and would follow it to anyone you shared it with.",

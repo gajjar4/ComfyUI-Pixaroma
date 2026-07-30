@@ -3,8 +3,10 @@
 // ╚═══════════════════════════════════════════════════════════════╝
 //
 // Grid of picture cards, or a dense list once somebody has hundreds. Single
-// click selects, double click opens, F2 or a second click on the name renames
-// in place, and a card can be dragged onto a folder in the left column.
+// click selects, double click OPENS (not renames - renaming is F2 or the
+// right-click menu), and a card can be dragged onto a folder in the left
+// column. The help text once described a double-click rename that has never
+// existed, copied out of an earlier version of this comment.
 
 import { el } from "./window.mjs";
 import { drawMap, coverFor } from "./cover.mjs";

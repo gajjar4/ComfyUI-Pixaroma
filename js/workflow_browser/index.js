@@ -265,6 +265,9 @@ function ask({ title, message, value, okLabel = "OK", danger }) {
     const ok = el("button", "pixwb-tbtn " + (danger ? "pixwb-danger" : "pixwb-primary"), okLabel);
     const no = el("button", "pixwb-tbtn", "Cancel");
     ok.type = no.type = "button";
+    ok.title = danger ? "This cannot be undone" : "Enter also does this";
+    no.title = "Escape also does this";
+    if (input) input.title = "Enter to confirm, Escape to cancel";
     acts.append(ok, no);
     box.append(acts);
     back.append(box);
@@ -291,12 +294,41 @@ const confirmAsk = (title, message, okLabel = "Delete") =>
 
 // ── actions ──────────────────────────────────────────────────────────────────
 
+/** Move a workflow's note and chosen cover to its new path.
+ *
+ *  Renaming or moving used to leave both behind under the OLD key: the note
+ *  silently vanished, and the cover became an orphan pointing at a picture
+ *  nothing referenced. The new key is written FIRST and the old cleared second,
+ *  in that order, because clearing a cover deletes its picture unless another
+ *  key already points at it. */
+async function carryMeta(oldRel, newRel) {
+  const note = S.meta?.notes?.[oldRel];
+  const cover = S.meta?.covers?.[oldRel];
+  if (!note && !cover) return;
+  const patch = {};
+  if (note) patch.notes = { [newRel]: note, [oldRel]: null };
+  if (cover) patch.covers = { [newRel]: cover, [oldRel]: null };
+  try { await A.saveMeta(patch); } catch { /* the rename itself already worked */ }
+}
+
 /** Drop a path from the selection, or point it at where the file went.
  *  A path that no longer exists must not stay selected: the next bulk action
  *  would try to act on it, fail on the first item, and abandon the rest. */
 function forgetRel(rel, replacement) {
   if (S.selected.delete(rel) && replacement) S.selected.add(replacement);
   if (S.kbdRel === rel) S.kbdRel = replacement || null;
+}
+
+/** One place, so every field cleans a name the same way.
+ *
+ *  Also strips leading and trailing dots, which the character class alone left
+ *  through: a folder called "..." or ".." is legal to type, confusing on disk,
+ *  and on Windows a name ending in a dot cannot be opened afterwards. */
+function cleanName(raw) {
+  return String(raw || "")
+    .replace(/[\\/:*?"<>|]/g, "")
+    .replace(/^[.\s]+|[.\s]+$/g, "")
+    .trim();
 }
 
 const dirOf = (rel) => (rel.includes("/") ? rel.slice(0, rel.lastIndexOf("/")) : "");
@@ -316,8 +348,12 @@ async function guard(fn, okMessage) {
     await loadData();
     render();
   } catch { /* the toast below is the more useful message */ }
-  S.win.toast(failure ? (failure.message || String(failure)) : (okMessage || ""));
-  if (!failure && !okMessage) S.win.toast("");
+  // Only speak when there is something to say. Toasting unconditionally showed
+  // an empty box after every favourite toggle and every folder reorder, and on
+  // Open it fired AFTER the handler's own "Opened <name>" and replaced it with
+  // nothing - so the commonest action in the panel confirmed itself blankly.
+  if (failure) S.win?.toast(failure.message || String(failure));
+  else if (okMessage) S.win?.toast(okMessage);
 }
 
 const HANDLERS = {
@@ -343,12 +379,23 @@ const HANDLERS = {
   },
 
   onRename(entry) {
+    // beginRename edits the card in place, so it needs that card on screen. It
+    // is not, if the workflow is selected but filtered out by a search, or if
+    // the rename came from the detail pane in list view. Fall back to a dialog
+    // rather than being a click that does nothing.
+    const onScreen = S.win.main.querySelector(`[data-rel="${CSS.escape(entry.rel)}"]`);
+    if (!onScreen) {
+      ask({ title: "Rename", message: entry.rel, value: entry.name, okLabel: "Rename" })
+        .then((v) => { if (v) commitRename(entry, v); });
+      return;
+    }
     beginRename(S.win.main, entry.rel, entry.name, (newName) => {
       guard(async () => {
         const clean = newName.replace(/[\\/:*?"<>|]/g, "").trim();
         if (!clean) throw new Error("That name cannot be used.");
         const target = joinRel(dirOf(entry.rel), clean + ".json");
         await A.renameOrMove(entry.rel, target);
+        await carryMeta(entry.rel, target);
         // Follow the file. Leaving the old path selected leaves a ghost that a
         // later bulk action tries to act on and fails.
         forgetRel(entry.rel, target);
@@ -538,17 +585,31 @@ function openContextMenuFolderList(folders, pick) {
 }
 
 function moveWorkflowsTo(rels, folderPath) {
+  // Per item, like the bulk delete. Stopping on the first failure moved some
+  // and abandoned the rest, then reported one plain error - so the user was
+  // told nothing worked while several had in fact already moved.
   guard(async () => {
     let moved = 0;
+    const failed = [];
     for (const rel of rels) {
       const file = rel.slice(rel.lastIndexOf("/") + 1);
       const target = joinRel(folderPath, file);
       if (target === rel) continue;
-      await A.renameOrMove(rel, target);
-      forgetRel(rel, target);
-      moved++;
+      try {
+        await A.renameOrMove(rel, target);
+        await carryMeta(rel, target);
+        forgetRel(rel, target);
+        moved++;
+      } catch (err) {
+        failed.push(`${file} (${err.message || "failed"})`);
+      }
     }
     S.selected = new Set();
+    if (failed.length) {
+      throw new Error(moved
+        ? `Moved ${moved}, but could not move ${failed.length}: ${failed.join("; ")}`
+        : `Could not move: ${failed.join("; ")}`);
+    }
     if (!moved) throw new Error("Already in that folder.");
   }, `Moved to ${folderPath || "the workflows folder"}`);
 }
@@ -556,6 +617,18 @@ function moveWorkflowsTo(rels, folderPath) {
 // ── folder actions ───────────────────────────────────────────────────────────
 
 const parentOf = (p) => (p.includes("/") ? p.slice(0, p.lastIndexOf("/")) : "");
+
+/** The rename itself, shared by the in-place edit and the dialog fallback. */
+function commitRename(entry, newName) {
+  const clean = cleanName(newName);
+  if (!clean) { S.win.toast("That name cannot be used."); return; }
+  guard(async () => {
+    const target = joinRel(dirOf(entry.rel), clean + ".json");
+    await A.renameOrMove(entry.rel, target);
+    await carryMeta(entry.rel, target);
+    forgetRel(entry.rel, target);
+  }, "Renamed");
+}
 
 function startFolderRename(path, row) {
   beginFolderRename(row, path, (newName) => {
@@ -565,15 +638,36 @@ function startFolderRename(path, row) {
     guard(async () => {
       const res = await A.folderAction({ action: "rename", path, newPath: target });
       if (!res.ok) throw new Error(res.message || "Could not rename that folder.");
-      // Carry the folder's place in the order and its colour across, or a rename
-      // would quietly send it back to alphabetical and change its dot.
+      // Carry the folder's place in the order and its colour across, or a
+      // rename would quietly send it back to alphabetical and change its dot.
+      //
+      // DESCENDANTS too. Matching only the exact path meant renaming a parent
+      // left every child still recorded under the old prefix: their order and
+      // colours reverted, and if a child was the folder being viewed the grid
+      // silently went empty with nothing selected in the sidebar.
+      const reparent = (p) => (p === path || p.startsWith(path + "/")
+        ? target + p.slice(path.length) : p);
+
       const patch = {};
-      const order = (S.meta.folderOrder || []).map((p) => (p === path ? target : p));
+      const order = (S.meta.folderOrder || []).map(reparent);
       if (order.length) patch.folderOrder = order;
-      const col = S.meta.folderColors?.[path];
-      if (col) patch.folderColors = { [path]: null, [target]: col };
+
+      const colours = {};
+      for (const [k, v] of Object.entries(S.meta.folderColors || {})) {
+        const moved = reparent(k);
+        if (moved !== k) { colours[k] = null; colours[moved] = v; }
+      }
+      if (Object.keys(colours).length) patch.folderColors = colours;
       if (Object.keys(patch).length) await A.saveMeta(patch);
-      if (S.sel.kind === "folder" && S.sel.value === path) S.sel = { kind: "folder", value: target };
+
+      if (S.sel.kind === "folder" && typeof S.sel.value === "string") {
+        const moved = reparent(S.sel.value);
+        if (moved !== S.sel.value) S.sel = { kind: "folder", value: moved };
+      }
+      // Every workflow inside moved too, so a selected one has a new path. Left
+      // alone it became a stale rel that no card could ever match again.
+      S.selected = new Set([...S.selected].map(reparent));
+      if (S.kbdRel) S.kbdRel = reparent(S.kbdRel);
     }, "Folder renamed");
   });
 }
@@ -689,6 +783,7 @@ function buildBar(bar) {
   const input = el("input");
   input.type = "text";
   input.placeholder = "Search names, models, prompts, notes...";
+  input.title = "Searches inside the files too: a model or LoRA filename, a phrase from a prompt, or your own note";
   input.addEventListener("input", () => {
     S.query = input.value;
     S.kbdRel = null;
@@ -698,9 +793,13 @@ function buildBar(bar) {
   bar.append(search);
 
   const seg = el("div", "pixwb-seg");
-  for (const [id, label] of [["grid", "Grid"], ["list", "List"]]) {
+  for (const [id, label, tip] of [
+    ["grid", "Grid", "Picture cards, for browsing by eye"],
+    ["list", "List", "A dense list, easier once you have hundreds"],
+  ]) {
     const b = el("button", S.view === id ? "on" : "", label);
     b.type = "button";
+    b.title = tip;
     b.addEventListener("click", () => {
       S.view = id;
       try { app.ui.settings.setSettingValueAsync(VIEW_SETTING, id); } catch { /* view is cosmetic */ }
