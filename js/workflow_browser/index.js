@@ -106,6 +106,23 @@ async function loadData() {
     }
     S.issues.missing_nodes = missingNodes;
     S.tidyRels = collectTidyRels(S.issues);
+
+    // The SELECTION has to survive the reload, and "survive" includes pointing
+    // at something that still exists. A selected folder can vanish without the
+    // panel doing it - deleted in Explorer, renamed on another PC, cleaned up by
+    // a script - and the stale selection then filtered every workflow out: the
+    // panel sat on "Nothing in here yet." with no sidebar row lit and no hint
+    // why. Found by doing exactly that. Fall back to All workflows, which is
+    // never wrong, merely general.
+    if (S.sel.kind === "folder" && S.sel.value !== "" && !S.folders.includes(S.sel.value)) {
+      S.sel = { kind: "all" };
+    } else if (S.sel.kind === "collection" && !S.collections.some((c) => c.id === S.sel.value)) {
+      S.sel = { kind: "all" };
+    } else if (S.sel.kind === "tidy" && !S.tidyRels.size) {
+      // The last problem was just fixed: the shortcut row disappears, so a
+      // selection of it must not strand the view on an empty screen.
+      S.sel = { kind: "all" };
+    }
   } catch (err) {
     if (ticket !== loadSeq) return;
     S.entries = [];
