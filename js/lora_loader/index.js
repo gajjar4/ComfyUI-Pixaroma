@@ -23,6 +23,10 @@ import { openLoraPanel, closeLoraPanelFor } from "./settings.mjs";
 import { closeInfoPanelFor } from "./info_panel.mjs";
 import { closeLoraDropdown } from "./dropdown.mjs";
 import { closeRowMenu } from "./interaction.mjs";
+import { isQueueLoopActive } from "../shared/queue_drivers.mjs";
+// Side-effect import: registers the XY Plot sweep provider so this node's rows show
+// up in the XY picker and can be swept per cell.
+import "./sweep.mjs";
 
 const CLASS = "PixaromaLoraLoader";
 
@@ -240,9 +244,16 @@ app.graphToPrompt = async function (...args) {
         const entry = out[id];
         if (!entry || entry.class_type !== CLASS) continue;
         if (!index) index = buildIndex();
+        entry.inputs = entry.inputs || {};
+        // A queue-driver sweep (XY Plot) may already have written this cell's state.
+        // Hook order between two graphToPrompt wrappers is load-order dependent, so
+        // defer to a value that is already there instead of clobbering it (the same
+        // defer guard Outpaint Stitch uses for its swept slider values). Outside a
+        // sweep loop nothing else ever writes this input, so a normal run is
+        // untouched.
+        if (isQueueLoopActive() && typeof entry.inputs[HIDDEN_INPUT] === "string" && entry.inputs[HIDDEN_INPUT]) continue;
         const node = findNode(index, id);
         const st = node ? readState(node) : { ...DEFAULT_STATE, ...loadDefaults(), loras: [] };
-        entry.inputs = entry.inputs || {};
         entry.inputs[HIDDEN_INPUT] = JSON.stringify(promptState(st));
       }
     }
@@ -291,6 +302,16 @@ registerNodeHelp(CLASS, {
         "as plain text you can wire into your prompt. If a LoRA has no words in its file, you can type your " +
         "own in the box at the bottom of the panel (it's saved on that LoRA), or use the optional Civitai " +
         "button to look them up online (only when you click it) and save them for next time.",
+    },
+    {
+      heading: "Comparing LoRAs side by side",
+      body:
+        "XY Plot Pixaroma can drive this node. In its picker each row shows up under this " +
+        "node's name as LoRA 1, LoRA 2 and so on: pick the row itself to try a different " +
+        "LoRA file in every square, or pick LoRA 1 strength to sweep the weight (there is " +
+        "a separate clip strength entry when you have split model and clip in the gear). " +
+        "The row being compared is switched on for every square, and the other rows stay " +
+        "exactly as you left them, so switch off anything you are not comparing.",
     },
     {
       heading: "Buttons and settings",

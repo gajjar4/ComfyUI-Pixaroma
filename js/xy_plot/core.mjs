@@ -8,6 +8,7 @@
 
 import { app } from "/scripts/app.js";
 import { api } from "/scripts/api.js";
+import { getSweepProvider, sweepProviderFor } from "../shared/sweep_targets.mjs";
 
 export const STATE_PROP = "xyPlotState";
 export const STATE_VERSION = 1;
@@ -105,6 +106,7 @@ export function resetAxis(node, axisKey) {
   axis.nodeId = null;
   axis.widgetName = null;
   axis.subField = null;
+  axis.label = null;
   axis.widgetType = null;
   axis.mode = null;
   axis.step = 1;
@@ -314,10 +316,63 @@ export function classifyWidgetEntries(w) {
   return single ? [single] : [];
 }
 
+// The graph node an axis points at, or null.
+//
+// The fast path is the axis's own graph level, which is where the picker found it.
+// The walk is the fallback for a node that MOVED since - Convert to Subgraph takes it
+// out from under getNodeById, and the axis would then silently do nothing (findPromptEntry
+// still finds its prompt entry by tail id, so the two lookups must not disagree).
+// `wantClass` makes the walk verify what it found, so a local id that happens to repeat
+// in another scope can never resolve to an unrelated node.
+export function targetNodeOf(xyNode, axis, wantClass) {
+  if (!axis || axis.nodeId == null) return null;
+  const graph = xyNode?.graph || app.graph;
+  try {
+    const direct = graph?.getNodeById?.(axis.nodeId);
+    if (direct) return direct;
+  } catch (_e) { /* fall through to the walk */ }
+  const want = String(axis.nodeId);
+  const seen = new Set();
+  let found = null;
+  const visit = (g) => {
+    if (!g || found || seen.has(g)) return;
+    seen.add(g);
+    for (const n of (g._nodes || g.nodes || [])) {
+      if (!n) continue;
+      if (String(n.id) === want && (!wantClass || (n.comfyClass || n.type) === wantClass)) {
+        found = n;
+        return;
+      }
+      const inner = n.subgraph || n.graph || n._graph;
+      if (inner && inner !== g) visit(inner);
+      if (found) return;
+    }
+  };
+  try { visit(app.graph); } catch (_e) { /* degrade to null */ }
+  return found;
+}
+
 // Friendly display name for an axis (used on the grid + in the picker readout):
 // "lora_1", "lora_1 strength", "lora_1 clip strength", or the plain widget name.
-export function axisDisplayName(axis) {
+// Pass `node` (the XY Plot node) so a provider-backed axis - one whose parameter
+// lives in a state blob rather than a widget, e.g. a LoRA Loader Pixaroma row - can
+// name itself ("LoRA 2 strength") instead of showing its internal axis key.
+export function axisDisplayName(axis, node) {
   if (!axis || !axis.widgetName) return "";
+  if (node) {
+    const target = targetNodeOf(node, axis);
+    const prov = target ? sweepProviderFor(target, axis) : null;
+    if (prov && prov.displayName) {
+      try {
+        const s = prov.displayName(target, axis);
+        if (s) return String(s);
+      } catch (_e) { /* fall through to the generic name */ }
+    }
+  }
+  // The friendly label saved at pick time. Only a provider axis has one, and it is
+  // what keeps the grid title readable when the target node is gone (its internal key
+  // - "pixlora:l470fb509" - would otherwise be printed as the axis name).
+  if (axis.label) return String(axis.label);
   if (axis.subField === "strength") return axis.widgetName + " strength";
   if (axis.subField === "strengthTwo") return axis.widgetName + " clip strength";
   return axis.widgetName;
@@ -332,6 +387,19 @@ export function enumerateTargets(xyNode) {
   for (const n of nodes) {
     if (!n || n === xyNode || n.id === xyNode?.id) continue;
     const widgets = (n.widgets || []).flatMap(classifyWidgetEntries).filter(Boolean);
+    // Nodes that keep their parameters in a serialized state blob instead of widgets
+    // (LoRA Loader Pixaroma) have nothing to enumerate above - their registered
+    // provider supplies the pickable axes. Widgets come first so a real widget always
+    // wins a name clash.
+    const prov = getSweepProvider(n);
+    if (prov && prov.enumerate) {
+      try {
+        const extra = prov.enumerate(n);
+        if (Array.isArray(extra)) for (const e of extra) if (e) widgets.push(e);
+      } catch (err) {
+        console.warn("[Pixaroma.XYPlot] sweep provider failed for", n.comfyClass || n.type, err);
+      }
+    }
     if (!widgets.length) continue;
     out.push({
       nodeId: n.id,
@@ -356,10 +424,21 @@ export function enumerateTargets(xyNode) {
 // same-titled CLIP Text Encode nodes) is obvious without opening the picker.
 export function currentValuePreview(node, axis) {
   if (!axis || axis.nodeId == null || !axis.widgetName) return "";
-  const graph = node?.graph || app.graph;
-  const target = graph?.getNodeById?.(axis.nodeId);
+  const target = targetNodeOf(node, axis);
   const w = target?.widgets?.find((x) => x && x.name === axis.widgetName);
-  if (!w || w.value == null) return "";
+  if (!w) {
+    // No widget with that name - a provider-backed axis (its parameter lives in the
+    // node's state blob) reads its own current value.
+    const prov = target ? sweepProviderFor(target, axis) : null;
+    if (prov && prov.preview) {
+      try {
+        const v = String(prov.preview(target, axis) || "").replace(/\s+/g, " ").trim();
+        return v.length > 48 ? v.slice(0, 48) + "…" : v;
+      } catch (_e) { return ""; }
+    }
+    return "";
+  }
+  if (w.value == null) return "";
   let raw = w.value;
   // Object-valued lora rows (Power Lora Loader): show the sub-field this axis
   // targets (the lora file, or the strength number), not "[object Object]".
@@ -379,10 +458,15 @@ export function currentValuePreview(node, axis) {
 // matches this axis's subField.
 export function lookupWidgetMeta(node, axis) {
   if (!axis || axis.nodeId == null || !axis.widgetName) return null;
-  const graph = node?.graph || app.graph;
-  const target = graph?.getNodeById?.(axis.nodeId);
+  const target = targetNodeOf(node, axis);
   const w = target?.widgets?.find((x) => x && x.name === axis.widgetName);
-  if (!w) return null;
+  if (!w) {
+    const prov = target ? sweepProviderFor(target, axis) : null;
+    if (prov && prov.lookup) {
+      try { return prov.lookup(target, axis) || null; } catch (_e) { return null; }
+    }
+    return null;
+  }
   const entries = classifyWidgetEntries(w);
   if (entries.length <= 1) return entries[0] || null;
   const sf = axis.subField || "lora";

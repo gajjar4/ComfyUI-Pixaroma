@@ -84,14 +84,14 @@ export const KEYWORDS = {
   PixaromaLoopStart: "repeat iterate for each again loop",
   PixaromaLoopEnd: "repeat iterate finish end loop",
   PixaromaCombine: "merge batch accumulate gather join",
-  PixaromaXYPlot: "grid compare matrix sweep test chart contact sheet",
+  PixaromaXYPlot: "grid compare matrix sweep test chart contact sheet lora strength weight",
   PixaromaRunTimer: "time clock how long duration speed stopwatch",
   PixaromaRunLog: "history times record log past runs",
   NotifyPixaroma: "sound alert ding beep finished done chime",
   PixaromaVersionCheck: "version diagnostic about update which version",
 
   // ── Utility and editors ──
-  PixaromaLoraLoader: "lora stack weight trigger civitai",
+  PixaromaLoraLoader: "lora stack weight trigger civitai xy plot compare grid sweep",
   Pixaroma3D: "mesh glb obj camera light render scene 3d",
   PixaromaPaint: "brush draw sketch layers erase paint",
   PixaromaImageComposition: "collage blend layers grade montage composite",

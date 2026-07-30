@@ -85,6 +85,15 @@ export function hasLora(name) {
   return _listCache ? _listCache.includes(name) : null;
 }
 
+// The last fetched list, or null when nothing has been fetched yet. A SYNC read for
+// callers that cannot await - XY Plot's picker enumeration runs inside a synchronous
+// render. null means "unknown", never "no LoRAs"; callers should kick listLoras() to
+// warm it (setupNode already does on every LoRA Loader node, so it is warm in
+// practice long before a picker opens).
+export function cachedLoras() {
+  return _listCache;
+}
+
 // `bust` (a timestamp or counter) forces past the browser's image cache - the
 // thumb route sends max-age=3600 and the URL otherwise never changes, so a
 // preview replaced by a Civitai fetch kept showing the OLD image up to an hour.

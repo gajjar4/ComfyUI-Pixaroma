@@ -44,6 +44,8 @@ export { installCanvasZoomPassthrough } from "./canvas_zoom.mjs";
 
 export { onNodeDefsRefresh, runRefreshHandlers, installRefreshHook } from "./refresh.mjs";
 
+export { registerSweepProvider, getSweepProvider, sweepProviderFor, anyProviderOwns } from "./sweep_targets.mjs";
+
 export {
   createPixaromaColorPicker,
   openPixaromaColorPickerPopup,

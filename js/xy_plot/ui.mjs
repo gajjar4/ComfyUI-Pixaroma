@@ -12,6 +12,7 @@ import {
   resolveAxisValues, computeCounts, axisReady,
 } from "./core.mjs";
 import { registerNodeHelp } from "../shared/index.mjs";
+import { isGraphLoading } from "../shared/graph_loading.mjs";
 
 const BRAND = "#f66744";
 
@@ -39,7 +40,7 @@ const XY_HELP = {
       defs: [
         ["Number", "A `Range` (Start / End / Steps) or a `List` of values."],
         ["Dropdown", "A checklist - tick the samplers / models / schedulers you want to compare."],
-        ["LoRA", "Compare loras or their strengths. Pick a lora ROW to swap which lora file, or its `strength` entry to sweep the weight (e.g. 0.3, 0.6, 1.0). Any OTHER lora rows stay applied in every square, so turn off the ones you are not comparing. Works with the core Load LoRA node and multi-lora loaders like the Power Lora Loader."],
+        ["LoRA", "Compare loras or their strengths. Pick a lora ROW to swap which lora file, or its `strength` entry to sweep the weight (e.g. 0.3, 0.6, 1.0). Any OTHER lora rows stay applied in every square, so turn off the ones you are not comparing. Works with LoRA Loader Pixaroma (each row shows up as `LoRA 1`, `LoRA 1 strength`, and `LoRA 1 clip strength` when model and clip strengths are separate), the core Load LoRA node, and other multi-lora loaders."],
         ["Prompt text", "`Full list` (one full prompt per line) or `Find & replace` (swap a word for each value)."],
       ],
       bullets: [
@@ -282,6 +283,12 @@ function selectChoice(node, axisKey, choice, rerender) {
   axis.nodeId = choice.nodeId;
   axis.widgetName = choice.w.name;
   axis.subField = sf;
+  // The friendly display name, saved so the grid title and this readout stay readable
+  // even if the target node is later deleted (a provider axis's `name` is an internal
+  // key). Written only here, on a user pick - it is deliberately absent from
+  // emptyAxis(), so backfillAxis can never ADD it on the load path and dirty an older
+  // saved workflow (same reasoning as subField, Pattern #11).
+  axis.label = (choice.w.label && choice.w.label !== choice.w.name) ? String(choice.w.label) : null;
   axis.widgetType = choice.w.type;
   axis.step = choice.w.step || 1;
   axis.precision = (typeof choice.w.precision === "number") ? choice.w.precision : null;
@@ -400,7 +407,7 @@ function renderPicker(node, axisKey, mountRow, rerender) {
   const val = el("span", "pix-xy-val");
   if (axis.nodeId != null && axis.widgetName) {
     const title = choices[curIdx]?.title || ("Node " + axis.nodeId);
-    const disp = choices[curIdx]?.w?.label || axisDisplayName(axis);
+    const disp = choices[curIdx]?.w?.label || axisDisplayName(axis, node);
     val.innerHTML = `<span class="pix-xy-node">${escapeHtml(title)}</span> · ${escapeHtml(disp)}`;
   } else {
     val.classList.add("placeholder");
@@ -509,7 +516,13 @@ function renderValueArea(node, axisKey, mount, refreshCounter, rerender) {
   } else if (axis.widgetType === "combo") {
     const meta = lookupWidgetMeta(node, axis);
     const options = (meta && meta.options && meta.options.length) ? meta.options : (axis.options || []);
-    axis.options = options;
+    // The refreshed list is SERIALIZED state, so persist it only when this render came
+    // from a user action. renderBody also runs on the workflow-load path, and there the
+    // live list is routinely a little different from the saved one (a LoRA added, a
+    // checkpoint renamed) - writing it then rewrites node.properties on a clean open and
+    // flags an untouched workflow "modified" (Vue Compat #18/#19). The checklist below
+    // still shows the LIVE list either way; the next real interaction persists it.
+    if (!isGraphLoading()) axis.options = options;
     const checkedSet = new Set(axis.raw.checked || []);
     const countEl = el("div", "pix-xy-count");
     const updateCount = () => { countEl.textContent = `${checkedSet.size} selected`; };

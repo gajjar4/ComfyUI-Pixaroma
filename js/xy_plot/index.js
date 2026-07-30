@@ -2,12 +2,13 @@ import { app } from "/scripts/app.js";
 import { api } from "/scripts/api.js";
 import {
   readState, restoreFromProperties, resetState, resetAxis as resetAxisCore,
-  resolveAxisValues, axisReady, computeCounts, axisDisplayName,
+  resolveAxisValues, axisReady, computeCounts, axisDisplayName, targetNodeOf,
 } from "./core.mjs";
 import { injectCSS, buildRoot, renderBody, measureContentHeight, closePopupIfOwner } from "./ui.mjs";
 import { buildGridPreview } from "./grid.mjs";
 import { applyAdaptiveCanvasOnly, isVueNodes, closeHelpPopup, installCanvasZoomPassthrough } from "../shared/index.mjs";
 import { isQueueLoopActive, runQueueLoop, feedsOnlyInactiveSwitch } from "../shared/queue_drivers.mjs";
+import { sweepProviderFor, anyProviderOwns } from "../shared/sweep_targets.mjs";
 import { installNodeAccent, registerNodeAccent } from "../shared/node_settings.mjs";
 
 const NODE = "PixaromaXYPlot";
@@ -309,11 +310,37 @@ function findPromptEntry(out, nodeId) {
   return null;
 }
 
-function injectAxis(out, axis, value) {
+function injectAxis(out, axis, value, xyNode) {
   if (!axis || axis.nodeId == null || !axis.widgetName) return;
   if (value === undefined || value === null) return;
   const te = findPromptEntry(out, axis.nodeId);
-  if (!te || !te.inputs) return;
+  if (!te) return;
+  // Provider-backed axis: the target keeps this parameter in a serialized state blob
+  // instead of a widget (LoRA Loader Pixaroma), so it owns the patch. It composes on
+  // whatever is already in the entry, so X and Y can both target the same node.
+  // Resolve the node with the entry's class in hand, so the subgraph-tolerant tail-id
+  // match that found `te` can't pair it with a same-id node from another scope.
+  const target = targetNodeOf(xyNode, axis, te.class_type);
+  const prov = target ? sweepProviderFor(target, axis) : null;
+  if (prov && prov.inject) {
+    // A provider writes a WHOLE state blob, so a mispaired entry would silently
+    // replace another node's entire configuration. Refuse rather than guess.
+    if (te.class_type && target.comfyClass && te.class_type !== target.comfyClass) {
+      console.warn("[Pixaroma.XYPlot] Axis target and its prompt entry disagree - skipping this injection so another node's settings can't be overwritten.");
+      return;
+    }
+    try { prov.inject(te, axis, value, target); }
+    catch (err) { console.error("Pixaroma.XYPlot: sweep provider inject failed", err); }
+    return;
+  }
+  // A provider axis whose node is gone (deleted) must NOT fall through: its name is an
+  // internal key, so writing it would put a meaningless input on the entry and every
+  // square would come out identical with nothing said.
+  if (!prov && anyProviderOwns(axis)) {
+    console.warn("[Pixaroma.XYPlot] This axis points at a node that is no longer on the canvas - every square would look the same. Re-pick the axis.");
+    return;
+  }
+  if (!te.inputs) return;
   const cur = te.inputs[axis.widgetName];
   if (axis.widgetType === "text" && axis.mode === "sr") {
     const find = axis.raw?.srFind || "";
@@ -435,8 +462,8 @@ app.graphToPrompt = async function (...args) {
         };
         entry.inputs = entry.inputs || {};
         entry.inputs.XYPlotState = JSON.stringify(payload);
-        injectAxis(out, state.x, run.xValue);
-        injectAxis(out, state.y, run.yValue);
+        injectAxis(out, state.x, run.xValue, node);
+        injectAxis(out, state.y, run.yValue, node);
         if (run.lockSeed) applySeedLock(out, run.seedMap);
       }
     }
@@ -517,8 +544,8 @@ app.queuePrompt = async function (...args) {
     const sessionId = "xy_" + Date.now() + "_" + (_sessionCounter++);
     const xLabels = xValues.map(String);
     const yLabels = yValues.map(String);
-    const xName = axisReady(state.x) ? axisDisplayName(state.x) : "";
-    const yName = axisReady(state.y) ? axisDisplayName(state.y) : "";
+    const xName = axisReady(state.x) ? axisDisplayName(state.x, node) : "";
+    const yName = axisReady(state.y) ? axisDisplayName(state.y, node) : "";
 
     return await runQueueLoop(async () => {
       let last;
