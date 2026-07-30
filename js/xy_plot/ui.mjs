@@ -40,7 +40,7 @@ const XY_HELP = {
       defs: [
         ["Number", "A `Range` (Start / End / Steps) or a `List` of values."],
         ["Dropdown", "A checklist - tick the samplers / models / schedulers you want to compare."],
-        ["LoRA", "Compare loras or their strengths. Pick a lora ROW to swap which lora file, or its `strength` entry to sweep the weight (e.g. 0.3, 0.6, 1.0). Any OTHER lora rows stay applied in every square, so turn off the ones you are not comparing. Works with LoRA Loader Pixaroma (each row shows up as `LoRA 1`, `LoRA 1 strength`, and `LoRA 1 clip strength` when model and clip strengths are separate), the core Load LoRA node, and other multi-lora loaders."],
+        ["LoRA", "Compare loras or their strengths. Pick a lora ROW to swap which lora file, or its `strength` entry to sweep the weight (e.g. 0.3, 0.6, 1.0). Any OTHER lora rows stay applied in every square, so turn off the ones you are not comparing. Works with LoRA Loader Pixaroma (each row shows up as `LoRA 1`, `LoRA 1 strength`, and `LoRA 1 clip strength` when model and clip strengths are separate), the core Load LoRA node, and other multi-lora loaders. When you swap the FILE on a LoRA Loader Pixaroma row, that row's ticked trigger words are left out of every square, since they belonged to one particular lora - put any words you want in all squares into your prompt instead."],
         ["Prompt text", "`Full list` (one full prompt per line) or `Find & replace` (swap a word for each value)."],
       ],
       bullets: [
@@ -481,13 +481,21 @@ function renderValueArea(node, axisKey, mount, refreshCounter, rerender) {
     // render (writing it on the load path rewrites serialized state and flags an
     // untouched workflow "modified" - it bites an axis saved before `precision` was
     // tracked, whose stored null differs from the live 0).
-    if (nmeta && typeof nmeta.precision === "number") {
-      setLiveAxisMeta(axis, "livePrecision", nmeta.precision);
-      if (!isGraphLoading()) axis.precision = nmeta.precision;
-    }
-    if (nmeta && typeof nmeta.realStep === "number") {
-      setLiveAxisMeta(axis, "liveRealStep", nmeta.realStep);
-      if (!isGraphLoading()) axis.realStep = nmeta.realStep;
+    //
+    // The STASH is written UNCONDITIONALLY - including to null - because it is what
+    // resolveAxisValues actually reads. Only stashing when the fresh meta had a number
+    // let a RE-POINTED axis keep the previous target's snap step: X on Empty Latent
+    // `width` (real step 8), re-pointed to a LoRA strength (no step), silently snapped
+    // 0.3 / 0.6 / 0.9 to 0 / 0 / 0 - three identical squares, no warning, and no Snap
+    // toggle to undo it. `liveOptions` below was unconditional from the start, which is
+    // exactly why it never had this bug; keep these three symmetrical.
+    const livePrec = (nmeta && typeof nmeta.precision === "number") ? nmeta.precision : null;
+    const liveStep = (nmeta && typeof nmeta.realStep === "number") ? nmeta.realStep : null;
+    setLiveAxisMeta(axis, "livePrecision", livePrec);
+    setLiveAxisMeta(axis, "liveRealStep", liveStep);
+    if (!isGraphLoading()) {
+      if (livePrec != null) axis.precision = livePrec;
+      if (liveStep != null) axis.realStep = liveStep;
     }
     const seg = el("div", "pix-xy-seg");
     const sRange = el("span", null, "Range"); const sList = el("span", null, "List");
@@ -500,8 +508,14 @@ function renderValueArea(node, axisKey, mount, refreshCounter, rerender) {
     // Per-axis Snap toggle - lives in the free space next to Range/List so it
     // adds no node height, and only shows when snapping has an effect (the field's
     // step is coarser than its precision, e.g. width/height snap to /16).
-    const snapUnit = Math.pow(10, -(axis.precision != null ? axis.precision : 0));
-    if (axis.realStep && axis.realStep > snapUnit + 1e-9) {
+    // Read the EFFECTIVE values, the same ones resolveAxisValues snaps with. Reading the
+    // saved copies here meant a workflow saved before realStep was tracked had its values
+    // snapped while the toggle to stop it was never drawn - the control was invisible but
+    // active.
+    const effPrec = (livePrec != null) ? livePrec : axis.precision;
+    const effStep = (liveStep != null) ? liveStep : axis.realStep;
+    const snapUnit = Math.pow(10, -(effPrec != null ? effPrec : 0));
+    if (effStep && effStep > snapUnit + 1e-9) {
       const snapT = buildToggle("Snap", axis.snap !== false, (v) => { axis.snap = v; save(); refreshPreview(); });
       snapT.title = "Round values to this setting's real step (e.g. width to multiples of 16). Off = exact.";
       modeRow.appendChild(snapT);

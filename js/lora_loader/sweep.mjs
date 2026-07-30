@@ -97,6 +97,12 @@ function enumerate(node) {
   rows.forEach((row, i) => {
     const name = PREFIX + row.id;
     const base = rowLabel(i);
+    // A row with no file yet: sweeping its STRENGTH alone changes nothing (Python drops
+    // a nameless row entirely), so say so in the value preview rather than let the user
+    // run a whole grid of identical squares. The entry stays offered because pairing it
+    // with a file sweep on the other axis is a real use - X picks the LoRA, Y its weight.
+    const noFile = !String(row.name || "").trim();
+    const hint = noFile ? " (pick a LoRA for this row first)" : "";
     out.push({
       name, subField: "name", label: base, type: "combo",
       options: fileOptions(row.name), cur: row.name || "(none)",
@@ -105,12 +111,12 @@ function enumerate(node) {
     // Snap toggle - people type exact weights like 0.35, not multiples of a grid.
     out.push({
       name, subField: "sm", label: subLabel(base, "sm"), type: "number",
-      step, precision: 2, realStep: null, cur: String(row.sm),
+      step, precision: 2, realStep: null, cur: String(row.sm) + hint,
     });
     if (!st.linkStrength) {
       out.push({
         name, subField: "sc", label: subLabel(base, "sc"), type: "number",
-        step, precision: 2, realStep: null, cur: String(row.sc),
+        step, precision: 2, realStep: null, cur: String(row.sc) + hint,
       });
     }
   });
@@ -134,8 +140,9 @@ function preview(node, axis) {
   const { row } = findRow(node, axis);
   if (!row) return "(row removed)";
   const sf = axis.subField || "name";
-  if (sf === "sm") return String(row.sm);
-  if (sf === "sc") return String(row.sc);
+  const hint = String(row.name || "").trim() ? "" : " (pick a LoRA for this row first)";
+  if (sf === "sm") return String(row.sm) + hint;
+  if (sf === "sc") return String(row.sc) + hint;
   return row.name || "(none)";
 }
 

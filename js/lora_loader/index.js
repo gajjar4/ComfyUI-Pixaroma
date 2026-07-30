@@ -311,7 +311,11 @@ registerNodeHelp(CLASS, {
         "LoRA file in every square, or pick LoRA 1 strength to sweep the weight (there is " +
         "a separate clip strength entry when you have split model and clip in the gear). " +
         "The row being compared is switched on for every square, and the other rows stay " +
-        "exactly as you left them, so switch off anything you are not comparing.",
+        "exactly as you left them, so switch off anything you are not comparing. One thing " +
+        "to know when you compare LoRA FILES: that row's ticked trigger words are left out " +
+        "of every square, because they belonged to one particular LoRA and keeping them " +
+        "would give a single square wording none of the others have. Other rows keep their " +
+        "words as normal, and anything you want in every square belongs in your prompt.",
     },
     {
       heading: "Buttons and settings",
