@@ -51,6 +51,59 @@ const { clampRect, readRect, saveRect, sideMax, floorY } = RECT;
 
 export { el };
 
+// ── "is the panel redrawing itself right now?" ────────────────────────────────
+//
+// An open rename box has to tell two things apart: the USER clicking away
+// (commit what they typed) and a RE-RENDER tearing the box out from under them
+// (keep it, and put it back afterwards). Both arrive as a plain blur.
+//
+// `input.isConnected` looks like the way to tell them apart and IS NOT. Measured
+// in Chrome: removing a focused element fires blur while the element is still
+// attached - isConnected is `true` inside the handler and only flips to false
+// after it returns. A guard written that way never fires, so an unrelated
+// refresh committed a half-typed name and renamed the file behind the user.
+//
+// So the answer comes from the renderer instead, which actually knows. A COUNT
+// rather than a boolean, because render() redraws three columns and a nested
+// call must not clear the flag for the outer one.
+let renderDepth = 0;
+
+export function markRendering(fn) {
+  renderDepth++;
+  try { return fn(); } finally { renderDepth--; }
+}
+
+export const isRendering = () => renderDepth > 0;
+
+/**
+ * Put text on the clipboard, true if it landed.
+ *
+ * navigator.clipboard needs a SECURE context and ComfyUI is very often reached
+ * over plain http on a LAN address, where the whole API is simply absent - so
+ * the old textarea trick is the fallback rather than an afterthought. One copy
+ * of this, because the panel now has three buttons that copy (the model list,
+ * the missing-node list, the version line) and three hand-rolled versions is
+ * three chances to forget the fallback.
+ *
+ * Note for anyone testing this: a SCRIPTED click carries no user activation, so
+ * execCommand reports failure where a real click succeeds. Click it yourself.
+ */
+export async function copyText(text) {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch { /* no secure context, or permission refused */ }
+  const ta = document.createElement("textarea");
+  ta.value = text;
+  ta.style.cssText = "position:fixed;top:-1000px;left:-1000px;";
+  document.body.append(ta);
+  ta.select();
+  let ok = false;
+  try { ok = document.execCommand("copy"); } catch { ok = false; }
+  ta.remove();
+  return ok;
+}
+
 export function createWorkflowWindow({ onRender, onClose }) {
   injectWorkflowCSS();
 

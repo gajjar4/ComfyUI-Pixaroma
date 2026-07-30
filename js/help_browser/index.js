@@ -304,6 +304,9 @@ function buildFooter(foot) {
   const vp = versionParts();
   ver.append(el("span", "pixhb-vername", vp.name), document.createTextNode(" " + vp.number));
   ver.type = "button";
+  // Also on hover, not just on open: the renderer can be switched while this
+  // window stays open, and the tooltip names the renderer.
+  ver.addEventListener("pointerenter", refreshFooter);
   ver.addEventListener("click", async () => {
     const ok = await copyText(versionLine());
     toast(S.win.el, ok ? "Version details copied. Paste them with your question." : "Could not reach the clipboard.");

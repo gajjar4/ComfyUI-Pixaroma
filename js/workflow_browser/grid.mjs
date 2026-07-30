@@ -8,7 +8,7 @@
 // column. The help text once described a double-click rename that has never
 // existed, copied out of an earlier version of this comment.
 
-import { el } from "./window.mjs";
+import { el, markRendering, isRendering } from "./window.mjs";
 import { drawMap, coverFor } from "./cover.mjs";
 
 const fmtWhen = (secs) => {
@@ -24,7 +24,7 @@ const fmtWhen = (secs) => {
 /** Cover element for one entry: a real picture when we have one, otherwise the
  *  drawn graph map. The map is a canvas, so it is painted after layout when its
  *  box has a real width. */
-function coverEl(entry, state, cls) {
+export function coverEl(entry, state, cls) {
   const c = coverFor(entry, state.meta);
   if (c.kind === "image") {
     const img = el("img", cls);
@@ -46,13 +46,17 @@ function coverEl(entry, state, cls) {
 }
 
 export function renderGrid(main, state, H) {
-  main.textContent = "";
+  // The clear is what removes an open rename box, and it fires that box's blur
+  // SYNCHRONOUSLY - so the flag has to be up across exactly this statement.
+  // Self-protecting rather than relying on the caller to wrap it.
+  markRendering(() => { main.textContent = ""; });
   const list = state.visible;
 
   if (!list.length) {
     main.append(el("div", "pixwb-empty", state.query
       ? `Nothing matches "${state.query}".`
       : "Nothing in here yet."));
+    activeRename = null;           // no cards, so nothing to put a rename box on
     return;
   }
 
@@ -87,13 +91,19 @@ export function renderGrid(main, state, H) {
     }
 
     const fav = state.favourites.has(entry.rel);
-    const star = el("div", "pixwb-star" + (fav ? " on" : ""), fav ? "★" : "☆");
+    const list = state.view === "list";
+    const star = el("div", "pixwb-star" + (list ? " pixwb-rowstar" : "") + (fav ? " on" : ""),
+                    fav ? "★" : "☆");
     star.title = fav ? "Remove from favourites" : "Add to favourites";
     star.addEventListener("click", (e) => { e.stopPropagation(); H.onStar(entry); });
     // Two quick clicks on the star would otherwise reach the card's dblclick
     // and open the workflow, which is not what anyone means by tapping a star.
     star.addEventListener("dblclick", (e) => e.stopPropagation());
-    if (state.view !== "list") card.append(star);
+    // In BOTH views. List view used to have no star at all, so switching to it
+    // hid which workflows were favourites and left no way to set one without
+    // going through the detail pane - while the same star sits on every card,
+    // in the left column and on the detail button.
+    card.append(star);
 
     card.addEventListener("click", (e) => H.onSelect(entry, e));
     card.addEventListener("dblclick", () => H.onOpen(entry));
@@ -116,10 +126,34 @@ export function renderGrid(main, state, H) {
     wrap.append(card);
   }
   main.append(wrap);
+  // Last, once every card is in the DOM: a rename that was open before this
+  // render goes back where it was, with what had been typed still in it.
+  restoreRename(main);
 }
 
-/** Turn a card's name into an input, in place. Enter commits, Escape cancels. */
-export function beginRename(main, rel, currentName, commit) {
+// A rename that is happening RIGHT NOW, so it can survive the grid being
+// rebuilt underneath it. Anything at all can trigger a re-render while the box
+// is open - a background run finishing and refreshing a cover, a favourite
+// toggled from the detail pane - and every one of those used to throw the
+// half-typed name away without a word.
+let activeRename = null;
+
+/** Put the rename box back after a re-render. Called at the end of every grid
+ *  render; does nothing when no rename is in progress. */
+export function restoreRename(main) {
+  if (!activeRename) return;
+  const { rel, value, currentName, commit } = activeRename;
+  // The card may be gone entirely (deleted, filtered out by a search, or in a
+  // folder no longer being shown). Renaming something invisible is not a thing,
+  // so drop it rather than leaving a box that can never reappear.
+  if (!main.querySelector(`[data-rel="${CSS.escape(rel)}"]`)) { activeRename = null; return; }
+  beginRename(main, rel, currentName, commit, value);
+}
+
+/** Turn a card's name into an input, in place. Enter commits, Escape cancels.
+ *  `startValue` is what to put in the box when it differs from the name on
+ *  disk - only used when restoring a rename that a re-render interrupted. */
+export function beginRename(main, rel, currentName, commit, startValue) {
   const card = main.querySelector(`[data-rel="${CSS.escape(rel)}"]`);
   if (!card) return;
   // Already renaming. Without this, a second call in LIST view fell through to
@@ -131,26 +165,48 @@ export function beginRename(main, rel, currentName, commit) {
   if (!nameEl) return;
 
   const input = el("input", "pixwb-rename");
-  input.value = currentName;
+  const resuming = startValue !== undefined;
+  input.value = resuming ? startValue : currentName;
   const restore = () => { input.replaceWith(nameEl); };
   nameEl.replaceWith(input);
   input.focus();
-  input.select();
+  // Select-all on a FRESH rename (type straight over the old name), but caret
+  // at the end when resuming - selecting there would mean the next keystroke
+  // wiped everything typed before the interruption.
+  if (resuming) input.setSelectionRange(input.value.length, input.value.length);
+  else input.select();
+
+  activeRename = { rel, currentName, commit, value: input.value };
 
   let done = false;
   const finish = (save) => {
     if (done) return;
     done = true;
+    activeRename = null;
     const value = input.value.trim();
     restore();
     if (save && value && value !== currentName) commit(value);
   };
+  input.addEventListener("input", () => {
+    if (activeRename) activeRename.value = input.value;
+  });
   input.addEventListener("keydown", (e) => {
     e.stopPropagation();                       // Escape here must not close the window
     if (e.key === "Enter") finish(true);
     else if (e.key === "Escape") finish(false);
   });
-  input.addEventListener("blur", () => finish(true));
+  input.addEventListener("blur", () => {
+    // A re-render REMOVED the box rather than the user clicking away. Without
+    // this test an unrelated refresh commits whatever had been typed so far,
+    // renaming the file to a half-finished name behind the user's back.
+    // Leave activeRename set; the render that removed it puts it back.
+    //
+    // NOT `input.isConnected` - that was tried and never fires. Chrome sends
+    // blur while the element is STILL ATTACHED and detaches it afterwards, so
+    // isConnected reads true in here for both cases (measured, not assumed).
+    if (isRendering()) return;
+    finish(true);
+  });
   input.addEventListener("click", (e) => e.stopPropagation());
   input.addEventListener("dblclick", (e) => e.stopPropagation());
 }

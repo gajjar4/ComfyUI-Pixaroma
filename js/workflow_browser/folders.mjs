@@ -14,7 +14,7 @@
 // Only real folders accept a drop. A collection is derived from what is inside
 // a file, so dropping onto one would promise a move that cannot happen.
 
-import { el } from "./window.mjs";
+import { el, markRendering, isRendering } from "./window.mjs";
 
 // Marks a drag as "a folder being re-ordered" rather than "workflow cards being
 // filed". Only the TYPE is readable during dragover - getData is blocked until
@@ -89,7 +89,10 @@ export function folderColor(path, meta) {
  * onDropOn(folderPath) - cards were dropped on a real folder row
  */
 export function renderFolders(side, state, { onPick, onDropOn, onRenameFolder, onFolderMenu, onReorderFolder }) {
-  side.textContent = "";
+  // The clear fires an open folder-rename box's blur synchronously - the flag
+  // has to be up across it so that blur is not mistaken for the user clicking
+  // away. See markRendering in window.mjs.
+  markRendering(() => { side.textContent = ""; });
   const { entries, folders, collections, meta, favourites, sel, tidyRels } = state;
 
   const is = (kind, value) => sel.kind === kind && (value === undefined || sel.value === value);
@@ -285,7 +288,17 @@ export function beginFolderRename(row, path, commit) {
     if (e.key === "Enter") finish(true);
     else if (e.key === "Escape") finish(false);
   });
-  input.addEventListener("blur", () => finish(true));
+  input.addEventListener("blur", () => {
+    // Only when the USER clicked away. Rebuilding the folder column removes this
+    // box too and fires its blur, so without the test an unrelated refresh
+    // committed whatever had been typed so far and renamed the folder to a
+    // half-finished name. Abandoning the edit is the safe half of that trade;
+    // the grid's rename box additionally restores itself, which the folder
+    // column does not need as often. (`isConnected` does NOT work here - see
+    // the note on the grid's copy.)
+    if (isRendering()) return;
+    finish(true);
+  });
   input.addEventListener("click", (e) => e.stopPropagation());
   input.addEventListener("dblclick", (e) => e.stopPropagation());
 }

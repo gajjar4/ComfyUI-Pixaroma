@@ -49,6 +49,9 @@ from .nodes._workflow_index_helpers import (
     build_index as _wf_build_index,
     collections as _wf_collections,
     detect_issues as _wf_detect_issues,
+    looks_like_image as _wf_looks_like_image,
+    reserved_part as _wf_reserved_part,
+    WIN_RESERVED_NAMES as _WIN_RESERVED_NAMES,
 )
 
 # Ensure ComfyUI/models/fonts/ exists so users have a place to drop fonts.
@@ -909,11 +912,9 @@ _LOAD_VIDEO_UPLOAD_EXTS = {
     "mpg", "mpeg", "wmv", "flv", "ogv", "ts",
 }
 _LOAD_VIDEO_MAX_BYTES = 1024 * 1024 * 1024  # 1 GB
-_WIN_RESERVED_NAMES = {
-    "CON", "PRN", "AUX", "NUL",
-    *(f"COM{i}" for i in range(1, 10)),
-    *(f"LPT{i}" for i in range(1, 10)),
-}
+# _WIN_RESERVED_NAMES is imported at the top of this file. It used to be defined
+# here as well, so the workflow folder check and this upload check were two
+# copies of the same list - one source now, in the module that has tests.
 
 
 @PromptServer.instance.routes.post("/pixaroma/api/load_video/upload")
@@ -2510,6 +2511,11 @@ async def api_workflows_folder(request):
     if action == "create":
         if not path:
             return web.json_response({"ok": False, "message": "Give the folder a name."})
+        bad = _wf_reserved_part(root, path)
+        if bad:
+            return web.json_response(
+                {"ok": False, "message": f'"{bad}" is a name Windows keeps for itself. '
+                                         f"Pick another one."})
         if os.path.exists(path):
             return web.json_response({"ok": False, "message": "That folder already exists."})
         try:
@@ -2524,6 +2530,11 @@ async def api_workflows_folder(request):
             return web.json_response({"ok": False, "message": "Bad folder name."})
         if not os.path.isdir(path):
             return web.json_response({"ok": False, "message": "That folder is gone."})
+        bad = _wf_reserved_part(root, new_path)
+        if bad:
+            return web.json_response(
+                {"ok": False, "message": f'"{bad}" is a name Windows keeps for itself. '
+                                         f"Pick another one."})
         if os.path.exists(new_path):
             return web.json_response({"ok": False, "message": "A folder with that name already exists."})
         try:
@@ -2589,6 +2600,8 @@ async def api_workflows_reveal(request):
 
 _WF_COVER_DIRNAME = "pixaroma_covers"
 _WF_COVER_MAX_BYTES = 8 * 1024 * 1024
+# _wf_looks_like_image is imported at the top - it is pure, so it lives in the
+# helpers module where the test harness can reach it.
 
 
 def _wf_covers_dir(request, create=False):
@@ -2687,7 +2700,14 @@ def _wf_migrate_embedded_covers(request, data):
             continue
         try:
             payload = url.split(",", 1)[1]
+            # Capped like a fresh upload. This runs on READ, so without a cap a
+            # single oversized leftover would be decoded whole every time the
+            # panel opened, until the migration finally succeeded.
+            if len(payload) > _WF_COVER_MAX_BYTES * 4 // 3 + 8:
+                raise ValueError("oversized")
             raw = base64.b64decode(payload)
+            if not raw or len(raw) > _WF_COVER_MAX_BYTES:
+                raise ValueError("oversized")
         except Exception:
             covers.pop(rel, None)          # unreadable leftover, drop it
             changed = True
@@ -2728,6 +2748,9 @@ async def api_workflows_cover_set(request):
         return web.json_response({"ok": False, "message": "That picture could not be read."})
     if not raw or len(raw) > _WF_COVER_MAX_BYTES:
         return web.json_response({"ok": False, "message": "That picture is too large."})
+    if not _wf_looks_like_image(raw):
+        return web.json_response(
+            {"ok": False, "message": "That file is not a picture the browser can show."})
 
     name = _wf_cover_name(rel)
     folder = _wf_covers_dir(request, create=True)
@@ -2754,6 +2777,11 @@ async def api_workflows_cover_set(request):
 
 
 def _wf_record_cover(request, rel, name):
+    # Resolved HERE, not inherited. This used to read a `folder` local belonging
+    # to the CALLER, so the one path that needs it - the write-failed cleanup
+    # below - raised NameError instead of tidying up, and NameError is not an
+    # OSError so the except missed it and the route 500'd.
+    folder = _wf_covers_dir(request)
     meta_path = _wf_meta_path(request)
     meta = _wf_read_meta(meta_path)
     covers = meta.get("covers")

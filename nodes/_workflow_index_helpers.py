@@ -446,6 +446,74 @@ _FRONTEND_ONLY = frozenset({
 })
 
 
+# ── name and file checks ─────────────────────────────────────────────────────
+# Pure, so they live here rather than in server_routes.py where nothing can
+# import them to test them. Both guard a WRITE, which is exactly the sort of
+# thing that should have a check watching it.
+
+# CON, NUL, COM1 and the rest name a DEVICE on Windows, not a file, at any
+# extension - so "NUL" and "NUL.json" both fail, and the failure arrives as an
+# unhelpful OSError from deep inside the write.
+WIN_RESERVED_NAMES = frozenset({
+    "CON", "PRN", "AUX", "NUL",
+    *(f"COM{i}" for i in range(1, 10)),
+    *(f"LPT{i}" for i in range(1, 10)),
+})
+
+# The leading bytes of the picture formats a browser will actually draw.
+_IMAGE_MAGIC = (
+    b"\xff\xd8\xff",                    # jpeg
+    b"\x89PNG\r\n\x1a\n",               # png
+    b"GIF87a", b"GIF89a",               # gif
+    b"BM",                              # bmp
+)
+
+
+def looks_like_image(raw):
+    """True when these bytes begin like a picture a browser can show.
+
+    A cover is served straight back to the browser as an image, so it should be
+    one. Checking costs nothing and turns a mistyped upload into a sentence the
+    user can act on, instead of a card that silently never renders."""
+    if not isinstance(raw, (bytes, bytearray)):
+        return False
+    raw = bytes(raw)
+    if raw.startswith(_IMAGE_MAGIC):
+        return True
+    # webp is RIFF....WEBP - the byte length sits between the two markers.
+    return len(raw) >= 12 and raw[:4] == b"RIFF" and raw[8:12] == b"WEBP"
+
+
+def reserved_part(root, path):
+    """The first segment of `path` below `root` that Windows keeps for itself,
+    or None. Checked on every platform: a folder made on Linux still has to open
+    on the Windows machine those workflows may later be copied to.
+
+    Deliberately PURE STRING work, no os.path. The obvious implementation began
+    `os.path.relpath(path, root)` and it failed open on the single most likely
+    input: ntpath resolves a bare "NUL" to the device mount \\\\.\\NUL, decides
+    the two paths are on different mounts and raises ValueError - so the guard
+    returned None for exactly the name it exists to catch. ("NUL.json" was
+    caught, which is what made it look like it worked.) Nothing here may call a
+    path function, because the whole point is that these names make path
+    functions behave strangely."""
+    r = str(root or "").replace("\\", "/").rstrip("/")
+    p = str(path or "").replace("\\", "/")
+    # Strip the root, so a root that itself contains a reserved word (possible
+    # on Linux: /home/con/workflows) does not refuse every name underneath it.
+    # If the two are unrelated, scan the whole path: refusing too much is a
+    # message, letting a device name through is a failed write.
+    if r and p.lower().startswith(r.lower() + "/"):
+        p = p[len(r) + 1:]
+    elif r and p.lower() == r.lower():
+        return None
+    for part in p.split("/"):
+        stem = part.split(".", 1)[0].strip().upper()
+        if stem in WIN_RESERVED_NAMES:
+            return part
+    return None
+
+
 def detect_issues(index, registered_types):
     """The three things worth telling someone about their workflow folder."""
     unsaved, missing = [], []

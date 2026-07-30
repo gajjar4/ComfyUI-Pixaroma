@@ -6,7 +6,7 @@
 // that earns its place: finding out a workflow cannot run AFTER loading it,
 // losing what was on the canvas, is exactly the annoyance this removes.
 
-import { el } from "./window.mjs";
+import { el, copyText } from "./window.mjs";
 import { drawMap, coverFor, hasHandCover } from "./cover.mjs";
 
 export function renderDetail(pane, state, H) {
@@ -151,28 +151,11 @@ export function renderDetail(pane, state, H) {
  *  message asking someone which model they used. */
 async function copyList(mods, workflowName, btn) {
   const text = `${workflowName}\n` + mods.map((m) => m).join("\n");
-  const flash = (label) => {
-    const original = btn.textContent;
-    btn.textContent = label;
-    btn.classList.add("done");
-    setTimeout(() => { btn.textContent = original; btn.classList.remove("done"); }, 1200);
-  };
-  try {
-    await navigator.clipboard.writeText(text);
-    flash("Copied");
-  } catch {
-    // navigator.clipboard needs a secure context, and ComfyUI is often reached
-    // over plain http on a LAN address, where it simply is not there.
-    const ta = document.createElement("textarea");
-    ta.value = text;
-    ta.style.cssText = "position:fixed;top:-1000px;left:-1000px;";
-    document.body.append(ta);
-    ta.select();
-    let ok = false;
-    try { ok = document.execCommand("copy"); } catch { ok = false; }
-    ta.remove();
-    flash(ok ? "Copied" : "Could not copy");
-  }
+  const original = btn.textContent;
+  const ok = await copyText(text);
+  btn.textContent = ok ? "Copied" : "Could not copy";
+  btn.classList.add("done");
+  setTimeout(() => { btn.textContent = original; btn.classList.remove("done"); }, 1200);
 }
 
 /** A filename split so it can be read at a glance: the folder dimmed, the name

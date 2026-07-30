@@ -113,9 +113,15 @@ export async function openWorkflow(rel) {
 }
 
 /** Is there already a workflow at this path? Asked before a rename, move or
- *  save-as, because the underlying write overwrites without complaint - the
- *  duplicate path has always passed ?overwrite=false for exactly that reason,
- *  and the others had no equivalent. */
+ *  save-as.
+ *
+ *  How much work it is doing differs by caller, which is worth knowing before
+ *  trusting or removing it. For RENAME and DUPLICATE it is only a courtesy: both
+ *  reach the server with `?overwrite=false` (rename via core's moveUserData,
+ *  duplicate explicitly), so the server refuses on its own and this check merely
+ *  buys a sentence naming the file instead of a status code. For SAVE-AS it is
+ *  the only check we have - core's saveAs is not documented to refuse - so do
+ *  not drop it there. */
 export async function exists(rel) {
   try {
     const r = await fetch(`/api/userdata/${encodeURIComponent(toStorePath(rel))}`,
@@ -126,19 +132,36 @@ export async function exists(rel) {
   }
 }
 
-/** Rename OR move - a move is just a rename with a different folder in it. */
+/** Rename OR move - a move is just a rename with a different folder in it.
+ *
+ *  The exists() check above is for the MESSAGE, not for safety. Core's rename
+ *  goes through moveUserData, which defaults to `?overwrite=false`, so the
+ *  server refuses to clobber an existing file on its own and nothing can be
+ *  lost in the gap between the check and the move. What the server returns in
+ *  that case is a bare status line ("Failed to rename file 'x': 409 Conflict"),
+ *  so the gap is closed by translating it rather than by trying to win a race
+ *  that has no prize. */
 export async function renameOrMove(rel, newRel) {
+  const leaf = () => newRel.split("/").pop();
   if (rel !== newRel && await exists(newRel)) {
-    throw new Error(`There is already a workflow called "${newRel.split("/").pop()}" there.`);
+    throw new Error(`There is already a workflow called "${leaf()}" there.`);
   }
   const s = store();
   const wf = s?.getWorkflowByPath?.(toStorePath(rel));
   if (!wf) throw new Error("That workflow is no longer there.");
   // Through the store, never by moving the file behind its back: this is what
   // keeps an open tab pointing at the right file and its modified flag intact.
-  if (typeof wf.rename === "function") await wf.rename(toStorePath(newRel));
-  else if (typeof s.renameWorkflow === "function") await s.renameWorkflow(wf, toStorePath(newRel));
-  else throw new Error("This ComfyUI build cannot rename workflows.");
+  try {
+    if (typeof wf.rename === "function") await wf.rename(toStorePath(newRel));
+    else if (typeof s.renameWorkflow === "function") await s.renameWorkflow(wf, toStorePath(newRel));
+    else throw new Error("This ComfyUI build cannot rename workflows.");
+  } catch (err) {
+    const msg = String(err?.message || err);
+    if (/\b409\b|conflict|exists/i.test(msg)) {
+      throw new Error(`There is already a workflow called "${leaf()}" there.`);
+    }
+    throw err;
+  }
   await s.syncWorkflows?.();
 }
 

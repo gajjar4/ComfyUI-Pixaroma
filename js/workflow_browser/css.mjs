@@ -168,6 +168,16 @@ export function injectWorkflowCSS() {
 .pixwb-star:hover { background: rgba(0,0,0,.7); transform: scale(1.12); }
 .pixwb-star.on { color: ${ACC}; background: rgba(0,0,0,.5); }
 
+/* Same star on a list ROW: in the flow at the end of the line rather than
+   floating over a cover, and no dark backdrop because there is no picture
+   underneath it to stand out from. */
+.pixwb-rowstar {
+  position: static; width: 20px; height: 20px; font-size: 13px;
+  background: none; border-radius: 4px; margin-left: 4px;
+}
+.pixwb-rowstar:hover { background: rgba(255,255,255,.1); transform: scale(1.12); }
+.pixwb-rowstar.on { background: none; }
+
 /* the same star, in the left column and on the detail button */
 .pixwb-favstar { color: ${ACC}; font-size: 12px; line-height: 1; flex: none; }
 .pixwb-btnstar { color: #ffffff; margin-right: 5px; font-size: 12px; }
@@ -192,7 +202,74 @@ export function injectWorkflowCSS() {
 .pixwb-row:hover { background: rgba(255,255,255,.04); color: #fff; }
 .pixwb-row.sel { border-color: ${ACC}; background: color-mix(in srgb, ${ACC} 12%, transparent); color: #fff; }
 .pixwb-row .pixwb-rowcov { width: 40px; height: 23px; flex: none; border-radius: 3px; background: #141312; object-fit: cover; }
-.pixwb-row .pixwb-rowfold { color: #6e6764; font-size: 10px; margin-left: auto; white-space: nowrap; }
+/* Both text cells must be allowed to SHRINK, or a long name simply pushes the
+   folder and the date out past the right edge of the panel: a flex item's
+   default min-width is auto, which refuses to go below its content. The name
+   gets the spare room, the folder/date cell only as much as it needs, and each
+   ends in an ellipsis rather than being clipped mid-letter. The full text is on
+   the row's title either way. */
+.pixwb-row .pixwb-rowname {
+  flex: 1 1 auto; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.pixwb-row .pixwb-rowfold {
+  color: #6e6764; font-size: 10px; margin-left: auto; white-space: nowrap;
+  flex: 0 1 auto; min-width: 0; max-width: 45%;
+  overflow: hidden; text-overflow: ellipsis;
+}
+
+/* ── the tidy-up screen ──────────────────────────────────────── */
+/* Replaces the card grid for "Needs tidying". Deliberately looks like a review
+   list rather than a gallery: the point is reading three different problems and
+   acting on each, not browsing pictures. */
+.pixwb-tidy { display: flex; flex-direction: column; gap: 16px; }
+.pixwb-tdintro {
+  color: #8b8480; font-size: 11px; line-height: 1.5;
+  border-left: 2px solid ${ACC}; padding: 2px 0 2px 9px;
+}
+.pixwb-tdsec { display: flex; flex-direction: column; gap: 4px; }
+.pixwb-tdhead { display: flex; align-items: baseline; gap: 8px; }
+.pixwb-tdtitle { color: #efe9e5; font-size: 12.5px; font-weight: 600; }
+.pixwb-tdcount {
+  color: ${ACC}; font-size: 10.5px; padding: 1px 6px; border-radius: 8px;
+  background: color-mix(in srgb, ${ACC} 15%, transparent); white-space: nowrap;
+}
+.pixwb-tdblurb { color: #8b8480; font-size: 11px; line-height: 1.5; margin-bottom: 3px; }
+/* A set of duplicates is bracketed, so it reads as "these belong together"
+   rather than as three unrelated rows that happen to be adjacent. */
+.pixwb-tdgroup {
+  border: 1px solid #332f2c; border-radius: 6px; padding: 3px;
+  margin-bottom: 6px; background: rgba(255,255,255,.015);
+}
+.pixwb-tdrow {
+  display: flex; align-items: center; gap: 9px; padding: 5px 7px; border-radius: 5px;
+  cursor: pointer; font-size: 11.5px; color: #b6b0ac; border: 1px solid transparent;
+}
+.pixwb-tdrow:hover { background: rgba(255,255,255,.04); color: #fff; }
+.pixwb-tdrow.sel { border-color: ${ACC}; background: color-mix(in srgb, ${ACC} 12%, transparent); color: #fff; }
+.pixwb-tdrow .pixwb-rowcov { width: 40px; height: 23px; flex: none; border-radius: 3px; background: #141312; object-fit: cover; }
+/* min-width:0 on the middle cell, or a long name refuses to shrink and pushes
+   the buttons off the right edge - the same flex default that bit the list. */
+.pixwb-tdmid { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.pixwb-tdmid .pixwb-rowname { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pixwb-tdsub {
+  color: #8b8480; font-size: 10px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.pixwb-tdfold {
+  color: #6e6764; font-size: 10px; flex: 0 1 auto; min-width: 0; max-width: 26%;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+/* flex: none so the fix is never the thing that gets squeezed away. */
+.pixwb-tdacts { display: flex; gap: 4px; flex: none; }
+.pixwb-tdbtn {
+  background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.14);
+  color: rgba(255,255,255,.72); font-family: inherit; font-size: 10.5px;
+  padding: 3px 8px; border-radius: 4px; cursor: pointer; white-space: nowrap;
+}
+.pixwb-tdbtn:hover { background: ${ACC}; border-color: ${ACC}; color: #fff; }
+.pixwb-tdbtn.primary { border-color: color-mix(in srgb, ${ACC} 55%, transparent); color: #e8ded9; }
+.pixwb-tdbtn.danger:hover { background: #a33f27; border-color: #a33f27; }
 
 /* ── detail pane ─────────────────────────────────────────────── */
 .pixwb-detail {
@@ -275,6 +352,12 @@ export function injectWorkflowCSS() {
 .pixwb-menu button:hover { background: ${ACC}; color: #fff; }
 .pixwb-menu button:disabled { opacity: .35; cursor: default; }
 .pixwb-menu button:disabled:hover { background: none; color: #cfcac7; }
+/* Arrow keys move real focus between the buttons, so the keyboard highlight is
+   just :focus - styled to match :hover exactly, or the two ways of reaching the
+   same entry would look like two different states. outline is cleared because
+   the fill already says where you are. */
+.pixwb-menu button:focus { background: ${ACC}; color: #fff; outline: none; }
+.pixwb-menu button.pixwb-menudanger:focus { background: #a33f27; color: #fff; }
 .pixwb-menu .pixwb-menusep { height: 1px; background: #3d3936; margin: 4px 2px; }
 
 /* inline folder rename */

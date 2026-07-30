@@ -11,13 +11,14 @@
 // the app, exactly like Help.
 
 import { app } from "/scripts/app.js";
-import { createWorkflowWindow, el } from "./window.mjs";
+import { createWorkflowWindow, el, copyText, markRendering } from "./window.mjs";
 import { injectWorkflowCSS } from "./css.mjs";
 import {
   renderFolders, orderedFolders, siblingsOf, beginFolderRename,
 } from "./folders.mjs";
 import { openContextMenu, closeContextMenu } from "./menu.mjs";
 import { renderGrid, beginRename } from "./grid.mjs";
+import { renderTidy } from "./tidy.mjs";
 import { renderDetail } from "./detail.mjs";
 import { searchEntries } from "./search.mjs";
 import { installOutputCoverCapture, hasHandCover } from "./cover.mjs";
@@ -189,15 +190,23 @@ function render() {
   refreshLive();
   computeVisible();
 
-  renderFolders(S.win.side, S, {
-    onPick: onPickFolder,
-    onDropOn: onDropOnFolder,
-    onRenameFolder: startFolderRename,
-    onFolderMenu: showFolderMenu,
-    onReorderFolder: reorderFolderByDrop,
+  // Wrapped so an open rename box can tell "the panel is redrawing" from "the
+  // user clicked away" - blur alone cannot, see markRendering in window.mjs.
+  markRendering(() => {
+    renderFolders(S.win.side, S, {
+      onPick: onPickFolder,
+      onDropOn: onDropOnFolder,
+      onRenameFolder: startFolderRename,
+      onFolderMenu: showFolderMenu,
+      onReorderFolder: reorderFolderByDrop,
+    });
+    // "Needs tidying" gets its own screen rather than the card grid: three
+    // different problems all wearing the same card told you which workflows
+    // were affected but never which problem each had, or what to do about it.
+    if (S.sel.kind === "tidy") renderTidy(S.win.main, S, HANDLERS);
+    else renderGrid(S.win.main, S, HANDLERS);
+    if (S.win.isDetailVisible()) renderDetail(S.win.detail, S, HANDLERS);
   });
-  renderGrid(S.win.main, S, HANDLERS);
-  if (S.win.isDetailVisible()) renderDetail(S.win.detail, S, HANDLERS);
 
   refreshSortButton();
 
@@ -331,6 +340,28 @@ function cleanName(raw) {
     .trim();
 }
 
+// CON, NUL, COM1 and the rest name a DEVICE on Windows rather than a file, at
+// any extension, so "NUL" and "NUL.json" both fail. The server refuses them too
+// (it is the authority), but the check is here as well so the answer is instant
+// and worded for the person typing rather than relayed from a failed write.
+const WIN_RESERVED = new Set([
+  "CON", "PRN", "AUX", "NUL",
+  ...Array.from({ length: 9 }, (_, i) => `COM${i + 1}`),
+  ...Array.from({ length: 9 }, (_, i) => `LPT${i + 1}`),
+]);
+
+/** Why this name will not do, in words, or null when it is fine. Separate from
+ *  cleanName so each reason gets its own sentence: "cannot be used" for a name
+ *  that sanitised down to nothing is no help when the real problem is that the
+ *  user typed CON. */
+function nameProblem(clean) {
+  if (!clean) return "That name cannot be used.";
+  if (WIN_RESERVED.has(clean.split(".")[0].trim().toUpperCase())) {
+    return `"${clean}" is a name Windows keeps for itself. Pick another one.`;
+  }
+  return null;
+}
+
 const dirOf = (rel) => (rel.includes("/") ? rel.slice(0, rel.lastIndexOf("/")) : "");
 const joinRel = (folder, file) => (folder ? `${folder}/${file}` : file);
 
@@ -378,6 +409,11 @@ const HANDLERS = {
     guard(() => A.toggleFavourite(entry.rel));
   },
 
+  async onCopyText(text, okMessage) {
+    const ok = await copyText(text);
+    S.win.toast(ok ? okMessage : "Could not reach the clipboard.");
+  },
+
   onRename(entry) {
     // beginRename edits the card in place, so it needs that card on screen. It
     // is not, if the workflow is selected but filtered out by a search, or if
@@ -391,8 +427,9 @@ const HANDLERS = {
     }
     beginRename(S.win.main, entry.rel, entry.name, (newName) => {
       guard(async () => {
-        const clean = newName.replace(/[\\/:*?"<>|]/g, "").trim();
-        if (!clean) throw new Error("That name cannot be used.");
+        const clean = cleanName(newName);
+        const bad = nameProblem(clean);
+        if (bad) throw new Error(bad);
         const target = joinRel(dirOf(entry.rel), clean + ".json");
         await A.renameOrMove(entry.rel, target);
         await carryMeta(entry.rel, target);
@@ -621,7 +658,8 @@ const parentOf = (p) => (p.includes("/") ? p.slice(0, p.lastIndexOf("/")) : "");
 /** The rename itself, shared by the in-place edit and the dialog fallback. */
 function commitRename(entry, newName) {
   const clean = cleanName(newName);
-  if (!clean) { S.win.toast("That name cannot be used."); return; }
+  const bad = nameProblem(clean);
+  if (bad) { S.win.toast(bad); return; }
   guard(async () => {
     const target = joinRel(dirOf(entry.rel), clean + ".json");
     await A.renameOrMove(entry.rel, target);
@@ -632,8 +670,12 @@ function commitRename(entry, newName) {
 
 function startFolderRename(path, row) {
   beginFolderRename(row, path, (newName) => {
-    const clean = newName.replace(/[\\/:*?"<>|]/g, "").trim();
-    if (!clean) { S.win.toast("That name cannot be used."); return; }
+    // cleanName, NOT a second inline regex. The copy that used to live here
+    // skipped the leading and trailing dot strip, so a folder could be renamed
+    // to "..." or to a name ending in a dot - which Windows then cannot open.
+    const clean = cleanName(newName);
+    const bad = nameProblem(clean);
+    if (bad) { S.win.toast(bad); return; }
     const target = parentOf(path) ? `${parentOf(path)}/${clean}` : clean;
     guard(async () => {
       const res = await A.folderAction({ action: "rename", path, newPath: target });
@@ -752,8 +794,9 @@ function onPickFolder(pick) {
     ask({ title: "New folder", message: "It is created inside the workflows folder.", value: "", okLabel: "Create" })
       .then((nameRaw) => {
         if (!nameRaw) return;
-        const clean = nameRaw.replace(/[\\/:*?"<>|]/g, "").trim();
-        if (!clean) { S.win.toast("That name cannot be used."); return; }
+        const clean = cleanName(nameRaw);
+        const bad = nameProblem(clean);
+        if (bad) { S.win.toast(bad); return; }
         guard(async () => {
           const res = await A.folderAction({ action: "create", path: clean });
           if (!res.ok) throw new Error(res.message || "Could not create that folder.");
@@ -858,8 +901,9 @@ function onSaveHere() {
     okLabel: "Save",
   }).then((nameRaw) => {
     if (!nameRaw) return;
-    const clean = nameRaw.replace(/[\\/:*?"<>|]/g, "").trim();
-    if (!clean) { S.win.toast("That name cannot be used."); return; }
+    const clean = cleanName(nameRaw);
+    const bad = nameProblem(clean);
+    if (bad) { S.win.toast(bad); return; }
     guard(() => A.saveCurrentAs(joinRel(folder, clean + ".json")), "Saved");
   });
 }
@@ -971,11 +1015,18 @@ function buildFooter(foot) {
   const vp = versionParts();
   ver.append(el("span", "pixwb-vername", vp.name), document.createTextNode(" " + vp.number));
   ver.title = versionLine() + "  ·  click to copy";
+  // Re-read as the pointer arrives, because the line names the RENDERER and the
+  // renderer can be switched without reloading the page. Built once, the
+  // tooltip went on saying "Classic nodes" after a switch to Nodes 2.0 - which
+  // is exactly the detail someone is reading it to report.
+  ver.addEventListener("pointerenter", () => {
+    ver.title = versionLine() + "  ·  click to copy";
+  });
   ver.addEventListener("click", async () => {
     const line = versionLine();
-    let ok = false;
-    try { await navigator.clipboard.writeText(line); ok = true; }
-    catch { ok = false; }
+    // Falls back to the textarea trick for a plain-http LAN address, and if
+    // even that fails the line itself is shown so it can be copied by hand.
+    const ok = await copyText(line);
     S.win.toast(ok ? "Copied: " + line : line);
   });
   foot.append(ver);
