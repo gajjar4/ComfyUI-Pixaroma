@@ -445,8 +445,17 @@ def build_hashes(model_sha256="", loras=None):
         v = autov2(sha)
         if not v:
             continue
-        key = "LORA:%s" % lora_tag_name(name)
-        if key.lower() == "vae":
+        tag = lora_tag_name(name)
+        # Civitai's query excludes an entry named exactly "vae", so a LoRA that
+        # happens to be called that would be silently dropped on their side.
+        if tag.lower() == "vae":
+            continue
+        key = "LORA:%s" % tag
+        # The key is the BASENAME, so two LoRAs from different folders sharing a
+        # name would collide and one hash would vanish. Keep the first rather
+        # than overwrite: dropping a hash loses a resource link silently, which
+        # is the failure mode this whole module is built to avoid.
+        if key in out:
             continue
         out[key] = v
     return out

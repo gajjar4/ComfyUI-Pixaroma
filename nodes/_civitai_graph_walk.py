@@ -102,13 +102,66 @@ _STATE_BLOB_NODES = {
 # is worse than a missing key because nobody can tell it is wrong.
 
 
+_SEED_MAX = 0xFFFFFFFFFFFFFFFF
+
+
+def _sliders_value(row):
+    """Mirror of node_sliders.PixaromaSliders._value_of.
+
+    MUST stay a mirror, not an approximation: the blob holds the RAW row value
+    and the node transforms it before emitting, so reading the blob straight
+    records a number the sampler never saw. A Control Panel row adopts the type
+    of whatever it is wired into, so a float row re-wired to `steps` keeps its
+    fractional value until the slider is next moved - that produced
+    "Steps: 7.6" in metadata while the sampler ran 8.
+    """
+    if not isinstance(row, dict):
+        return None
+    kind = str(row.get("type") or "auto").lower()
+    if kind in ("combo", "text"):
+        v = row.get("value")
+        return v if isinstance(v, str) else (None if v is None else str(v))
+    try:
+        value = float(row.get("value", 0) or 0)
+    except (TypeError, ValueError, OverflowError):
+        value = 0.0
+    if value != value or value in (float("inf"), float("-inf")):
+        value = 0.0
+    value = max(-1e12, min(1e12, value))
+    if kind == "toggle":
+        on = bool(round(value))
+        if str(row.get("out") or "auto").lower() == "int":
+            return 1 if on else 0
+        return 1 if on else 0  # a bool is not a metadata value; emit the int form
+    if kind in ("int", "seed"):
+        return int(round(value))
+    return float(value)
+
+
+def _seed_value(state):
+    """Mirror of node_seed.PixaromaSeed.get_seed (runSeed, else seed, else 0)."""
+    try:
+        s = int(state.get("runSeed", state.get("seed", 0)))
+    except (TypeError, ValueError):
+        return 0
+    if s < 0:
+        return 0
+    if s > _SEED_MAX:
+        return s % (_SEED_MAX + 1)
+    return s
+
+
 def _from_state_blob(prompt, node_id, slot):
-    """Value a Pixaroma state-blob node emits on `slot`, or None."""
+    """Value a Pixaroma state-blob node emits on `slot`, or None.
+
+    Applies the same normalisation the node itself applies, so the metadata
+    records what the sampler actually received.
+    """
     ct = class_of(prompt, node_id)
     spec = _STATE_BLOB_NODES.get(ct)
     if not spec:
         return None
-    state_key, list_key, value_key = spec
+    state_key, list_key, _value_key = spec
     raw = widget_value(prompt, node_id, state_key)
     if not isinstance(raw, str) or not raw.strip():
         return None
@@ -119,19 +172,19 @@ def _from_state_blob(prompt, node_id, slot):
     if not isinstance(state, dict):
         return None
     if list_key is None:
-        v = state.get(value_key)
-        return v if isinstance(v, (int, float, str)) and not isinstance(v, bool) else None
+        return _seed_value(state)
     rows = state.get(list_key)
     if not isinstance(rows, list):
         return None
     try:
-        row = rows[int(slot)]
-    except (IndexError, TypeError, ValueError):
+        idx = int(slot)
+    except (TypeError, ValueError):
         return None
-    if not isinstance(row, dict):
+    # A negative index would silently wrap to the LAST row. Not reachable from
+    # the frontend (API slots are non-negative) but it would be a wrong value.
+    if idx < 0 or idx >= len(rows):
         return None
-    v = row.get(value_key)
-    return v if isinstance(v, (int, float, str)) and not isinstance(v, bool) else None
+    return _sliders_value(rows[idx])
 
 
 def resolve_input(prompt, node_id, input_name, _depth=0):
@@ -209,7 +262,10 @@ def walk_back(prompt, start_id, match, follow=None, max_depth=_MAX_DEPTH):
             node = prompt.get(node_id)
             if not isinstance(node, dict):
                 continue
-            for name, value in (node.get("inputs") or {}).items():
+            inputs = node.get("inputs")
+            if not isinstance(inputs, dict):
+                continue
+            for name, value in inputs.items():
                 if not is_link(value):
                     continue
                 if follow and not follow(ct, name):
@@ -324,7 +380,13 @@ def find_checkpoint(prompt, from_id):
     branch and return the wrong file.
     """
     def follow(_ct, name):
-        return name in ("model", "unet", "base_model")
+        # "guider" is REQUIRED, not optional: SamplerCustom / SamplerCustomAdvanced
+        # reach the model through a guider node, so without it the filtered walk
+        # returns nothing on EVERY custom-sampling graph and falls through to the
+        # unfiltered retry below - which then happily picks a checkpoint that was
+        # only loaded for its CLIP or VAE, and hashes that file. Reproduced on a
+        # Flux graph: it recorded an unrelated SD1.5 checkpoint as the model.
+        return name in ("model", "unet", "base_model", "guider")
 
     def match(ct, node_id):
         if not _CKPT_CLASS_RE.search(ct):
@@ -334,15 +396,21 @@ def find_checkpoint(prompt, from_id):
     node_id = walk_back(prompt, from_id, match, follow=follow)
     if node_id is None:
         # Some chains route the model through inputs we did not follow; retry
-        # without the filter rather than give up.
+        # without the filter rather than give up. NOTE this retry can only ever
+        # GUESS - it may reach a checkpoint loaded for its CLIP or VAE - so the
+        # follow-list above must stay complete enough that it rarely runs.
         node_id = walk_back(prompt, from_id, match)
     if node_id is None:
-        return None, None
+        return None, None, None
     for k in _CKPT_KEYS:
         v = widget_value(prompt, node_id, k)
         if isinstance(v, str) and v:
-            return node_id, v
-    return node_id, None
+            # Return the WIDGET NAME too: it says which model tree the name came
+            # from (ckpt_name -> checkpoints, unet_name -> diffusion_models), and
+            # discarding it meant the resolver tried "checkpoints" first for
+            # everything, so a name present in BOTH trees hashed the wrong file.
+            return node_id, v, k
+    return node_id, None, None
 
 
 _LORA_CLASSES = ("LoraLoader", "LoraLoaderModelOnly")
@@ -372,20 +440,31 @@ def collect_loras(prompt, from_id):
                 continue
             ct = class_of(prompt, node_id)
             if depth and ct in _LORA_CLASSES:
-                name = widget_value(prompt, node_id, "lora_name")
-                strength = widget_value(prompt, node_id, "strength_model")
+                name = resolve_input(prompt, node_id, "lora_name")
+                # resolve_input, NOT widget_value: a wired strength (from Control
+                # Panel Pixaroma, a Primitive, anything) reads as None through
+                # widget_value and used to fall back to 1.0 - so a LoRA the user
+                # had turned DOWN TO ZERO was advertised at full strength, and the
+                # zero-skip below could never fire because the guess was 1.0.
+                strength = resolve_input(prompt, node_id, "strength_model")
                 if strength is None:
-                    strength = widget_value(prompt, node_id, "strength")
+                    strength = resolve_input(prompt, node_id, "strength")
                 try:
-                    s = float(strength) if strength is not None else 1.0
+                    s = float(strength) if strength is not None else None
                 except (TypeError, ValueError):
-                    s = 1.0
-                if isinstance(name, str) and name and not (-_ZERO < s < _ZERO):
+                    s = None
+                # Undeterminable strength -> omit the row rather than invent 1.0.
+                # The hash still reaches Civitai through collect_resources, which
+                # keys off the name; only the weight is lost, which is honest.
+                if isinstance(name, str) and name and s is not None and not (-_ZERO < s < _ZERO):
                     found.append((name, s))
             node = prompt.get(node_id)
             if not isinstance(node, dict):
                 continue
-            for iname, value in (node.get("inputs") or {}).items():
+            inputs = node.get("inputs")
+            if not isinstance(inputs, dict):
+                continue
+            for iname, value in inputs.items():
                 if not is_link(value):
                     continue
                 src = str(value[0])
@@ -416,7 +495,10 @@ def find_pixaroma_loras(prompt, from_id):
             node = (prompt or {}).get(node_id)
             if not isinstance(node, dict):
                 continue
-            for _n, value in (node.get("inputs") or {}).items():
+            inputs = node.get("inputs")
+            if not isinstance(inputs, dict):
+                continue
+            for _n, value in inputs.items():
                 if is_link(value) and str(value[0]) not in seen:
                     seen.add(str(value[0]))
                     nxt.append((str(value[0]), depth + 1))
@@ -432,14 +514,23 @@ _TEXT_KEYS = ("text", "text_g", "text_l", "prompt", "string", "value",
               "positive", "text_positive")
 
 
-def read_text(prompt, cond_id, max_depth=_MAX_DEPTH):
+def read_text(prompt, cond_id, avoid=(), max_depth=_MAX_DEPTH):
     """First prompt string found upstream of a conditioning input, or None.
 
     Follows conditioning chains (Combine / Concat / SetArea and friends) and
     primitive string wires, which is why it does not just read one widget.
+
+    `avoid` names inputs the walk must NOT traverse. This is load-bearing, not a
+    nicety: nodes like ControlNetApplyAdvanced carry BOTH conditioning sides, so
+    when the positive text arrives by wire (one hop further away) the negative
+    node's literal is nearer and wins - the image then ships with its NEGATIVE
+    prompt recorded as the positive, which nobody looking at it can detect.
+    Reproduced before this guard existed. Refusing the opposite branch is purely
+    subtractive: the worst case becomes an omitted prompt, never a swapped one.
     """
     if not prompt or cond_id is None:
         return None
+    avoid = tuple(avoid or ())
     seen = {str(cond_id)}
     frontier = [(str(cond_id), 0)]
     while frontier:
@@ -450,12 +541,16 @@ def read_text(prompt, cond_id, max_depth=_MAX_DEPTH):
             node = prompt.get(node_id)
             if not isinstance(node, dict):
                 continue
-            inputs = node.get("inputs") or {}
+            inputs = node.get("inputs")
+            if not isinstance(inputs, dict):
+                continue
             for key in _TEXT_KEYS:
                 v = inputs.get(key)
                 if isinstance(v, str) and v.strip():
                     return v
-            for _n, value in inputs.items():
+            for name, value in inputs.items():
+                if name in avoid:
+                    continue
                 if is_link(value) and str(value[0]) not in seen:
                     seen.add(str(value[0]))
                     nxt.append((str(value[0]), depth + 1))
@@ -473,7 +568,15 @@ def read_prompts(prompt, sampler_id):
         if guider:
             pos = link_source(prompt, guider, "positive")
             neg = link_source(prompt, guider, "negative")
-    return read_text(prompt, pos), read_text(prompt, neg)
+            # BasicGuider (the standard Flux shape) has NEITHER: its single
+            # conditioning input carries the positive, one hop further out.
+            # Without this the most common modern workflow recorded no prompt.
+            if pos is None and neg is None:
+                pos = link_source(prompt, guider, "conditioning")
+    # Each side refuses to cross into the other, so a node carrying both (e.g.
+    # ControlNetApplyAdvanced) cannot leak the negative into the positive.
+    return (read_text(prompt, pos, avoid=("negative",)),
+            read_text(prompt, neg, avoid=("positive",)))
 
 
 # ------------------------------------------------------------------ top level
@@ -491,13 +594,14 @@ def describe(prompt, save_node_id):
     sampler_id = find_sampler(prompt, save_node_id)
     info = read_sampler(prompt, sampler_id)
     pos, neg = read_prompts(prompt, sampler_id)
-    ckpt_id, ckpt = find_checkpoint(prompt, sampler_id if sampler_id else save_node_id)
+    ckpt_id, ckpt, ckpt_key = find_checkpoint(prompt, sampler_id if sampler_id else save_node_id)
     info.update({
         "sampler_id": sampler_id,
         "positive": pos,
         "negative": neg,
         "checkpoint": ckpt,
         "checkpoint_id": ckpt_id,
+        "checkpoint_key": ckpt_key,   # which widget supplied it -> which folder
         "loras": collect_loras(prompt, sampler_id if sampler_id else save_node_id),
         "pixaroma_lora_ids": find_pixaroma_loras(prompt, sampler_id if sampler_id else save_node_id),
     })

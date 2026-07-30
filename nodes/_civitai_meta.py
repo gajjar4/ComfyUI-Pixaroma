@@ -37,6 +37,13 @@ from . import _civitai_meta_helpers as meta
 
 # Folder keys a KSampler's model could have come from, most likely first.
 _MODEL_FOLDERS = ("checkpoints", "diffusion_models", "unet")
+# Which tree each loader widget names, so the lookup starts in the right place.
+_FOLDERS_FOR_KEY = {
+    "ckpt_name": ("checkpoints", "diffusion_models", "unet"),
+    "unet_name": ("diffusion_models", "unet", "checkpoints"),
+    "model_name": ("checkpoints", "diffusion_models", "unet"),
+    "model_path": ("checkpoints", "diffusion_models", "unet"),
+}
 
 # LoRA Loader Pixaroma keeps its stack in a hidden state blob, so it is read
 # here rather than by the generic walker. Verified against the node's OWN reader
@@ -148,7 +155,11 @@ def collect_resources(prompt, info, allow_hash=True):
     ckpt_sha = ""
     ckpt = info.get("checkpoint")
     if ckpt:
-        path = resolve_model_path(ckpt)
+        # Search the tree the NAME CAME FROM first. Without this a name that
+        # exists both as a full checkpoint and as a UNET hashed whichever the
+        # fixed order hit first, attributing the image to a model never loaded.
+        folders = _FOLDERS_FOR_KEY.get(info.get("checkpoint_key"), _MODEL_FOLDERS)
+        path = resolve_model_path(ckpt, folders)
         if path:
             ckpt_sha, _src = cache.resolve(path, allow_hash=allow_hash)
 
@@ -162,14 +173,22 @@ def collect_resources(prompt, info, allow_hash=True):
     seen = set()
     specs = []
     for name, strength in loras:
-        key = str(name).lower()
+        path = resolve_model_path(name, ("loras",))
+        # De-dupe on the RESOLVED FILE, not the name: two LoRAs organised as
+        # sd15/detail.safetensors and sdxl/detail.safetensors are different files
+        # that share a basename, and keying on the name let both through here
+        # only for them to collide later in the Hashes dict, losing one hash.
+        key = os.path.normcase(path) if path else str(name).lower()
         if key in seen:
             continue
         seen.add(key)
-        specs.append((name, strength))
-        path = resolve_model_path(name, ("loras",))
+        # A LoRA file that is not there did NOT affect the image: the LoRA Loader
+        # skips a missing row and prints "skipped (not found)", and its own
+        # trigger-words output excludes it for the same reason. Claiming it in the
+        # metadata would advertise a resource that never touched the picture.
         if not path:
             continue
+        specs.append((name, strength))
         sha, _src = cache.resolve(path, allow_hash=allow_hash)
         if sha:
             hashed.append((name, sha))
