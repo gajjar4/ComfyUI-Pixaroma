@@ -2872,16 +2872,28 @@ def _wf_record_cover(request, rel, name):
     # every rename-then-repick stranded a jpg in the covers folder forever.
     prev = covers.get(rel)
     old_name = prev.get("file") if isinstance(prev, dict) else None
+    # Asked BEFORE the overwrite, while `meta` still describes what is on disk:
+    # does anything on disk point at the file the upload just (over)wrote?
+    # Needed by the failure branch below, where the sidecar write did NOT land,
+    # so the on-disk records are the ones that matter.
+    name_was_referenced = _wf_cover_referenced(meta, name)
     covers[rel] = {"kind": "file", "file": name, "v": version}
     meta["covers"] = covers
     if not _wf_write_meta(meta_path, meta):
-        # The picture is on disk but nothing points at it. Saying "ok" here left
-        # an orphan file and a cover that vanished on the next reload, with no
-        # hint anything had gone wrong.
-        try:
-            os.remove(os.path.join(folder, name))
-        except OSError:
-            pass
+        # The record write failed, so the sidecar still holds whatever it held.
+        # Deleting the uploaded file is only CLEANUP when nothing on disk points
+        # at that name - and something usually does: the filename is hashed from
+        # the workflow's path, so RE-picking a cover for a workflow that already
+        # has one writes the SAME name its existing record references. Deleting
+        # unconditionally here destroyed that existing cover on a failed save -
+        # the record survived, pointed at nothing, and the next read pruned it.
+        # When the old record references the name, the file (now holding the new
+        # bytes) simply stays: the user keeps a working cover either way.
+        if not name_was_referenced:
+            try:
+                os.remove(os.path.join(folder, name))
+            except OSError:
+                pass
         return web.json_response({"ok": False, "message": "Could not save the cover setting."})
     # Only after the write landed, and with the same guards as everywhere else:
     # the shape check (a corrupt record must not aim os.remove), the reference
