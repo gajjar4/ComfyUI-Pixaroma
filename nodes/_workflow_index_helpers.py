@@ -494,6 +494,23 @@ def looks_like_image(raw):
     )
 
 
+# A cover filename is ALWAYS 16 hex characters and .jpg, because we generate it
+# ourselves from the workflow path. Anything else did not come from us.
+_COVER_NAME_RE = re.compile(r"[0-9a-f]{16}\.jpg")
+
+
+def is_cover_name(name):
+    """Is this a filename we could have written?
+
+    Load-bearing for SAFETY, not tidiness. The sidecar is written from a plain
+    HTTP body, so a cover record's "file" is whatever the client sent - and the
+    clear path feeds it to os.remove. Without this, setting a cover's file to
+    "../../something" and then clearing that key deleted an arbitrary file
+    anywhere the ComfyUI process could reach. os.path.join is no defence: it
+    DISCARDS the base directory when the second part is absolute."""
+    return isinstance(name, str) and bool(_COVER_NAME_RE.fullmatch(name))
+
+
 def reserved_part(root, path):
     """The first segment of `path` below `root` that Windows keeps for itself,
     or None. Checked on every platform: a folder made on Linux still has to open

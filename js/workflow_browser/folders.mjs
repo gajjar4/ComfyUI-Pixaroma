@@ -135,7 +135,9 @@ export function renderFolders(side, state, { onPick, onDropOn, onRenameFolder, o
       // (measured - not even on the shared parent, which is where the spec's
       // "nearest common ancestor" rule would have put it). So the tooltip and
       // the help page both promised a gesture that could not work.
-      if (folderPath !== undefined && onRenameFolder) {
+      // A REAL folder only. "(loose files)" is passed as "" - it is the root,
+      // shown as a row for convenience, and there is nothing there to rename.
+      if (folderPath && onRenameFolder) {
         const now = performance.now();
         if (lastFoldClick.path === folderPath && now - lastFoldClick.at < DBL_MS) {
           lastFoldClick = { path: null, at: 0 };

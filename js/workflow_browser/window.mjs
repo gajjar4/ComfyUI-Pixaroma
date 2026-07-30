@@ -257,18 +257,19 @@ export function createWorkflowWindow({ onRender, onClose }) {
   // Note this can only be caught with a REAL click. A synthetic MouseEvent does
   // not move focus, so a scripted test of the arrows passes either way.
   win.addEventListener("mousedown", (e) => {
-    // LEFT button only. A right-click means "open the menu", and this handler
-    // fired for it too: the deferred refocus landed a tick AFTER the context
-    // menu had focused its first entry and pulled focus straight back out, so
-    // the menu's arrow keys did nothing. Middle-click is not a click into the
-    // panel either.
-    if (e.button !== 0) return;
     if (e.target.closest("input, textarea, select, [contenteditable]")) return;
     setTimeout(() => {
       const a = document.activeElement;
       if (a && win.contains(a) && a.matches("input, textarea, [contenteditable]")) return;
       // The context menu lives in document.body, OUTSIDE this window, so the
       // test above cannot see it. Anything focused in there is deliberate.
+      //
+      // This is what makes a RIGHT-click safe, and it has to be this rather
+      // than skipping non-left buttons entirely: the deferred refocus lands a
+      // tick after the menu has focused its first entry, and without the test
+      // it pulled focus straight back out so the menu's arrow keys did nothing.
+      // But a right-click that opens NO menu still needs the rescue, or it
+      // blurs the search box with nothing to bring it back.
       if (a && a.closest(".pixwb-menu")) return;
       bar.querySelector("input")?.focus({ preventScroll: true });
     }, 0);
@@ -318,11 +319,20 @@ export function createWorkflowWindow({ onRender, onClose }) {
       // Hiding the panel blurs whatever was focused inside it, and if that was
       // an open rename box the blur would COMMIT the half-typed name. Closing
       // is not "clicking away" - Alt+W reaches here with no click at all - so
-      // the same flag a re-render uses says "this blur is not the user's
-      // answer". The edit is abandoned, which is what Escape does too.
+      // the flag a re-render uses says "this blur is not the user's answer".
+      //
+      // Suppressing the commit is only half of it: onClose ALSO has to throw the
+      // edit away. Leaving it meant reopening the panel restored the box, with
+      // focus, still holding the half-typed name - and the next keystroke or
+      // click committed a rename the user had walked away from. The edit really
+      // is abandoned now, which is what Escape does too.
       markRendering(() => { win.style.display = "none"; });
       const q = bar.querySelector("input");
-      if (q) q.value = "";
+      // Emptying the BOX is not the same as clearing the search. The filter is
+      // held in the panel's own state, so a panel closed mid-search reopened
+      // looking unfiltered while still hiding most of the list. Fire the same
+      // event typing does, so whatever listens clears its state too.
+      if (q && q.value) { q.value = ""; q.dispatchEvent(new Event("input", { bubbles: true })); }
       if (toastEl) toastEl.style.display = "none";
       onClose?.();
     },

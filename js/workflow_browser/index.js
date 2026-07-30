@@ -17,7 +17,7 @@ import {
   renderFolders, orderedFolders, siblingsOf, beginFolderRename,
 } from "./folders.mjs";
 import { openContextMenu, closeContextMenu, setMenuFocusHome } from "./menu.mjs";
-import { renderGrid, beginRename, setRenameLostNotifier } from "./grid.mjs";
+import { renderGrid, beginRename, setRenameLostNotifier, dropRename } from "./grid.mjs";
 import { renderTidy } from "./tidy.mjs";
 import { renderDetail } from "./detail.mjs";
 import { searchEntries } from "./search.mjs";
@@ -236,15 +236,41 @@ function refreshSortButton() {
 
 // ── small dialogs, in the panel's own style ──────────────────────────────────
 
+// The dialog that is up right now, so closing the panel can dismiss it. Without
+// this a confirmation outlived its panel: close the panel mid-"Delete this?" and
+// the same dialog was sitting there on the next open, still wired to the entry
+// from before - and pressing OK deleted a file the user had already backed out
+// of deleting.
+let openAsk = null;
+
+export function closeAsk() {
+  const cancel = openAsk;
+  openAsk = null;
+  if (cancel) { try { cancel(); } catch { /* already gone */ } }
+}
+
 function ask({ title, message, value, okLabel = "OK", danger }) {
   return new Promise((resolve) => {
     const back = el("div");
     back.tabIndex = -1;
     back.style.cssText = "position:absolute;inset:0;background:rgba(0,0,0,.55);z-index:8;display:flex;align-items:center;justify-content:center;";
     const box = el("div");
-    box.style.cssText = "background:#1d1c1b;border:1px solid #3d3936;border-radius:8px;padding:14px 16px;width:min(330px,86%);box-shadow:0 12px 30px rgba(0,0,0,.6);";
+    // Wider when the message LISTS things (a delete naming the files it will
+    // remove). 330px wraps a folder path into three lines and the list becomes
+    // unreadable exactly when reading it matters most.
+    const listy = (message || "").includes("\n");
+    box.style.cssText = "background:#1d1c1b;border:1px solid #3d3936;border-radius:8px;"
+      + `padding:14px 16px;width:min(${listy ? 460 : 330}px,90%);`
+      + "box-shadow:0 12px 30px rgba(0,0,0,.6);";
     box.append(el("div", "pixwb-detname", title));
-    if (message) box.append(el("div", "pixwb-detpath", message));
+    if (message) {
+      const m = el("div", "pixwb-detpath", message);
+      // The message is written with real line breaks when it names files, and
+      // HTML would otherwise run them all together into one paragraph.
+      m.style.whiteSpace = "pre-wrap";
+      if (listy) { m.style.maxHeight = "38vh"; m.style.overflowY = "auto"; }
+      box.append(m);
+    }
 
     // EVERY key is stopped while this is up, not only the ones typed into a
     // field. The overlay blocks the mouse but keyboard events still bubbled to
@@ -255,6 +281,20 @@ function ask({ title, message, value, okLabel = "OK", danger }) {
       e.stopPropagation();
       if (e.key === "Escape") { e.preventDefault(); done(null); }
       else if (e.key === "Enter" && !input) { e.preventDefault(); done(true); }
+      else if (e.key === "Tab") {
+        // TRAPPED, not just stopped. stopPropagation only keeps the event from
+        // other listeners - it does nothing about Tab's native behaviour, which
+        // is to walk on to the next focusable element in the document. The
+        // backdrop is the LAST child of the body, so Tab landed on the footer's
+        // buttons and Shift+Tab on the detail pane's own Rename and Delete, all
+        // still live behind a dialog asking about a different workflow. The
+        // context menu already traps Tab for exactly this reason.
+        e.preventDefault();
+        const stops = [input, ok, no].filter(Boolean);
+        const at = stops.indexOf(document.activeElement);
+        const next = (at + (e.shiftKey ? -1 : 1) + stops.length) % stops.length;
+        stops[at < 0 ? 0 : next].focus();
+      }
     });
 
     let input = null;
@@ -289,9 +329,19 @@ function ask({ title, message, value, okLabel = "OK", danger }) {
     function done(v) {
       if (settled) return;
       settled = true;
+      if (openAsk === cancel) openAsk = null;
       back.remove();
       resolve(v);
+      // Focus went with the dialog. Put it back in the panel, or the arrow keys
+      // stop working after every confirm - the same document.body trap the
+      // context menu hits.
+      S.win?.focusSearch?.();
     }
+    // Registered so closing the panel can dismiss this. Resolves null, exactly
+    // as Cancel does, so whatever is awaiting it takes the "no" branch instead
+    // of hanging forever on a promise nothing will ever settle.
+    const cancel = () => done(null);
+    openAsk = cancel;
     ok.addEventListener("click", () => done(input ? input.value.trim() : true));
     no.addEventListener("click", () => done(null));
     back.addEventListener("mousedown", (e) => { if (e.target === back) done(null); });
@@ -466,7 +516,21 @@ const HANDLERS = {
 
   onDuplicate(entry) {
     guard(async () => {
-      await A.duplicate(entry.rel, joinRel(dirOf(entry.rel), entry.name + " copy.json"));
+      const target = joinRel(dirOf(entry.rel), entry.name + " copy.json");
+      await A.duplicate(entry.rel, target);
+      // The copy gets the note and the cover too. It is a copy - it should look
+      // and read like the thing it was copied from. Deliberately NOT carryMeta:
+      // that MOVES them, clearing the original's, which is exactly wrong here.
+      // Two keys pointing at one cover file is fine; the server only deletes a
+      // picture once nothing references it.
+      const note = S.meta?.notes?.[entry.rel];
+      const cover = S.meta?.covers?.[entry.rel];
+      const patch = {};
+      if (note) patch.notes = { [target]: note };
+      if (cover) patch.covers = { [target]: cover };
+      if (Object.keys(patch).length) {
+        try { await A.saveMeta(patch); } catch { /* the copy itself worked */ }
+      }
     }, "Copied");
   },
 
@@ -486,13 +550,17 @@ const HANDLERS = {
     }, "Deleted");
   },
 
-  async onDeleteMany(rels) {
+  async onDeleteMany(rels, wording) {
     const dirty = rels.filter((r) => A.isModified(r));
+    const warn = dirty.length
+      ? `${dirty.length} of them are open with unsaved changes, which go too. There is no undo.`
+      : "There is no undo yet, so this really does remove the files.";
+    // A caller can NAME the files. The tidy screen's "Keep this one" deletes
+    // workflows the user never picked one by one, so a bare count is not enough
+    // to agree to.
     const yes = await confirmAsk(
-      `Delete ${rels.length} workflows?`,
-      dirty.length
-        ? `${dirty.length} of them are open with unsaved changes, which go too. There is no undo.`
-        : "There is no undo yet, so this really does remove the files.");
+      wording?.title || `Delete ${rels.length} workflows?`,
+      wording?.message ? `${wording.message}\n\n${warn}` : warn);
     if (!yes) return;
     // Keep going past a failure and report at the end. Stopping on the first
     // one left the rest silently undone while the earlier deletes had already
@@ -517,7 +585,12 @@ const HANDLERS = {
 
   onNote(rel, text) {
     A.saveMeta({ notes: { [rel]: text || null } })
-      .then(() => {
+      .then((res) => {
+        // The RESULT, not just "it did not throw". The route answers 200 with
+        // {ok:false} when the sidecar could not be written, so a note the user
+        // watched themselves type could quietly fail to reach the disk and only
+        // be noticed as missing much later.
+        if (!res || res.ok === false) throw new Error("not saved");
         S.meta.notes = S.meta.notes || {};
         if (text) S.meta.notes[rel] = text; else delete S.meta.notes[rel];
         const e = S.byRel.get(rel);
@@ -529,7 +602,10 @@ const HANDLERS = {
   onSetCover(entry) {
     const picker = el("input");
     picker.type = "file";
-    picker.accept = "image/*";
+    // The formats the server will actually accept, not "image/*". Offering
+    // everything and then refusing SVG at the last step is a worse experience
+    // than not offering it: the file dialog says yes and the panel says no.
+    picker.accept = "image/jpeg,image/png,image/gif,image/bmp,image/webp,image/avif,image/heic";
     picker.addEventListener("change", async () => {
       const file = picker.files?.[0];
       if (!file) return;
@@ -743,8 +819,8 @@ function startFolderRename(path, row) {
       //
       // carryMeta does exactly this for a single file; this is the same move for
       // a whole subtree, in ONE patch so it is a single write. New keys and null
-      // clears go in the same object safely: the server applies every set before
-      // any clear, precisely so a re-pointed picture is not deleted first.
+      // clears go in the same object safely: the server decides every deletion
+      // once, at the end, against the final state.
       const notes = {};
       const covers = {};
       for (const [k, v] of Object.entries(S.meta.notes || {})) {
@@ -758,8 +834,11 @@ function startFolderRename(path, row) {
       if (Object.keys(notes).length) patch.notes = notes;
       if (Object.keys(covers).length) patch.covers = covers;
 
-      if (Object.keys(patch).length) await A.saveMeta(patch);
-
+      // The VIEW is reparented FIRST, before the write that can fail. The folder
+      // has already moved on disk by this point, so these have to follow it
+      // whatever happens next - doing them after the await meant a failed write
+      // left the sidebar pointing at a folder name that no longer exists, and
+      // the grid showed nothing at all.
       if (S.sel.kind === "folder" && typeof S.sel.value === "string") {
         const moved = reparent(S.sel.value);
         if (moved !== S.sel.value) S.sel = { kind: "folder", value: moved };
@@ -768,6 +847,22 @@ function startFolderRename(path, row) {
       // alone it became a stale rel that no card could ever match again.
       S.selected = new Set([...S.selected].map(reparent));
       if (S.kbdRel) S.kbdRel = reparent(S.kbdRel);
+
+      if (Object.keys(patch).length) {
+        // The RESULT is checked, not just the absence of a throw. saveMeta only
+        // rejects on a bad HTTP status, and the server answers 200 with
+        // {ok:false} when the sidecar could not be written (disk full, an
+        // antivirus lock on the temp file, a permissions blip). Treated as
+        // success, that was silent data loss: the notes and covers still name
+        // the OLD folder, and the very next read prunes each of those covers as
+        // orphaned and deletes the picture. commitSiblingOrder just below has
+        // always checked its result; this call site was the one that did not.
+        const res2 = await A.saveMeta(patch);
+        if (!res2 || res2.ok === false) {
+          throw new Error("The folder was renamed, but its notes and covers could "
+            + "not be saved. Rename it back to keep them.");
+        }
+      }
     }, "Folder renamed");
   });
 }
@@ -985,7 +1080,24 @@ function onPanelKeys(e) {
   // and typing in them is unaffected. The search box deliberately DOES let
   // arrows through, so you can type and then walk the results without moving
   // your hands.
-  const list = S.visible;
+  //
+  // The tidy screen groups the SAME workflows into sections, so its visual
+  // order is not S.visible's order and a workflow can appear twice. Walking
+  // S.visible there moved the cursor in an order that matched nothing on
+  // screen, so the order is read off the rendered rows instead - first
+  // appearance only, so one workflow is one stop.
+  let list = S.visible;
+  if (S.sel.kind === "tidy") {
+    const seenRel = new Set();
+    list = [];
+    for (const row of S.win.main.querySelectorAll(".pixwb-tdrow[data-rel]")) {
+      const rel = row.dataset.rel;
+      if (seenRel.has(rel)) continue;
+      seenRel.add(rel);
+      const entry = S.byRel.get(rel);
+      if (entry) list.push(entry);
+    }
+  }
   if (!list.length) return;
   const idx = S.kbdRel ? list.findIndex((x) => x.rel === S.kbdRel) : -1;
 
@@ -1006,7 +1118,8 @@ function onPanelKeys(e) {
       if (!atEdge || el0.selectionStart !== el0.selectionEnd) return;
     }
     e.preventDefault();
-    const cols = S.view === "list" ? 1 : gridColumns();
+    // The tidy screen is a single column of rows, whatever Grid/List says.
+    const cols = (S.view === "list" || S.sel.kind === "tidy") ? 1 : gridColumns();
     const raw = ARROWS[e.key];
     const step = raw === "up" ? -cols : raw === "down" ? cols : raw;
     let next = idx < 0 ? (step > 0 ? 0 : list.length - 1) : idx + step;
@@ -1103,6 +1216,14 @@ function ensureWindow() {
     },
     onClose: () => {
       closeContextMenu();
+      // Anything modal or half-finished has to go with the panel, or it comes
+      // BACK on the next open still wired to the workflow it was about to act
+      // on. Both of these were reachable: a rename box resurrected itself with
+      // focus and could then commit a half-typed name, and a Delete confirmation
+      // closed with the panel reappeared later, still able to delete the file
+      // the user had walked away from.
+      dropRename(false);        // false: closing is not a surprise, do not toast
+      closeAsk();
       syncButton();
     },
   });

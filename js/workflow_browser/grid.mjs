@@ -143,13 +143,18 @@ let activeRename = null;
 let onRenameLost = null;
 export function setRenameLostNotifier(fn) { onRenameLost = fn; }
 
-/** Forget any rename in progress. Used when there are no rows at all to put it
- *  back on. */
-export function dropRename(reason) {
+/** Forget any rename in progress, WITHOUT committing it.
+ *
+ *  Called when there is no row left to put the box back on, and when the panel
+ *  closes. The close case matters: hiding the panel suppresses the commit (the
+ *  render flag is up) but used to leave this state set, so reopening resurrected
+ *  the box - with focus - still holding the half-typed name. The next keystroke
+ *  or click then committed a rename the user had walked away from. */
+export function dropRename(tell) {
   if (!activeRename) return;
   const { currentName } = activeRename;
   activeRename = null;
-  if (reason) { try { onRenameLost?.(currentName); } catch { /* no panel */ } }
+  if (tell) { try { onRenameLost?.(currentName); } catch { /* no panel */ } }
 }
 
 /** Put the rename box back after a re-render. Called at the end of every grid
@@ -162,15 +167,26 @@ export function restoreRename(main) {
   // so drop it rather than leaving a box that can never reappear - but SAY so,
   // because otherwise the half-typed name simply disappears and it looks like
   // the panel ate it.
-  if (!main.querySelector(`[data-rel="${CSS.escape(rel)}"]`)) { dropRename(true); return; }
+  if (!rowFor(main, rel)) { dropRename(true); return; }
   beginRename(main, rel, currentName, commit, value);
+}
+
+/** The element a rename box should go into for this workflow.
+ *
+ *  One workflow can be on screen TWICE - the tidy screen shows it once per
+ *  problem it has. Only one of those rows offers Rename, so it is marked, and a
+ *  plain first-match lookup would otherwise put the edit box on whichever
+ *  section happened to render first. */
+function rowFor(main, rel) {
+  const sel = `[data-rel="${CSS.escape(rel)}"]`;
+  return main.querySelector(sel + "[data-rename]") || main.querySelector(sel);
 }
 
 /** Turn a card's name into an input, in place. Enter commits, Escape cancels.
  *  `startValue` is what to put in the box when it differs from the name on
  *  disk - only used when restoring a rename that a re-render interrupted. */
 export function beginRename(main, rel, currentName, commit, startValue) {
-  const card = main.querySelector(`[data-rel="${CSS.escape(rel)}"]`);
+  const card = rowFor(main, rel);
   if (!card) return;
   // Already renaming. Without this, a second call in LIST view fell through to
   // the `span` fallback, matched the folder/date span (the only one left once

@@ -50,6 +50,7 @@ from .nodes._workflow_index_helpers import (
     collections as _wf_collections,
     detect_issues as _wf_detect_issues,
     looks_like_image as _wf_looks_like_image,
+    is_cover_name as _wf_is_cover_name,
     reserved_part as _wf_reserved_part,
     WIN_RESERVED_NAMES as _WIN_RESERVED_NAMES,
 )
@@ -2468,6 +2469,15 @@ def _wf_apply_meta_patch(request, patch):
     path = _wf_meta_path(request)
     data = _wf_read_meta(path)
 
+    # Every picture that STOPS being referenced by this patch, whether because
+    # its key was cleared or because that key was pointed at something else. The
+    # deletions happen ONCE, at the end, against the FINAL state - which is what
+    # makes the whole thing order-independent. Deleting inside the merge meant
+    # asking "is anything else using this?" of a half-applied patch, and the
+    # answer could be no purely because the key that re-points it had not been
+    # merged yet.
+    orphan_candidates = []
+
     # Dict sections merge key by key, so two panels cannot wipe each other.
     for section in _WF_META_DICTS:
         incoming = patch.get(section)
@@ -2476,35 +2486,26 @@ def _wf_apply_meta_patch(request, patch):
         current = data.get(section)
         if not isinstance(current, dict):
             current = {}
-        # SETS FIRST, then the clears. Both passes matter and the order between
-        # them is load-bearing: a rename sends {newKey: sameCover, oldKey: null},
-        # and the clear consults _wf_cover_referenced to decide whether to delete
-        # the picture. Interleaved in dict order, that check runs against a
-        # HALF-MERGED state - if the null happened to come first it would see no
-        # other reference and delete the jpg the new key was about to need. It
-        # only worked because the client writes the new key first, which is a
-        # promise no caller should have to keep.
-        for k, v in incoming.items():
-            if v is not None:
-                current[k] = v
-        data[section] = current
 
         for k, v in incoming.items():
-            if v is not None:
-                continue
-            old = current.pop(k, None)          # an explicit null clears one entry
-            # Clearing a cover should take its picture with it, or the folder
-            # fills up with files nothing points at. Only when no OTHER workflow
-            # still uses it: a rename re-points the same picture at a new key and
-            # clears the old one, and that must not delete the file the new key
-            # now needs.
-            if (section == "covers" and isinstance(old, dict)
-                    and isinstance(old.get("file"), str) and old["file"]
-                    and not _wf_cover_referenced(data, old["file"], skip_key=k)):
-                try:
-                    os.remove(os.path.join(_wf_covers_dir(request), old["file"]))
-                except OSError:
-                    pass                         # already gone, or in use - not worth failing over
+            old = current.get(k)
+            if v is None:
+                current.pop(k, None)            # an explicit null clears one entry
+            else:
+                # A covers record names a FILE WE WILL LATER DELETE, so refuse a
+                # filename we could not have written rather than storing it and
+                # finding out at os.remove time.
+                if section == "covers" and isinstance(v, dict) and "file" in v \
+                        and not _wf_is_cover_name(v.get("file")):
+                    continue
+                current[k] = v
+            # Overwriting a cover strands its old picture just as surely as
+            # clearing it does. Only the clear case used to be considered, so
+            # every workflow run that replaced a hand-picked cover with its own
+            # output left the chosen file behind forever.
+            if section == "covers" and isinstance(old, dict) and old.get("file"):
+                if not (isinstance(v, dict) and v.get("file") == old["file"]):
+                    orphan_candidates.append(old["file"])
         data[section] = current
 
     # List sections REPLACE. An order is meaningless merged key by key - the
@@ -2515,6 +2516,21 @@ def _wf_apply_meta_patch(request, patch):
             data[section] = [x for x in incoming if isinstance(x, str)]
 
     ok = _wf_write_meta(path, data)
+
+    # Only after the write landed. Removing a picture and then failing to save
+    # the record that stopped pointing at it would leave a cover referencing a
+    # file that is no longer there.
+    if ok:
+        for name in orphan_candidates:
+            if _wf_cover_referenced(data, name):
+                continue                        # something else still wants it
+            target = _wf_cover_path(request, name)
+            if not target:
+                continue                        # not a name we could have written
+            try:
+                os.remove(target)
+            except OSError:
+                pass                            # already gone, or in use
     return web.json_response({"ok": ok, "meta": data})
 
 
@@ -2641,6 +2657,18 @@ def _wf_covers_dir(request, create=False):
     return d
 
 
+def _wf_cover_path(request, name):
+    """The on-disk path for one of our cover files, or None if the name is not
+    ours. Every os.remove of a cover goes through this."""
+    if not _wf_is_cover_name(name):
+        return None
+    folder = _wf_covers_dir(request)
+    path = os.path.join(folder, name)
+    # Belt as well as braces: the regex already rules out separators, but the
+    # containment check is what a reader will look for.
+    return path if _is_path_under(path, folder) else None
+
+
 def _wf_cover_name(rel):
     """Stable per workflow, and safe as a filename whatever the path contains."""
     return hashlib.sha1(rel.encode("utf-8")).hexdigest()[:16] + ".jpg"
@@ -2710,10 +2738,12 @@ def _wf_drop_missing_covers(request, data):
                 covers.pop(rel, None)
                 changed = True
                 if name and not _wf_cover_referenced(data, name, skip_key=rel):
-                    try:
-                        os.remove(os.path.join(folder, name))
-                    except OSError:
-                        pass
+                    path = _wf_cover_path(request, name)
+                    if path:
+                        try:
+                            os.remove(path)
+                        except OSError:
+                            pass
     return changed
 
 
@@ -2852,12 +2882,11 @@ def _wf_record_cover(request, rel, name):
 async def api_workflows_cover_get(request):
     name = request.match_info.get("name", "")
     # The name is ours (a hex digest plus .jpg), so anything else is not one of
-    # ours and there is no reason to go looking for it.
-    if not re.fullmatch(r"[0-9a-f]{16}\.jpg", name or ""):
-        return web.Response(status=404, text="Not found")
-    folder = _wf_covers_dir(request)
-    path = os.path.join(folder, name)
-    if not _is_path_under(path, folder) or not os.path.isfile(path):
+    # ours and there is no reason to go looking for it. Same validator the
+    # delete paths use - one definition, so read and delete can never disagree
+    # about what counts as one of our files.
+    path = _wf_cover_path(request, name)
+    if not path or not os.path.isfile(path):
         return web.Response(status=404, text="Not found")
     # NOT "immutable". These are ordinary files in a folder the user can open,
     # and deleting one by hand left the old picture on screen for a year because

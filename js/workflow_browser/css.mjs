@@ -248,6 +248,11 @@ export function injectWorkflowCSS() {
 }
 .pixwb-tdrow:hover { background: rgba(255,255,255,.04); color: #fff; }
 .pixwb-tdrow.sel { border-color: ${ACC}; background: color-mix(in srgb, ${ACC} 12%, transparent); color: #fff; }
+/* Same keyboard cursor a card gets, so arrowing through this screen shows where
+   you are instead of only changing the pane on the right. */
+.pixwb-tdrow.kbd { outline: 1px solid ${ACC}; outline-offset: 1px; }
+/* A list row had no keyboard cursor either - only cards did. */
+.pixwb-row.kbd { outline: 1px solid ${ACC}; outline-offset: -1px; }
 .pixwb-tdrow .pixwb-rowcov { width: 40px; height: 23px; flex: none; border-radius: 3px; background: #141312; object-fit: cover; }
 /* min-width:0 on the middle cell, or a long name refuses to shrink and pushes
    the buttons off the right edge - the same flex default that bit the list. */

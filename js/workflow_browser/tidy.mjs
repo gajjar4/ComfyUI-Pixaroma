@@ -46,8 +46,15 @@ function row(entry, state, H, extras, trailing, renamable) {
   const r = el("div", "pixwb-tdrow");
   // data-rel plus a .pixwb-rowname is exactly what beginRename looks for, so
   // Rename edits the name in place here just as it does on a card - no dialog,
-  // no second code path.
-  if (renamable) r.dataset.rel = entry.rel;
+  // no second code path. Set on EVERY row, because the keyboard walks the rows
+  // by it; the rename box is aimed with data-rename instead.
+  r.dataset.rel = entry.rel;
+  if (renamable) r.dataset.rename = "1";
+  // The same two states every card shows. Without them, clicking a row updated
+  // the pane on the right and the arrow keys moved an invisible cursor, so the
+  // whole screen looked unresponsive to both.
+  if (state.selected.has(entry.rel)) r.classList.add("sel");
+  if (state.kbdRel === entry.rel) r.classList.add("kbd");
   r.title = entry.rel;
   r.append(coverEl(entry, state, "pixwb-rowcov"));
 
@@ -135,8 +142,16 @@ export function renderTidy(main, state, H) {
         const others = g.filter((x) => x.rel !== e.rel);
         box.append(row(e, state, H, [
           { label: `Keep this one`, primary: true,
-            title: `Delete the other ${others.length} in this set`,
-            fn: () => H.onDeleteMany(others.map((x) => x.rel)) },
+            title: `Delete the other ${others.length} in this set:\n`
+                   + others.map((x) => x.name).join("\n"),
+            // The NAMES go to the confirmation, not just the count. "Delete 2
+            // workflows?" for files the user never individually picked is not
+            // enough to agree to when there is no undo.
+            fn: () => H.onDeleteMany(others.map((x) => x.rel), {
+              title: `Delete the other ${others.length} in this set?`,
+              message: `Keeping "${e.name}". These go:\n`
+                       + others.map((x) => x.rel).join("\n"),
+            }) },
           { label: "Open", fn: () => H.onOpen(e) },
           { label: "Delete", danger: true, fn: () => H.onDelete(e) },
         ], null));
