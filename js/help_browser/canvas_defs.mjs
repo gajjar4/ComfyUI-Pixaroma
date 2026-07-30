@@ -140,4 +140,80 @@ export const CANVAS_FEATURES = [
     ],
     footer: "Entirely optional. Pick whichever makes pressing Run more enjoyable, or leave it off.",
   },
+{
+    key: "canvas:workflows",
+    title: "Workflows",
+    tagline: "A panel for finding, opening and organising your workflow files, with a picture of each one.",
+    keywords: "workflow browser organise organize folder rename move delete duplicate cover thumbnail picture favourite favorite star search find open manage tidy duplicates junk sort list grid",
+    sections: [
+      {
+        heading: "What it does",
+        body: "Opens from the Workflows button in the top toolbar, next to the Help question mark. Alt+W does the same, and so does right-clicking empty canvas.\n\nIt reads the same folder ComfyUI already keeps your workflows in, so everything you have is there the first time you open it. Nothing is imported and nothing is moved.",
+      },
+      {
+        heading: "Finding one",
+        bullets: [
+          "The cursor starts in the search box, so you can just type.",
+          "Search looks INSIDE the files as well as at their names: type a model or LoRA filename, a phrase from a prompt, or your own note, and it finds the workflows that use it.",
+          "Arrow keys move the selection: left and right by one card, up and down by a whole row. Enter opens the highlighted one.",
+          "Double click a card to open it. A small orange dot on a card means it is open right now.",
+        ],
+      },
+      {
+        heading: "The pictures on the cards",
+        body: "Every workflow gets one straight away: a small map of the graph itself, drawn from where the nodes sit and what colour you gave them. Once a workflow has been run, its own last output image becomes the picture instead. You can also choose any picture yourself with Set cover.\n\nCovers you choose by hand are saved as ordinary jpg files in a pixaroma_covers folder inside ComfyUI's user folder, next to your workflows. You can open, back up or delete them like any other file, and a cover you delete simply goes back to the drawn map.",
+      },
+      {
+        heading: "The buttons along the top",
+        defs: [
+          ["Grid / List", "Picture cards, or a dense sortable list once you have hundreds."],
+          ["Sort", "Recent, Name, or number of Nodes. It greys out in Recent and while searching, because those two already have an order of their own."],
+          ["Open folder", "Opens the selected folder on your computer. On Windows it opens BEHIND the browser, so look in your taskbar for it."],
+          ["Save open workflow here", "Saves whatever is on the canvas into the folder you have selected, so new work stops landing loose in the root."],
+        ],
+      },
+      {
+        heading: "Organising",
+        bullets: [
+          "Double click a name to rename it, on a workflow or a folder. Enter saves, Escape cancels.",
+          "Drag a card onto a folder to move it. Select several first with Ctrl+click to move them together.",
+          "Drag a folder up or down to reorder it. A line shows where it will land. Folders can be reordered within their level, not dragged inside each other.",
+          "Right click a workflow for everything at once: Open, favourite, Rename, Duplicate, Move to folder, Set cover, Reveal, Delete.",
+          "Right click a folder for Rename, Move up, Move down, Reveal and Delete. A folder is only deleted when it is empty, which is the safety net.",
+        ],
+      },
+      {
+        heading: "Favourites, Recent and the collections",
+        body: "The star on a card adds it to Favourites. These are ComfyUI's own bookmarks, so the same stars show in ComfyUI's built-in Workflows sidebar.\n\nUnder your real folders there are collections that fill themselves, worked out by reading each file: what it makes (Text to Image, Video, Upscale, Inpaint) and which model family it uses. Your folders are untouched, and a workflow filed in the wrong place still turns up in the right collection.",
+      },
+      {
+        heading: "Needs tidying",
+        body: "A shortcut on the left that gathers the workflows worth a look: files still called \"Unsaved Workflow\", sets of files that are duplicates of each other (same nodes, same models, different names), and any that need nodes which are not installed on this machine.\n\nIt only shows them. Nothing is renamed or deleted for you.",
+      },
+      {
+        heading: "What it tells you before you open one",
+        body: "Select a workflow and the panel on the right shows when it changed, how many nodes it has, whether any of its nodes are missing on this machine, and every model and LoRA file it needs, with a Copy button for the whole list. There is also a note field in your own words, which search can find.",
+      },
+      {
+        heading: "Keyboard",
+        defs: [
+          ["Alt+W", "Open or close the panel"],
+          ["type", "Search, from the moment it opens"],
+          ["arrow keys", "Move the selection"],
+          ["Enter", "Open the highlighted workflow"],
+          ["F2", "Rename it"],
+          ["Escape", "Clear the search, then close the panel"],
+        ],
+      },
+      {
+        heading: "Worth knowing",
+        bullets: [
+          "Deleting a workflow cannot be undone yet, so it always asks first. If the one you are deleting is open with unsaved changes, it says so.",
+          "The panel stays open while you work, and while you switch between workflows.",
+          "Your notes, chosen covers and folder order are kept beside your workflows, not inside them, so sharing a workflow never carries them along.",
+        ],
+      },
+    ],
+    footer: "There is deliberately no Workflows node. A node would be saved into the workflow file and would follow it to anyone you shared it with.",
+  },
 ];

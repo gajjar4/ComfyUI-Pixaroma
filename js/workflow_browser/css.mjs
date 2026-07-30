@@ -154,17 +154,25 @@ export function injectWorkflowCSS() {
 /* The star was a 12px glyph in the corner and was genuinely hard to hit. It is
    now a proper 26x26 target with its own backdrop, so it is both visible on a
    pale cover and clickable without aiming. */
+/* Hollow WHITE when it is not a favourite, filled ORANGE when it is - the same
+   pair used in the left column and on the detail button, so all three read as
+   one control rather than three. */
 .pixwb-star {
   position: absolute; top: 3px; right: 3px;
   width: 26px; height: 26px; display: flex; align-items: center; justify-content: center;
   font-size: 15px; line-height: 1; cursor: pointer; border-radius: 6px;
-  color: rgba(255,255,255,.72); background: rgba(0,0,0,.34);
+  color: #ffffff; background: rgba(0,0,0,.34);
   transition: background .12s, color .12s, transform .08s;
 }
-.pixwb-card:hover .pixwb-star { background: rgba(0,0,0,.55); color: #fff; }
-.pixwb-star:hover { background: ${ACC} !important; color: #fff !important; transform: scale(1.08); }
+.pixwb-card:hover .pixwb-star { background: rgba(0,0,0,.55); }
+.pixwb-star:hover { background: rgba(0,0,0,.7); transform: scale(1.12); }
 .pixwb-star.on { color: ${ACC}; background: rgba(0,0,0,.5); }
-.pixwb-star.on:hover { color: #fff !important; }
+
+/* the same star, in the left column and on the detail button */
+.pixwb-favstar { color: ${ACC}; font-size: 12px; line-height: 1; flex: none; }
+.pixwb-btnstar { color: #ffffff; margin-right: 5px; font-size: 12px; }
+.pixwb-btnstar.on { color: ${ACC}; }
+.pixwb-tbtn:hover .pixwb-btnstar { color: #fff; }
 .pixwb-openmark {
   position: absolute; top: 4px; left: 5px; width: 6px; height: 6px; border-radius: 50%;
   background: ${ACC}; box-shadow: 0 0 0 2px rgba(0,0,0,.45);
@@ -292,6 +300,13 @@ export function injectWorkflowCSS() {
   font-size: 10px; color: #6e6764;
 }
 .pixwb-footsp { flex: 1; }
+.pixwb-helpbtn {
+  border: 1px solid #3d3936; background: rgba(255,255,255,.04); color: ${ACC};
+  border-radius: 5px; width: 22px; height: 20px; cursor: pointer; margin-right: 7px;
+  font-family: inherit; font-size: 12px; font-weight: 700; line-height: 1; padding: 0;
+  transition: background .12s, border-color .12s, color .12s;
+}
+.pixwb-helpbtn:hover { background: ${ACC}; border-color: ${ACC}; color: #fff; }
 .pixwb-ver {
   border: 1px solid #3d3936; background: rgba(255,255,255,.04); color: #a49d99;
   border-radius: 5px; padding: 2px 8px; cursor: pointer;

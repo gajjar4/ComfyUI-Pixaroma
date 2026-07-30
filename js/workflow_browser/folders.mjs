@@ -95,7 +95,7 @@ export function renderFolders(side, state, { onPick, onDropOn, onRenameFolder, o
   const is = (kind, value) => sel.kind === kind && (value === undefined || sel.value === value);
 
   /** Build a row, attach its click, and - for a real folder - its drop target. */
-  function addRow({ label, count, on, dot, indent = 0, title, muted }, pick, folderPath) {
+  function addRow({ label, count, on, dot, indent = 0, title, muted, star }, pick, folderPath) {
     const b = el("button", "pixwb-fold" + (on ? " on" : ""));
     b.type = "button";
     if (title) b.title = title;
@@ -110,6 +110,9 @@ export function renderFolders(side, state, { onPick, onDropOn, onRenameFolder, o
       d.style.background = dot;
       b.append(d);
     }
+    // The star is its own element so it can be orange while the label stays
+    // readable grey - baking it into the label text made it one colour.
+    if (star) b.append(el("span", "pixwb-favstar", "★"));
     b.append(el("span", null, label));
     if (count != null) b.append(el("span", "pixwb-cnt", String(count)));
     b.addEventListener("click", () => onPick(pick));
@@ -178,7 +181,7 @@ export function renderFolders(side, state, { onPick, onDropOn, onRenameFolder, o
 
   // ── shortcuts ──
   addRow({ label: "All workflows", count: entries.length, on: is("all") }, { kind: "all" });
-  addRow({ label: "★ Favourites", count: favourites.size, on: is("fav") }, { kind: "fav" });
+  addRow({ label: "Favourites", star: true, count: favourites.size, on: is("fav") }, { kind: "fav" });
   addRow({ label: "Recent", count: Math.min(20, entries.length), on: is("recent") }, { kind: "recent" });
 
   // The count is the number of WORKFLOWS the click will show, not the number of

@@ -853,6 +853,20 @@ function buildFooter(foot) {
   // you on" is the first thing any support answer needs, and the Help window
   // already puts it here for the same reason. Click copies the full line.
   foot.append(el("div", "pixwb-footsp"));
+
+  // Opens the FULL help browser at this panel's own page, rather than being a
+  // second, smaller pile of explanation that would drift from it.
+  const help = el("button", "pixwb-helpbtn", "?");
+  help.type = "button";
+  help.title = "How this panel works: the buttons, the shortcuts, where covers are kept";
+  help.addEventListener("click", () => {
+    try {
+      window.PixaromaHelpBrowser?.open("canvas:workflows");
+    } catch {
+      S.win.toast("The help browser is not available.");
+    }
+  });
+  foot.append(help);
   const ver = el("button", "pixwb-ver", versionShort());
   ver.type = "button";
   ver.title = versionLine() + "  ·  click to copy";

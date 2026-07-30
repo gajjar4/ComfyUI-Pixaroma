@@ -97,8 +97,12 @@ export function renderDetail(pane, state, H) {
   // A full-size favourite control, so the little star on the card is never the
   // only way to do it - and it works in list view, where cards have no star.
   const fav = state.favourites.has(entry.rel);
-  btn(fav ? "★ Favourite" : "☆ Favourite", () => H.onStar(entry), null,
-      fav ? "Remove from favourites" : "Add to favourites");
+  const favBtn = btn("Favourite", () => H.onStar(entry), null,
+                     fav ? "Remove from favourites" : "Add to favourites");
+  // Filled and orange when it IS a favourite, hollow and white when it is not,
+  // matching the star on the card so the two read as the same control.
+  const glyph = el("span", "pixwb-btnstar" + (fav ? " on" : ""), fav ? "★" : "☆");
+  favBtn.prepend(glyph);
   btn("Rename", () => H.onRename(entry));
   btn("Duplicate", () => H.onDuplicate(entry));
   const hasCover = hasHandCover(entry, state.meta);
