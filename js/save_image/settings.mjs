@@ -251,7 +251,7 @@ export function openSettingsPanel(node, onChange) {
       node,
       "civitaiMeta",
       "Add Civitai generation info",
-      "Also writes the model, LoRAs, steps, seed and sampler in the format Civitai reads"
+      "Also writes the model, LoRAs, steps, seed and sampler in the format Civitai reads. Keep 'Save workflow inside the image' on too, or dragging the file back rebuilds a basic graph from this info instead of your full workflow"
     )
   );
 
