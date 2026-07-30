@@ -147,7 +147,11 @@ export function makeRect({
     // Re-clamped against the CURRENT width, so a sidebar widened on a big
     // window cannot swallow the article after the window shrinks.
     const sw = Math.round(Math.max(sideMin, Math.min(r?.sw ?? d.sw, sideMax(w))));
+    // Spread the input first so a panel can keep its OWN extra keys in the same
+    // saved rect (the Workflows panel stores its detail-pane width as `dw`).
+    // Returning a fixed set of fields silently dropped them on every clamp.
     return {
+      ...(r && typeof r === "object" ? r : {}),
       x: Math.round(Math.max(0, Math.min(r?.x ?? d.x, vw - w))),
       y: Math.round(Math.max(top, Math.min(r?.y ?? d.y, Math.max(top, vh - h)))),
       w, h, sw,

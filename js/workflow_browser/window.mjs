@@ -33,6 +33,14 @@ const SIDE_DEF = 190;
 const SIDE_MIN = 120;
 const SIDE_MAX_FRAC = 0.45;
 
+// The DETAIL pane is draggable too. Model filenames run long
+// (wan2.2\Wan2.2-Fun-A14B-InP-LOW-HPS2.1_resized_dynamic_avg_rank_15_bf16),
+// and a fixed 208px column wrapped every one of them into three lines.
+const DET_DEF = 208;
+const DET_MIN = 150;
+const DET_MAX_FRAC = 0.5;
+const detMax = (winW) => Math.max(DET_MIN, Math.round(winW * DET_MAX_FRAC));
+
 const RECT = makeRect({
   settingKey: RECT_SETTING,
   minW: MIN_W, minH: MIN_H, prefW: PREF_W, prefH: PREF_H,
@@ -67,7 +75,9 @@ export function createWorkflowWindow({ onRender, onClose }) {
   sideGrip.title = "Drag to resize the list. Double-click to reset.";
   const main = el("div", "pixwb-main");
   const detail = el("div", "pixwb-detail");
-  body.append(side, sideGrip, main, detail);
+  const detGrip = el("div", "pixwb-detgrip");
+  detGrip.title = "Drag to resize. Double-click to reset.";
+  body.append(side, sideGrip, main, detGrip, detail);
 
   const foot = el("div", "pixwb-foot");
   const grip = el("div", "pixwb-grip");
@@ -82,9 +92,14 @@ export function createWorkflowWindow({ onRender, onClose }) {
     win.style.height = rect.h + "px";
     rect.sw = Math.max(SIDE_MIN, Math.min(rect.sw ?? SIDE_DEF, sideMax(rect.w)));
     side.style.width = rect.sw + "px";
+    rect.dw = Math.max(DET_MIN, Math.min(rect.dw ?? DET_DEF, detMax(rect.w)));
+    detail.style.width = rect.dw + "px";
     // The detail pane is the first thing to go on a narrow window: three
-    // columns in 560px leaves the grid too thin to show anything.
-    detail.classList.toggle("hidden", rect.w < 760);
+    // columns in 560px leaves the grid too thin to show anything. Its grip
+    // goes with it, or there would be a handle for something invisible.
+    const narrow = rect.w < 760;
+    detail.classList.toggle("hidden", narrow);
+    detGrip.classList.toggle("hidden", narrow);
   };
   applyRect();
 
@@ -133,6 +148,26 @@ export function createWorkflowWindow({ onRender, onClose }) {
     sideGrip.addEventListener(t, () => sideGrip.classList.remove("pixwb-dragging")));
   sideGrip.addEventListener("dblclick", () => {
     rect.sw = SIDE_DEF;
+    applyRect();
+    saveRect(rect);
+  });
+
+  // Same startDrag as everything else, so it inherits the pointer capture and
+  // the buttons-are-up guard rather than being a third hand-rolled copy.
+  // Measured from the RIGHT edge, since that is the edge this pane is pinned to.
+  detGrip.addEventListener("pointerdown", (e) => {
+    const bodyRight = body.getBoundingClientRect().right;
+    startDrag(detGrip, e, (ev) => {
+      rect.dw = Math.round(Math.max(DET_MIN, Math.min(bodyRight - ev.clientX, detMax(rect.w))));
+      detail.style.width = rect.dw + "px";
+    }, onDragEnd);
+    detGrip.classList.add("pixwb-dragging");
+    e.stopPropagation();
+  });
+  ["pointerup", "pointercancel", "lostpointercapture"].forEach((t) =>
+    detGrip.addEventListener(t, () => detGrip.classList.remove("pixwb-dragging")));
+  detGrip.addEventListener("dblclick", () => {
+    rect.dw = DET_DEF;
     applyRect();
     saveRect(rect);
   });

@@ -188,10 +188,21 @@ export function injectWorkflowCSS() {
 
 /* ── detail pane ─────────────────────────────────────────────── */
 .pixwb-detail {
-  width: 208px; flex: none; background: #1a1918; border-left: 1px solid #302d2b;
+  width: 208px; min-width: 150px; flex: none; background: #1a1918;
   overflow-y: auto; padding: 10px;
 }
 .pixwb-detail.hidden { display: none; }
+/* Its own grip, so long model filenames can be given room instead of wrapping
+   onto three lines. Same treatment as the left divider. */
+.pixwb-detgrip { width: 6px; flex: none; cursor: ew-resize; background: transparent; z-index: 2; }
+.pixwb-detgrip.hidden { display: none; }
+.pixwb-detgrip::after {
+  content: ""; display: block; width: 1px; height: 100%; margin-left: 2px;
+  background: #302d2b; transition: background .12s;
+}
+.pixwb-detgrip:hover::after, .pixwb-detgrip.pixwb-dragging::after {
+  background: ${ACC}; width: 3px; margin-left: 1px;
+}
 .pixwb-detcov { width: 100%; height: 104px; border-radius: 6px; background: #141312; object-fit: cover; display: block; }
 .pixwb-detname { color: #fff; font-size: 12.5px; font-weight: 600; margin: 8px 0 2px; line-height: 1.35; word-break: break-word; }
 .pixwb-detpath { color: #6e6764; font-size: 10px; margin-bottom: 9px; word-break: break-word; }
@@ -208,7 +219,10 @@ export function injectWorkflowCSS() {
   border-radius: 4px; padding: 3px 6px;
   font-size: 10px; margin-bottom: 3px; word-break: break-all; line-height: 1.4;
 }
-.pixwb-mod .pixwb-moddir { color: #6e6764; }
+.pixwb-mod .pixwb-moddir { color: #8a827d; }
+/* The separator is brighter than the folder name itself: dimming the whole
+   prefix hid the one character that says "this is in a subfolder". */
+.pixwb-mod .pixwb-modsep { color: ${ACC}; opacity: .75; padding: 0 1px; }
 .pixwb-mod .pixwb-modname { color: #e8e3df; }
 .pixwb-mod .pixwb-modext { color: ${ACC}; }
 

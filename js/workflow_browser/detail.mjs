@@ -128,12 +128,14 @@ export function renderDetail(pane, state, H) {
 function modChip(name) {
   const d = el("div", "pixwb-mod");
   const cut = Math.max(name.lastIndexOf("/"), name.lastIndexOf("\\"));
-  const dir = cut >= 0 ? name.slice(0, cut + 1) : "";
+  const dir = cut >= 0 ? name.slice(0, cut) : "";
+  const sep = cut >= 0 ? name[cut] : "";
   const file = cut >= 0 ? name.slice(cut + 1) : name;
   const dot = file.lastIndexOf(".");
   const base = dot > 0 ? file.slice(0, dot) : file;
   const ext = dot > 0 ? file.slice(dot) : "";
   if (dir) d.append(el("span", "pixwb-moddir", dir));
+  if (sep) d.append(el("span", "pixwb-modsep", sep));
   d.append(el("span", "pixwb-modname", base));
   if (ext) d.append(el("span", "pixwb-modext", ext));
   d.title = name;
