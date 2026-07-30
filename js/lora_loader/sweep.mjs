@@ -121,7 +121,11 @@ function enumerate(node) {
 // and its number step from the live node.
 function lookup(node, axis) {
   if (!owns(axis)) return null;
-  const sf = axis.subField || "name";
+  // effectiveSubField, so a stale clip-strength axis (picked while separate, then
+  // re-linked) still finds the entry it now drives and keeps refreshing its step and
+  // precision, instead of returning null and quietly going stale.
+  const { st } = findRow(node, axis);
+  const sf = effectiveSubField(st, axis);
   return enumerate(node).find((e) => e.name === axis.widgetName && e.subField === sf) || null;
 }
 
@@ -157,7 +161,14 @@ function effectiveSubField(st, axis) {
 function strengthOf(value) {
   const n = Number(value);
   const r = roundStrength(n);
-  if (Number.isFinite(n) && Math.abs(r - n) > 0.005) {
+  if (!Number.isFinite(n)) {
+    // clampStrength turns a non-number into 0, which reads as a working row that just
+    // does nothing. Not reachable from a number axis today, but it is the one input
+    // class that would fail silently.
+    console.warn(`[LoRA Loader Pixaroma] XY Plot gave a strength that is not a number (${JSON.stringify(value)}); this square ran at ${r}.`);
+    return r;
+  }
+  if (Math.abs(r - n) > 0.005) {
     console.warn(
       `[LoRA Loader Pixaroma] XY Plot asked for a strength of ${n}, but LoRA strengths ` +
       `are limited to ${MIN_STRENGTH}..${MAX_STRENGTH} (2 decimals), so this square ran ` +

@@ -9,7 +9,7 @@ import { app } from "/scripts/app.js";
 import {
   readState, writeState,
   enumerateTargets, lookupWidgetMeta, currentValuePreview, axisDisplayName,
-  resolveAxisValues, computeCounts, axisReady,
+  resolveAxisValues, computeCounts, axisReady, setLiveAxisMeta,
 } from "./core.mjs";
 import { registerNodeHelp } from "../shared/index.mjs";
 import { isGraphLoading } from "../shared/graph_loading.mjs";
@@ -476,8 +476,19 @@ function renderValueArea(node, axisKey, mount, refreshCounter, rerender) {
     // 1 = cfg, 2 = denoise) so a reloaded axis rounds correctly even if it was
     // saved before precision was tracked.
     const nmeta = lookupWidgetMeta(node, axis);
-    if (nmeta && typeof nmeta.precision === "number") axis.precision = nmeta.precision;
-    if (nmeta && typeof nmeta.realStep === "number") axis.realStep = nmeta.realStep;
+    // Same rule as the option list below: the live values drive resolveAxisValues via
+    // the non-serialized stash, and the SAVED copy is only refreshed on a user-driven
+    // render (writing it on the load path rewrites serialized state and flags an
+    // untouched workflow "modified" - it bites an axis saved before `precision` was
+    // tracked, whose stored null differs from the live 0).
+    if (nmeta && typeof nmeta.precision === "number") {
+      setLiveAxisMeta(axis, "livePrecision", nmeta.precision);
+      if (!isGraphLoading()) axis.precision = nmeta.precision;
+    }
+    if (nmeta && typeof nmeta.realStep === "number") {
+      setLiveAxisMeta(axis, "liveRealStep", nmeta.realStep);
+      if (!isGraphLoading()) axis.realStep = nmeta.realStep;
+    }
     const seg = el("div", "pix-xy-seg");
     const sRange = el("span", null, "Range"); const sList = el("span", null, "List");
     (axis.mode === "list" ? sList : sRange).classList.add("on");
@@ -520,8 +531,14 @@ function renderValueArea(node, axisKey, mount, refreshCounter, rerender) {
     // from a user action. renderBody also runs on the workflow-load path, and there the
     // live list is routinely a little different from the saved one (a LoRA added, a
     // checkpoint renamed) - writing it then rewrites node.properties on a clean open and
-    // flags an untouched workflow "modified" (Vue Compat #18/#19). The checklist below
-    // still shows the LIVE list either way; the next real interaction persists it.
+    // flags an untouched workflow "modified" (Vue Compat #18/#19).
+    //
+    // The live list is stashed unconditionally (non-serialized) because resolveAxisValues
+    // filters the user's ticks against it. Gating the FILTER as well as the write was a
+    // real bug: the checklist below renders from `options` (live) while the filter read
+    // the saved list, so a model installed since the save could be ticked and still not
+    // plot - hasPlot went false and Run quietly produced one ordinary image.
+    setLiveAxisMeta(axis, "liveOptions", options);
     if (!isGraphLoading()) axis.options = options;
     const checkedSet = new Set(axis.raw.checked || []);
     const countEl = el("div", "pix-xy-count");

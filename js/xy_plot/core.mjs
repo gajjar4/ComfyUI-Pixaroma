@@ -123,6 +123,31 @@ export function restoreFromProperties(node) {
   readState(node);
 }
 
+// ── live (non-serialized) axis metadata ────────────────────────────────────
+//
+// An axis object lives INSIDE node.properties, so any plain field written on it is
+// saved into the workflow - which is why the render can only persist a refreshed
+// option list / precision when the user drove that render (Vue Compat #18/#19).
+// But resolveAxisValues still needs the LIVE values, or the checklist the user ticks
+// and the values that actually plot disagree: a model installed since the workflow
+// was saved could be ticked, silently fail the filter below, and Run would quietly
+// fall back to one ordinary image.
+//
+// So the render stashes the live values here as NON-ENUMERABLE properties. Every
+// copier LiteGraph and ComfyUI use skips those - verified live against
+// graph.serialize(), graphToPrompt().workflow, LiteGraph.cloneObject,
+// structuredClone, spread and Object.assign - so they can never reach the saved file
+// or the change-tracker diff. backfillAxis preserves axis identity by design
+// (see its comment), so they survive every rerender.
+export function setLiveAxisMeta(axis, key, value) {
+  if (!axis) return;
+  try {
+    Object.defineProperty(axis, key, {
+      value, writable: true, configurable: true, enumerable: false,
+    });
+  } catch (_e) { /* never worth breaking a render over */ }
+}
+
 // ── Target enumeration ─────────────────────────────────────────────────────
 
 // A short, one-line preview of a widget's current value - lets the picker
@@ -319,18 +344,25 @@ export function classifyWidgetEntries(w) {
 // The graph node an axis points at, or null.
 //
 // The fast path is the axis's own graph level, which is where the picker found it.
-// The walk is the fallback for a node that MOVED since - Convert to Subgraph takes it
-// out from under getNodeById, and the axis would then silently do nothing (findPromptEntry
-// still finds its prompt entry by tail id, so the two lookups must not disagree).
-// `wantClass` makes the walk verify what it found, so a local id that happens to repeat
-// in another scope can never resolve to an unrelated node.
+//
+// The subgraph WALK is opt-in via `wantClass`, and ONLY the inject path passes it
+// (with the prompt entry's class_type). Reason: the walk exists so a node MOVED by
+// Convert to Subgraph is still reachable (findPromptEntry finds its prompt entry by
+// tail id, so the two lookups must not disagree) - but a bare id-only walk could bind
+// to an UNRELATED same-id node in another scope (subgraph id spaces restart small, so
+// a collision with a low top-level id is plausible). The class check makes that safe.
+// The read-only callers (preview / meta / display name) deliberately pass NO class:
+// they only ever DEGRADE when the node is missing (empty preview, generic name), which
+// is exactly the pre-walk behaviour, so returning null there is strictly correct and
+// carries no risk of naming the wrong node.
 export function targetNodeOf(xyNode, axis, wantClass) {
   if (!axis || axis.nodeId == null) return null;
   const graph = xyNode?.graph || app.graph;
   try {
     const direct = graph?.getNodeById?.(axis.nodeId);
     if (direct) return direct;
-  } catch (_e) { /* fall through to the walk */ }
+  } catch (_e) { /* fall through */ }
+  if (!wantClass) return null;   // reads: no class to verify against -> never guess
   const want = String(axis.nodeId);
   const seen = new Set();
   let found = null;
@@ -339,7 +371,7 @@ export function targetNodeOf(xyNode, axis, wantClass) {
     seen.add(g);
     for (const n of (g._nodes || g.nodes || [])) {
       if (!n) continue;
-      if (String(n.id) === want && (!wantClass || (n.comfyClass || n.type) === wantClass)) {
+      if (String(n.id) === want && (n.comfyClass || n.type) === wantClass) {
         found = n;
         return;
       }
@@ -570,11 +602,16 @@ function snapToGrid(v, realStep, precision) {
 export function resolveAxisValues(axis) {
   if (!axis || !axis.widgetType) return [];
   const raw = axis.raw || {};
+  // Prefer the LIVE values the last render stashed (setLiveAxisMeta) over the saved
+  // ones - the saved copy is only refreshed on a user-driven render, so on a freshly
+  // opened workflow it can be out of date.
   if (axis.widgetType === "number") {
+    const precision = (axis.livePrecision != null) ? axis.livePrecision : axis.precision;
+    const realStep = (axis.liveRealStep != null) ? axis.liveRealStep : axis.realStep;
     let vals = (axis.mode === "list")
-      ? parseNumberList(raw.listText, axis.step, axis.precision)
-      : rangeToList(raw.start, raw.end, raw.steps, axis.step, axis.precision);
-    if (axis.snap !== false && axis.realStep) vals = vals.map((v) => snapToGrid(v, axis.realStep, axis.precision));
+      ? parseNumberList(raw.listText, axis.step, precision)
+      : rangeToList(raw.start, raw.end, raw.steps, axis.step, precision);
+    if (axis.snap !== false && realStep) vals = vals.map((v) => snapToGrid(v, realStep, precision));
     return vals;
   }
   if (axis.widgetType === "combo") {
@@ -583,7 +620,15 @@ export function resolveAxisValues(axis) {
     // (e.g. a sampler/checkpoint removed after a model-list change), so we don't
     // inject a stale value the target node would reject. Only filter when we
     // actually know the live options; otherwise keep them all.
-    const opts = axis.options;
+    //
+    // This MUST read the live list, not the saved one. Filtering against a saved list
+    // breaks both ways: a value added since the save is ticked in the checklist but
+    // filtered out here, so hasPlot goes false and Run silently does one ordinary
+    // image; a value removed since the save survives and is sent to a server that
+    // rejects it.
+    const opts = (Array.isArray(axis.liveOptions) && axis.liveOptions.length)
+      ? axis.liveOptions
+      : axis.options;
     if (Array.isArray(opts) && opts.length) {
       const set = new Set(opts);
       return checked.filter((v) => set.has(v));

@@ -9,6 +9,7 @@ import { buildGridPreview } from "./grid.mjs";
 import { applyAdaptiveCanvasOnly, isVueNodes, closeHelpPopup, installCanvasZoomPassthrough } from "../shared/index.mjs";
 import { isQueueLoopActive, runQueueLoop, feedsOnlyInactiveSwitch } from "../shared/queue_drivers.mjs";
 import { sweepProviderFor, anyProviderOwns } from "../shared/sweep_targets.mjs";
+import { isGraphLoading } from "../shared/graph_loading.mjs";
 import { installNodeAccent, registerNodeAccent } from "../shared/node_settings.mjs";
 
 const NODE = "PixaromaXYPlot";
@@ -269,6 +270,12 @@ app.registerExtension({
       if (origDraw) origDraw.call(this, ctx);
       if (this.flags?.collapsed) return;
       if (isVueNodes()) return;   // size clamp is legacy-only (see onResize)
+      // node.size is SERIALIZED, and a draw hook runs on the very first frame of a
+      // workflow load - earlier than any other clamp here. Nodes 2.0 has no live width
+      // clamp, so a node genuinely can be saved below MIN_W and reopened in Classic;
+      // rewriting it on frame 1 would flag an untouched workflow "modified"
+      // (Vue Compat #18/#19, the lesson convention #7 carries).
+      if (isGraphLoading()) return;
       if (this.size[0] < MIN_W) this.size[0] = MIN_W;
       if (this.size[1] < MIN_H) this.size[1] = MIN_H;
     };
@@ -314,7 +321,16 @@ function injectAxis(out, axis, value, xyNode) {
   if (!axis || axis.nodeId == null || !axis.widgetName) return;
   if (value === undefined || value === null) return;
   const te = findPromptEntry(out, axis.nodeId);
-  if (!te) return;
+  if (!te) {
+    // A provider axis's name is an internal key, so there is no other signal that the
+    // sweep did nothing. This check has to sit BEFORE the return: a DELETED node has no
+    // prompt entry at all, which is exactly the case worth reporting, and the later
+    // guard below would never be reached for it.
+    if (anyProviderOwns(axis)) {
+      console.warn("[Pixaroma.XYPlot] This axis points at a node that is no longer in the prompt (deleted, muted or bypassed) - every square will look the same. Re-pick the axis.");
+    }
+    return;
+  }
   // Provider-backed axis: the target keeps this parameter in a serialized state blob
   // instead of a widget (LoRA Loader Pixaroma), so it owns the patch. It composes on
   // whatever is already in the entry, so X and Y can both target the same node.
@@ -333,11 +349,12 @@ function injectAxis(out, axis, value, xyNode) {
     catch (err) { console.error("Pixaroma.XYPlot: sweep provider inject failed", err); }
     return;
   }
-  // A provider axis whose node is gone (deleted) must NOT fall through: its name is an
-  // internal key, so writing it would put a meaningless input on the entry and every
-  // square would come out identical with nothing said.
+  // A provider axis that reached here has a prompt entry but no provider on the node it
+  // resolved to (a tail-id match landing in another scope). It must NOT fall through:
+  // its name is an internal key, so writing it would put a meaningless input on some
+  // other node's entry.
   if (!prov && anyProviderOwns(axis)) {
-    console.warn("[Pixaroma.XYPlot] This axis points at a node that is no longer on the canvas - every square would look the same. Re-pick the axis.");
+    console.warn("[Pixaroma.XYPlot] This axis could not be matched to its node - skipping the injection so another node's settings can't be touched. Re-pick the axis.");
     return;
   }
   if (!te.inputs) return;
