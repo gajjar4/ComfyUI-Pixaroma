@@ -84,10 +84,25 @@ export function renderDetail(pane, state, H) {
   note.value = state.meta?.notes?.[entry.rel] || "";
   note.addEventListener("keydown", (e) => e.stopPropagation());   // Escape must not close the window
   let t = null;
+  let sent = note.value;
+  const flush = () => {
+    clearTimeout(t);
+    t = null;
+    if (note.value !== sent) { sent = note.value; H.onNote(entry.rel, note.value); }
+  };
   note.addEventListener("input", () => {
     clearTimeout(t);
-    t = setTimeout(() => H.onNote(entry.rel, note.value), 500);
+    t = setTimeout(flush, 500);
   });
+  // Flushed the moment the user clicks ANYWHERE else, not only when the timer
+  // gets around to it. The debounce is there to coalesce keystrokes, but it
+  // left a half-second in which the newest text existed only in this box - and
+  // renaming the folder inside that window carried the PREVIOUS text to the
+  // new key and then saved the fresh text under the old, dead one: the edit
+  // looked saved and was actually invisible forever. Blur fires on the very
+  // click that starts any such action, so flushing here closes the window
+  // before the action can read stale state.
+  note.addEventListener("blur", flush);
   pane.append(note);
 
   // ── actions ──

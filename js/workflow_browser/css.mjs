@@ -266,6 +266,12 @@ export function injectWorkflowCSS() {
   color: #6e6764; font-size: 10px; flex: 0 1 auto; min-width: 0; max-width: 26%;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
+/* A duplicate-set member shown only because its SET matched the search. Dimmed
+   so the header's match count and the rows on screen stop looking like they
+   disagree - the extra rows visibly read as context, not as matches. */
+.pixwb-tdrow.pixwb-tddimmed { opacity: .5; }
+.pixwb-tdrow.pixwb-tddimmed:hover { opacity: 1; }
+
 /* flex: none so the fix is never the thing that gets squeezed away. */
 .pixwb-tdacts { display: flex; gap: 4px; flex: none; }
 .pixwb-tdbtn {

@@ -146,7 +146,7 @@ export function renderTidy(main, state, H) {
       const box = el("div", "pixwb-tdgroup");
       for (const e of g) {
         const others = g.filter((x) => x.rel !== e.rel);
-        box.append(row(e, state, H, [
+        const r = row(e, state, H, [
           { label: `Keep this one`, primary: true,
             title: `Delete the other ${others.length} in this set:\n`
                    + others.map((x) => x.name).join("\n"),
@@ -160,7 +160,16 @@ export function renderTidy(main, state, H) {
             }) },
           { label: "Open", fn: () => H.onOpen(e) },
           { label: "Delete", danger: true, fn: () => H.onDelete(e) },
-        ], null));
+        ], null);
+        // A set is shown WHOLE when any member matches the search - half a set
+        // cannot be judged. But then some rows on screen do not match the query
+        // the header counted, so those are dimmed and say why: without the cue,
+        // header "1 of 142" over three visible rows read as a counting bug.
+        if (q && !keep(e.rel)) {
+          r.classList.add("pixwb-tddimmed");
+          r.title += "\nShown for context - it does not match your search, its set does.";
+        }
+        box.append(r);
       }
       s.append(box);
     }

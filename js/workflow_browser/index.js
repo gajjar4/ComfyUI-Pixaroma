@@ -299,14 +299,21 @@ function ask({ title, message, value, okLabel = "OK", danger }) {
       if (e.key === "Escape") { e.preventDefault(); done(null); }
       else if (e.key === "Enter" && !input) {
         e.preventDefault();
-        // Enter means the FOCUSED button, not always OK. The Tab trap below
-        // exists precisely so a careful keyboard user can reach Cancel - and
-        // this branch then deleted their files anyway, because it answered
-        // "true" without looking at where focus was. preventDefault also
-        // suppresses the button's own native Enter-activates-me behaviour, so
-        // there was no fallback doing the right thing underneath. Reaching
-        // Cancel and pressing Enter must mean no.
-        done(document.activeElement === no ? null : true);
+        // Enter CONFIRMS only when the confirm button is visibly focused; from
+        // anywhere else it is a safe cancel. Two wrong versions preceded this
+        // one, each backwards in its own way: the first always confirmed (so
+        // Tab-to-Cancel then Enter deleted files), and the fix to THAT
+        // special-cased Cancel but still confirmed from every other focus -
+        // including the BACKDROP, which really does take focus: the 40ms
+        // fallback below puts it there when the buttons could not, and a click
+        // on the title or the scrolling file list lands there too, because a
+        // click on a non-focusable child walks up to the nearest focusable
+        // ancestor. In those states nothing shows a focus ring, and a no-undo
+        // dialog answering "yes" to an Enter aimed at nothing is the wrong
+        // default in the only direction that cannot be taken back. The normal
+        // flow is untouched: opening the dialog focuses OK, so a straight
+        // Enter still confirms.
+        done(document.activeElement === ok ? true : null);
       }
       else if (e.key === "Tab") {
         // TRAPPED, not just stopped. stopPropagation only keeps the event from
@@ -616,6 +623,17 @@ const HANDLERS = {
   },
 
   onNote(rel, text) {
+    // The in-memory copy is updated FIRST, before the round trip. Anything that
+    // snapshots S.meta - the folder rename carrying a whole subtree of notes,
+    // carryMeta on a single file - must see the text as the user last typed it,
+    // not as the server last confirmed it; updating only on success left a gap
+    // in which a rename carried the PREVIOUS text and stranded the newest under
+    // a dead key. The save can still fail, and the toast still says so - but an
+    // optimistic memory with an honest error beats a stale memory with none.
+    S.meta.notes = S.meta.notes || {};
+    if (text) S.meta.notes[rel] = text; else delete S.meta.notes[rel];
+    const e = S.byRel.get(rel);
+    if (e) e._note = text || "";
     A.saveMeta({ notes: { [rel]: text || null } })
       .then((res) => {
         // The RESULT, not just "it did not throw". The route answers 200 with
@@ -623,10 +641,6 @@ const HANDLERS = {
         // watched themselves type could quietly fail to reach the disk and only
         // be noticed as missing much later.
         if (!res || res.ok === false) throw new Error("not saved");
-        S.meta.notes = S.meta.notes || {};
-        if (text) S.meta.notes[rel] = text; else delete S.meta.notes[rel];
-        const e = S.byRel.get(rel);
-        if (e) e._note = text || "";
       })
       .catch(() => S.win.toast("Could not save that note."));
   },
@@ -872,16 +886,31 @@ function startFolderRename(path, row) {
         }
       }
 
-      const res = await A.folderAction({ action: "rename", path, newPath: target });
+      // Take the copies back out when the rename does not happen. Best-effort:
+      // if the undo itself fails, the heal prune drops stray COVER records
+      // harmlessly on the next read; a stray NOTE record just lingers invisibly
+      // (notes are deliberately never pruned - see the pattern file).
+      const undoCopies = async () => {
+        if (!Object.keys(preAdd).length) return;
+        const undo = {};
+        if (preAdd.notes) undo.notes = Object.fromEntries(Object.keys(newNotes).map((k) => [k, null]));
+        if (preAdd.covers) undo.covers = Object.fromEntries(Object.keys(newCovers).map((k) => [k, null]));
+        try { await A.saveMeta(undo); } catch { /* the prune heals the covers */ }
+      };
+
+      // In a try, because folderAction THROWS on a network drop, a 500 or a
+      // non-JSON body - and a throw jumped straight past the `!res.ok` branch
+      // that held the undo, leaving the copies in place for a rename that never
+      // happened. Both failure shapes now clean up the same way.
+      let res;
+      try {
+        res = await A.folderAction({ action: "rename", path, newPath: target });
+      } catch (err) {
+        await undoCopies();
+        throw err;
+      }
       if (!res.ok) {
-        // Take the copies back out. Best-effort: if this fails too, the heal
-        // prune drops them harmlessly on the next read (see above).
-        if (Object.keys(preAdd).length) {
-          const undo = {};
-          if (preAdd.notes) undo.notes = Object.fromEntries(Object.keys(newNotes).map((k) => [k, null]));
-          if (preAdd.covers) undo.covers = Object.fromEntries(Object.keys(newCovers).map((k) => [k, null]));
-          try { await A.saveMeta(undo); } catch { /* the prune heals it */ }
-        }
+        await undoCopies();
         throw new Error(res.message || "Could not rename that folder.");
       }
 
@@ -1273,6 +1302,15 @@ function ensureWindow() {
       if (opts?.repaintOnly) {            // every time the corner is dragged
         // The detail pane just became visible mid-drag: fill it from the data
         // already loaded. No refetch, no toolbar rebuild - the render alone.
+        //
+        // UNLESS a folder is being renamed right now. This render fires from a
+        // pointermove, not from anything the user finished, and rebuilding the
+        // folder column tears the rename box out with the typed name in it. A
+        // workflow-card rename survives that (the grid restores its box); the
+        // folder box has no such mechanism, so the render is skipped instead -
+        // the detail pane fills on the next real render, the rename does not
+        // silently vanish mid-drag.
+        if (S.win.el.querySelector("input.pixwb-foldrename")) return;
         render();
         return;
       }

@@ -96,13 +96,35 @@ export function isModified(rel) {
 }
 
 /**
+ * The store's object for a workflow, with one retry through syncWorkflows.
+ *
+ * The panel's own listing comes from OUR server route, which reads the folder -
+ * so it shows a file the instant it exists. ComfyUI's STORE only knows files it
+ * has synced, and a workflow dropped into the folder from Explorer (or written
+ * by anything else while ComfyUI runs) is not in it yet. Every action then
+ * failed with "That workflow is no longer there." - about a file the user could
+ * SEE in the panel. One sync closes the gap; if the file genuinely is gone, the
+ * retry misses too and the message is finally true.
+ */
+async function storeWorkflow(rel) {
+  const s = store();
+  if (!s?.getWorkflowByPath) throw new Error("This ComfyUI build has no workflow store.");
+  let wf = s.getWorkflowByPath(toStorePath(rel));
+  if (!wf && typeof s.syncWorkflows === "function") {
+    try {
+      await s.syncWorkflows();
+      wf = s.getWorkflowByPath(toStorePath(rel));
+    } catch { /* the throw below says what matters */ }
+  }
+  return wf;
+}
+
+/**
  * Open a workflow. See the note at the top of this file before changing ANY
  * line of this function.
  */
 export async function openWorkflow(rel) {
-  const s = store();
-  if (!s?.getWorkflowByPath) throw new Error("This ComfyUI build has no workflow store.");
-  const wf = s.getWorkflowByPath(toStorePath(rel));
+  const wf = await storeWorkflow(rel);
   if (!wf) throw new Error("That workflow is no longer there.");
 
   // No { force: true }: on an already-open workflow this is a no-op and its
@@ -159,7 +181,7 @@ export async function renameOrMove(rel, newRel) {
     throw new Error(`There is already a workflow called "${leaf()}" there.`);
   }
   const s = store();
-  const wf = s?.getWorkflowByPath?.(toStorePath(rel));
+  const wf = await storeWorkflow(rel);
   if (!wf) throw new Error("That workflow is no longer there.");
   // Through the store, never by moving the file behind its back: this is what
   // keeps an open tab pointing at the right file and its modified flag intact.
@@ -179,7 +201,7 @@ export async function renameOrMove(rel, newRel) {
 
 export async function remove(rel) {
   const s = store();
-  const wf = s?.getWorkflowByPath?.(toStorePath(rel));
+  const wf = await storeWorkflow(rel);
   if (!wf) throw new Error("That workflow is no longer there.");
   if (typeof wf.delete === "function") await wf.delete();
   else if (typeof s.deleteWorkflow === "function") await s.deleteWorkflow(wf);
