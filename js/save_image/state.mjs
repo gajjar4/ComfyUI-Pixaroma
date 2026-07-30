@@ -13,6 +13,7 @@ export const DEFAULT_STATE = {
   format: "png",
   quality: 100,
   embedWorkflow: true,
+  civitaiMeta: false, // also write A1111/Civitai generation settings
   saveOnRun: true,
   dateStyle: "yyyy-MM-dd", // what the + Date chip inserts (regional order)
   counterDigits: 3, // %counter% zero-padding (001 = 3)

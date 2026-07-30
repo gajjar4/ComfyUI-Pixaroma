@@ -37,6 +37,7 @@ DEFAULT_STATE = {
     "format": "png",
     "quality": 100,
     "embedWorkflow": True,
+    "civitaiMeta": False,
     "saveOnRun": True,
     "dateStyle": "yyyy-MM-dd",  # JS-only (what the + Date chip inserts)
     "counterDigits": 3,         # %counter% zero-padding (001 = 3)
@@ -119,7 +120,7 @@ _EXIF_MAX = 64000  # JPEG APP1 segment tops out ~65 KB; Pillow raises
                    # "EXIF data is too long" past it (verified empirically)
 
 
-def _build_jpeg_exif(prompt=None, workflow=None):
+def _build_jpeg_exif(prompt=None, workflow=None, parameters=None):
     """EXIF bytes embedding workflow + prompt, using the community convention
     ComfyUI already reads for WebP (0x010E ImageDescription = 'Workflow:<json>',
     0x010F Make = 'Prompt:<json>'). Best effort: the current ComfyUI frontend
@@ -131,16 +132,35 @@ def _build_jpeg_exif(prompt=None, workflow=None):
     then raises AT SAVE TIME - so try workflow+prompt, fall back to workflow
     only, and skip embedding entirely when even that is too large (the JPG
     still saves; PNG is the reload format anyway).
+
+    A1111-style `parameters` text goes in EXIF UserComment (0x9286, inside the
+    Exif IFD 0x8769) with the standard 8-byte "UNICODE\\0" prefix + UTF-16-BE
+    payload, which is what Civitai's reader expects and what piexif produces for
+    encoding="unicode". It is added on EVERY attempt including the last, because
+    it is small and it is the ONLY part Civitai can read - dropping it to make
+    room for a giant workflow would defeat the point.
     """
+    def _user_comment(exif):
+        if not (isinstance(parameters, str) and parameters.strip()):
+            return
+        try:
+            ifd = exif.get_ifd(0x8769)
+            ifd[0x9286] = b"UNICODE\x00" + parameters.encode("utf-16-be")
+        except Exception:
+            pass
+
     try:
-        for wf, pr in ((workflow, prompt), (workflow, None)):
-            if wf is None and pr is None:
+        attempts = ((workflow, prompt), (workflow, None), (None, None))
+        for wf, pr in attempts:
+            if wf is None and pr is None and not (
+                    isinstance(parameters, str) and parameters.strip()):
                 return None
             exif = Image.Exif()
             if wf is not None:
                 exif[0x010E] = "Workflow:" + json.dumps(_json_safe(wf))
             if pr is not None:
                 exif[0x010F] = "Prompt:" + json.dumps(_json_safe(pr))
+            _user_comment(exif)
             data = exif.tobytes()
             if len(data) <= _EXIF_MAX:
                 return data
@@ -159,8 +179,14 @@ class PixaromaSaveImage:
         "never overwrites), %width%, %height%, %batch_num%, plus node references like %Seed Pixaroma.seed%. "
         "Use / in the name to create subfolders. Format is PNG (lossless, embeds the workflow so the file can be "
         "dragged back into ComfyUI) or JPG (smaller, quality setting in the right-click panel; ComfyUI cannot "
-        "reload workflows from JPG). Right-click the node for date style, counter digits, JPG quality, and "
-        "workflow embedding. Batches save every frame with the counter increasing.\n\n"
+        "reload workflows from JPG). Right-click the node for date style, counter digits, JPG quality, "
+        "workflow embedding, and Civitai generation info. Batches save every frame with the counter "
+        "increasing.\n\n"
+        "Add Civitai generation info (right-click) also writes the settings in the format Civitai reads, "
+        "so an image posted there shows the checkpoint, the LoRAs and their strengths, plus steps, seed, "
+        "sampler and size. The values are read from your workflow automatically, so nothing needs wiring "
+        "into this node. The first save after adding a new model pauses briefly to fingerprint it, then "
+        "it is remembered.\n\n"
         "Saved images show in a large preview on the node: one image fills the area, a batch shows as a grid. "
         "Click a picture in the grid to view it big, click it or hover for the arrows to flip through, and the "
         "X returns to the grid. Copy puts the shown image on the clipboard, Open shows it in a new browser tab. "
@@ -182,6 +208,7 @@ class PixaromaSaveImage:
                 "SaveImageState": "STRING",
                 "prompt": "PROMPT",
                 "extra_pnginfo": "EXTRA_PNGINFO",
+                "unique_id": "UNIQUE_ID",
             },
         }
 
@@ -198,7 +225,8 @@ class PixaromaSaveImage:
         # on day one. Same choice as Preview Image Pixaroma.
         return float("nan")
 
-    def save(self, images, name=None, SaveImageState="", prompt=None, extra_pnginfo=None):
+    def save(self, images, name=None, SaveImageState="", prompt=None, extra_pnginfo=None,
+             unique_id=None):
         state = dict(DEFAULT_STATE)
         try:
             data = json.loads(SaveImageState) if SaveImageState else {}
@@ -214,6 +242,7 @@ class PixaromaSaveImage:
         except Exception:
             quality = 100
         embed = bool(state.get("embedWorkflow", True))
+        civitai_on = bool(state.get("civitaiMeta", False))
         save_on = bool(state.get("saveOnRun", True))
         try:
             digits = max(1, min(8, int(state.get("counterDigits", 3))))
@@ -271,13 +300,33 @@ class PixaromaSaveImage:
             rel = "image_%counter%"
             note = "filename pattern was invalid, used 'image_%counter%'"
 
+        # Civitai-readable generation settings, read from the graph (opt-in).
+        # Built BEFORE the pnginfo so it can ride in the same chunk set. Wrapped
+        # because metadata is a nice-to-have: nothing here may cost the user
+        # their image.
+        a1111 = None
+        if civitai_on:
+            try:
+                from ._civitai_meta import build_metadata
+                a1111 = build_metadata(prompt, extra_pnginfo, unique_id, w, h)
+            except Exception as e:
+                print("[Save Image Pixaroma] Civitai metadata skipped: %s" % e)
+
         pnginfo = None
         exif_bytes = None
-        if embed and fmt == "png":
-            pnginfo = _build_pnginfo(prompt=prompt, extra_pnginfo=extra_pnginfo)
-        elif embed and fmt == "jpg":
+        if fmt == "png" and (embed or a1111):
+            pnginfo = _build_pnginfo(
+                prompt=prompt if embed else None,
+                extra_pnginfo=extra_pnginfo if embed else None,
+                parameters=a1111,
+            )
+        elif fmt == "jpg" and (embed or a1111):
             wf = extra_pnginfo.get("workflow") if isinstance(extra_pnginfo, dict) else None
-            exif_bytes = _build_jpeg_exif(prompt=prompt, workflow=wf)
+            exif_bytes = _build_jpeg_exif(
+                prompt=prompt if embed else None,
+                workflow=wf if embed else None,
+                parameters=a1111,
+            )
 
         out_real = os.path.realpath(folder_paths.get_output_directory())
         results = []

@@ -264,7 +264,7 @@ def _next_counter(dir_path, name_template):
 
 # ---- workflow metadata embedding ----
 
-def _build_pnginfo(prompt=None, workflow=None, extra_pnginfo=None):
+def _build_pnginfo(prompt=None, workflow=None, extra_pnginfo=None, parameters=None):
     """Return a PngInfo object embedding workflow + prompt as tEXt chunks,
     matching the byte format ComfyUI's built-in SaveImage writes.
 
@@ -296,4 +296,13 @@ def _build_pnginfo(prompt=None, workflow=None, extra_pnginfo=None):
                 pnginfo.add_text(k, json.dumps(_json_safe(v)))
             except Exception:
                 pass
+    # A1111-style generation settings, read by Civitai and by every A1111-family
+    # tool. Written RAW, NOT json.dumps'd: the value is plain text, and quoting
+    # it would make Civitai's parser see a leading quote instead of the prompt.
+    # The chunk name must be exactly "parameters" (case sensitive).
+    if isinstance(parameters, str) and parameters.strip():
+        try:
+            pnginfo.add_text("parameters", parameters)
+        except Exception:
+            pass
     return pnginfo

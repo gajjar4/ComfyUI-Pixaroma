@@ -249,6 +249,15 @@ export function openSettingsPanel(node, onChange) {
   body.appendChild(
     switchRow(
       node,
+      "civitaiMeta",
+      "Add Civitai generation info",
+      "Also writes the model, LoRAs, steps, seed and sampler in the format Civitai reads"
+    )
+  );
+
+  body.appendChild(
+    switchRow(
+      node,
       "hideBarWhenFolded",
       "Hide the toolbar when folded",
       "When folded, also tuck away the format and Copy/Open/Folder buttons"

@@ -83,12 +83,23 @@ _STATE_BLOB_NODES = {
     "PixaromaSliders": ("SlidersState", "sliders", "value"),
     "PixaromaSeed": ("SeedState", None, "runSeed"),
 }
-# Other Pixaroma value nodes (Control Panel, Number, WH, Resolution, Sizes...)
-# very likely need entries here too, but their blob schemas were NOT verified, so
-# they are deliberately absent rather than guessed: a wrong slot mapping would
-# record a real number that is simply the WRONG one, which is worse than a
-# missing key because nobody can tell it is wrong. Verify each against a live
-# graphToPrompt before adding it.
+# NOTE "Control Panel Pixaroma" IS PixaromaSliders - one node, two names
+# (nodes/node_sliders.py: NODE_DISPLAY_NAME_MAPPINGS = {"PixaromaSliders":
+# "Control Panel Pixaroma"}), so the entry above already covers it. There is no
+# separate control_panel node to add.
+#
+# The other value nodes need NOTHING here, for two different reasons:
+#   Number and WH keep their values in PLAIN WIDGETS (inputs.value /
+#     inputs.width / inputs.height), so resolve_input's same-named and
+#     "value"-named widget fallbacks already read them.
+#   Portrait Landscape and Switch WH hold no value of their own - they only
+#     select or reorder values arriving from elsewhere, so the walker must keep
+#     following, which it does.
+# Resolution and Sizes DO keep a state blob, but as a single width/height pair
+# rather than a slot-indexed list, so they would need a different shape here.
+# They are deliberately absent until verified against a live graphToPrompt: a
+# wrong slot mapping records a real number that is simply the WRONG one, which
+# is worse than a missing key because nobody can tell it is wrong.
 
 
 def _from_state_blob(prompt, node_id, slot):

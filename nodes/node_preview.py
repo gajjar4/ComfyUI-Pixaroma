@@ -52,7 +52,10 @@ class PixaromaPreview:
         "ComfyUI tokens (%year%, %month%, %day%, %hour%, %minute%, %second%, %width%, %height%). Date format codes "
         "are yyyy yy MM dd HH mm ss. It also supports node-reference tokens like %Seed Pixaroma.seed% (or "
         "%KSampler.seed%) that insert another node's field value into the name, just like the native Save Image "
-        "node. See the project README for the full token reference."
+        "node. See the project README for the full token reference.\n\n"
+        "The civitai_meta switch also writes the generation settings in the format Civitai reads, so an "
+        "image posted there shows the checkpoint, the LoRAs and their strengths, plus steps, seed, sampler "
+        "and size. The values come from your workflow automatically, so nothing needs wiring in."
     )
 
     @classmethod
@@ -69,10 +72,17 @@ class PixaromaPreview:
                     "See the node's Info panel (right sidebar) for the full token reference and examples."
                 )}),
                 "save_mode": (["preview", "save"], {"default": "preview", "tooltip": "preview: write each batch frame to ComfyUI's temp/ folder, auto-cleared on restart. Use this while iterating so you don't clutter output/. The temp PNGs embed the workflow, so you can drag a preview back onto the canvas to restore the graph (just like the native Preview node). save: write every batch frame to output/ with embedded workflow metadata, exactly like the native SaveImage node. The on-node preview strip works the same in both modes; the manual Save to Disk / Save to Output buttons are independent of save_mode."}),
+                "civitai_meta": ("BOOLEAN", {"default": False, "label_on": "on", "label_off": "off", "tooltip": (
+                    "Also write the generation settings in the format Civitai reads, so an image posted "
+                    "there shows the checkpoint, the LoRAs and their strengths, plus steps, seed, sampler "
+                    "and size. The values are read from your workflow automatically. The first save after "
+                    "adding a new model pauses briefly to fingerprint it, then it is remembered."
+                )}),
             },
             "hidden": {
                 "prompt": "PROMPT",
                 "extra_pnginfo": "EXTRA_PNGINFO",
+                "unique_id": "UNIQUE_ID",
             },
         }
 
@@ -96,10 +106,24 @@ class PixaromaPreview:
         image,
         filename_prefix,
         save_mode,
+        civitai_meta=False,
         prompt=None,
         extra_pnginfo=None,
+        unique_id=None,
     ):
         prefix = _safe_prefix(filename_prefix) or "Preview"
+
+        # Civitai-readable generation settings, read from the graph (opt-in).
+        # Built once for the whole batch. Wrapped because metadata must never
+        # cost the user their image.
+        a1111 = None
+        if civitai_meta:
+            try:
+                from ._civitai_meta import build_metadata
+                a1111 = build_metadata(prompt, extra_pnginfo, unique_id,
+                                       int(image.shape[2]), int(image.shape[1]))
+            except Exception as e:
+                print("[Preview Image Pixaroma] Civitai metadata skipped: %s" % e)
 
         results = []
         if save_mode == "save":
@@ -110,7 +134,8 @@ class PixaromaPreview:
             os.makedirs(full_folder, exist_ok=True)
             for i, tensor in enumerate(image):
                 pil = _tensor_to_pil(tensor)
-                pnginfo = _build_pnginfo(prompt=prompt, extra_pnginfo=extra_pnginfo)
+                pnginfo = _build_pnginfo(prompt=prompt, extra_pnginfo=extra_pnginfo,
+                                     parameters=a1111)
                 fname = f"{name}_{counter + i:05}_.png"
                 pil.save(os.path.join(full_folder, fname), "PNG", pnginfo=pnginfo)
                 results.append({
@@ -125,7 +150,8 @@ class PixaromaPreview:
             # without having to switch to save mode and clean up output/ after.
             temp_dir = folder_paths.get_temp_directory()
             os.makedirs(temp_dir, exist_ok=True)
-            pnginfo = _build_pnginfo(prompt=prompt, extra_pnginfo=extra_pnginfo)
+            pnginfo = _build_pnginfo(prompt=prompt, extra_pnginfo=extra_pnginfo,
+                                         parameters=a1111)
             for tensor in image:
                 pil = _tensor_to_pil(tensor)
                 fname = f"pixaroma_preview_{uuid.uuid4().hex}.png"
