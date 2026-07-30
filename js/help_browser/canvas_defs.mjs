@@ -149,7 +149,7 @@ export const CANVAS_FEATURES = [
     title: "Workflows panel",
     icon: "/pixaroma/assets/icons/ui/workflow.svg",
     tagline: "A panel for finding, opening and organising the workflow files on your own computer, with a picture of each one.",
-    keywords: "workflow browser panel organise organize folder rename move delete duplicate cover thumbnail picture favourite favorite star search find open manage tidy duplicates junk sort list grid pixaroma workflows website site download example",
+    keywords: "workflow browser panel organise organize folder rename move delete duplicate cover thumbnail picture favourite favorite star search find open manage tidy tidying duplicates copies junk clean up sort list grid missing nodes red boxes unsaved keyboard shortcut arrow keys pixaroma workflows website site download example",
     sections: [
       {
         heading: "What it does",
@@ -190,11 +190,16 @@ export const CANVAS_FEATURES = [
       },
       {
         heading: "Favourites, Recent and the collections",
-        body: "The star on a card adds it to Favourites. These are ComfyUI's own bookmarks, so the same stars show in ComfyUI's built-in Workflows sidebar.\n\nUnder your real folders there are collections that fill themselves, worked out by reading each file: what it makes (Text to Image, Video, Upscale, Inpaint) and which model family it uses. Your folders are untouched, and a workflow filed in the wrong place still turns up in the right collection.",
+        body: "The star adds a workflow to Favourites, on a picture card and on a list row alike. These are ComfyUI's own bookmarks, so the same stars show in ComfyUI's built-in Workflows sidebar.\n\nUnder your real folders there are collections that fill themselves, worked out by reading each file: what it makes (Text to Image, Video, Upscale, Inpaint) and which model family it uses. Your folders are untouched, and a workflow filed in the wrong place still turns up in the right collection.",
       },
       {
         heading: "Needs tidying",
-        body: "A shortcut on the left that gathers the workflows worth a look: files still called \"Unsaved Workflow\", sets of files that are duplicates of each other (same nodes, same models, different names), and any that need nodes which are not installed on this machine.\n\nIt only shows them. Nothing is renamed or deleted for you.",
+        body: "A shortcut on the left that opens a review screen, grouped by what is actually wrong. Nothing is ever changed for you: every row is a suggestion with its own fix next to it, and anything that deletes still asks first.",
+        defs: [
+          ["Still called \"Unsaved Workflow\"", "Files saved before you named them. Rename edits the name right there in the row: type over it and press Enter."],
+          ["The same workflow saved more than once", "Sets of files with the same nodes and the same models under different names. \"Keep this one\" deletes the others in its set, and tells you which before it does."],
+          ["Needs nodes you do not have", "These open with red boxes where the missing nodes should be. Copy list puts the missing node names on your clipboard, ready to search for in ComfyUI Manager."],
+        ],
       },
       {
         heading: "What it tells you before you open one",
