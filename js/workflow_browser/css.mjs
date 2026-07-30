@@ -219,12 +219,25 @@ export function injectWorkflowCSS() {
   border-radius: 4px; padding: 3px 6px;
   font-size: 10px; margin-bottom: 3px; word-break: break-all; line-height: 1.4;
 }
-.pixwb-mod .pixwb-moddir { color: #8a827d; }
-/* The separator is brighter than the folder name itself: dimming the whole
-   prefix hid the one character that says "this is in a subfolder". */
-.pixwb-mod .pixwb-modsep { color: ${ACC}; opacity: .75; padding: 0 1px; }
-.pixwb-mod .pixwb-modname { color: #e8e3df; }
-.pixwb-mod .pixwb-modext { color: ${ACC}; }
+/* The FOLDER is grey and the FILENAME is white, extension included. Colouring
+   the extension separately was tried and only broke the name into pieces - the
+   filename is one thing and reads best as one thing. */
+.pixwb-mod .pixwb-moddir,
+.pixwb-mod .pixwb-modsep { color: #7d7673; }
+.pixwb-mod .pixwb-modname,
+.pixwb-mod .pixwb-modext { color: #f2eeeb; }
+
+/* Copy-all, on the heading rather than as another row in the list. */
+.pixwb-headrow { display: flex; align-items: center; gap: 6px; }
+.pixwb-headrow .pixwb-grouphead { flex: 1; padding-right: 0; }
+.pixwb-copybtn {
+  border: 1px solid #3d3936; background: rgba(255,255,255,.04); color: #a49d99;
+  border-radius: 5px; padding: 2px 8px; cursor: pointer;
+  font-family: inherit; font-size: 10px; white-space: nowrap;
+  transition: background .12s, border-color .12s, color .12s;
+}
+.pixwb-copybtn:hover { border-color: ${ACC}; color: #fff; }
+.pixwb-copybtn.done { background: #3ec371; border-color: #3ec371; color: #fff; }
 
 /* A control that would do nothing in the current view says so, rather than
    silently ignoring the click. */

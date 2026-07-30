@@ -695,6 +695,18 @@ function onSaveHere() {
 
 // ── keyboard ─────────────────────────────────────────────────────────────────
 
+/** How many cards sit on one row right now. Read off the REAL grid rather than
+ *  worked out from widths: the grid is auto-fill, so the answer changes with
+ *  the window, the sidebar and the detail pane, and any arithmetic here would
+ *  be a second copy of the CSS that could drift from it. */
+function gridColumns() {
+  const grid = S.win?.main?.querySelector(".pixwb-grid");
+  if (!grid) return 1;
+  const cols = getComputedStyle(grid).gridTemplateColumns;
+  const n = cols ? cols.trim().split(/\s+/).filter(Boolean).length : 0;
+  return Math.max(1, n);
+}
+
 function onPanelKeys(e) {
   // Rename boxes and the note field stopPropagation, so they never reach here
   // and typing in them is unaffected. The search box deliberately DOES let
@@ -704,10 +716,22 @@ function onPanelKeys(e) {
   if (!list.length) return;
   const idx = S.kbdRel ? list.findIndex((x) => x.rel === S.kbdRel) : -1;
 
-  if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+  // In a GRID, up and down have to jump a whole ROW. Stepping one card at a
+  // time made them behave exactly like left and right, which is why they read
+  // as not working. In list view a row IS one item, so the step is 1.
+  const ARROWS = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: "up", ArrowDown: "down" };
+  if (e.key in ARROWS) {
     e.preventDefault();
-    const step = e.key === "ArrowDown" ? 1 : -1;
-    const next = idx < 0 ? 0 : Math.max(0, Math.min(list.length - 1, idx + step));
+    const cols = S.view === "list" ? 1 : gridColumns();
+    const raw = ARROWS[e.key];
+    const step = raw === "up" ? -cols : raw === "down" ? cols : raw;
+    let next = idx < 0 ? (step > 0 ? 0 : list.length - 1) : idx + step;
+    // Clamping rather than wrapping: landing on the last card because you
+    // pressed Up once too often is disorienting. Except a vertical move that
+    // would fall off the end still goes to the final card, so the bottom row
+    // is always reachable even when it is not full.
+    if (next < 0) next = raw === "up" ? Math.max(0, idx % cols) : 0;
+    if (next > list.length - 1) next = list.length - 1;
     S.kbdRel = list[next].rel;
     S.selected = new Set([S.kbdRel]);
     render();
@@ -735,7 +759,7 @@ function buildFooter(foot) {
     foot.append(w);
   };
   hint("type", "search");
-  hint("↑ ↓", "move");
+  hint("← → ↑ ↓", "move");
   hint("Enter", "open");
   hint("F2", "rename");
   hint("double click", "open");

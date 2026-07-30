@@ -115,10 +115,46 @@ export function renderDetail(pane, state, H) {
   // no use to anyone.
   const mods = [...(entry.models || []), ...(entry.loras || [])];
   if (mods.length) {
-    pane.append(el("div", "pixwb-grouphead", `Needs these files (${mods.length})`));
+    const head = el("div", "pixwb-headrow");
+    head.append(el("div", "pixwb-grouphead", `Needs these files (${mods.length})`));
+    const copy = el("button", "pixwb-copybtn", "Copy");
+    copy.type = "button";
+    copy.title = "Copy every filename, one per line";
+    copy.addEventListener("click", () => copyList(mods, entry.name, copy));
+    head.append(copy);
+    pane.append(head);
+
     const list = el("div", "pixwb-modlist");
     for (const m of mods) list.append(modChip(m));
     pane.append(list);
+  }
+}
+
+/** Copy the filenames out, so they can be pasted into a download list or a
+ *  message asking someone which model they used. */
+async function copyList(mods, workflowName, btn) {
+  const text = `${workflowName}\n` + mods.map((m) => m).join("\n");
+  const flash = (label) => {
+    const original = btn.textContent;
+    btn.textContent = label;
+    btn.classList.add("done");
+    setTimeout(() => { btn.textContent = original; btn.classList.remove("done"); }, 1200);
+  };
+  try {
+    await navigator.clipboard.writeText(text);
+    flash("Copied");
+  } catch {
+    // navigator.clipboard needs a secure context, and ComfyUI is often reached
+    // over plain http on a LAN address, where it simply is not there.
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.style.cssText = "position:fixed;top:-1000px;left:-1000px;";
+    document.body.append(ta);
+    ta.select();
+    let ok = false;
+    try { ok = document.execCommand("copy"); } catch { ok = false; }
+    ta.remove();
+    flash(ok ? "Copied" : "Could not copy");
   }
 }
 
