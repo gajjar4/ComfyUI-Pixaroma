@@ -136,12 +136,18 @@ def _build_jpeg_exif(prompt=None, workflow=None, parameters=None):
     A1111-style `parameters` text goes in EXIF UserComment (0x9286, inside the
     Exif IFD 0x8769) with the standard 8-byte "UNICODE\\0" prefix + UTF-16-BE
     payload, which is what Civitai's reader expects and what piexif produces for
-    encoding="unicode". It is added on EVERY attempt including the last, because
-    it is small and it is the ONLY part Civitai can read - dropping it to make
-    room for a giant workflow would defeat the point.
+    encoding="unicode". It is preferred over the workflow, because it is normally
+    small and it is the ONLY part Civitai can read - dropping it to make room for
+    a giant workflow would defeat the point.
+
+    But "normally small" is not always: UTF-16 costs 2 bytes per character, so a
+    ~32000-character prompt alone busts the 64 KB limit. The ladder therefore ends
+    with two attempts that DROP the user comment, so an enormous prompt costs only
+    the Civitai part and still leaves the workflow EXIF that used to fit, rather
+    than losing everything.
     """
-    def _user_comment(exif):
-        if not (isinstance(parameters, str) and parameters.strip()):
+    def _user_comment(exif, include=True):
+        if not include or not (isinstance(parameters, str) and parameters.strip()):
             return
         try:
             ifd = exif.get_ifd(0x8769)
@@ -149,18 +155,29 @@ def _build_jpeg_exif(prompt=None, workflow=None, parameters=None):
         except Exception:
             pass
 
+    have_params = isinstance(parameters, str) and bool(parameters.strip())
     try:
-        attempts = ((workflow, prompt), (workflow, None), (None, None))
-        for wf, pr in attempts:
-            if wf is None and pr is None and not (
-                    isinstance(parameters, str) and parameters.strip()):
-                return None
+        # (workflow, prompt, include_user_comment), most complete first.
+        attempts = (
+            (workflow, prompt, True),
+            (workflow, None, True),
+            (None, None, True),
+            # Last resorts with the user comment dropped, so a huge prompt does
+            # not also cost the workflow EXIF that fitted before this feature.
+            # Fullest first, same as above, or a fitting bigger payload would be
+            # skipped in favour of the smaller one tried earlier.
+            (workflow, prompt, False),
+            (workflow, None, False),
+        )
+        for wf, pr, include in attempts:
+            if wf is None and pr is None and not (include and have_params):
+                continue
             exif = Image.Exif()
             if wf is not None:
                 exif[0x010E] = "Workflow:" + json.dumps(_json_safe(wf))
             if pr is not None:
                 exif[0x010F] = "Prompt:" + json.dumps(_json_safe(pr))
-            _user_comment(exif)
+            _user_comment(exif, include)
             data = exif.tobytes()
             if len(data) <= _EXIF_MAX:
                 return data

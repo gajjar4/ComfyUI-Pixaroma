@@ -1,5 +1,7 @@
 # Byte-compiled / optimized / DLL files
 __pycache__/
+# model-fingerprint cache, only lands here if ComfyUI's user dir is unavailable
+pixaroma_model_hashes.json
 *.py[codz]
 *$py.class
 .agent

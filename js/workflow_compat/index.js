@@ -59,6 +59,15 @@ const GOOD_AUX = "pixaroma/ComfyUI-Pixaroma";
 
 // Mirrors of the frontend's own patterns (workflowSchema.ts).
 const AUX_SHAPE = /^[^/]+\/[^/]+$/;
+// The frontend validates aux_id in TWO stages, not one: the shape regex above,
+// THEN a refine that the user half matches githubUsernamePattern (max 39 chars,
+// no leading/trailing '-', no '--') and the repo half matches the same rule as
+// cnr_id. Mirroring only the shape let a slash-bearing but still-illegal value
+// (e.g. "--x/repo") pass our repair, so the workflow stayed broken and the user
+// still got "No workflow data available". Checking both stages is strictly safer:
+// a legitimate fork like "someone/ComfyUI-Pixaroma-fork" passes both and is left
+// alone, and only values the frontend ITSELF rejects get replaced.
+const GITHUB_USER = /^(?!-)(?!.*--)[a-zA-Z0-9-]+(?<!-)$/;
 const GIT_HASH = /^[0-9a-f]{4,40}$/i;
 const SEMVER =
   /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([\da-z-]+(?:\.[\da-z-]+)*))?(?:\+([\da-z-]+(?:\.[\da-z-]+)*))?$/;
@@ -93,6 +102,14 @@ function validCnr(v) {
   );
 }
 
+function validAux(v) {
+  if (typeof v !== "string" || !AUX_SHAPE.test(v)) return false;
+  const cut = v.indexOf("/");
+  const user = v.slice(0, cut);
+  const repo = v.slice(cut + 1);
+  return user.length >= 1 && user.length <= 39 && GITHUB_USER.test(user) && validCnr(repo);
+}
+
 /** Repair illegal pack metadata on Pixaroma nodes. Returns how many it fixed. */
 function normalizePackMetadata(workflow) {
   let fixed = 0;
@@ -103,7 +120,7 @@ function normalizePackMetadata(workflow) {
     if (!p || typeof p !== "object") continue;
     if (!isOurs(entry)) continue;
 
-    if ("aux_id" in p && !(typeof p.aux_id === "string" && AUX_SHAPE.test(p.aux_id))) {
+    if ("aux_id" in p && !validAux(p.aux_id)) {
       p.aux_id = GOOD_AUX;
       fixed++;
     }

@@ -117,8 +117,13 @@ class PixaromaPreview:
         # Civitai-readable generation settings, read from the graph (opt-in).
         # Built once for the whole batch. Wrapped because metadata must never
         # cost the user their image.
+        #
+        # ONLY in save mode. Preview mode writes to temp/, which is cleared on
+        # restart and is explicitly not a deliverable, so building this there
+        # would make every preview run pay the model-fingerprint cost (a full
+        # read of the checkpoint the first time) for a file nobody posts.
         a1111 = None
-        if str(CivitaiMeta).strip().lower() in ("1", "true", "yes", "on"):
+        if save_mode == "save" and str(CivitaiMeta).strip().lower() in ("1", "true", "yes", "on"):
             try:
                 from ._civitai_meta import build_metadata
                 a1111 = build_metadata(prompt, extra_pnginfo, unique_id,
