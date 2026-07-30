@@ -1270,7 +1270,13 @@ async def api_preview_save(request):
         os.makedirs(full_folder, exist_ok=True)
         fname = f"{name}_{counter:05}_.png"
         full_path = os.path.join(full_folder, fname)
-        pnginfo = _embed_workflow_metadata(workflow, prompt)
+        # Carry a `parameters` (Civitai/A1111) chunk THROUGH the re-encode. The
+        # browser posts the raw bytes of a PNG this plugin itself wrote, so the
+        # chunk - when present - is our own output riding along; rebuilding the
+        # PngInfo from scratch was silently dropping it (found in review). None
+        # is a no-op in _build_pnginfo, so files without it are byte-identical.
+        pnginfo = _build_pnginfo(prompt=prompt, workflow=workflow,
+                                 parameters=pil.info.get("parameters"))
         pil.save(full_path, "PNG", pnginfo=pnginfo)
     except Exception as e:
         return web.json_response({"error": f"save failed: {e}"}, status=500)
@@ -1316,7 +1322,10 @@ async def api_preview_prepare(request):
         return web.json_response({"error": "invalid image data"}, status=400)
 
     try:
-        pnginfo = _build_pnginfo(prompt=prompt, workflow=workflow)
+        # Same pass-through as /preview/save above: keep our own `parameters`
+        # chunk across the re-encode (None is a no-op).
+        pnginfo = _build_pnginfo(prompt=prompt, workflow=workflow,
+                                 parameters=pil.info.get("parameters"))
         buf = io.BytesIO()
         pil.save(buf, "PNG", pnginfo=pnginfo)
         body = buf.getvalue()

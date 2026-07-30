@@ -118,12 +118,15 @@ class PixaromaPreview:
         # Built once for the whole batch. Wrapped because metadata must never
         # cost the user their image.
         #
-        # ONLY in save mode. Preview mode writes to temp/, which is cleared on
-        # restart and is explicitly not a deliverable, so building this there
-        # would make every preview run pay the model-fingerprint cost (a full
-        # read of the checkpoint the first time) for a file nobody posts.
+        # Built in BOTH modes on purpose (review round-trip, 2026-07-30): the
+        # Save to Disk / Save Output buttons re-encode whatever file the node
+        # wrote through the /preview routes, which now pass the `parameters`
+        # chunk through - and in the default preview mode the TEMP file is the
+        # only source those buttons have, so gating this to save mode made the
+        # toggle a no-op for exactly the default configuration. The fingerprint
+        # cost only occurs when the user opted in, once per model.
         a1111 = None
-        if save_mode == "save" and str(CivitaiMeta).strip().lower() in ("1", "true", "yes", "on"):
+        if str(CivitaiMeta).strip().lower() in ("1", "true", "yes", "on"):
             try:
                 from ._civitai_meta import build_metadata
                 a1111 = build_metadata(prompt, extra_pnginfo, unique_id,
