@@ -46,7 +46,9 @@ const NO_COLOUR = "#57534f";
 const _liftCache = new Map();
 
 function lift(hex) {
-  if (!hex) return NO_COLOUR;
+  // Colours come from workflow files, which are downloaded from the internet.
+  // A number or an object here used to throw on .slice.
+  if (!hex || typeof hex !== "string") return NO_COLOUR;
   const hit = _liftCache.get(hex);
   if (hit) return hit;
 
@@ -117,6 +119,14 @@ export function drawMap(canvas, map) {
     return;
   }
 
+  // Entries come from an untrusted file. A null or short one used to throw on
+  // e[0] inside a requestAnimationFrame, where nothing catches it, and the card
+  // was left with a blank cover and a console error.
+  const boxes = map.filter((e) => Array.isArray(e) && e.length >= 4
+    && Number.isFinite(+e[0]) && Number.isFinite(+e[1])
+    && Number.isFinite(+e[2]) && Number.isFinite(+e[3]));
+  if (!boxes.length) return;
+
   // Inset so boxes at the extremes are not clipped flush against the edge.
   const pad = 6;
   const iw = Math.max(1, w - pad * 2);
@@ -128,14 +138,14 @@ export function drawMap(canvas, map) {
   ctx.strokeStyle = "rgba(120,150,180,.35)";
   ctx.lineWidth = 1;
   ctx.beginPath();
-  for (let i = 1; i < map.length; i++) {
-    const a = map[i - 1], b = map[i];
+  for (let i = 1; i < boxes.length; i++) {
+    const a = boxes[i - 1], b = boxes[i];
     ctx.moveTo(pad + (a[0] + a[2] / 2) * iw, pad + (a[1] + a[3] / 2) * ih);
     ctx.lineTo(pad + (b[0] + b[2] / 2) * iw, pad + (b[1] + b[3] / 2) * ih);
   }
   ctx.stroke();
 
-  for (const e of map) {
+  for (const e of boxes) {
     const x = pad + e[0] * iw;
     const y = pad + e[1] * ih;
     const bw = Math.max(2, e[2] * iw);
@@ -155,11 +165,25 @@ export function drawMap(canvas, map) {
 /** Where a card's picture should come from, if anywhere. */
 export function coverFor(entry, meta) {
   const hand = meta?.covers?.[entry.rel];
+  if (hand && hand.kind === "file" && hand.file) {
+    // The version in the query is what lets the picture be cached hard and
+    // still update the instant it is replaced - the filename never changes.
+    return { kind: "image", url: `/pixaroma/api/workflows/cover/${encodeURIComponent(hand.file)}?v=${hand.v || 1}` };
+  }
+  // A cover saved by the first version was embedded here as base64. The server
+  // moves those out to files when the sidecar is read, but a panel still
+  // holding the old copy in memory should show it rather than nothing.
   if (hand && hand.kind === "file" && hand.url) return { kind: "image", url: hand.url };
   if (hand && hand.kind === "output" && hand.filename) {
     return { kind: "image", url: outputURL(hand) };
   }
   return { kind: "map" };
+}
+
+/** Does this workflow have a picture the user chose by hand? */
+export function hasHandCover(entry, meta) {
+  const hand = meta?.covers?.[entry.rel];
+  return !!(hand && hand.kind === "file" && (hand.file || hand.url));
 }
 
 function outputURL(rec) {

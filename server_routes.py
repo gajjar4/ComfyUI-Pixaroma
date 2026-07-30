@@ -1,6 +1,9 @@
 import os
 import io
 import re
+import hashlib
+import shutil
+import asyncio
 import json
 import base64
 import uuid
@@ -2316,8 +2319,20 @@ def _wf_read_meta(path):
             data = json.load(f)
         if isinstance(data, dict):
             return data
-    except (OSError, ValueError, UnicodeDecodeError):
-        pass
+    except FileNotFoundError:
+        return {}                     # first run, nothing to preserve
+    except (OSError, ValueError, UnicodeDecodeError, RecursionError):
+        # It EXISTS but will not parse. Returning {} here and letting the next
+        # save write that back would erase every note, cover and folder colour
+        # the moment somebody typed one character. Keep a copy first, so the
+        # data is recoverable by hand instead of gone.
+        try:
+            broken = path + ".broken"
+            if not os.path.exists(broken):
+                shutil.copy2(path, broken)
+                print(f"[Pixaroma] workflows sidecar unreadable; kept a copy at {broken}")
+        except OSError:
+            pass
     return {}
 
 
@@ -2383,10 +2398,23 @@ async def api_workflows_index(request):
 _WF_META_DICTS = ("notes", "covers", "folderColors")
 _WF_META_LISTS = ("folderOrder",)
 
+# Every write is read-modify-write on one small file. Without this, a folder
+# reorder and a note autosave landing together could each read before the other
+# wrote, and the second write would put the first one's section back as it was -
+# the exact "two panels must not wipe each other" case the merge was meant to
+# cover, which merging alone cannot fix across separate requests.
+_WF_META_LOCK = asyncio.Lock()
+
 
 @PromptServer.instance.routes.get("/pixaroma/api/workflows/meta")
 async def api_workflows_meta_get(request):
-    data = _wf_read_meta(_wf_meta_path(request))
+    path = _wf_meta_path(request)
+    data = _wf_read_meta(path)
+    # Covers used to be embedded as base64 in this very file. Move any leftover
+    # out to a real picture on the way past, so nobody has to do anything and
+    # the sidecar stops growing by 30 KB a cover.
+    if _wf_migrate_embedded_covers(request, data):
+        _wf_write_meta(path, data)
     for k in _WF_META_DICTS:
         data.setdefault(k, {})
     for k in _WF_META_LISTS:
@@ -2406,6 +2434,11 @@ async def api_workflows_meta_post(request):
     if not isinstance(patch, dict):
         return web.json_response({"ok": False, "message": "bad payload"})
 
+    async with _WF_META_LOCK:
+        return _wf_apply_meta_patch(request, patch)
+
+
+def _wf_apply_meta_patch(request, patch):
     path = _wf_meta_path(request)
     data = _wf_read_meta(path)
 
@@ -2419,7 +2452,18 @@ async def api_workflows_meta_post(request):
             current = {}
         for k, v in incoming.items():
             if v is None:
-                current.pop(k, None)      # an explicit null clears one entry
+                old = current.pop(k, None)      # an explicit null clears one entry
+                # Clearing a cover should take its picture with it, or the
+                # folder fills up with files nothing points at. Only when no
+                # OTHER workflow still uses it: a rename re-points the same
+                # picture at a new key and clears the old one, and that must not
+                # delete the file the new key now needs.
+                if (section == "covers" and isinstance(old, dict)
+                        and old.get("file") and not _wf_cover_referenced(data, old["file"], skip_key=k)):
+                    try:
+                        os.remove(os.path.join(_wf_covers_dir(request), old["file"]))
+                    except OSError:
+                        pass                     # already gone, or in use - not worth failing over
             else:
                 current[k] = v
         data[section] = current
@@ -2515,3 +2559,144 @@ async def api_workflows_reveal(request):
         return web.json_response({"ok": True})
     except Exception as e:
         return web.json_response({"ok": False, "message": str(e)})
+
+
+# ── cover pictures ───────────────────────────────────────────────────────────
+# A hand-picked cover used to be embedded in the sidecar as a base64 data URL.
+# That file is fetched WHOLE every time the panel opens, so three covers already
+# made it 96 KB and fifty would have made it ~1.5 MB on every open. Covers are
+# written as real jpg files here instead, and the sidecar keeps only a filename.
+#
+# The stored name is derived from the workflow path so it is stable, and each
+# save bumps a version number that the browser puts in the URL - which means the
+# image can be cached hard and still update the moment it is replaced.
+
+_WF_COVER_DIRNAME = "pixaroma_covers"
+_WF_COVER_MAX_BYTES = 8 * 1024 * 1024
+
+
+def _wf_covers_dir(request, create=False):
+    d = os.path.join(_wf_user_dir(request), _WF_COVER_DIRNAME)
+    if create:
+        try:
+            os.makedirs(d, exist_ok=True)
+        except OSError:
+            pass
+    return d
+
+
+def _wf_cover_name(rel):
+    """Stable per workflow, and safe as a filename whatever the path contains."""
+    return hashlib.sha1(rel.encode("utf-8")).hexdigest()[:16] + ".jpg"
+
+
+def _wf_cover_referenced(meta, filename, skip_key=None):
+    """True when some OTHER workflow still points at this file. Renaming a
+    workflow re-points the same picture at a new key, so deleting the file just
+    because the old key went away would throw away a cover that is still in
+    use."""
+    for k, v in (meta.get("covers") or {}).items():
+        if k == skip_key:
+            continue
+        if isinstance(v, dict) and v.get("file") == filename:
+            return True
+    return False
+
+
+def _wf_migrate_embedded_covers(request, data):
+    """Move any base64 cover left over from the first version out to a file.
+    Runs on read, so it happens once, by itself, with nothing for the user to
+    do. Returns True when something changed and the sidecar needs writing."""
+    covers = data.get("covers")
+    if not isinstance(covers, dict):
+        return False
+    changed = False
+    for rel, rec in list(covers.items()):
+        if not isinstance(rec, dict):
+            continue
+        url = rec.get("url") or ""
+        if not (rec.get("kind") == "file" and url.startswith("data:")):
+            continue
+        try:
+            payload = url.split(",", 1)[1]
+            raw = base64.b64decode(payload)
+        except Exception:
+            covers.pop(rel, None)          # unreadable leftover, drop it
+            changed = True
+            continue
+        name = _wf_cover_name(rel)
+        try:
+            os.makedirs(_wf_covers_dir(request, create=True), exist_ok=True)
+            with open(os.path.join(_wf_covers_dir(request), name), "wb") as f:
+                f.write(raw)
+        except OSError:
+            continue                        # leave it embedded rather than lose it
+        covers[rel] = {"kind": "file", "file": name, "v": 1}
+        changed = True
+    return changed
+
+
+@PromptServer.instance.routes.post("/pixaroma/api/workflows/cover")
+async def api_workflows_cover_set(request):
+    """Store a hand-picked cover as a real file and point the sidecar at it."""
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    rel = str(body.get("rel", "") or "")
+    data_url = str(body.get("dataUrl", "") or "")
+    if not rel or "," not in data_url:
+        return web.json_response({"ok": False, "message": "Nothing to save."})
+
+    try:
+        raw = base64.b64decode(data_url.split(",", 1)[1])
+    except Exception:
+        return web.json_response({"ok": False, "message": "That picture could not be read."})
+    if not raw or len(raw) > _WF_COVER_MAX_BYTES:
+        return web.json_response({"ok": False, "message": "That picture is too large."})
+
+    name = _wf_cover_name(rel)
+    folder = _wf_covers_dir(request, create=True)
+    path = os.path.join(folder, name)
+    if not _is_path_under(path, folder):
+        return web.json_response({"ok": False, "message": "Bad cover path."})
+    try:
+        with open(path, "wb") as f:
+            f.write(raw)
+    except OSError as e:
+        return web.json_response({"ok": False, "message": str(e)})
+
+    async with _WF_META_LOCK:
+        return _wf_record_cover(request, rel, name)
+
+
+def _wf_record_cover(request, rel, name):
+    meta_path = _wf_meta_path(request)
+    meta = _wf_read_meta(meta_path)
+    covers = meta.get("covers")
+    if not isinstance(covers, dict):
+        covers = {}
+    prev = covers.get(rel) if isinstance(covers.get(rel), dict) else {}
+    # Bumped so the browser fetches the new picture even though the filename is
+    # unchanged, while still being free to cache it hard between changes.
+    version = int(prev.get("v") or 0) + 1
+    covers[rel] = {"kind": "file", "file": name, "v": version}
+    meta["covers"] = covers
+    _wf_write_meta(meta_path, meta)
+    return web.json_response({"ok": True, "file": name, "v": version})
+
+
+@PromptServer.instance.routes.get("/pixaroma/api/workflows/cover/{name}")
+async def api_workflows_cover_get(request):
+    name = request.match_info.get("name", "")
+    # The name is ours (a hex digest plus .jpg), so anything else is not one of
+    # ours and there is no reason to go looking for it.
+    if not re.fullmatch(r"[0-9a-f]{16}\.jpg", name or ""):
+        return web.Response(status=404, text="Not found")
+    folder = _wf_covers_dir(request)
+    path = os.path.join(folder, name)
+    if not _is_path_under(path, folder) or not os.path.isfile(path):
+        return web.Response(status=404, text="Not found")
+    # Cacheable hard: the URL carries a version that changes when the picture
+    # does, which is the whole point of storing it as a file.
+    return web.FileResponse(path, headers={"Cache-Control": "max-age=31536000, immutable"})

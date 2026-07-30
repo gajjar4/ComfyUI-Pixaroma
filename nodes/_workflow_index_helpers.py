@@ -16,6 +16,8 @@ import hashlib
 import json
 import os
 import re
+import threading
+from collections import deque
 
 # Files bigger than this are almost certainly not a hand-made workflow, and
 # parsing one blocks the request. 24 MB is far above the largest real workflow
@@ -172,17 +174,37 @@ def _clamp01(v):
 def _walk_strings(widgets):
     """Widget values can nest (lists, dicts) depending on the node. Yield every
     string found, so a model filename is not missed because of its shape."""
-    stack = [widgets]
-    seen = 0
-    while stack and seen < 400:
-        cur = stack.pop()
-        seen += 1
+    # TWO separate limits, because one number could not do both jobs.
+    #
+    # Counting only POPS bounded nothing: a flat list of a million strings was a
+    # single pop plus one extend. Spending the SAME budget on pushes then broke
+    # it the other way - a big list used the whole allowance queueing items and
+    # the loop exited before yielding any of them, so models and prompt text
+    # came back empty. (Caught by a mutation test, not by reading it.)
+    #
+    # So: visits bound the WORK, the queue length bounds the MEMORY, and the
+    # queue is FIFO so a truncated walk keeps the EARLIEST values - widget slot
+    # 0 is where a model filename lives, and dropping that first was backwards.
+    MAX_VISIT = 2000
+    MAX_QUEUE = 2000
+    queue = deque([widgets])
+    visited = 0
+    while queue and visited < MAX_VISIT:
+        cur = queue.popleft()
+        visited += 1
         if isinstance(cur, str):
             yield cur
-        elif isinstance(cur, dict):
-            stack.extend(cur.values())
+            continue
+        if isinstance(cur, dict):
+            items = cur.values()
         elif isinstance(cur, (list, tuple)):
-            stack.extend(cur)
+            items = cur
+        else:
+            continue
+        for v in items:
+            if len(queue) >= MAX_QUEUE:
+                break
+            queue.append(v)
 
 
 # ── one workflow ─────────────────────────────────────────────────────────────
@@ -225,6 +247,11 @@ def summarize_workflow(path, root):
     try:
         with open(path, "r", encoding="utf-8") as f:
             data = json.load(f)
+    except RecursionError:
+        # A few KB of nested brackets is enough. RecursionError is a
+        # RuntimeError, so the three types above do not cover it.
+        blank["error"] = "this file is nested too deeply to read"
+        return blank
     except (OSError, ValueError, UnicodeDecodeError) as e:
         blank["error"] = "not a readable workflow: %s" % e.__class__.__name__
         return blank
@@ -243,10 +270,14 @@ def summarize_workflow(path, root):
         if not isinstance(n, dict):
             continue
         t = n.get("type")
-        if isinstance(t, str) and t:
+        # `(t or "").lower()` looks safe and is not: Python's `or` returns the
+        # truthy operand, so "type": true or "type": 7 reached .lower() and
+        # raised, taking the whole folder listing down with one bad file.
+        t = t if isinstance(t, str) else ""
+        if t:
             types.append(t)
             lower.append(t.lower())
-        tl = (t or "").lower()
+        tl = t.lower()
 
         widgets = n.get("widgets_values")
         if widgets is not None:
@@ -295,7 +326,12 @@ def summarize_workflow(path, root):
     # Same shape of graph + same models = the same workflow wearing two names.
     # Deliberately ignores prompt text and node positions, which is what makes
     # it useful for spotting the copies people accumulate.
-    fp_src = "|".join(sorted(types)) + "||" + "|".join(uniq_models) + "||" + "|".join(uniq_loras)
+    # Serialised rather than joined on a separator. A filename containing the
+    # separator could otherwise produce the same string as a different set split
+    # differently, and telling workflows apart is this hash's only job. Escaping
+    # by hand was the first attempt and introduced an invalid escape sequence;
+    # json has one correct answer and no way to get it subtly wrong.
+    fp_src = json.dumps([sorted(types), uniq_models, uniq_loras], separators=(",", ":"))
     fingerprint = hashlib.md5(fp_src.encode("utf-8")).hexdigest() if types else ""
 
     text = " ".join(texts)
@@ -335,7 +371,10 @@ def _save_cache(cache_path, entries):
     """Written to a temp file and moved into place, so a crash or a full disk
     part-way through leaves the previous cache intact rather than a broken one
     that then has to be detected and thrown away on every future open."""
-    tmp = cache_path + ".tmp"
+    # The temp name carries the thread id: this runs in a thread executor, and a
+    # single shared "<cache>.tmp" meant two overlapping builds wrote into the
+    # same file and produced a torn one.
+    tmp = "%s.%d.tmp" % (cache_path, threading.get_ident())
     try:
         os.makedirs(os.path.dirname(cache_path), exist_ok=True)
         with open(tmp, "w", encoding="utf-8") as f:
@@ -371,7 +410,19 @@ def build_index(root, cache_path):
             if hit and hit.get("key") == key and isinstance(hit.get("data"), dict):
                 data = hit["data"]
             else:
-                data = summarize_workflow(full, root)
+                # summarize_workflow is written not to raise, but this listing is
+                # the whole feature: a single unreadable file must not be able to
+                # empty it, including through a bug introduced here later.
+                try:
+                    data = summarize_workflow(full, root)
+                except Exception as e:            # noqa: BLE001 - deliberate
+                    data = {
+                        "name": os.path.splitext(fn)[0], "rel": rel,
+                        "folder": os.path.dirname(rel), "size": 0, "modified": 0.0,
+                        "node_count": 0, "class_types": [], "models": [], "loras": [],
+                        "text": "", "map": [], "fingerprint": "",
+                        "error": "could not be read: %s" % e.__class__.__name__,
+                    }
             new_entries[rel] = {"key": key, "data": data}
             out.append(data)
 

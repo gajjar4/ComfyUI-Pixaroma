@@ -20,7 +20,7 @@ import { openContextMenu, closeContextMenu } from "./menu.mjs";
 import { renderGrid, beginRename } from "./grid.mjs";
 import { renderDetail } from "./detail.mjs";
 import { searchEntries } from "./search.mjs";
-import { installOutputCoverCapture } from "./cover.mjs";
+import { installOutputCoverCapture, hasHandCover } from "./cover.mjs";
 import { globalAccent, BRAND } from "../shared/index.mjs";
 import { versionShort, versionLine } from "../shared/version.mjs";
 import * as A from "./api.mjs";
@@ -61,12 +61,21 @@ const S = {
 
 // ── data ─────────────────────────────────────────────────────────────────────
 
+let loadSeq = 0;
+
 async function loadData() {
+  // Every load carries a ticket. Two loads overlap easily - opening the panel
+  // fires one, and any action fires another through guard() - and whichever
+  // RESOLVES last used to win, not whichever started last. A slow first load
+  // landing after a rename would put the old name back on screen and make the
+  // rename look like it had failed.
+  const ticket = ++loadSeq;
   S.loading = true;
   try {
     // Favourites are not in memory until ComfyUI is asked to read them, and
     // reading the list before that reports none - see ensureFavouritesLoaded.
     const [idx, meta] = await Promise.all([A.fetchIndex(), A.fetchMeta(), A.ensureFavouritesLoaded()]);
+    if (ticket !== loadSeq) return;          // a newer load already answered
     S.entries = idx.entries || [];
     S.rawFolders = idx.folders || [];
     S.collections = idx.collections || [];
@@ -97,10 +106,11 @@ async function loadData() {
     S.issues.missing_nodes = missingNodes;
     S.tidyRels = collectTidyRels(S.issues);
   } catch (err) {
+    if (ticket !== loadSeq) return;
     S.entries = [];
     S.win?.toast("Could not read the workflows folder: " + err.message);
   } finally {
-    S.loading = false;
+    if (ticket === loadSeq) S.loading = false;
   }
   refreshLive();
 }
@@ -220,11 +230,23 @@ function refreshSortButton() {
 function ask({ title, message, value, okLabel = "OK", danger }) {
   return new Promise((resolve) => {
     const back = el("div");
+    back.tabIndex = -1;
     back.style.cssText = "position:absolute;inset:0;background:rgba(0,0,0,.55);z-index:8;display:flex;align-items:center;justify-content:center;";
     const box = el("div");
     box.style.cssText = "background:#1d1c1b;border:1px solid #3d3936;border-radius:8px;padding:14px 16px;width:min(330px,86%);box-shadow:0 12px 30px rgba(0,0,0,.6);";
     box.append(el("div", "pixwb-detname", title));
     if (message) box.append(el("div", "pixwb-detpath", message));
+
+    // EVERY key is stopped while this is up, not only the ones typed into a
+    // field. The overlay blocks the mouse but keyboard events still bubbled to
+    // the panel's own handler, so F2 opened a rename box behind the dialog and
+    // Enter could fire "open workflow" at the very file being deleted. The two
+    // delete dialogs have no input at all, so they were entirely unprotected.
+    back.addEventListener("keydown", (e) => {
+      e.stopPropagation();
+      if (e.key === "Escape") { e.preventDefault(); done(null); }
+      else if (e.key === "Enter" && !input) { e.preventDefault(); done(true); }
+    });
 
     let input = null;
     if (value !== undefined) {
@@ -248,6 +270,8 @@ function ask({ title, message, value, okLabel = "OK", danger }) {
     back.append(box);
     S.win.el.querySelector(".pixwb-body").append(back);
     setTimeout(() => (input || ok).focus(), 20);
+    // ...and if neither can take focus, the backdrop still can, so Escape works.
+    setTimeout(() => { if (!back.contains(document.activeElement)) back.focus(); }, 40);
 
     let settled = false;
     function done(v) {
@@ -267,18 +291,33 @@ const confirmAsk = (title, message, okLabel = "Delete") =>
 
 // ── actions ──────────────────────────────────────────────────────────────────
 
+/** Drop a path from the selection, or point it at where the file went.
+ *  A path that no longer exists must not stay selected: the next bulk action
+ *  would try to act on it, fail on the first item, and abandon the rest. */
+function forgetRel(rel, replacement) {
+  if (S.selected.delete(rel) && replacement) S.selected.add(replacement);
+  if (S.kbdRel === rel) S.kbdRel = replacement || null;
+}
+
 const dirOf = (rel) => (rel.includes("/") ? rel.slice(0, rel.lastIndexOf("/")) : "");
 const joinRel = (folder, file) => (folder ? `${folder}/${file}` : file);
 
 async function guard(fn, okMessage) {
+  let failure = null;
   try {
     await fn();
-    if (okMessage) S.win.toast(okMessage);
+  } catch (err) {
+    failure = err;
+  }
+  // Reload EITHER WAY. A batch that fails half way through has already changed
+  // the disk, and leaving the old list on screen invites the user to run it
+  // again believing nothing happened.
+  try {
     await loadData();
     render();
-  } catch (err) {
-    S.win.toast(err.message || String(err));
-  }
+  } catch { /* the toast below is the more useful message */ }
+  S.win.toast(failure ? (failure.message || String(failure)) : (okMessage || ""));
+  if (!failure && !okMessage) S.win.toast("");
 }
 
 const HANDLERS = {
@@ -308,7 +347,11 @@ const HANDLERS = {
       guard(async () => {
         const clean = newName.replace(/[\\/:*?"<>|]/g, "").trim();
         if (!clean) throw new Error("That name cannot be used.");
-        await A.renameOrMove(entry.rel, joinRel(dirOf(entry.rel), clean + ".json"));
+        const target = joinRel(dirOf(entry.rel), clean + ".json");
+        await A.renameOrMove(entry.rel, target);
+        // Follow the file. Leaving the old path selected leaves a ghost that a
+        // later bulk action tries to act on and fails.
+        forgetRel(entry.rel, target);
       }, "Renamed");
     });
   },
@@ -320,21 +363,39 @@ const HANDLERS = {
   },
 
   async onDelete(entry) {
+    // Deleting the workflow you are MID-EDIT on costs the unsaved work as well
+    // as the file, and the generic wording did not say so.
+    const dirty = A.isModified(entry.rel);
     const yes = await confirmAsk(
       `Delete "${entry.name}"?`,
-      "There is no undo yet, so this really does remove the file.");
+      dirty
+        ? "This one is OPEN with unsaved changes. Deleting it loses those changes too, and there is no undo."
+        : "There is no undo yet, so this really does remove the file.");
     if (!yes) return;
-    guard(() => A.remove(entry.rel), "Deleted");
+    guard(async () => {
+      await A.remove(entry.rel);
+      forgetRel(entry.rel);
+    }, "Deleted");
   },
 
   async onDeleteMany(rels) {
+    const dirty = rels.filter((r) => A.isModified(r));
     const yes = await confirmAsk(
       `Delete ${rels.length} workflows?`,
-      "There is no undo yet, so this really does remove the files.");
+      dirty.length
+        ? `${dirty.length} of them are open with unsaved changes, which go too. There is no undo.`
+        : "There is no undo yet, so this really does remove the files.");
     if (!yes) return;
+    // Keep going past a failure and report at the end. Stopping on the first
+    // one left the rest silently undone while the earlier deletes had already
+    // happened, which reads as "nothing worked".
     guard(async () => {
-      for (const rel of rels) await A.remove(rel);
-      S.selected = new Set();
+      const failed = [];
+      for (const rel of rels) {
+        try { await A.remove(rel); forgetRel(rel); }
+        catch { failed.push(rel.split("/").pop()); }
+      }
+      if (failed.length) throw new Error(`Could not delete ${failed.length}: ${failed.join(", ")}`);
     }, `Deleted ${rels.length}`);
   },
 
@@ -364,18 +425,20 @@ const HANDLERS = {
     picker.addEventListener("change", async () => {
       const file = picker.files?.[0];
       if (!file) return;
-      try {
-        const url = await shrinkToDataURL(file, 360);
-        await A.saveMeta({ covers: { [entry.rel]: { kind: "file", url } } });
-        S.meta.covers = S.meta.covers || {};
-        S.meta.covers[entry.rel] = { kind: "file", url };
-        render();
-        S.win.toast("Cover set");
-      } catch (err) {
-        S.win.toast(err.message || "Could not use that picture.");
-      }
+      // Shrunk before it is sent: a card is 132px wide, and the full photo would
+      // be stored and re-served at whatever size the camera happened to use.
+      const dataUrl = await shrinkToDataURL(file, 360).catch(() => null);
+      if (!dataUrl) { S.win.toast("That file is not a picture."); return; }
+      guard(async () => {
+        const res = await A.setCover(entry.rel, dataUrl);
+        if (!res?.ok) throw new Error(res?.message || "Could not save that cover.");
+      }, "Cover set");
     });
     picker.click();
+  },
+
+  onClearCover(entry) {
+    guard(() => A.clearCover(entry.rel), "Cover removed");
   },
 
   onContext(entry, e) {
@@ -444,7 +507,10 @@ function showCardMenu(entry, x, y) {
     { label: "Rename", fn: () => HANDLERS.onRename(entry) },
     { label: "Duplicate", fn: () => HANDLERS.onDuplicate(entry) },
     { label: "Move to folder…", fn: () => promptMoveTo([entry.rel]) },
-    { label: "Set cover…", fn: () => HANDLERS.onSetCover(entry) },
+    { label: hasHandCover(entry, S.meta) ? "Replace cover…" : "Set cover…",
+      fn: () => HANDLERS.onSetCover(entry) },
+    { label: "Remove cover", fn: () => HANDLERS.onClearCover(entry),
+      disabled: !hasHandCover(entry, S.meta) },
     null,
     { label: "Reveal in explorer", fn: () => guard(() => A.reveal(entry.rel), "Opened the folder - look in your taskbar") },
     null,
@@ -479,6 +545,7 @@ function moveWorkflowsTo(rels, folderPath) {
       const target = joinRel(folderPath, file);
       if (target === rel) continue;
       await A.renameOrMove(rel, target);
+      forgetRel(rel, target);
       moved++;
     }
     S.selected = new Set();
@@ -726,6 +793,17 @@ function onPanelKeys(e) {
   // as not working. In list view a row IS one item, so the step is 1.
   const ARROWS = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: "up", ArrowDown: "down" };
   if (e.key in ARROWS) {
+    // Left/Right belong to the CARET when there is text to move through -
+    // hijacking them meant a typed query could not be edited without the mouse.
+    // Up/Down are always navigation: a single-line input has no use for them.
+    const el0 = e.target;
+    const horizontal = e.key === "ArrowLeft" || e.key === "ArrowRight";
+    if (horizontal && el0 && el0.tagName === "INPUT" && (el0.value || "").length) {
+      const at = el0.selectionStart ?? 0;
+      const atEdge = e.key === "ArrowLeft" ? at === 0 : at >= el0.value.length;
+      // Only take over once the caret has nowhere left to go.
+      if (!atEdge || el0.selectionStart !== el0.selectionEnd) return;
+    }
     e.preventDefault();
     const cols = S.view === "list" ? 1 : gridColumns();
     const raw = ARROWS[e.key];

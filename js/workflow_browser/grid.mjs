@@ -66,7 +66,7 @@ export function renderGrid(main, state, H) {
 
     if (state.view === "list") {
       card.append(coverEl(entry, state, "pixwb-rowcov"));
-      card.append(el("span", null, entry.name));
+      card.append(el("span", "pixwb-rowname", entry.name));
       const right = el("span", "pixwb-rowfold",
         `${entry.folder || ""}  ${fmtWhen(entry.modified)}`.trim());
       card.append(right);
@@ -120,7 +120,12 @@ export function renderGrid(main, state, H) {
 export function beginRename(main, rel, currentName, commit) {
   const card = main.querySelector(`[data-rel="${CSS.escape(rel)}"]`);
   if (!card) return;
-  const nameEl = card.querySelector(".pixwb-cardname") || card.querySelector("span");
+  // Already renaming. Without this, a second call in LIST view fell through to
+  // the `span` fallback, matched the folder/date span (the only one left once
+  // the name had been swapped for an input) and destroyed it, leaving two live
+  // rename boxes on one row.
+  if (card.querySelector("input")) return;
+  const nameEl = card.querySelector(".pixwb-cardname") || card.querySelector(".pixwb-rowname");
   if (!nameEl) return;
 
   const input = el("input", "pixwb-rename");

@@ -67,6 +67,15 @@ export const saveMeta = (patch) => postJSON(`${BASE}/meta`, patch);
 export const folderAction = (body) => postJSON(`${BASE}/folder`, body);
 export const reveal = (path) => postJSON(`${BASE}/reveal`, { path });
 
+/** Store a hand-picked cover as a real file. It used to be embedded in the
+ *  sidecar as base64, which meant the whole panel re-downloaded every cover on
+ *  every open - three of them already made that file 96 KB. */
+export const setCover = (rel, dataUrl) => postJSON(`${BASE}/cover`, { rel, dataUrl });
+
+/** Remove a cover. The server deletes the picture too, unless another workflow
+ *  still points at it. */
+export const clearCover = (rel) => saveMeta({ covers: { [rel]: null } });
+
 // ── ComfyUI's workflow store ────────────────────────────────────────────────
 
 /** The store keys workflows as "workflows/<relative path>". */
@@ -103,8 +112,25 @@ export async function openWorkflow(rel) {
   return wf;
 }
 
+/** Is there already a workflow at this path? Asked before a rename, move or
+ *  save-as, because the underlying write overwrites without complaint - the
+ *  duplicate path has always passed ?overwrite=false for exactly that reason,
+ *  and the others had no equivalent. */
+export async function exists(rel) {
+  try {
+    const r = await fetch(`/api/userdata/${encodeURIComponent(toStorePath(rel))}`,
+                          { method: "HEAD", cache: "no-store" });
+    return r.ok;
+  } catch {
+    return false;      // unreachable server: let the real call report the problem
+  }
+}
+
 /** Rename OR move - a move is just a rename with a different folder in it. */
 export async function renameOrMove(rel, newRel) {
+  if (rel !== newRel && await exists(newRel)) {
+    throw new Error(`There is already a workflow called "${newRel.split("/").pop()}" there.`);
+  }
   const s = store();
   const wf = s?.getWorkflowByPath?.(toStorePath(rel));
   if (!wf) throw new Error("That workflow is no longer there.");
@@ -127,7 +153,10 @@ export async function remove(rel) {
 }
 
 /** Save the workflow that is open RIGHT NOW into a folder. User action only. */
-export async function saveCurrentAs(newRel) {
+export async function saveCurrentAs(newRel, { overwrite = false } = {}) {
+  if (!overwrite && await exists(newRel)) {
+    throw new Error(`There is already a workflow called "${newRel.split("/").pop()}" there.`);
+  }
   const s = store();
   const wf = s?.activeWorkflow;
   if (!wf) throw new Error("Nothing is open to save.");

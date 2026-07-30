@@ -7,7 +7,7 @@
 // losing what was on the canvas, is exactly the annoyance this removes.
 
 import { el } from "./window.mjs";
-import { drawMap, coverFor } from "./cover.mjs";
+import { drawMap, coverFor, hasHandCover } from "./cover.mjs";
 
 export function renderDetail(pane, state, H) {
   pane.textContent = "";
@@ -101,7 +101,13 @@ export function renderDetail(pane, state, H) {
       fav ? "Remove from favourites" : "Add to favourites");
   btn("Rename", () => H.onRename(entry));
   btn("Duplicate", () => H.onDuplicate(entry));
-  btn("Set cover", () => H.onSetCover(entry), null, "Choose a picture for this card");
+  const hasCover = hasHandCover(entry, state.meta);
+  btn(hasCover ? "Replace cover" : "Set cover", () => H.onSetCover(entry), null,
+      "Choose a picture for this card");
+  if (hasCover) {
+    btn("Remove cover", () => H.onClearCover(entry), null,
+        "Go back to the drawn map, or this workflow's own last output");
+  }
   btn("Reveal", () => H.onReveal(entry), null, "Open the folder it is in");
   btn("Delete", () => H.onDelete(entry), "pixwb-danger", "There is no undo yet, so this asks first");
   pane.append(acts);

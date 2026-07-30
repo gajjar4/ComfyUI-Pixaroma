@@ -135,7 +135,13 @@ export function renderFolders(side, state, { onPick, onDropOn, onRenameFolder, o
           b.classList.add("pixwb-droptarget");
         }
       });
-      b.addEventListener("dragleave", clearMarks);
+      b.addEventListener("dragleave", (e) => {
+        // The row has child spans (indent, dot, label, count). Crossing onto one
+        // fires dragleave on the row even though the cursor never left it, so
+        // the highlight flickered. Ignore a leave that lands inside.
+        if (e.relatedTarget && b.contains(e.relatedTarget)) return;
+        clearMarks();
+      });
       b.addEventListener("drop", (e) => {
         e.preventDefault();
         const wasFolder = isFolderDrag(e);
