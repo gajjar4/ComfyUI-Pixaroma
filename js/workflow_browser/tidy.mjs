@@ -88,12 +88,18 @@ export function renderTidy(main, state, H) {
   // The same query box still narrows the screen. Switching to plain cards the
   // moment someone typed would have thrown away the very grouping they came
   // here for.
-  const q = (query || "").trim().toLowerCase();
-  const keep = (rel) => {
-    if (!q) return true;
-    const e = byRel.get(rel);
-    return !!e && (e.name.toLowerCase().includes(q) || rel.toLowerCase().includes(q));
-  };
+  //
+  // Narrowed by S.visible, NOT by a filter of this screen's own. computeVisible
+  // has already run the REAL search over these entries - the weighted one that
+  // reads models, LoRAs, notes, node types and prompt text - and the header's
+  // "N of M" is counted from its result. The first version re-implemented a
+  // name-and-path substring test here, so a query matching only a model name
+  // made the header say "3 of 142" while this screen said nothing matched -
+  // one search box, two answers. There is exactly one definition of matching,
+  // and this screen borrows it.
+  const q = (query || "").trim();
+  const vis = new Set((state.visible || []).map((e) => e.rel));
+  const keep = (rel) => !q || vis.has(rel);
   const get = (rel) => byRel.get(rel);
 
   const wrap = el("div", "pixwb-tidy");

@@ -157,8 +157,14 @@ export function createWorkflowWindow({ onRender, onClose }) {
     // Widening past the threshold REVEALS the detail pane, but the resize path
     // deliberately skips re-rendering (it fires per pointermove), so the pane
     // appeared and sat empty until something else happened to redraw it. Ask
-    // for one real render on the frame the visibility actually changes.
-    if (wasNarrow !== null && wasNarrow !== narrow && !narrow) onRender?.();
+    // for a REPAINT on the frame the visibility actually changes - a repaint,
+    // not the full open-path rebuild: a bare onRender() here refetched the
+    // whole index from the server in the middle of the drag, on every crossing
+    // of the threshold, which is exactly what the resizeOnly guard one line
+    // down in the caller exists to prevent. The data has not changed because
+    // the window got wider; only the pane needs filling from what is already
+    // loaded.
+    if (wasNarrow !== null && wasNarrow !== narrow && !narrow) onRender?.({ repaintOnly: true });
     wasNarrow = narrow;
   };
   applyRect();

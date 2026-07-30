@@ -2864,6 +2864,14 @@ def _wf_record_cover(request, rel, name):
     # producing a url identical to one the browser may still be holding - and
     # the new cover would show as the old one. A millisecond stamp cannot repeat.
     version = int(time.time() * 1000)
+    # The record being REPLACED can point at a DIFFERENT file than the one just
+    # written: the filename is hashed from the workflow's path, so after a
+    # rename the carried-over record still holds the OLD path's hash, and the
+    # next hand-pick writes the NEW hash. The meta-patch route learned to clean
+    # up superseded pictures; this route is its own write path and did not, so
+    # every rename-then-repick stranded a jpg in the covers folder forever.
+    prev = covers.get(rel)
+    old_name = prev.get("file") if isinstance(prev, dict) else None
     covers[rel] = {"kind": "file", "file": name, "v": version}
     meta["covers"] = covers
     if not _wf_write_meta(meta_path, meta):
@@ -2875,6 +2883,17 @@ def _wf_record_cover(request, rel, name):
         except OSError:
             pass
         return web.json_response({"ok": False, "message": "Could not save the cover setting."})
+    # Only after the write landed, and with the same guards as everywhere else:
+    # the shape check (a corrupt record must not aim os.remove), the reference
+    # check against the FINAL state, and _wf_cover_path as the one way a name
+    # becomes a path.
+    if old_name and old_name != name and not _wf_cover_referenced(meta, old_name):
+        old_path = _wf_cover_path(request, old_name)
+        if old_path:
+            try:
+                os.remove(old_path)
+            except OSError:
+                pass
     return web.json_response({"ok": True, "file": name, "v": version})
 
 

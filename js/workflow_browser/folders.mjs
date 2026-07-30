@@ -145,6 +145,12 @@ export function renderFolders(side, state, { onPick, onDropOn, onRenameFolder, o
           return;                          // replacement the first click made
         }
         lastFoldClick = { path: folderPath, at: now };
+      } else {
+        // Any OTHER row resets the count. Without this, clicking folder A,
+        // then a shortcut or a collection, then folder A again inside the
+        // window read as a double click - three deliberate single clicks with
+        // an unrelated selection in between opened a rename box.
+        lastFoldClick = { path: null, at: 0 };
       }
       onPick(pick);
     });

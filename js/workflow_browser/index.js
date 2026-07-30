@@ -297,7 +297,17 @@ function ask({ title, message, value, okLabel = "OK", danger }) {
     back.addEventListener("keydown", (e) => {
       e.stopPropagation();
       if (e.key === "Escape") { e.preventDefault(); done(null); }
-      else if (e.key === "Enter" && !input) { e.preventDefault(); done(true); }
+      else if (e.key === "Enter" && !input) {
+        e.preventDefault();
+        // Enter means the FOCUSED button, not always OK. The Tab trap below
+        // exists precisely so a careful keyboard user can reach Cancel - and
+        // this branch then deleted their files anyway, because it answered
+        // "true" without looking at where focus was. preventDefault also
+        // suppresses the button's own native Enter-activates-me behaviour, so
+        // there was no fallback doing the right thing underneath. Reaching
+        // Cancel and pressing Enter must mean no.
+        done(document.activeElement === no ? null : true);
+      }
       else if (e.key === "Tab") {
         // TRAPPED, not just stopped. stopPropagation only keeps the event from
         // other listeners - it does nothing about Tab's native behaviour, which
@@ -515,13 +525,18 @@ const HANDLERS = {
         .then((v) => { if (v) commitRename(entry, v); });
       return;
     }
+    // The same shape as commitRename, and the no-op check sits OUTSIDE guard()
+    // for the same reason it does there: inside, a bare return is
+    // indistinguishable from a successful rename, so retyping the same name
+    // (or adding a character cleanName strips) toasted "Renamed" and paid for
+    // a full reload when nothing had happened at all.
     beginRename(S.win.main, entry.rel, entry.name, (newName) => {
+      const clean = cleanName(newName);
+      const bad = nameProblem(clean);
+      if (bad) { S.win.toast(bad); return; }
+      const target = joinRel(dirOf(entry.rel), clean + ".json");
+      if (target === entry.rel) return;            // see commitRename
       guard(async () => {
-        const clean = cleanName(newName);
-        const bad = nameProblem(clean);
-        if (bad) throw new Error(bad);
-        const target = joinRel(dirOf(entry.rel), clean + ".json");
-        if (target === entry.rel) return;          // see commitRename
         await A.renameOrMove(entry.rel, target);
         await carryMeta(entry.rel, target);
         // Follow the file. Leaving the old path selected leaves a ghost that a
@@ -805,11 +820,6 @@ function startFolderRename(path, row) {
     if (bad) { S.win.toast(bad); return; }
     const target = parentOf(path) ? `${parentOf(path)}/${clean}` : clean;
     guard(async () => {
-      const res = await A.folderAction({ action: "rename", path, newPath: target });
-      if (!res.ok) throw new Error(res.message || "Could not rename that folder.");
-      // Carry the folder's place in the order and its colour across, or a
-      // rename would quietly send it back to alphabetical and change its dot.
-      //
       // DESCENDANTS too. Matching only the exact path meant renaming a parent
       // left every child still recorded under the old prefix: their order and
       // colours reverted, and if a child was the folder being viewed the grid
@@ -817,45 +827,68 @@ function startFolderRename(path, row) {
       const reparent = (p) => (p === path || p.startsWith(path + "/")
         ? target + p.slice(path.length) : p);
 
-      const patch = {};
-      const order = (S.meta.folderOrder || []).map(reparent);
-      if (order.length) patch.folderOrder = order;
-
-      const colours = {};
-      for (const [k, v] of Object.entries(S.meta.folderColors || {})) {
-        const moved = reparent(k);
-        if (moved !== k) { colours[k] = null; colours[moved] = v; }
-      }
-      if (Object.keys(colours).length) patch.folderColors = colours;
-
-      // The WORKFLOWS inside moved too, and their notes and covers are keyed by
-      // the workflow's path - so without this every one of them is orphaned.
-      // Worse than orphaned for covers: the next read prunes a cover whose
-      // workflow is not where it says, and deletes the picture with it. So
-      // renaming a folder silently destroyed every hand-picked cover inside it.
+      // THREE steps, in an order chosen so that NO failure can cost a picture.
       //
-      // carryMeta does exactly this for a single file; this is the same move for
-      // a whole subtree, in ONE patch so it is a single write. New keys and null
-      // clears go in the same object safely: the server decides every deletion
-      // once, at the end, against the final state.
-      const notes = {};
-      const covers = {};
+      // The old shape (rename, then move every record in one patch) had a
+      // losing branch that no message could fix: if the rename succeeded and
+      // the record write failed, the covers still named the OLD paths - and
+      // guard() reloads either way, so the very next read pruned each of those
+      // covers as "workflow not where it says" and DELETED the pictures, before
+      // the error toast was even on screen. The advice it gave ("rename it
+      // back") was already false by the time the user could read it.
+      //
+      // So: 1) COPY the notes and covers to the new keys, old keys untouched.
+      //        Fails -> abort with nothing changed at all.
+      //     2) Rename the folder on disk.
+      //        Fails -> best-effort removal of the copies; even unremoved they
+      //        are only records pointing at paths that never appeared, and the
+      //        heal prune drops such a record WITHOUT deleting its picture when
+      //        another key still references it - which the old key does.
+      //     3) Clear the old keys and carry the order and colours.
+      //        Fails -> the old records are stale, but every picture is
+      //        referenced by its NEW key, so the prune only drops the records.
+      //        The user loses the folder's colour and position, and is told
+      //        exactly that - not their covers.
+      const newNotes = {};
+      const newCovers = {};
+      const oldNotes = {};
+      const oldCovers = {};
       for (const [k, v] of Object.entries(S.meta.notes || {})) {
         const moved = reparent(k);
-        if (moved !== k) { notes[moved] = v; notes[k] = null; }
+        if (moved !== k) { newNotes[moved] = v; oldNotes[k] = null; }
       }
       for (const [k, v] of Object.entries(S.meta.covers || {})) {
         const moved = reparent(k);
-        if (moved !== k) { covers[moved] = v; covers[k] = null; }
+        if (moved !== k) { newCovers[moved] = v; oldCovers[k] = null; }
       }
-      if (Object.keys(notes).length) patch.notes = notes;
-      if (Object.keys(covers).length) patch.covers = covers;
 
-      // The VIEW is reparented FIRST, before the write that can fail. The folder
-      // has already moved on disk by this point, so these have to follow it
-      // whatever happens next - doing them after the await meant a failed write
-      // left the sidebar pointing at a folder name that no longer exists, and
-      // the grid showed nothing at all.
+      const preAdd = {};
+      if (Object.keys(newNotes).length) preAdd.notes = newNotes;
+      if (Object.keys(newCovers).length) preAdd.covers = newCovers;
+      if (Object.keys(preAdd).length) {
+        const resA = await A.saveMeta(preAdd);
+        if (!resA || resA.ok === false) {
+          throw new Error("Could not save the folder's records, so nothing was renamed.");
+        }
+      }
+
+      const res = await A.folderAction({ action: "rename", path, newPath: target });
+      if (!res.ok) {
+        // Take the copies back out. Best-effort: if this fails too, the heal
+        // prune drops them harmlessly on the next read (see above).
+        if (Object.keys(preAdd).length) {
+          const undo = {};
+          if (preAdd.notes) undo.notes = Object.fromEntries(Object.keys(newNotes).map((k) => [k, null]));
+          if (preAdd.covers) undo.covers = Object.fromEntries(Object.keys(newCovers).map((k) => [k, null]));
+          try { await A.saveMeta(undo); } catch { /* the prune heals it */ }
+        }
+        throw new Error(res.message || "Could not rename that folder.");
+      }
+
+      // The VIEW follows the DISK, which has now definitely changed - so this
+      // happens before the final write, whatever that write does. Done after it,
+      // a failure left the sidebar pointing at a folder name that no longer
+      // exists and the grid showed nothing at all.
       if (S.sel.kind === "folder" && typeof S.sel.value === "string") {
         const moved = reparent(S.sel.value);
         if (moved !== S.sel.value) S.sel = { kind: "folder", value: moved };
@@ -865,19 +898,29 @@ function startFolderRename(path, row) {
       S.selected = new Set([...S.selected].map(reparent));
       if (S.kbdRel) S.kbdRel = reparent(S.kbdRel);
 
+      // Carry the folder's place in the order and its colour across, or a
+      // rename would quietly send it back to alphabetical and change its dot.
+      const patch = {};
+      const order = (S.meta.folderOrder || []).map(reparent);
+      if (order.length) patch.folderOrder = order;
+      const colours = {};
+      for (const [k, v] of Object.entries(S.meta.folderColors || {})) {
+        const moved = reparent(k);
+        if (moved !== k) { colours[k] = null; colours[moved] = v; }
+      }
+      if (Object.keys(colours).length) patch.folderColors = colours;
+      if (Object.keys(oldNotes).length) patch.notes = oldNotes;
+      if (Object.keys(oldCovers).length) patch.covers = oldCovers;
+
       if (Object.keys(patch).length) {
-        // The RESULT is checked, not just the absence of a throw. saveMeta only
-        // rejects on a bad HTTP status, and the server answers 200 with
-        // {ok:false} when the sidecar could not be written (disk full, an
-        // antivirus lock on the temp file, a permissions blip). Treated as
-        // success, that was silent data loss: the notes and covers still name
-        // the OLD folder, and the very next read prunes each of those covers as
-        // orphaned and deletes the picture. commitSiblingOrder just below has
-        // always checked its result; this call site was the one that did not.
+        // Checked, not assumed: the route answers 200 with ok:false when the
+        // sidecar could not be written. commitSiblingOrder below has always
+        // checked its result; this call site once did not, and the cost was
+        // deleted cover pictures.
         const res2 = await A.saveMeta(patch);
         if (!res2 || res2.ok === false) {
-          throw new Error("The folder was renamed, but its notes and covers could "
-            + "not be saved. Rename it back to keep them.");
+          throw new Error("The folder was renamed and its notes and covers are safe, "
+            + "but its colour and place in the list could not be saved.");
         }
       }
     }, "Folder renamed");
@@ -1227,7 +1270,13 @@ function ensureWindow() {
   S.win = createWorkflowWindow({
     onRender: (opts) => {
       if (opts?.resizeOnly) return;      // a resize must not refetch the folder
-      buildBar(S.win.bar);                // every time the corner is dragged
+      if (opts?.repaintOnly) {            // every time the corner is dragged
+        // The detail pane just became visible mid-drag: fill it from the data
+        // already loaded. No refetch, no toolbar rebuild - the render alone.
+        render();
+        return;
+      }
+      buildBar(S.win.bar);
       buildFooter(S.win.foot);
       loadData().then(render);
     },
