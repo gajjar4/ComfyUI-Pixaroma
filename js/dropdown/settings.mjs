@@ -492,6 +492,14 @@ export function openDropdownPanel(node, onChange) {
 
   panel.append(title, body, foot);
   document.body.appendChild(panel);
+  // MUST be recorded, and this was missed once. Without it, _panel stays null,
+  // so closeDropdownPanel() removes nothing, outsideClose and escClose both
+  // early-return, and every open stacks another panel on the page: after four
+  // opens there were four live panels, each with handlers bound to its own
+  // stale row indices, so a click could delete a row in a panel nobody could
+  // see. A single open looked perfectly fine, which is why only opening it
+  // TWICE finds this.
+  _panel = panel;
   renderTypes();
   renderList();
   placeBeside(panel, getNodeScreenRect(node));
