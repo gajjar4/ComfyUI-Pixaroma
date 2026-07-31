@@ -1048,11 +1048,24 @@ function setFolderExpanded(path, open) {
   expandWrites = expandWrites.then(async () => {
     try {
       const res = await A.saveMeta({ folderExpanded: next });
-      // The sidecar ignores sections it does not know about, which is exactly
-      // how folderOrder was silently swallowed when IT was new. Test the SHAPE,
-      // not the length: an up-to-date server always answers with an array, and
-      // an empty one is a perfectly ordinary answer (everything closed), while
-      // an older server leaves the key out altogether.
+      // The RESULT, not merely the absence of a throw (#23). The route answers
+      // 200 with {ok:false} when the sidecar could not be WRITTEN, and it fills
+      // in the patched section before attempting the write - so it echoes the
+      // list back either way and a shape test alone passes on a failed save.
+      // That is the same hole that once cost deleted cover pictures on the
+      // folder-rename path.
+      if (!res || res.ok === false) {
+        throw new Error("Your folder choice could not be saved. Something else may have the "
+          + "workflows folder open, or it is read-only.");
+      }
+      // Only THEN the shape. The sidecar ignores sections it does not know
+      // about, which is exactly how folderOrder was silently swallowed when IT
+      // was new. Test the SHAPE, not the length: an up-to-date server always
+      // answers with an array, and an empty one is a perfectly ordinary answer
+      // (everything closed), while an older server leaves the key out.
+      // Kept as a SEPARATE message from the one above - this one means an
+      // out-of-date server, and telling someone to restart when their disk is
+      // read-only sends them through a reboot that cannot help (#27).
       if (!Array.isArray(res?.meta?.folderExpanded)) {
         throw new Error("Restart ComfyUI - remembering open folders needs the newer server files.");
       }
