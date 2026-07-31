@@ -12,6 +12,16 @@ deliberately simple so that mirroring stays trivial.
 
 import json
 import math
+import re
+
+# THE shared number grammar. Deliberately NOT each language's native parser:
+# float() and Number() disagree in both directions, and every disagreement is a
+# case where the settings panel promises one thing and the run does another.
+# Measured, not assumed - a parity run found JS reading "0x10" as 16 while
+# Python refused it, and Python accepting "1_0" while JS refuses.
+#   accepts: 5  5.  .5  5.5  +5  -3  1e3  1E3  -1e3
+#   refuses: 0x10  0b1  1_0  1,024  1024px  abc  Infinity  NaN  (and "")
+_NUMBER_RE = re.compile(r"^[+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?$")
 
 # The four types a Dropdown node can be set to. The JS uses these exact
 # strings in its state blob, so they are a wire format - do not rename.
@@ -72,7 +82,10 @@ def _as_number(raw):
             return None
     elif isinstance(raw, str):
         text = raw.strip()
-        if not text:
+        if not _NUMBER_RE.match(text):
+            # Covers empty/whitespace too, since the pattern needs at least one
+            # digit. Everything the grammar refuses is refused IDENTICALLY by
+            # the browser, which is the whole point of having a grammar.
             return None
         try:
             value = float(text)
@@ -83,6 +96,36 @@ def _as_number(raw):
     if not math.isfinite(value):
         return None
     return value
+
+
+def _round_half_away(value):
+    """Round to the nearest whole number, halves going AWAY from zero.
+
+    Neither language's default is usable here. Python's round() is banker's
+    rounding (2.5 -> 2, 0.5 -> 0), JavaScript's Math.round breaks ties toward
+    positive infinity (-3.5 -> -3). They disagree on every exact half, so the
+    panel previewed one number and the run emitted another.
+
+    Half-away-from-zero is also what a person expects: someone typing 2.5 into
+    a whole-number list means 3, not 2.
+    """
+    if value >= 0:
+        return int(math.floor(value + 0.5))
+    return -int(math.floor(-value + 0.5))
+
+
+def _number_to_text(value):
+    """A number -> the string the BROWSER would show for it.
+
+    Python str() on a whole float keeps the '.0' that JavaScript drops, so the
+    same value read as text differed between the panel and the run. Match the
+    browser, because the browser is what the user is looking at.
+    """
+    if isinstance(value, float) and math.isfinite(value):
+        if value == int(value) and abs(value) < 1e16:
+            return str(int(value))
+        return repr(value)
+    return str(value)
 
 
 def readable(raw, kind):
@@ -116,6 +159,8 @@ def coerce_value(raw, kind):
         if isinstance(raw, bool):
             # Emit the spelling the user would have typed, not Python's.
             return "true" if raw else "false"
+        if isinstance(raw, (int, float)):
+            return _number_to_text(raw)
         return str(raw)
 
     if kind == "bool":
@@ -137,7 +182,7 @@ def coerce_value(raw, kind):
         return FALLBACKS[kind]
     number = max(-_LIMIT, min(_LIMIT, number))
     if kind == "int":
-        return int(round(number))
+        return _round_half_away(number)
     return float(number)
 
 
