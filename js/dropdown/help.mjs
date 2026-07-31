@@ -64,7 +64,7 @@ export const DROPDOWN_HELP = {
       ],
       bullets: [
         "`F` is drawn quietly since it is the normal way to work. `I` and `R` are filled in, because those change the value on you, and the name on the node then updates to whatever just ran.",
-        "Picking an entry by hand takes over again: the next run starts from what you chose.",
+        "On `I`, picking an entry by hand takes over: the next run starts from what you chose and carries on from there. On `R` it only means that entry will not be the next one, since random is random.",
         "Exporting or saving your workflow does not move an in-order list along. Only a real run does.",
         "The position starts again from your chosen entry when you reload the page, which is also why running a workflow never marks it as changed.",
       ],
