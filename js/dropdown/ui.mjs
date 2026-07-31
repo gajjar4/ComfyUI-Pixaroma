@@ -127,7 +127,12 @@ export function injectCSS() {
   .pix-dd-opt:hover{ background:#2a2a2a; }
   .pix-dd-opt.sel{ background:${ACC}; }
   .pix-dd-oname{
-    flex:none; max-width:45%; overflow:hidden; text-overflow:ellipsis;
+    /* The NAME wins the row: it shows in full and the value peek takes what is
+       left. It was capped at 45%, which cut "summer background" to "summer
+       bac..." while the peek kept space the name needed. A name longer than
+       the whole popup still ellipsizes - the popup opens at the field's width,
+       so widening the NODE is how you give a long name more room. */
+    flex:none; max-width:100%; overflow:hidden; text-overflow:ellipsis;
     white-space:nowrap; color:#ddd; font-size:12px;
   }
   .pix-dd-opt.sel .pix-dd-oname{ color:#fff; }

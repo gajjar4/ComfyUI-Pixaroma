@@ -141,6 +141,18 @@ function injectCSS() {
     .pix-ddp-btn.primary { background:var(--acc,${BRAND}); border-color:var(--acc,${BRAND}); color:#fff; }
     .pix-ddp-btn.primary:hover { filter:brightness(1.1); }
     .pix-ddp-push { margin-left:auto; }
+
+    /* The Clear-list confirm. It lives INSIDE the panel element: on
+       document.body it would sit outside the panel, and the outside-click
+       closer would take the whole settings panel down with the first click. */
+    .pix-ddp-ask { position:absolute; inset:0; z-index:5; background:rgba(0,0,0,0.55);
+      display:flex; align-items:center; justify-content:center; }
+    .pix-ddp-askbox { background:#232323; border:1px solid #4a4a4a; border-radius:8px;
+      padding:14px 16px; width:min(320px,86%); display:flex; flex-direction:column; gap:10px;
+      box-shadow:0 10px 30px rgba(0,0,0,0.5); }
+    .pix-ddp-asktitle { color:var(--acc,${BRAND}); font-size:12px; }
+    .pix-ddp-askmsg { color:#bbb; font-size:11.5px; line-height:1.5; }
+    .pix-ddp-askrow { display:flex; gap:8px; justify-content:flex-end; }
   `;
   document.head.appendChild(s);
 }
@@ -338,6 +350,47 @@ export function openDropdownPanel(node, onChange) {
   const foot = el("div", "pix-ddp-f");
 
   const fire = () => { _onChange?.(node); };
+
+  // A yes/no question drawn over THIS panel. Two traps make it panel-local
+  // rather than a document.body dialog: (a) the panel closes on any outside
+  // pointerdown, and a body-level backdrop IS outside, so answering the
+  // question would also close the settings; (b) the panel's Esc closer is a
+  // document-level capture listener, so this one listens on WINDOW capture,
+  // which runs first - Esc answers the question instead of closing the panel
+  // underneath it. Enter is the OK button, matching pixConfirm elsewhere.
+  function askInPanel({ title: t, message, okText }) {
+    return new Promise((resolve) => {
+      const back = el("div", "pix-ddp-ask");
+      const box = el("div", "pix-ddp-askbox");
+      box.appendChild(el("div", "pix-ddp-asktitle", t));
+      if (message) box.appendChild(el("div", "pix-ddp-askmsg", message));
+      const row = el("div", "pix-ddp-askrow");
+      const no = el("button", "pix-ddp-btn", "Cancel");
+      const ok = el("button", "pix-ddp-btn primary", okText || "OK");
+      row.append(no, ok);
+      box.appendChild(row);
+      back.appendChild(box);
+      panel.appendChild(back);
+
+      let done = false;
+      const finish = (v) => {
+        if (done) return;
+        done = true;
+        window.removeEventListener("keydown", onKey, true);
+        back.remove();
+        resolve(v);
+      };
+      const onKey = (e) => {
+        if (e.key === "Escape") { e.preventDefault(); e.stopImmediatePropagation(); finish(false); }
+        else if (e.key === "Enter") { e.preventDefault(); e.stopImmediatePropagation(); finish(true); }
+      };
+      window.addEventListener("keydown", onKey, true);
+      back.addEventListener("pointerdown", (e) => { if (e.target === back) finish(false); });
+      no.addEventListener("click", () => finish(false));
+      ok.addEventListener("click", () => finish(true));
+      queueMicrotask(() => ok.focus());
+    });
+  }
 
   // ── What comes out ──────────────────────────────────────────────────────
   const typeSec = el("div");
@@ -676,10 +729,29 @@ export function openDropdownPanel(node, onChange) {
     inp.click();
   });
 
+  const bClr = el("button", "pix-ddp-btn", "Clear list");
+  bClr.title = "Remove every entry from this list at once";
+  bClr.addEventListener("click", async () => {
+    const n = readState(node).options.length;
+    if (!n) { toast("The list is already empty."); return; }
+    const ok = await askInPanel({
+      title: "Clear the whole list?",
+      message: `This removes ${n === 1 ? "the only entry" : `all ${n} entries`} from this node. `
+        + "If you might want them back, Export first - Import brings the file straight back in.",
+      okText: "Clear the list",
+    });
+    if (!ok) return;
+    // Same reset as picking by hand: a held or spent In-order/Random position
+    // points into a list that no longer exists.
+    node._pixDdPending = null;
+    node._pixDdCursor = null;
+    commit({ options: [], index: 0 });
+  });
+
   const bDone = el("button", "pix-ddp-btn pix-ddp-push", "Done");
   bDone.addEventListener("click", closeDropdownPanel);
 
-  foot.append(bExp, bImp, bDone);
+  foot.append(bExp, bImp, bClr, bDone);
 
   panel.append(title, body, foot);
   document.body.appendChild(panel);

@@ -26,6 +26,7 @@ export const DROPDOWN_HELP = {
         "An empty list offers `Add your first entry`. Fill in a short name and the value it stands for.",
         "The value box grows as you type, so a long sentence or several lines are fine.",
         "The `+` on a row adds another one below it, the `✕` removes that row, and the `⋮⋮` grip drags it up or down.",
+        "`Clear list` at the bottom empties the whole list in one go, after asking. Export first if you might want it back.",
         "Close the settings. Your list is saved inside the workflow.",
       ],
     },
@@ -35,7 +36,9 @@ export const DROPDOWN_HELP = {
         "The node itself is one row. Click it to open your list, or use the `◀` and `▶` "
         + "arrows to step through without opening anything.\n\n"
         + "The list shows each name on the left and a peek at its value on the right, so you "
-        + "can tell two similar entries apart.",
+        + "can tell two similar entries apart. The name always gets the space first: the peek "
+        + "gives way rather than cutting a name short. If a name is still too long, make the "
+        + "node wider - the list opens at the node's width.",
     },
     {
       heading: "What comes out",
