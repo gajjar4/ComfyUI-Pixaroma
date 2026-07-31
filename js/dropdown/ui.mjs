@@ -22,7 +22,7 @@ import { isVueNodes, applyAdaptiveCanvasOnly } from "../shared/nodes2.mjs";
 import { installCanvasZoomPassthrough } from "../shared/canvas_zoom.mjs";
 import { installNodeAccent, accentOf, ACC } from "../shared/node_settings.mjs";
 import {
-  ROW_H, MIN_W, BODY_PAD, readState, writeState, shownIndex, MODE_LETTERS, MODE_LABELS,
+  ROW_H, MIN_W, BODY_PAD, readState, writeState, shownIndex, MODE_LETTERS, MODE_LABELS, MODES,
 } from "./core.mjs";
 import { SOCKET_LABELS, previewText } from "./coerce.mjs";
 
@@ -92,15 +92,19 @@ export function injectCSS() {
   }
   .pix-dd-gear:hover::before{ background:${ACC}; }
 
-  /* Shown ONLY when the run mode is not Fixed. A node that will pick a
-     different entry on the next Run has to say so somewhere, and the default
-     needs no badge. */
+  /* Always shown, and clickable: it cycles F -> I -> R. Fixed is the quiet
+     default so a normal node is not shouting an orange badge; the two modes
+     that will change the value on you are filled, because a node that sends
+     something different on the next Run has to say so. */
   .pix-dd-mode{
-    flex:none; min-width:15px; height:15px; padding:0 3px; box-sizing:border-box;
-    border-radius:3px; background:${ACC}; color:#fff;
-    font:10px/15px 'Segoe UI',sans-serif; text-align:center;
+    flex:none; width:16px; height:16px; padding:0; box-sizing:border-box;
+    display:flex; align-items:center; justify-content:center;
+    border-radius:3px; border:1px solid #4a4a4a; background:none; color:#999;
+    font:10px 'Segoe UI',sans-serif; cursor:pointer; line-height:1;
   }
-  .pix-dd-mode.hide{ display:none; }
+  .pix-dd-mode:hover{ border-color:${ACC}; color:#ddd; }
+  .pix-dd-mode.on{ background:${ACC}; border-color:${ACC}; color:#fff; }
+  .pix-dd-mode.on:hover{ filter:brightness(1.12); color:#fff; }
 
   .pix-dd-type{
     flex:none; color:${ACC}; font-size:10px; letter-spacing:.02em;
@@ -205,8 +209,8 @@ export function buildRow(node, onOpenSettings) {
   gear.className = "pix-dd-gear";
   gear.title = "Edit the list and what it sends out";
 
-  const mode = document.createElement("span");
-  mode.className = "pix-dd-mode hide";
+  const mode = document.createElement("button");
+  mode.className = "pix-dd-mode";
 
   const type = document.createElement("span");
   type.className = "pix-dd-type";
@@ -226,6 +230,7 @@ export function buildRow(node, onOpenSettings) {
     // The gear closes the popup itself. Only the FIELD is exempt from the
     // outside-click handler, so nothing else would.
     if (t.closest(".pix-dd-gear")) { e.stopPropagation(); closePopup(); onOpenSettings?.(node); return; }
+    if (t.closest(".pix-dd-mode")) { e.stopPropagation(); cycleMode(node); return; }
     if (t.closest(".pix-dd-field")) {
       e.stopPropagation();
       // An empty list has nothing to show, so send the user where they can fix
@@ -281,10 +286,9 @@ export function renderRow(node) {
     parts.field.title = opt ? `Sends: ${previewText(opt.value, st.type)}` : "";
   }
 
-  const isFixed = st.mode === "fixed";
-  parts.mode.textContent = MODE_LETTERS[st.mode] || "";
-  parts.mode.title = MODE_LABELS[st.mode] || "";
-  parts.mode.classList.toggle("hide", isFixed);
+  parts.mode.textContent = MODE_LETTERS[st.mode] || "F";
+  parts.mode.title = `${MODE_LABELS[st.mode] || ""}\nClick to change`;
+  parts.mode.classList.toggle("on", st.mode !== "fixed");
 
   parts.type.textContent = SOCKET_LABELS[st.type] || st.type;
   parts.type.title = `This node sends ${SOCKET_LABELS[st.type]}. Change it in the settings.`;
@@ -311,6 +315,27 @@ export function step(node, delta) {
   closePopup();
   node.setDirtyCanvas?.(true, true);
   node.graph?.setDirtyCanvas?.(true, true);
+}
+
+/**
+ * Cycle the run mode F -> I -> R -> F from the node face, so it can be changed
+ * without opening the settings at all.
+ *
+ * Drops the held pick and the sequence position, exactly as the panel's buttons
+ * do: switching mode should start from the entry the node is showing rather
+ * than continuing a sequence the user has just abandoned.
+ */
+export function cycleMode(node) {
+  const cur = readState(node).mode;
+  const next = MODES[(Math.max(0, MODES.indexOf(cur)) + 1) % MODES.length];
+  writeState(node, { mode: next });
+  node._pixDdPending = null;
+  node._pixDdCursor = null;
+  renderRow(node);
+  node.setDirtyCanvas?.(true, true);
+  // No need to repaint the settings panel: the badge is OUTSIDE it, so the
+  // panel's own outside-click guard has already closed it - the same as
+  // clicking anywhere else on the node.
 }
 
 // ── The option popup ───────────────────────────────────────────────────────

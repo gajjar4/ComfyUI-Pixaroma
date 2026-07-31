@@ -25,6 +25,17 @@ function el(tag, cls, text) {
   return e;
 }
 
+// A REAL example of valid input for the chosen type, rather than a restatement
+// of the column header. It shows the point of the node in one glance: a short
+// name standing in for something longer or fiddlier than you want to retype.
+// Per type, because "warm light" would be nonsense above a list of step counts.
+const PLACEHOLDERS = {
+  text:  { name: "warm light", value: "warm golden hour light, long soft shadows" },
+  int:   { name: "square",     value: "1024" },
+  float: { name: "gentle",     value: "0.35" },
+  bool:  { name: "detail on",  value: "true" },
+};
+
 function toast(msg, severity = "info") {
   const t = app?.extensionManager?.toast;
   if (t?.add) t.add({ severity, summary: "Dropdown Pixaroma", detail: msg, life: 3200 });
@@ -93,14 +104,22 @@ function injectCSS() {
     .pix-ddp-warn.hide { display:none; }
     /* The + and the x sit tight against the value box: the gap that used to be
        here was dead space the value field could use. The + is a filled chip so
-       it reads as the primary of the two and is not dwarfed by the x. */
-    .pix-ddp-ins { flex:none; width:19px; height:19px; margin-top:3px; padding:0;
-      border-radius:4px; border:1px solid transparent;
+       it reads as the primary of the two and is not dwarfed by the x.
+       BOTH are centred on the FIRST LINE of the row (height = one line of the
+       value box), not on the row: the value box grows with its text, and a
+       button floating in the middle of a six-line paragraph reads as belonging
+       to nothing. Flex centring, not padding guesses - that is what left them
+       a couple of px out from each other and from the fields. */
+    .pix-ddp-ins, .pix-ddp-del { flex:none; height:27px; padding:0;
+      display:flex; align-items:center; justify-content:center;
+      background:none; border:none; cursor:pointer; }
+    .pix-ddp-ins { width:21px; }
+    .pix-ddp-ins::before { content:"+"; display:flex; align-items:center; justify-content:center;
+      width:19px; height:19px; border-radius:4px;
       background:color-mix(in srgb, var(--acc,${BRAND}) 22%, transparent);
-      color:var(--acc,${BRAND}); font:15px/1 'Segoe UI',sans-serif; cursor:pointer; }
-    .pix-ddp-ins:hover { background:var(--acc,${BRAND}); color:#fff; }
-    .pix-ddp-del { flex:none; width:15px; text-align:center; padding:5px 0 0;
-      cursor:pointer; font-size:12px; line-height:1; background:none; border:none; color:#777; }
+      color:var(--acc,${BRAND}); font:15px/1 'Segoe UI',sans-serif; }
+    .pix-ddp-ins:hover::before { background:var(--acc,${BRAND}); color:#fff; }
+    .pix-ddp-del { width:17px; color:#777; font:13px/1 'Segoe UI',sans-serif; }
     .pix-ddp-del:hover { color:#e0604a; }
 
     .pix-ddp-empty { padding:14px 10px; text-align:center; }
@@ -396,20 +415,21 @@ export function openDropdownPanel(node, onChange) {
 
       const nm = el("input", "pix-ddp-nm");
       nm.value = o.name;
-      nm.placeholder = "top left";
+      nm.placeholder = PLACEHOLDERS[st.type].name;
       nm.title = "The short name you pick from the dropdown";
 
       const vl = el("textarea", "pix-ddp-vl");
       vl.value = o.value;
       vl.rows = 1;
-      vl.placeholder = "what it sends";
+      vl.placeholder = PLACEHOLDERS[st.type].value;
       vl.title = "The value this entry sends out. It can run to several lines.";
       if (!readable(o.value, st.type)) vl.classList.add("bad");
 
       const warn = el("span", "pix-ddp-warn" + (readable(o.value, st.type) ? " hide" : ""), "⚠");
       warn.title = `This does not read as ${TYPE_LABELS[st.type].toLowerCase()}. It is kept as you typed it, and sends ${JSON.stringify(previewText(o.value, st.type))} until you change it.`;
 
-      const ins = el("button", "pix-ddp-ins", "+");
+      // The glyph is drawn by the ::before chip, so the button itself is empty.
+      const ins = el("button", "pix-ddp-ins");
       ins.title = "Add a row below this one";
       const del = el("button", "pix-ddp-del", "✕");
       del.title = "Delete this row";
@@ -515,9 +535,10 @@ export function openDropdownPanel(node, onChange) {
   }
 
   // ── Footer ──────────────────────────────────────────────────────────────
-  const bAdd = el("button", "pix-ddp-btn primary", "Add option");
-  bAdd.title = "Add an entry at the end of the list";
-  bAdd.addEventListener("click", addRow);
+  // NO "Add option" in the footer. Adding lives where the list is: the + on a
+  // row inserts below it, and an empty list carries its own button. A third
+  // route to the same action, parked away from the thing it acts on, was just
+  // noise.
 
   const bExp = el("button", "pix-ddp-btn", "Export");
   bExp.title = "Save this list to a file you can load into another workflow";
@@ -582,7 +603,7 @@ export function openDropdownPanel(node, onChange) {
   const bDone = el("button", "pix-ddp-btn pix-ddp-push", "Done");
   bDone.addEventListener("click", closeDropdownPanel);
 
-  foot.append(bAdd, bExp, bImp, bDone);
+  foot.append(bExp, bImp, bDone);
 
   panel.append(title, body, foot);
   document.body.appendChild(panel);
