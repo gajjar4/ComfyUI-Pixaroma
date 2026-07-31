@@ -71,6 +71,39 @@ export function orderedFolders(folders, order) {
   return out;
 }
 
+/** Every folder path ABOVE this one, outermost first. "a/b/c" -> ["a", "a/b"]. */
+export function ancestorsOf(path) {
+  const parts = String(path || "").split("/");
+  const out = [];
+  for (let i = 1; i < parts.length; i++) out.push(parts.slice(0, i).join("/"));
+  return out;
+}
+
+/** Does any folder sit inside this one? Drives whether a row gets a twisty. */
+export function hasChildren(path, folders) {
+  const prefix = path + "/";
+  return (folders || []).some((f) => f.startsWith(prefix));
+}
+
+/**
+ * Which folders are drawn open for THIS render.
+ *
+ * The stored list is the ones the user opened - absent means closed, so a fresh
+ * install starts tidy instead of pouring every sub-folder down the column.
+ *
+ * The branch holding the folder being VIEWED is added on top, and deliberately
+ * only for the render: selecting a sub-folder must not silently rewrite the
+ * user's saved choices, or every click would be an edit and the sidecar would
+ * be written on navigation.
+ */
+export function openSet(expanded, sel) {
+  const open = new Set(expanded || []);
+  if (sel && sel.kind === "folder" && sel.value) {
+    for (const a of ancestorsOf(sel.value)) open.add(a);
+  }
+  return open;
+}
+
 /** The siblings of a folder, in the order they are displayed. */
 export function siblingsOf(path, folders, order) {
   const parent = path.includes("/") ? path.slice(0, path.lastIndexOf("/")) : "";
@@ -96,17 +129,18 @@ export function folderColor(path, meta) {
  * onPick(sel)          - {kind, value} for the row that was clicked
  * onDropOn(folderPath) - cards were dropped on a real folder row
  */
-export function renderFolders(side, state, { onPick, onDropOn, onRenameFolder, onFolderMenu, onReorderFolder }) {
+export function renderFolders(side, state, { onPick, onDropOn, onRenameFolder, onFolderMenu, onReorderFolder, onToggleFolder }) {
   // The clear fires an open folder-rename box's blur synchronously - the flag
   // has to be up across it so that blur is not mistaken for the user clicking
   // away. See markRendering in window.mjs.
   markRendering(() => { side.textContent = ""; });
   const { entries, folders, collections, meta, favourites, sel, tidyRels } = state;
+  const open = openSet(meta?.folderExpanded, sel);
 
   const is = (kind, value) => sel.kind === kind && (value === undefined || sel.value === value);
 
   /** Build a row, attach its click, and - for a real folder - its drop target. */
-  function addRow({ label, count, on, dot, indent = 0, title, muted, star }, pick, folderPath) {
+  function addRow({ label, count, on, dot, indent = 0, title, muted, star, twisty }, pick, folderPath) {
     const b = el("button", "pixwb-fold" + (on ? " on" : ""));
     b.type = "button";
     if (title) b.title = title;
@@ -116,6 +150,26 @@ export function renderFolders(side, state, { onPick, onDropOn, onRenameFolder, o
       sp.style.width = indent * 11 + "px";
       b.append(sp);
     }
+    // The twisty, or a spacer exactly its width when this folder has nothing
+    // inside it - so every label in the column starts on the same line whether
+    // or not that particular folder happens to have sub-folders.
+    if (twisty) {
+      const c = el("span", "pixwb-chev" + (twisty.open ? " pixwb-chev-open" : ""), "▶");
+      c.title = twisty.open ? "Hide what is inside" : "Show what is inside";
+      c.addEventListener("click", (e) => {
+        // Must not also select the folder, and must not count towards the
+        // double-click-to-rename gesture: opening then closing a folder quickly
+        // is a completely ordinary thing to do and would otherwise pop a rename
+        // box (the same class of bug as pattern #30).
+        e.preventDefault();
+        e.stopPropagation();
+        lastFoldClick = { path: null, at: 0 };
+        twisty.onToggle();
+      });
+      b.append(c);
+    } else if (twisty === null) {
+      b.append(el("span", "pixwb-chevpad"));
+    }
     if (dot) {
       const d = el("span", "pixwb-dot");
       d.style.background = dot;
@@ -124,7 +178,7 @@ export function renderFolders(side, state, { onPick, onDropOn, onRenameFolder, o
     // The star is its own element so it can be orange while the label stays
     // readable grey - baking it into the label text made it one colour.
     if (star) b.append(el("span", "pixwb-favstar", "★"));
-    b.append(el("span", null, label));
+    b.append(el("span", "pixwb-foldlbl", label));
     if (count != null) b.append(el("span", "pixwb-cnt", String(count)));
     b.addEventListener("click", () => {
       // Double click to rename is handled HERE, counting clicks, rather than
@@ -249,17 +303,30 @@ export function renderFolders(side, state, { onPick, onDropOn, onRenameFolder, o
 
   addRow({
     label: "(loose files)", count: entries.filter((e) => !e.folder).length,
-    on: is("folder", ""), dot: "#5a5450",
+    on: is("folder", ""), dot: "#5a5450", twisty: null,
     title: "Workflows sitting outside any folder",
   }, { kind: "folder", value: "" }, "");
 
   for (const f of folders) {
+    // A folder inside a closed one is simply not drawn. `folders` already
+    // arrives parent-before-child (orderedFolders walks it as a tree), so the
+    // order and the indent stay exactly as they were - the only change is that
+    // some rows are left out.
+    if (!ancestorsOf(f).every((a) => open.has(a))) continue;
+
+    const kids = hasChildren(f, folders);
+    const isOpen = open.has(f);
     const row = addRow({
       label: f.split("/").pop(),
       count: perFolder.get(f) || 0,
       on: is("folder", f),
       dot: folderColor(f, meta),
       indent: f.split("/").length - 1,
+      // The NEXT state is decided here, from what is actually drawn - not from
+      // the stored list. A folder can be drawn open because it holds the
+      // selection while not being in the stored set at all, and a twisty that
+      // read the stored set would "open" a row that is already open.
+      twisty: kids ? { open: isOpen, onToggle: () => onToggleFolder?.(f, !isOpen) } : null,
       title: f + "\nDouble click to rename, right click for more",
     }, { kind: "folder", value: f }, f);
 

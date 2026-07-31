@@ -149,7 +149,7 @@ export const CANVAS_FEATURES = [
     title: "Workflows panel",
     icon: "/pixaroma/assets/icons/ui/workflow.svg",
     tagline: "A panel for finding, opening and organising the workflow files on your own computer, with a picture of each one.",
-    keywords: "workflow browser panel organise organize folder rename move delete duplicate cover thumbnail picture favourite favorite star search find open manage tidy tidying duplicates copies junk clean up sort list grid missing nodes red boxes unsaved keyboard shortcut arrow keys pixaroma workflows website site download example",
+    keywords: "workflow browser panel organise organize folder subfolder sub-folder rename move delete duplicate cover thumbnail picture favourite favorite star search find open manage tidy tidying duplicates copies junk clean up sort list grid missing nodes red boxes unsaved keyboard shortcut arrow keys pixaroma workflows website site download example text too small tiny bigger larger size zoom font readable collapse expand fold unfold hide show arrow twisty tree nested new folder inside",
     sections: [
       {
         heading: "What it does",
@@ -172,6 +172,7 @@ export const CANVAS_FEATURES = [
         heading: "The buttons along the top",
         defs: [
           ["Grid / List", "Picture cards, or a dense sortable list once you have hundreds."],
+          ["A A A", "How big everything in the panel is drawn: text, cards, covers and the folder list together. The small A is how the panel first shipped, the middle one is the normal size, and the large one is for a big screen or tired eyes. It is remembered."],
           ["Sort", "Recent, Name, or number of Nodes. It greys out in Recent and while searching, because those two already have an order of their own."],
           ["Open folder", "Opens the selected folder on your computer. On Windows it opens BEHIND the browser, so look in your taskbar for it."],
           ["Save open workflow here", "Saves whatever is on the canvas into the folder you have selected, so new work stops landing loose in the root."],
@@ -184,8 +185,10 @@ export const CANVAS_FEATURES = [
           "Rename a FOLDER by double clicking its name, or from its right-click menu.",
           "Drag a card onto a folder to move it. Select several first with Ctrl+click to move them together.",
           "Drag a folder up or down to reorder it. A line shows where it will land. Folders can be reordered within their level, not dragged inside each other.",
+          "A folder with folders inside it has a small arrow. Click the arrow to show or hide what is in it, and the panel remembers. They start closed, so a lot of folders no longer fills the whole column. Whichever folder you are looking at is always shown, whether or not you opened its parent yourself.",
+          "To make a folder INSIDE another one, right click the outer folder and choose New folder inside. The plain + New folder at the bottom of the list always makes one at the top level.",
           "Right click a workflow for everything at once: Open, favourite, Rename, Duplicate, Move to folder, Set or Remove cover, Reveal, Delete.",
-          "Right click a folder for Rename, Move up, Move down, Reveal and Delete. A folder is only deleted when it is empty, which is the safety net.",
+          "Right click a folder for New folder inside, Rename, Move up, Move down, Reveal and Delete. A folder is only deleted once it is EMPTY: move or delete what is in it first, sub-folders included. That refusal is the safety net, because there is no undo.",
         ],
       },
       {

@@ -29,6 +29,33 @@ import * as A from "./api.mjs";
 const CMD_ID = "Pixaroma.OpenWorkflowBrowser";
 const VIEW_SETTING = "Pixaroma.Workflows.View";
 const SORT_SETTING = "Pixaroma.Workflows.Sort";
+const DENSITY_SETTING = "Pixaroma.Workflows.Density";
+
+/**
+ * How big everything in the panel is drawn.
+ *
+ * One multiplier feeds --pixwb-k, which every size in css.mjs is expressed
+ * against, so text, cards, covers and the folder column all move together -
+ * the panel gets roomier rather than just wordier.
+ *
+ * "m" is the default because the panel shipped noticeably smaller than
+ * ComfyUI's own sidebar and people said so; "s" is exactly what it used to be,
+ * for anyone who wants the density back.
+ *
+ * The variable is set on the ROOT element, not the window, because the
+ * right-click menu and the toast are fixed-position children of <body> and
+ * would not inherit it from the panel.
+ */
+const DENSITY = {
+  s: { k: 1, label: "Small - the most workflows on screen at once" },
+  m: { k: 1.15, label: "Medium - the default" },
+  l: { k: 1.32, label: "Large - biggest text and biggest pictures" },
+};
+
+function applyDensity(which) {
+  const k = DENSITY[which]?.k ?? DENSITY.m.k;
+  try { document.documentElement.style.setProperty("--pixwb-k", String(k)); } catch { /* nothing to do */ }
+}
 
 // No "size": a workflow is a small json either way, so the biggest file tells
 // you nothing worth ordering by. Node count answers the question people
@@ -46,7 +73,7 @@ const S = {
   collections: [],
   issues: {},
   tidyRels: new Set(),
-  meta: { notes: {}, covers: {}, folderColors: {} },
+  meta: { notes: {}, covers: {}, folderColors: {}, folderExpanded: [] },
   favourites: new Set(),
   openPaths: [],
   byRel: new Map(),
@@ -56,6 +83,7 @@ const S = {
   query: "",
   view: "grid",
   sort: "recent",
+  density: "m",
   visible: [],
   accent: BRAND,
 };
@@ -216,6 +244,7 @@ function render() {
       onRenameFolder: startFolderRename,
       onFolderMenu: showFolderMenu,
       onReorderFolder: reorderFolderByDrop,
+      onToggleFolder: setFolderExpanded,
     });
     // "Needs tidying" gets its own screen rather than the card grid: three
     // different problems all wearing the same card told you which workflows
@@ -932,6 +961,11 @@ function startFolderRename(path, row) {
       const patch = {};
       const order = (S.meta.folderOrder || []).map(reparent);
       if (order.length) patch.folderOrder = order;
+      // Open/closed is keyed by folder path too, so without this the renamed
+      // folder and everything under it snapped shut - and the branch the user
+      // was looking at closed underneath them mid-rename.
+      const expanded = (S.meta.folderExpanded || []).map(reparent);
+      if (expanded.length) patch.folderExpanded = expanded;
       const colours = {};
       for (const [k, v] of Object.entries(S.meta.folderColors || {})) {
         const moved = reparent(k);
@@ -975,6 +1009,62 @@ function commitSiblingOrder(sibs, reordered) {
   });
 }
 
+/* Open/closed writes are chained rather than fired in parallel. Each one sends
+ * the WHOLE list (list sections replace, they do not merge), so two in flight
+ * at once can land out of order and leave the folder in the state of the
+ * earlier click. Chaining costs nothing at this rate and removes the race. */
+let expandWrites = Promise.resolve();
+
+/**
+ * Open or close one folder and remember it.
+ *
+ * Deliberately NOT routed through guard(): guard refetches the whole index and
+ * toasts on success, and a twisty is navigation, not an edit. The column
+ * repaints immediately from local state and the write follows behind it, so
+ * the arrow feels instant even on a slow disk.
+ */
+function setFolderExpanded(path, open) {
+  const current = new Set(S.meta.folderExpanded || []);
+  if (open === current.has(path)) return expandWrites;
+
+  const before = [...current];
+  if (open) current.add(path); else current.delete(path);
+  const next = [...current];
+  S.meta.folderExpanded = next;
+
+  // Closing the branch you are LOOKING at would otherwise fight itself: the
+  // selected folder's ancestors are force-opened at render time so the
+  // selection is always reachable, so the row would snap straight back open.
+  // Closing it means "show me this folder instead", so the selection comes up
+  // to the folder that was closed.
+  if (!open && S.sel.kind === "folder" && typeof S.sel.value === "string"
+      && S.sel.value.startsWith(path + "/")) {
+    S.sel = { kind: "folder", value: path };
+    S.selected = new Set();
+    S.kbdRel = null;
+  }
+  render();
+
+  expandWrites = expandWrites.then(async () => {
+    try {
+      const res = await A.saveMeta({ folderExpanded: next });
+      // The sidecar ignores sections it does not know about, which is exactly
+      // how folderOrder was silently swallowed when IT was new. Test the SHAPE,
+      // not the length: an up-to-date server always answers with an array, and
+      // an empty one is a perfectly ordinary answer (everything closed), while
+      // an older server leaves the key out altogether.
+      if (!Array.isArray(res?.meta?.folderExpanded)) {
+        throw new Error("Restart ComfyUI - remembering open folders needs the newer server files.");
+      }
+    } catch (err) {
+      S.meta.folderExpanded = before;
+      render();
+      S.win?.toast(err?.message || "Could not remember that folder.");
+    }
+  });
+  return expandWrites;
+}
+
 /** Move a folder one place among its OWN siblings. */
 function moveFolder(path, delta) {
   const sibs = siblingsOf(path, S.folders, S.meta.folderOrder);
@@ -1012,6 +1102,7 @@ function showFolderMenu(path, ev) {
   const at = sibs.indexOf(path);
   const rowEl = ev.currentTarget;
   openContextMenu(ev.clientX, ev.clientY, [
+    { label: "New folder inside", fn: () => createFolder(path) },
     { label: "Rename", fn: () => startFolderRename(path, rowEl) },
     { label: "Move up", fn: () => moveFolder(path, -1), disabled: at <= 0 },
     { label: "Move down", fn: () => moveFolder(path, 1), disabled: at < 0 || at >= sibs.length - 1 },
@@ -1019,31 +1110,63 @@ function showFolderMenu(path, ev) {
     { label: "Reveal in explorer", fn: () => guard(() => A.reveal(path), "Opened the folder - look in your taskbar") },
     null,
     {
+      // Marked as the destructive one. The menu has supported `danger` all
+      // along and this entry never set it, so the only irreversible thing in
+      // the list looked exactly like "Move up".
       label: "Delete folder",
+      danger: true,
       fn: () => guard(async () => {
         const res = await A.folderAction({ action: "delete", path });
         // The server refuses a folder that still holds anything - that refusal
         // IS the safety net, since there is no undo.
         if (!res.ok) throw new Error(res.message || "Could not delete that folder.");
         if (S.sel.kind === "folder" && S.sel.value === path) S.sel = { kind: "all" };
+        // Drop its open/closed record too, or a folder later recreated with the
+        // same name would come back open for no reason anyone could explain.
+        const kept = (S.meta.folderExpanded || [])
+          .filter((p) => p !== path && !p.startsWith(path + "/"));
+        if (kept.length !== (S.meta.folderExpanded || []).length) {
+          S.meta.folderExpanded = kept;
+          try { await A.saveMeta({ folderExpanded: kept }); } catch { /* cosmetic only */ }
+        }
       }, "Folder deleted"),
     },
   ]);
 }
 
+/**
+ * Make a folder, optionally inside another one.
+ *
+ * `parent` is "" for a top-level folder. The server's create already calls
+ * os.makedirs and validates every segment, so a nested path needs nothing on
+ * that side - only a way to ask for one.
+ */
+function createFolder(parent) {
+  ask({
+    title: parent ? "New folder inside" : "New folder",
+    message: parent ? `It is created inside ${parent}.` : "It is created inside the workflows folder.",
+    value: "",
+    okLabel: "Create",
+  }).then((nameRaw) => {
+    if (!nameRaw) return;
+    const clean = cleanName(nameRaw);
+    const bad = nameProblem(clean);
+    if (bad) { S.win.toast(bad); return; }
+    const path = parent ? `${parent}/${clean}` : clean;
+    guard(async () => {
+      const res = await A.folderAction({ action: "create", path });
+      if (!res.ok) throw new Error(res.message || "Could not create that folder.");
+      // Open the parent, or the folder that was just asked for lands inside a
+      // closed branch and reads as though nothing happened. Written through the
+      // same saver as the twisty so the choice sticks.
+      if (parent) await setFolderExpanded(parent, true);
+    }, "Folder created");
+  });
+}
+
 function onPickFolder(pick) {
   if (pick.kind === "newfolder") {
-    ask({ title: "New folder", message: "It is created inside the workflows folder.", value: "", okLabel: "Create" })
-      .then((nameRaw) => {
-        if (!nameRaw) return;
-        const clean = cleanName(nameRaw);
-        const bad = nameProblem(clean);
-        if (bad) { S.win.toast(bad); return; }
-        guard(async () => {
-          const res = await A.folderAction({ action: "create", path: clean });
-          if (!res.ok) throw new Error(res.message || "Could not create that folder.");
-        }, "Folder created");
-      });
+    createFolder("");
     return;
   }
   S.sel = pick;
@@ -1094,6 +1217,25 @@ function buildBar(bar) {
     seg.append(b);
   }
   bar.append(seg);
+
+  // Text and picture size. Same segmented idiom as Grid|List, so it reads as
+  // part of the panel; each A is drawn at the size it selects.
+  const sizes = el("div", "pixwb-seg pixwb-sizeseg");
+  for (const id of ["s", "m", "l"]) {
+    const b = el("button", S.density === id ? "on" : "", "A");
+    b.type = "button";
+    b.dataset.k = id;
+    b.title = "Size of everything in this panel: " + DENSITY[id].label;
+    b.addEventListener("click", () => {
+      S.density = id;
+      applyDensity(id);
+      try { app.ui.settings.setSettingValueAsync(DENSITY_SETTING, id); } catch { /* cosmetic */ }
+      buildBar(bar);
+      render();
+    });
+    sizes.append(b);
+  }
+  bar.append(sizes);
 
   const sort = el("button", "pixwb-tbtn", "Sort: " + SORT_LABELS[S.sort]);
   sort.type = "button";
@@ -1415,7 +1557,12 @@ app.registerExtension({
       S.view = app.ui.settings.getSettingValue(VIEW_SETTING) || "grid";
       const savedSort = app.ui.settings.getSettingValue(SORT_SETTING);
       S.sort = SORT_LABELS[savedSort] ? savedSort : "recent";
+      const savedDensity = app.ui.settings.getSettingValue(DENSITY_SETTING);
+      S.density = DENSITY[savedDensity] ? savedDensity : "m";
     } catch { /* unregistered settings, absent on a first run */ }
+    // Outside the try: an unreadable setting must still leave the panel at a
+    // sane size rather than at whatever --pixwb-k happened to be.
+    applyDensity(S.density);
     mountToolbarButton();
     installOutputCoverCapture();
   },

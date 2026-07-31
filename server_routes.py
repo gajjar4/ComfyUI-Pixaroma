@@ -2409,7 +2409,7 @@ async def api_workflows_index(request):
 # "Move up" look like it did nothing at all. Add the key here as well as at the
 # call site.
 _WF_META_DICTS = ("notes", "covers", "folderColors")
-_WF_META_LISTS = ("folderOrder",)
+_WF_META_LISTS = ("folderOrder", "folderExpanded")
 
 # Every write is read-modify-write on one small file. Without this, a folder
 # reorder and a note autosave landing together could each read before the other
