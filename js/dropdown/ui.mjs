@@ -65,7 +65,7 @@ export function injectCSS() {
   .pix-dd-arrow.dim:hover{ filter:none; }
 
   .pix-dd-field{
-    flex:1 1 auto; min-width:0; height:${ROW_H - 6}px; box-sizing:border-box;
+    flex:1 1 auto; min-width:0; height:${ROW_H - 4}px; box-sizing:border-box;
     display:flex; align-items:center; justify-content:space-between; gap:5px;
     background:#1d1d1d; border:1px solid #444; border-radius:4px;
     padding:0 6px; cursor:pointer;
@@ -73,8 +73,10 @@ export function injectCSS() {
   .pix-dd-field:hover{ border-color:${ACC}; }
   .pix-dd-field.open{ border-color:${ACC}; }
   .pix-dd-name{
+    /* 12px, matching Show Text's readout and the native node widgets. At 11px
+       this row read visibly smaller than every node beside it. */
     flex:1 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis;
-    white-space:nowrap; color:#ddd; font-size:11px;
+    white-space:nowrap; color:#ddd; font-size:12px;
   }
   .pix-dd-name.empty{ color:#777; font-style:italic; }
   .pix-dd-caret{ flex:none; color:${ACC}; font-size:8px; }
@@ -100,15 +102,15 @@ export function injectCSS() {
     flex:none; width:16px; height:16px; padding:0; box-sizing:border-box;
     display:flex; align-items:center; justify-content:center;
     border-radius:3px; border:1px solid #4a4a4a; background:none; color:#999;
-    font:10px 'Segoe UI',sans-serif; cursor:pointer; line-height:1;
+    font:11px 'Segoe UI',sans-serif; cursor:pointer; line-height:1;
   }
   .pix-dd-mode:hover{ border-color:${ACC}; color:#ddd; }
   .pix-dd-mode.on{ background:${ACC}; border-color:${ACC}; color:#fff; }
   .pix-dd-mode.on:hover{ filter:brightness(1.12); color:#fff; }
 
   .pix-dd-type{
-    flex:none; color:${ACC}; font-size:10px; letter-spacing:.02em;
-    max-width:46px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+    flex:none; color:${ACC}; font-size:11px; letter-spacing:.02em;
+    max-width:50px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
   }
 
   /* ── The option popup (lives on document.body, outside the node) ────────── */
@@ -215,7 +217,9 @@ export function buildRow(node, onOpenSettings) {
   const type = document.createElement("span");
   type.className = "pix-dd-type";
 
-  row.append(prev, field, next, gear, mode, type);
+  // Order: step arrows, the list, the run-mode badge, then settings, then the
+  // type word beside its dot. The gear sits after the badge by request.
+  row.append(prev, field, next, mode, gear, type);
 
   node._pixDdRow = row;
   node._pixDdParts = { prev, field, name, next, gear, mode, type };

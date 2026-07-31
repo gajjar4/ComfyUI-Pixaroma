@@ -82,9 +82,13 @@ function injectCSS() {
 
     .pix-ddp-list { background:rgba(0,0,0,0.28); border-radius:6px; padding:4px;
       display:flex; flex-direction:column; gap:3px; }
+    /* NO highlight for the currently-picked row. It used to carry an accent
+       wash, which read as "this row is special" without ever saying why - the
+       node face and the open list already show which entry is active, so the
+       panel was inventing a third place to say it. The panel BUILDS the list;
+       the node PICKS from it. */
     .pix-ddp-row { display:flex; align-items:flex-start; gap:6px; padding:4px;
       border-radius:5px; background:rgba(255,255,255,0.02); }
-    .pix-ddp-row.sel { background:color-mix(in srgb, var(--acc,${BRAND}) 14%, transparent); }
     .pix-ddp-row.drop-above { box-shadow:inset 0 2px 0 var(--acc,${BRAND}); }
     .pix-ddp-row.drop-below { box-shadow:inset 0 -2px 0 var(--acc,${BRAND}); }
     .pix-ddp-row .grip { color:var(--acc,${BRAND}); cursor:grab; flex:none; font-size:12px;
@@ -402,8 +406,7 @@ export function openDropdownPanel(node, onChange) {
     }
 
     st.options.forEach((o, i) => {
-      const row = el("div", "pix-ddp-row" + (i === st.index ? " sel" : ""));
-      row.title = i === st.index ? "This is the entry the node is currently sending" : "";
+      const row = el("div", "pix-ddp-row");
 
       // The GRIP is the draggable element, not the row. Putting draggable on the
       // row makes e.target the row, so the guard below never matches, reorder
@@ -458,12 +461,6 @@ export function openDropdownPanel(node, onChange) {
         warn.classList.toggle("hide", ok);
         renderTypes();
         fire();
-      });
-
-      // Clicking a row selects it, so the panel doubles as the picker.
-      row.addEventListener("pointerdown", (e) => {
-        if (e.target.closest("input, textarea, button, .grip")) return;
-        commit({ index: i });
       });
 
       ins.addEventListener("click", () => {
