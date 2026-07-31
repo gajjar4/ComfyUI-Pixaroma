@@ -23,9 +23,9 @@ export const DROPDOWN_HELP = {
       heading: "Setting it up",
       bullets: [
         "Press the gear on the node, or right click it, to open the settings.",
-        "Press `Add option` and fill in a name and the value it stands for.",
+        "An empty list offers `Add your first entry`. Fill in a short name and the value it stands for.",
         "The value box grows as you type, so a long sentence or several lines are fine.",
-        "Drag the `⋮⋮` grip to reorder. The `+` on a row adds another one below it.",
+        "The `+` on a row adds another one below it, the `✕` removes that row, and the `⋮⋮` grip drags it up or down.",
         "Close the settings. Your list is saved inside the workflow.",
       ],
     },
@@ -54,15 +54,16 @@ export const DROPDOWN_HELP = {
     {
       heading: "Changing entry on its own each run",
       body:
-        "Under `EACH TIME YOU RUN` in the settings there are three small buttons. They decide "
-        + "which entry the node sends when you press Run:",
+        "The small letter on the node says which entry it will send when you press Run, and you "
+        + "can click it to change: `F`, then `I`, then `R`, then back again. The same three "
+        + "buttons are in the settings under `EACH TIME YOU RUN`.",
       defs: [
         ["`F`  Fixed", "Always the entry you picked. This is the default, and the node stays completely predictable."],
         ["`I`  In order", "The next entry down the list on each run, going back to the top after the last one. Good for working through a list of looks without touching anything."],
         ["`R`  Random", "Any entry each run, never the same one twice in a row."],
       ],
       bullets: [
-        "When it is not on Fixed, a small `I` or `R` badge appears on the node, and the name shown updates to whatever just ran.",
+        "`F` is drawn quietly since it is the normal way to work. `I` and `R` are filled in, because those change the value on you, and the name on the node then updates to whatever just ran.",
         "Picking an entry by hand takes over again: the next run starts from what you chose.",
         "Exporting or saving your workflow does not move an in-order list along. Only a real run does.",
         "The position starts again from your chosen entry when you reload the page, which is also why running a workflow never marks it as changed.",
