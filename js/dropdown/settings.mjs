@@ -17,6 +17,8 @@ let _panel = null;
 let _panelNode = null;
 let _onChange = null;
 let _cpHandle = null;   // an open colour picker, so the panel can close it too
+let _followRaf = null;  // the canvas-follow loop, see startFollowing()
+let _userMoved = false; // has the user dragged the panel somewhere deliberately?
 
 function el(tag, cls, text) {
   const e = document.createElement(tag);
@@ -181,6 +183,45 @@ function placeBeside(panel, rect) {
   panel.style.top = top + "px";
 }
 
+/**
+ * Keep the panel beside its node while the canvas moves.
+ *
+ * Without this the panel is written to a fixed screen position ONCE and then
+ * stays there: zoom or pan and it is stranded somewhere else entirely, which
+ * with two Dropdowns on the canvas leaves no way to tell which one it is
+ * editing.
+ *
+ * A rAF loop rather than an event: LiteGraph emits nothing for a transform
+ * change, and zoom has to be followed smoothly rather than caught up with 350ms
+ * later. It compares three numbers per frame and returns, so the idle cost is
+ * nil, and it only runs while a panel is open.
+ *
+ * Stops following the moment the user DRAGS the panel: at that point they have
+ * put it somewhere on purpose and moving it out from under them would be worse
+ * than leaving it behind.
+ */
+function startFollowing(panel, node) {
+  let lastScale = null, lastX = null, lastY = null;
+  const tick = () => {
+    if (!_panel || _panel !== panel || !panel.isConnected) { _followRaf = null; return; }
+    _followRaf = requestAnimationFrame(tick);
+    if (_userMoved) return;
+    const ds = app.canvas?.ds;
+    if (!ds) return;
+    const sc = ds.scale || 1;
+    const ox = ds.offset?.[0] ?? 0, oy = ds.offset?.[1] ?? 0;
+    if (sc === lastScale && ox === lastX && oy === lastY) return;
+    lastScale = sc; lastX = ox; lastY = oy;
+    placeBeside(panel, getNodeScreenRect(node));
+  };
+  _followRaf = requestAnimationFrame(tick);
+}
+
+function stopFollowing() {
+  if (_followRaf != null) cancelAnimationFrame(_followRaf);
+  _followRaf = null;
+}
+
 function makeDraggable(panel, handle) {
   handle.addEventListener("pointerdown", (e) => {
     if (e.target.closest(".x")) return;
@@ -189,6 +230,8 @@ function makeDraggable(panel, handle) {
     const ox = e.clientX - r.left, oy = e.clientY - r.top;
     const move = (ev) => {
       if (!panel.isConnected) return up();
+      // From here the panel is where the USER put it, so stop following.
+      _userMoved = true;
       panel.style.left = Math.max(0, Math.min(window.innerWidth - panel.offsetWidth, ev.clientX - ox)) + "px";
       panel.style.top = Math.max(0, Math.min(window.innerHeight - panel.offsetHeight, ev.clientY - oy)) + "px";
     };
@@ -217,6 +260,8 @@ function escClose(e) {
 }
 
 export function closeDropdownPanel() {
+  stopFollowing();
+  _userMoved = false;
   try { _cpHandle?.close(); } catch {}
   _cpHandle = null;
   if (_panel) { try { _panel.remove(); } catch {} }
@@ -617,6 +662,7 @@ export function openDropdownPanel(node, onChange) {
   renderList();
   placeBeside(panel, getNodeScreenRect(node));
   makeDraggable(panel, title);
+  startFollowing(panel, node);
 
   // Deferred, or the click that opened the panel immediately closes it.
   setTimeout(() => {
