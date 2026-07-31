@@ -51,6 +51,7 @@ const XY_HELP = {
       heading: "Examples: what to pick for what you want",
       body:
         "Two things to hold on to and the rest follows. The picker chooses WHICH setting changes. The value box under it chooses WHAT that setting becomes, and you get one square per value, not all of them at once.\n\n"
+        + "So X and Y are how many settings can change at once, not how many things you can compare. One axis with 5 ticks gives you 5 squares, and you can go up to 100 on an axis. Use the second axis when you want a SECOND setting changing as well.\n\n"
         + "Two habits worth having. Watch the counter above the buttons, because it tells you how many images you just asked for and 4 across by 3 down is 12 runs. And leave Lock seed on unless you are plotting the seed itself, or two things change at once and you cannot tell which one did it.",
       defs: [
         ["Which sampler suits this image?",
@@ -59,8 +60,8 @@ const XY_HELP = {
           "X: `steps`, `Range`, Start 10, End 40, Steps 4. That gives 10, 20, 30, 40, and you can see where it stops improving."],
         ["Steps against cfg, all at once",
           "X: `steps` (try 15, 25, 35). Y: `cfg` (try 3, 5, 7). Nine squares showing every pairing, which is far quicker than nine separate runs."],
-        ["Compare two LoRAs fairly",
-          "Keep ONE row switched on in the LoRA loader. Pick `LoRA 1 file` and tick both LoRAs. Two squares, one LoRA in each, nothing else in the way. If a second row is still on, an orange line under the picker will name it."],
+        ["Compare 3 (or 10) LoRAs fairly",
+          "Keep ONE row switched on in the LoRA loader. Pick `LoRA 1 file` and tick as many LoRAs as you want to see: 3 ticks gives 3 squares, one LoRA in each and nothing else in the way. If a second row is still switched on, an orange line under the picker will name it."],
         ["What weight should this LoRA be?",
           "Pick `LoRA 1 strength` and enter `0, 0.4, 0.7, 1` as a list. The `0` square is your before shot, since a LoRA at 0 does nothing."],
         ["Two LoRAs together, every mix",
