@@ -199,8 +199,8 @@ export function buildRow(node, onOpenSettings) {
     const t = e.target;
     if (t.closest(".pix-dd-prev")) { e.stopPropagation(); step(node, -1); return; }
     if (t.closest(".pix-dd-next")) { e.stopPropagation(); step(node, +1); return; }
-    // The gear must close the popup itself: _outside now skips this row, so it
-    // will not do it for us.
+    // The gear closes the popup itself. Only the FIELD is exempt from the
+    // outside-click handler, so nothing else would.
     if (t.closest(".pix-dd-gear")) { e.stopPropagation(); closePopup(); onOpenSettings?.(node); return; }
     if (t.closest(".pix-dd-field")) {
       e.stopPropagation();
@@ -282,8 +282,8 @@ let _popNode = null;
 export function closePopup() {
   if (_pop) {
     _pop.remove();
-    document.removeEventListener("pointerdown", _outside, true);
-    document.removeEventListener("wheel", _outside, true);
+    document.removeEventListener("pointerdown", _outsidePointer, true);
+    document.removeEventListener("wheel", _outsideWheel, true);
     document.removeEventListener("keydown", _onKey, true);
   }
   _popNode?._pixDdParts?.field?.classList?.remove("open");
@@ -295,16 +295,33 @@ export function closePopupFor(node) {
   if (_popNode === node) closePopup();
 }
 
-function _outside(e) {
+// A CLICK anywhere that is not the list itself or the field that owns it.
+//
+// Only the FIELD is exempt, NOT the whole row. This handler runs in the CAPTURE
+// phase, so it fires before the row's own pointerdown: exempting the field is
+// what lets a second click on it toggle the list shut instead of this closing it
+// and the row handler instantly reopening it (which looked like the click doing
+// nothing). Exempting the whole ROW went too far - the type label, the gaps
+// between controls and the padding reserved for the output dot are all genuinely
+// outside, and the row's handler has no branch for them, so clicking there left
+// the list stuck open.
+function _outsidePointer(e) {
   if (!_pop) return;
-  // MUST gate on containment or scrolling the option list closes the popup.
   if (_pop.contains(e.target)) return;
-  // The OWNING row is not "outside" either. This handler runs in the CAPTURE
-  // phase, so without this it fires before the row's own pointerdown: clicking
-  // the field a second time closed the popup here and the row handler then
-  // immediately reopened it, which looks exactly like the click doing nothing.
-  // Leaving the row alone lets its own handler decide (toggle, step, or gear).
-  if (_popNode?._pixDdRow?.contains(e.target)) return;
+  if (_popNode?._pixDdParts?.field?.contains(e.target)) return;
+  closePopup();
+}
+
+// A WHEEL anywhere that is not the list itself.
+//
+// Deliberately has NO field/row exemption. The popup is position:fixed and its
+// coordinates are written once, from the field's rect, so anything that moves
+// the canvas leaves it stranded beside a node that is no longer there. A wheel
+// over the row zooms the canvas (the zoom passthrough), so the row must close it
+// too - only scrolling the LIST is exempt, or the list could not be scrolled.
+function _outsideWheel(e) {
+  if (!_pop) return;
+  if (_pop.contains(e.target)) return;
   closePopup();
 }
 
@@ -377,8 +394,8 @@ export function openPopup(node) {
 
   // Deferred, or the click that opened it immediately closes it.
   setTimeout(() => {
-    document.addEventListener("pointerdown", _outside, true);
-    document.addEventListener("wheel", _outside, true);
+    document.addEventListener("pointerdown", _outsidePointer, true);
+    document.addEventListener("wheel", _outsideWheel, true);
     document.addEventListener("keydown", _onKey, true);
   }, 0);
 }
