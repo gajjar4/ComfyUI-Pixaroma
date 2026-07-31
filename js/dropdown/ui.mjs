@@ -21,7 +21,9 @@
 import { isVueNodes, applyAdaptiveCanvasOnly } from "../shared/nodes2.mjs";
 import { installCanvasZoomPassthrough } from "../shared/canvas_zoom.mjs";
 import { installNodeAccent, accentOf, ACC } from "../shared/node_settings.mjs";
-import { ROW_H, MIN_W, BODY_PAD, readState, writeState, selectedOption } from "./core.mjs";
+import {
+  ROW_H, MIN_W, BODY_PAD, readState, writeState, shownIndex, MODE_LETTERS, MODE_LABELS,
+} from "./core.mjs";
 import { SOCKET_LABELS, previewText } from "./coerce.mjs";
 
 // What Classic inserts above the row: node.widgets_start_y (2, set in index.js)
@@ -49,7 +51,10 @@ export function injectCSS() {
     height:${ROW_H}px; min-height:${ROW_H}px; box-sizing:border-box;
     display:flex; align-items:center; gap:5px;
     font:12px 'Segoe UI',sans-serif; user-select:none;
-    padding-right:16px;   /* the output dot lands here */
+    /* The output dot sits on the node's right EDGE, which is already outboard
+       of this row (Classic insets a DOM widget by widget.margin). Reserving
+       another 16px here put a visible hole between the type word and the dot. */
+    padding-right:2px;
   }
   .pix-dd-arrow{
     flex:none; width:13px; text-align:center; cursor:pointer;
@@ -74,11 +79,28 @@ export function injectCSS() {
   .pix-dd-name.empty{ color:#777; font-style:italic; }
   .pix-dd-caret{ flex:none; color:${ACC}; font-size:8px; }
 
+  /* The bundled gear SVG as a mask, so it matches the ⚙ on the node selection
+     toolbar instead of being an emoji that renders differently per platform. */
   .pix-dd-gear{
-    flex:none; width:15px; text-align:center; cursor:pointer;
-    color:#aaa; font-size:12px; line-height:1; background:none; border:none; padding:0;
+    flex:none; width:14px; height:14px; padding:0; margin:0;
+    background:none; border:none; cursor:pointer; line-height:0;
   }
-  .pix-dd-gear:hover{ color:${ACC}; }
+  .pix-dd-gear::before{
+    content:""; display:block; width:100%; height:100%; background:#aaa;
+    -webkit-mask:url("/pixaroma/assets/icons/note/gear.svg") center/contain no-repeat;
+    mask:url("/pixaroma/assets/icons/note/gear.svg") center/contain no-repeat;
+  }
+  .pix-dd-gear:hover::before{ background:${ACC}; }
+
+  /* Shown ONLY when the run mode is not Fixed. A node that will pick a
+     different entry on the next Run has to say so somewhere, and the default
+     needs no badge. */
+  .pix-dd-mode{
+    flex:none; min-width:15px; height:15px; padding:0 3px; box-sizing:border-box;
+    border-radius:3px; background:${ACC}; color:#fff;
+    font:10px/15px 'Segoe UI',sans-serif; text-align:center;
+  }
+  .pix-dd-mode.hide{ display:none; }
 
   .pix-dd-type{
     flex:none; color:${ACC}; font-size:10px; letter-spacing:.02em;
@@ -181,16 +203,18 @@ export function buildRow(node, onOpenSettings) {
 
   const gear = document.createElement("button");
   gear.className = "pix-dd-gear";
-  gear.textContent = "⚙";
   gear.title = "Edit the list and what it sends out";
+
+  const mode = document.createElement("span");
+  mode.className = "pix-dd-mode hide";
 
   const type = document.createElement("span");
   type.className = "pix-dd-type";
 
-  row.append(prev, field, next, gear, type);
+  row.append(prev, field, next, gear, mode, type);
 
   node._pixDdRow = row;
-  node._pixDdParts = { prev, field, name, next, gear, type };
+  node._pixDdParts = { prev, field, name, next, gear, mode, type };
 
   // ONE delegated listener. Every branch stops propagation so the click does
   // not reach the canvas and start a node drag.
@@ -242,7 +266,10 @@ export function renderRow(node) {
   const parts = node._pixDdParts;
   if (!parts) return;
   const st = readState(node);
-  const opt = st.options[st.index];
+  // The pick that is queued or last ran, not blindly the stored one: in Random
+  // or In-order the node would otherwise keep showing an entry it is not going
+  // to send.
+  const opt = st.options[shownIndex(node)];
 
   if (!st.options.length) {
     parts.name.textContent = "No options yet, press the gear";
@@ -253,6 +280,11 @@ export function renderRow(node) {
     parts.name.classList.remove("empty");
     parts.field.title = opt ? `Sends: ${previewText(opt.value, st.type)}` : "";
   }
+
+  const isFixed = st.mode === "fixed";
+  parts.mode.textContent = MODE_LETTERS[st.mode] || "";
+  parts.mode.title = MODE_LABELS[st.mode] || "";
+  parts.mode.classList.toggle("hide", isFixed);
 
   parts.type.textContent = SOCKET_LABELS[st.type] || st.type;
   parts.type.title = `This node sends ${SOCKET_LABELS[st.type]}. Change it in the settings.`;
@@ -267,7 +299,14 @@ export function step(node, delta) {
   const st = readState(node);
   if (st.options.length < 2) return;
   const n = st.options.length;
-  writeState(node, { index: ((st.index + delta) % n + n) % n });
+  // Step from what the node is SHOWING. In Random or In-order that is the
+  // queued/last-run pick, not the stored one, so the arrow moves from where the
+  // user's eye is.
+  writeState(node, { index: ((shownIndex(node) + delta) % n + n) % n });
+  // A pick by hand wins over any sequence in flight, or the next Run would
+  // ignore what was just chosen.
+  node._pixDdPending = null;
+  node._pixDdCursor = null;
   renderRow(node);
   closePopup();
   node.setDirtyCanvas?.(true, true);
@@ -369,6 +408,9 @@ export function openPopup(node) {
       item.addEventListener("pointerdown", (e) => {
         e.stopPropagation();
         writeState(node, { index: i });
+        // Same rule as the arrows: choosing by hand overrides a sequence.
+        node._pixDdPending = null;
+        node._pixDdCursor = null;
         renderRow(node);
         closePopup();
         node.setDirtyCanvas?.(true, true);

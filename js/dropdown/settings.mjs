@@ -9,6 +9,7 @@ import { isVueNodes } from "../shared/nodes2.mjs";
 import { createAccentSection, BRAND } from "../shared/node_settings.mjs";
 import {
   readState, writeState, accentOf, syncOutput, dropIncompatibleLinks,
+  MODES, MODE_LETTERS, MODE_LABELS,
 } from "./core.mjs";
 import { TYPES, TYPE_LABELS, readable, previewText } from "./coerce.mjs";
 
@@ -54,6 +55,13 @@ function injectCSS() {
     .pix-ddp-seg button:hover { border-color:var(--acc,${BRAND}); color:#ddd; }
     .pix-ddp-seg button.on { background:var(--acc,${BRAND}); border-color:var(--acc,${BRAND}); color:#fff; }
 
+    .pix-ddp-modes { display:flex; gap:5px; }
+    .pix-ddp-modes button { width:34px; text-align:center; padding:6px 0; border-radius:5px;
+      background:#1d1d1d; border:1px solid #444; color:#aaa;
+      font:12px 'Segoe UI',sans-serif; cursor:pointer; }
+    .pix-ddp-modes button:hover { border-color:var(--acc,#f66744); color:#ddd; }
+    .pix-ddp-modes button.on { background:var(--acc,#f66744); border-color:var(--acc,#f66744); color:#fff; }
+
     .pix-ddp-head { display:flex; align-items:center; justify-content:space-between; }
     .pix-ddp-count { font-size:11px; color:#666; }
 
@@ -80,16 +88,26 @@ function injectCSS() {
       padding:5px 7px; outline:none; resize:none; overflow:hidden; line-height:1.45; }
     .pix-ddp-vl:focus { border-color:var(--acc,${BRAND}); }
     .pix-ddp-vl.bad { border-color:#a8552f; }
-    .pix-ddp-warn { flex:none; width:14px; text-align:center; padding-top:5px;
+    .pix-ddp-warn { flex:none; width:13px; text-align:center; padding-top:5px;
       color:#e0703a; font-size:11px; cursor:default; }
-    .pix-ddp-warn.hide { visibility:hidden; }
-    .pix-ddp-ins, .pix-ddp-del { flex:none; width:15px; text-align:center; padding-top:5px;
-      cursor:pointer; font-size:12px; line-height:1; background:none; border:none; }
-    .pix-ddp-ins { color:var(--acc,${BRAND}); }
-    .pix-ddp-ins:hover { filter:brightness(1.3); }
-    .pix-ddp-del { color:#777; }
+    .pix-ddp-warn.hide { display:none; }
+    /* The + and the x sit tight against the value box: the gap that used to be
+       here was dead space the value field could use. The + is a filled chip so
+       it reads as the primary of the two and is not dwarfed by the x. */
+    .pix-ddp-ins { flex:none; width:19px; height:19px; margin-top:3px; padding:0;
+      border-radius:4px; border:1px solid transparent;
+      background:color-mix(in srgb, var(--acc,${BRAND}) 22%, transparent);
+      color:var(--acc,${BRAND}); font:15px/1 'Segoe UI',sans-serif; cursor:pointer; }
+    .pix-ddp-ins:hover { background:var(--acc,${BRAND}); color:#fff; }
+    .pix-ddp-del { flex:none; width:15px; text-align:center; padding:5px 0 0;
+      cursor:pointer; font-size:12px; line-height:1; background:none; border:none; color:#777; }
     .pix-ddp-del:hover { color:#e0604a; }
-    .pix-ddp-empty { padding:14px 10px; text-align:center; color:#777; font-size:11px; font-style:italic; }
+
+    .pix-ddp-empty { padding:14px 10px; text-align:center; }
+    .pix-ddp-empty p { margin:0 0 10px; color:#777; font-size:11px; font-style:italic; }
+    .pix-ddp-emptybtn { background:var(--acc,${BRAND}); color:#fff; border:0; border-radius:5px;
+      padding:7px 16px; font:12px 'Segoe UI',sans-serif; cursor:pointer; }
+    .pix-ddp-emptybtn:hover { filter:brightness(1.1); }
 
     .pix-ddp-f { display:flex; gap:8px; flex-wrap:wrap; padding:10px 12px; border-top:1px solid #333; background:#1f1f1f; }
     .pix-ddp-btn { border:1px solid rgba(255,255,255,0.14); background:rgba(255,255,255,0.04); color:rgba(255,255,255,0.65);
@@ -228,6 +246,14 @@ export function openDropdownPanel(node, onChange) {
   typeSec.appendChild(typeHint);
 
   // ── The list ────────────────────────────────────────────────────────────
+  // ── What happens on each run ─────────────────────────────────────────────
+  const runSec = el("div");
+  runSec.append(el("div", "pix-ddp-lab", "EACH TIME YOU RUN"));
+  const modeRow = el("div", "pix-ddp-modes");
+  runSec.appendChild(modeRow);
+  const modeHint = el("div", "pix-ddp-sub");
+  runSec.appendChild(modeHint);
+
   const listSec = el("div");
   const head = el("div", "pix-ddp-head");
   head.append(el("span", "pix-ddp-lab", "THE LIST"));
@@ -242,7 +268,7 @@ export function openDropdownPanel(node, onChange) {
   const list = el("div", "pix-ddp-list");
   listSec.appendChild(list);
 
-  body.append(typeSec, listSec);
+  body.append(typeSec, runSec, listSec);
 
   // The accent section is the shared one, so this node's colour behaves exactly
   // like every other Pixaroma node's.
@@ -255,6 +281,34 @@ export function openDropdownPanel(node, onChange) {
 
   // ── Render ──────────────────────────────────────────────────────────────
   let dragFrom = -1;
+
+  function renderModes() {
+    const st = readState(node);
+    modeRow.textContent = "";
+    for (const m of MODES) {
+      const b = el("button", st.mode === m ? "on" : null, MODE_LETTERS[m]);
+      b.title = MODE_LABELS[m];
+      b.addEventListener("click", () => {
+        if (readState(node).mode === m) return;
+        writeState(node, { mode: m });
+        // Drop any held or spent position, so switching mode starts cleanly
+        // from the entry the node is showing rather than mid-sequence.
+        node._pixDdPending = null;
+        node._pixDdCursor = null;
+        renderModes();
+        fire();
+      });
+      modeRow.appendChild(b);
+    }
+    const n = readState(node).options.length;
+    modeHint.textContent = st.mode === "fixed"
+      ? "Always sends the entry you picked."
+      : (n < 2
+        ? (st.mode === "increment" ? "Steps to the next entry each run. Add more entries for this to do anything."
+                                   : "Picks any entry each run. Add more entries for this to do anything.")
+        : (st.mode === "increment" ? "Steps to the next entry each run and wraps at the end."
+                                   : "Picks a different entry at random each run."));
+  }
 
   function renderTypes() {
     const st = readState(node);
@@ -295,8 +349,19 @@ export function openDropdownPanel(node, onChange) {
   function commit(patch) {
     writeState(node, patch);
     renderTypes();
+    renderModes();
     renderList();
     fire();
+  }
+
+  // Append an entry and put the cursor in its name box, so you can just type.
+  // Shared by the footer button and the empty-state one so they cannot drift.
+  function addRow() {
+    const cur = readState(node);
+    cur.options.push({ name: "", value: "" });
+    commit({ options: cur.options });
+    const boxes = list.querySelectorAll(".pix-ddp-nm");
+    boxes[boxes.length - 1]?.focus();
   }
 
   function renderList() {
@@ -305,8 +370,15 @@ export function openDropdownPanel(node, onChange) {
     list.textContent = "";
 
     if (!st.options.length) {
-      const e = el("div", "pix-ddp-empty", "Nothing here yet. Press Add option to make your first entry.");
-      list.appendChild(e);
+      // The button belongs HERE, where the list would be and where the eye
+      // already is, rather than only in the footer with a line of prose
+      // pointing at it.
+      const box = el("div", "pix-ddp-empty");
+      box.appendChild(el("p", null, "Nothing here yet."));
+      const first = el("button", "pix-ddp-emptybtn", "Add your first entry");
+      first.addEventListener("click", () => addRow());
+      box.appendChild(first);
+      list.appendChild(box);
       return;
     }
 
@@ -445,14 +517,7 @@ export function openDropdownPanel(node, onChange) {
   // ── Footer ──────────────────────────────────────────────────────────────
   const bAdd = el("button", "pix-ddp-btn primary", "Add option");
   bAdd.title = "Add an entry at the end of the list";
-  bAdd.addEventListener("click", () => {
-    const cur = readState(node);
-    cur.options.push({ name: "", value: "" });
-    commit({ options: cur.options });
-    // Put the cursor in the new name box so you can just type.
-    const boxes = list.querySelectorAll(".pix-ddp-nm");
-    boxes[boxes.length - 1]?.focus();
-  });
+  bAdd.addEventListener("click", addRow);
 
   const bExp = el("button", "pix-ddp-btn", "Export");
   bExp.title = "Save this list to a file you can load into another workflow";
@@ -530,6 +595,7 @@ export function openDropdownPanel(node, onChange) {
   // TWICE finds this.
   _panel = panel;
   renderTypes();
+  renderModes();
   renderList();
   placeBeside(panel, getNodeScreenRect(node));
   makeDraggable(panel, title);

@@ -5,6 +5,7 @@
 // the face and the output-dot alignment, settings.mjs for the panel.
 
 import { app } from "/scripts/app.js";
+import { api } from "/scripts/api.js";
 import { isVueNodes } from "../shared/nodes2.mjs";
 import { isGraphLoading } from "../shared/graph_loading.mjs";
 import { isQueueLoopActive } from "../shared/queue_drivers.mjs";
@@ -12,7 +13,7 @@ import { registerNodeHelp } from "../shared/help.mjs";
 import { registerNodeSettings, repaintAccent } from "../shared/node_settings.mjs";
 import {
   CLASS, HIDDEN_INPUT, MIN_W, DEFAULT_W, readState, writeState,
-  syncOutput, injectedState,
+  syncOutput, injectedState, commitPick,
 } from "./core.mjs";
 import {
   buildRow, renderRow, bodyHeight, alignOutputLegacy, scheduleAlign,
@@ -231,5 +232,31 @@ app.graphToPrompt = async function (...args) {
   }
   return result;
 };
+
+// ── Spend the run's pick, ONLY when a queue is actually accepted ────────────
+// graphToPrompt also runs for Export, for workflow sharing, for several Save
+// buttons, and for a queue that then fails validation. None of those should
+// move an "In order" list on, so the pick is HELD until this fires and the same
+// entry is handed out again until then.
+if (!app._pixDdQueuePatched && api && typeof api.queuePrompt === "function") {
+  app._pixDdQueuePatched = true;
+  const _origQueuePrompt = api.queuePrompt.bind(api);
+  api.queuePrompt = async function (...args) {
+    const res = await _origQueuePrompt(...args);   // throws on a rejected queue -> pick kept
+    try {
+      const index = buildIndex();
+      for (const node of index.values()) {
+        commitPick(node);
+        // Show what actually ran. DOM only - this must never write serialized
+        // state, or every Run would flag the workflow modified.
+        renderRow(node);
+      }
+      app.graph?.setDirtyCanvas?.(true, false);
+    } catch (err) {
+      console.error("[Pixaroma.Dropdown] commit failed", err);
+    }
+    return res;
+  };
+}
 
 export { openPanel, readState, writeState };
