@@ -487,7 +487,16 @@ def _pix_dropdown_extract(inputs: dict) -> Optional[str]:
         idx = state.get("index")
         if isinstance(idx, bool) or not isinstance(idx, (int, float)):
             idx = 0
-        idx = int(idx)
+        try:
+            # int() RAISES on NaN (ValueError) and on +/-Infinity (OverflowError),
+            # and json.loads accepts both of those as bare literals. Uncaught,
+            # that propagated out of _walk_for_text and took down the reading of
+            # the WHOLE image, not just this node's contribution - so a single
+            # hand-written state in a shared PNG could stop Prompt Reader
+            # recovering anything at all. Nothing on this path may raise.
+            idx = int(idx)
+        except (ValueError, OverflowError):
+            return None
         if idx < 0 or idx >= len(options):
             return None
         entry = options[idx]

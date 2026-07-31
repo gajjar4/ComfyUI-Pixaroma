@@ -398,6 +398,19 @@ export function openDropdownPanel(node, onChange) {
         e.dataTransfer.effectAllowed = "move";
         try { e.dataTransfer.setData("text/plain", String(i)); } catch {}
       });
+      // ALWAYS clear the drag, however it ended. `drop` alone is not enough: a
+      // drag released in the gap between rows, on the list padding, or outside
+      // the panel never fires it, leaving dragFrom pointing at a row. The next
+      // thing dropped on a row - a file, a text selection, anything at all,
+      // since dragover/drop sit on the ROW and fire for any drag - would then
+      // reorder the list as if that stale grip drag had been completed.
+      // dragend fires AFTER drop, so a real reorder still gets its value first.
+      grip.addEventListener("dragend", () => {
+        dragFrom = -1;
+        for (const el2 of list.querySelectorAll(".drop-above, .drop-below")) {
+          el2.classList.remove("drop-above", "drop-below");
+        }
+      });
       row.addEventListener("dragover", (e) => {
         if (dragFrom < 0) return;
         e.preventDefault();
@@ -475,9 +488,25 @@ export function openDropdownPanel(node, onChange) {
             value: typeof o.value === "string" ? o.value : (o.value == null ? "" : String(o.value)),
           }));
         if (!clean.length) { toast("That file has no entries in it.", "error"); return; }
-        commit({ options: clean, index: 0, type: data.type || readState(node).type });
+
+        // An exported file always carries the type it was exported WITH, so an
+        // Import can change this node's type - and therefore its output socket -
+        // exactly as the type chips do. It has to cut the wires that no longer
+        // fit for the same reason, or the node keeps a connection its socket no
+        // longer supports and the mismatch only surfaces at run time, far from
+        // the Import that caused it.
+        const wasType = readState(node).type;
+        commit({ options: clean, index: 0, type: data.type || wasType });
         syncOutput(node);
-        toast(`Loaded ${clean.length} ${clean.length === 1 ? "entry" : "entries"}.`);
+        const nowType = readState(node).type;
+        // ONLY when the type actually changed. Cutting wires is destructive, and
+        // importing a list of the same type must never touch a connection.
+        const cut = nowType !== wasType ? dropIncompatibleLinks(node) : 0;
+
+        const bits = [`Loaded ${clean.length} ${clean.length === 1 ? "entry" : "entries"}`];
+        if (nowType !== wasType) bits.push(`and switched this node to ${TYPE_LABELS[nowType].toLowerCase()}`);
+        if (cut) bits.push(`- ${cut} ${cut === 1 ? "wire that no longer fits was" : "wires that no longer fit were"} unplugged`);
+        toast(bits.join(" ") + ".", cut ? "warn" : "info");
       } catch {
         toast("That file could not be read.", "error");
       }

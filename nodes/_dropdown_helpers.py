@@ -21,7 +21,28 @@ import re
 # Python refused it, and Python accepting "1_0" while JS refuses.
 #   accepts: 5  5.  .5  5.5  +5  -3  1e3  1E3  -1e3
 #   refuses: 0x10  0b1  1_0  1,024  1024px  abc  Infinity  NaN  (and "")
-_NUMBER_RE = re.compile(r"^[+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?$")
+#
+# [0-9] and NOT \d: Python's \d also matches fullwidth and Arabic-Indic digits
+# while JavaScript's \d is ASCII-only, so "１０２４" was readable here and not in
+# the browser. The panel warned about a row that then worked, which is the same
+# class of lie as the reverse. Enumerated, not assumed: JS \d matches exactly
+# the ten code points U+0030..U+0039.
+_NUMBER_RE = re.compile(r"^[+-]?(?:[0-9]+\.?[0-9]*|\.[0-9]+)(?:[eE][+-]?[0-9]+)?$")
+
+# EXACTLY the code points JavaScript's String.prototype.trim removes, enumerated
+# by running it over U+0000..U+FFFF rather than read off the spec.
+#
+# Python's str.strip() is NOT the same set, in BOTH directions: it leaves U+FEFF
+# (a BOM, which is what a value pasted out of an Excel CSV or a BOM-marked text
+# file carries) and it strips U+001C..U+001F and U+0085, which JS keeps. Either
+# way the two languages disagreed about whether a row was a number.
+_JS_WHITESPACE = (
+    "\t\n\v\f\r "                     # U+0009..U+000D and space
+    "\u00a0\u1680"                            # NBSP, OGHAM SPACE MARK
+    "\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200a"  # EN QUAD..HAIR SPACE
+    "\u2028\u2029\u202f\u205f\u3000"  # separators, NNBSP, MMSP, IDEOGRAPHIC
+    "\ufeff"                                              # BOM / ZWNBSP
+)
 
 # The four types a Dropdown node can be set to. The JS uses these exact
 # strings in its state blob, so they are a wire format - do not rename.
@@ -52,7 +73,7 @@ def normalize_type(kind):
     """
     if not isinstance(kind, str):
         return "text"
-    k = kind.strip().lower()
+    k = kind.strip(_JS_WHITESPACE).lower()
     if k in TYPES:
         return k
     # Tolerate a few obvious aliases so a hand-edited workflow still runs.
@@ -81,7 +102,10 @@ def _as_number(raw):
         except (TypeError, ValueError, OverflowError):
             return None
     elif isinstance(raw, str):
-        text = raw.strip()
+        # strip(_JS_WHITESPACE), never bare strip(): the browser trims a
+        # different set, so a value pasted with a leading BOM read as a number
+        # there and as junk here.
+        text = raw.strip(_JS_WHITESPACE)
         if not _NUMBER_RE.match(text):
             # Covers empty/whitespace too, since the pattern needs at least one
             # digit. Everything the grammar refuses is refused IDENTICALLY by
@@ -140,7 +164,7 @@ def readable(raw, kind):
     if kind == "bool":
         if isinstance(raw, bool):
             return True
-        if isinstance(raw, str) and raw.strip().lower() in (_TRUE_WORDS | _FALSE_WORDS):
+        if isinstance(raw, str) and raw.strip(_JS_WHITESPACE).lower() in (_TRUE_WORDS | _FALSE_WORDS):
             return True
         # A number reads as on/off by the usual zero/non-zero rule.
         return _as_number(raw) is not None
@@ -167,7 +191,9 @@ def coerce_value(raw, kind):
         if isinstance(raw, bool):
             return raw
         if isinstance(raw, str):
-            word = raw.strip().lower()
+            # Must use the SAME set as readable()'s bool branch above, or the
+            # two disagree with each other before either disagrees with the JS.
+            word = raw.strip(_JS_WHITESPACE).lower()
             if word in _TRUE_WORDS:
                 return True
             if word in _FALSE_WORDS:

@@ -199,7 +199,9 @@ export function buildRow(node, onOpenSettings) {
     const t = e.target;
     if (t.closest(".pix-dd-prev")) { e.stopPropagation(); step(node, -1); return; }
     if (t.closest(".pix-dd-next")) { e.stopPropagation(); step(node, +1); return; }
-    if (t.closest(".pix-dd-gear")) { e.stopPropagation(); onOpenSettings?.(node); return; }
+    // The gear must close the popup itself: _outside now skips this row, so it
+    // will not do it for us.
+    if (t.closest(".pix-dd-gear")) { e.stopPropagation(); closePopup(); onOpenSettings?.(node); return; }
     if (t.closest(".pix-dd-field")) {
       e.stopPropagation();
       // An empty list has nothing to show, so send the user where they can fix
@@ -294,8 +296,16 @@ export function closePopupFor(node) {
 }
 
 function _outside(e) {
+  if (!_pop) return;
   // MUST gate on containment or scrolling the option list closes the popup.
-  if (_pop && !_pop.contains(e.target)) closePopup();
+  if (_pop.contains(e.target)) return;
+  // The OWNING row is not "outside" either. This handler runs in the CAPTURE
+  // phase, so without this it fires before the row's own pointerdown: clicking
+  // the field a second time closed the popup here and the row handler then
+  // immediately reopened it, which looks exactly like the click doing nothing.
+  // Leaving the row alone lets its own handler decide (toggle, step, or gear).
+  if (_popNode?._pixDdRow?.contains(e.target)) return;
+  closePopup();
 }
 
 function _onKey(e) {
