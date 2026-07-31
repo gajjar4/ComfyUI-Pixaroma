@@ -93,9 +93,16 @@ export function readable(raw, kind) {
       const w = raw.trim().toLowerCase();
       if (TRUE_WORDS.has(w) || FALSE_WORDS.has(w)) return true;
     }
+    // The clamp cannot change a zero/non-zero answer, so magnitude is
+    // irrelevant for on/off.
     return asNumber(raw) !== null;
   }
-  return asNumber(raw) !== null;
+  const n = asNumber(raw);
+  if (n === null) return false;
+  // A value the clamp would MOVE is not readable, even though it parsed. See
+  // the matching note in _dropdown_helpers.py: without this a 15-digit seed got
+  // no warning mark and the run then sent 1000000000000 instead.
+  return n >= -LIMIT && n <= LIMIT;
 }
 
 export function coerceValue(raw, kind) {

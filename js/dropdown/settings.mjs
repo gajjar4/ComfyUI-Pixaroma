@@ -228,17 +228,43 @@ function makeDraggable(panel, handle) {
     e.preventDefault();
     const r = panel.getBoundingClientRect();
     const ox = e.clientX - r.left, oy = e.clientY - r.top;
+
+    // BOTH defences against a drag that sticks to the cursor, because a
+    // pointerup can genuinely go missing: released outside the window, on a
+    // second monitor, or swallowed upstream. Synthetic events never reproduce
+    // it, so a green scripted test means nothing here - this is a house rule
+    // earned from a human report on the Help window.
+    try { handle.setPointerCapture(e.pointerId); } catch { /* not capturable */ }
+
     const move = (ev) => {
       if (!panel.isConnected) return up();
+      // The button is no longer held: the release was lost, so end the drag.
+      if (!(ev.buttons & 1)) return up();
       // From here the panel is where the USER put it, so stop following.
       _userMoved = true;
       panel.style.left = Math.max(0, Math.min(window.innerWidth - panel.offsetWidth, ev.clientX - ox)) + "px";
       panel.style.top = Math.max(0, Math.min(window.innerHeight - panel.offsetHeight, ev.clientY - oy)) + "px";
     };
+    // Idempotent: the buttons guard above can call this as well as a real
+    // release, and lostpointercapture fires after we release it ourselves.
+    let done = false;
     const up = () => {
+      if (done) return;
+      done = true;
+      try { handle.releasePointerCapture(e.pointerId); } catch { /* already gone */ }
+      handle.removeEventListener("pointermove", move, true);
+      handle.removeEventListener("pointerup", up, true);
+      handle.removeEventListener("pointercancel", up, true);
+      handle.removeEventListener("lostpointercapture", up, true);
       window.removeEventListener("pointermove", move, true);
       window.removeEventListener("pointerup", up, true);
     };
+    handle.addEventListener("pointermove", move, true);
+    handle.addEventListener("pointerup", up, true);
+    handle.addEventListener("pointercancel", up, true);
+    handle.addEventListener("lostpointercapture", up, true);
+    // Window belt too: if the capture could not be taken, the move events still
+    // arrive here.
     window.addEventListener("pointermove", move, true);
     window.addEventListener("pointerup", up, true);
   });
@@ -279,10 +305,18 @@ export function closeDropdownPanelFor(node) {
 // Grow a value box to fit its content. An EMPTY box is pinned to one line: at a
 // narrow width its wrapped placeholder otherwise balloons scrollHeight and the
 // box grows tall and never shrinks back (Nodes 2.0 recipe #7).
+const VALUE_MAX_H = 160;
+
 function autoGrow(ta) {
-  if (!ta.value) { ta.style.height = "27px"; return; }
+  if (!ta.value) { ta.style.height = "27px"; ta.style.overflowY = "hidden"; return; }
   ta.style.height = "auto";
-  ta.style.height = Math.min(160, Math.max(27, ta.scrollHeight)) + "px";
+  const want = Math.max(27, ta.scrollHeight);
+  ta.style.height = Math.min(VALUE_MAX_H, want) + "px";
+  // Once it stops growing the rest of the text has to stay REACHABLE. The box
+  // was overflow:hidden at every height, so a pasted style paragraph past about
+  // nine wrapped lines could not be seen or scrolled to at all - in a node
+  // whose whole pitch is holding text too long to retype.
+  ta.style.overflowY = want > VALUE_MAX_H ? "auto" : "hidden";
 }
 
 export function openDropdownPanel(node, onChange) {

@@ -177,9 +177,20 @@ def readable(raw, kind):
             return True
         if isinstance(raw, str) and raw.strip(_JS_WHITESPACE).lower() in (_TRUE_WORDS | _FALSE_WORDS):
             return True
-        # A number reads as on/off by the usual zero/non-zero rule.
+        # A number reads as on/off by the usual zero/non-zero rule, and the
+        # clamp cannot change that answer, so magnitude is irrelevant here.
         return _as_number(raw) is not None
-    return _as_number(raw) is not None
+
+    number = _as_number(raw)
+    if number is None:
+        return False
+    # A value the clamp would MOVE is not readable, even though it parsed.
+    # Without this the panel showed no warning on a 15-digit seed and the run
+    # then sent 1000000000000 instead - the panel promising one number and the
+    # run sending another, which is the exact thing the warning marks exist to
+    # prevent. Flagged rather than clamp-free: the cap matches Seed Pixaroma's,
+    # and letting 1e308 through to a downstream node helps nobody.
+    return -_LIMIT <= number <= _LIMIT
 
 
 def coerce_value(raw, kind):

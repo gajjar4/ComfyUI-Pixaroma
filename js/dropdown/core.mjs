@@ -153,16 +153,22 @@ export function pendingIndex(node) {
   if (Number.isInteger(node._pixDdPending) && node._pixDdPending < n) return node._pixDdPending;
 
   let next;
-  if (!Number.isInteger(node._pixDdCursor)) {
-    // First run after a load: send what the node is showing, THEN start moving.
-    next = clamp(st.index);
-  } else if (st.mode === "increment") {
-    next = (clamp(node._pixDdCursor) + 1) % n;
-  } else {
+  if (st.mode === "random") {
+    // ALWAYS random, including the very first run after switching to R. The
+    // first-run branch below is for In-order only: it exists so a sequence
+    // starts where the user is looking, but applying it to Random made the
+    // first Run send the entry already on the face while the panel promised
+    // "a different entry at random each run".
+    const avoid = Number.isInteger(node._pixDdCursor) ? clamp(node._pixDdCursor) : clamp(st.index);
     next = Math.floor(Math.random() * n);
     // Never the same entry twice running - with a two-entry list a repeat reads
     // as the mode not working at all.
-    if (n > 1 && next === clamp(node._pixDdCursor)) next = (next + 1 + Math.floor(Math.random() * (n - 1))) % n;
+    if (n > 1 && next === avoid) next = (next + 1 + Math.floor(Math.random() * (n - 1))) % n;
+  } else if (!Number.isInteger(node._pixDdCursor)) {
+    // First run after a load: send what the node is showing, THEN start moving.
+    next = clamp(st.index);
+  } else {
+    next = (clamp(node._pixDdCursor) + 1) % n;
   }
   node._pixDdPending = next;
   return next;

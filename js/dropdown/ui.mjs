@@ -24,7 +24,7 @@ import { installNodeAccent, accentOf, ACC } from "../shared/node_settings.mjs";
 import {
   ROW_H, MIN_W, BODY_PAD, readState, writeState, shownIndex, MODE_LETTERS, MODE_LABELS, MODES,
 } from "./core.mjs";
-import { SOCKET_LABELS, previewText } from "./coerce.mjs";
+import { SOCKET_LABELS, previewText, readable } from "./coerce.mjs";
 
 // What Classic inserts above the row: node.widgets_start_y (2, set in index.js)
 // plus BaseDOMWidgetImpl.DEFAULT_MARGIN (10). Read the margin off the live
@@ -421,9 +421,14 @@ export function openPopup(node) {
     empty.textContent = "Nothing in the list yet.";
     pop.appendChild(empty);
   } else {
+    const shown = shownIndex(node);
     st.options.forEach((o, i) => {
       const item = document.createElement("div");
-      item.className = "pix-dd-opt" + (i === st.index ? " sel" : "");
+      // shownIndex, NOT st.index: in In-order or Random the face shows the
+      // entry that is queued or last ran, and the list highlighting a
+      // different one made the node look like it was ignoring the mode.
+      const ok = readable(o.value, st.type);
+      item.className = "pix-dd-opt" + (i === shown ? " sel" : "") + (ok ? "" : " bad");
       const nm = document.createElement("span");
       nm.className = "pix-dd-oname";
       nm.textContent = o.name?.trim() || "(unnamed)";
@@ -433,7 +438,9 @@ export function openPopup(node) {
       // blow the one-line row apart.
       hint.textContent = previewText(o.value, st.type);
       item.append(nm, hint);
-      item.title = o.value || "";
+      item.title = ok
+        ? (o.value || "")
+        : `Does not read as ${SOCKET_LABELS[st.type]}, so this one sends ${previewText(o.value, st.type)}.`;
       item.addEventListener("pointerdown", (e) => {
         e.stopPropagation();
         writeState(node, { index: i });
