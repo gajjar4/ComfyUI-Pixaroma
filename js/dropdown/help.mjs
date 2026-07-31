@@ -1,0 +1,92 @@
+// Dropdown Pixaroma - the help page.
+//
+// Kept beside the node rather than in the central help_defs.mjs map, the way
+// Compare / Text / XY Plot / Find and Replace do, because it is written against
+// this node's own behaviour and should move with it.
+//
+// Written for someone making pictures, not for someone reading the code: what it
+// does, how to use it, and what actually comes out. No em dashes (house rule).
+
+export const DROPDOWN_HELP = {
+  title: "Dropdown Pixaroma",
+  tagline: "A dropdown you fill in yourself: pick a short name, send a long value.",
+  sections: [
+    {
+      heading: "What it is for",
+      body:
+        "Some values are long and you retype them constantly. A LoRA might want a whole "
+        + "sentence as its trigger. A look you like might be a paragraph of prompt.\n\n"
+        + "Put them in this node once, give each one a short name, and after that you just "
+        + "pick the name. The node sends the long value on your behalf.",
+    },
+    {
+      heading: "Setting it up",
+      bullets: [
+        "Press the gear on the node, or right click it, to open the settings.",
+        "Press `Add option` and fill in a name and the value it stands for.",
+        "The value box grows as you type, so a long sentence or several lines are fine.",
+        "Drag the `⋮⋮` grip to reorder. The `+` on a row adds another one below it.",
+        "Close the settings. Your list is saved inside the workflow.",
+      ],
+    },
+    {
+      heading: "Choosing on the canvas",
+      body:
+        "The node itself is one row. Click it to open your list, or use the `◀` and `▶` "
+        + "arrows to step through without opening anything.\n\n"
+        + "The list shows each name on the left and a peek at its value on the right, so you "
+        + "can tell two similar entries apart.",
+    },
+    {
+      heading: "What comes out",
+      body:
+        "Pick one of four in the settings, and the node's output says which one is active:",
+      table: {
+        headers: ["Setting", "Sends", "Good for"],
+        rows: [
+          ["Text", "`text`", "Trigger words, prompt fragments, file names"],
+          ["Whole number", "`int`", "Sizes, steps, frame counts"],
+          ["Decimal", "`float`", "Strengths, cfg, denoise"],
+          ["On / off", "`on/off`", "Any true or false setting"],
+        ],
+      },
+    },
+    {
+      heading: "It ignores what it is plugged into",
+      body:
+        "The list and the type belong to this node. Wiring it somewhere else never changes "
+        + "them.\n\n"
+        + "That is the difference from Control Panel Pixaroma, whose controls copy the type of "
+        + "whatever they are wired to. Use Control Panel when you want a dial for one specific "
+        + "input. Use this when you want your own named list that you can plug in anywhere.",
+    },
+    {
+      heading: "Changing the type later",
+      body:
+        "Nothing is ever deleted. If you switch a list of sentences to Whole number, your "
+        + "sentences stay exactly as you typed them, and the rows that are not numbers get a "
+        + "small warning mark. Those rows send 0 until you change them, and switching back to "
+        + "Text brings everything straight back.\n\n"
+        + "Anything plugged into the output that no longer fits is unplugged, and the node "
+        + "tells you how many wires that was.",
+    },
+    {
+      heading: "Comparing every entry at once",
+      body:
+        "XY Plot Pixaroma can drive this node. Pick your Dropdown as an axis and tick the "
+        + "entries you want, and you get one square per entry with the names written along "
+        + "the edge.\n\n"
+        + "That is the quick way to see four LoRA triggers side by side without wiring "
+        + "anything four times.",
+    },
+    {
+      heading: "Sharing a list",
+      bullets: [
+        "The list saves inside the workflow, so sending someone the workflow sends the entries with it.",
+        "`Export` writes the list to a file. `Import` loads one back and replaces what is there.",
+        "Copying the node copies its list too.",
+      ],
+    },
+  ],
+  footer: "Find it under 👑 Pixaroma / 🔢 Values, or search for dropdown, list, options, preset or trigger.",
+};

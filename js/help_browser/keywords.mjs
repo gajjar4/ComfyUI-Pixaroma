@@ -70,6 +70,7 @@ export const KEYWORDS = {
   PixaromaSliders: "slider knob dashboard remote control panel",
   PixaromaSeed: "random fixed number sampler noise",
   PixaromaNumber: "int float value amount",
+  PixaromaDropdown: "dropdown drop down list options preset choose pick select menu combo trigger word lora trigger shortcut saved values my own list named values swap between",
   PixaromaWH: "width height size dimensions",
   PixaromaPortraitLandscape: "rotate orientation flip tall wide",
 

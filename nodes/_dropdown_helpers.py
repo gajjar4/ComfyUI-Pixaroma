@@ -236,16 +236,52 @@ def parse_state(raw):
     return {"type": kind, "index": index, "options": options}
 
 
+def _loads(raw):
+    """The hidden state string -> a dict, never raising."""
+    if isinstance(raw, dict):
+        return raw
+    if isinstance(raw, str):
+        try:
+            # RecursionError too: deeply nested JSON would otherwise take the
+            # whole run down rather than just this node.
+            state = json.loads(raw)
+        except (ValueError, TypeError, RecursionError):
+            return {}
+        return state if isinstance(state, dict) else {}
+    return {}
+
+
 def selected_value(raw):
     """The hidden state string -> the single value this node outputs.
 
-    An empty list, or an index pointing past the end, gives the type's fallback
-    rather than raising: a workflow with an unconfigured Dropdown should still
-    run and show you an empty string, not a red node.
+    TWO accepted shapes, on purpose:
+
+    1. LEAN, `{"type": ..., "value": ...}` - what the browser actually injects
+       at graphToPrompt time. The injected string IS the node's cache key, so it
+       carries ONLY what changes the result. The option NAMES, the rest of the
+       list, the accent colour and any UI flag are display-only: renaming a row
+       or recolouring the node must not re-run the graph, and editing a row you
+       have not selected must not either.
+
+    2. FULL, `{"type": ..., "index": N, "options": [...]}` - the shape stored in
+       the workflow. Accepted so a hand-written or hand-edited API file still
+       runs, and so the node degrades sanely if injection is ever missed.
+
+    An empty list, or an index past the end, gives the type's fallback rather
+    than raising: an unconfigured Dropdown should still run and hand on an empty
+    string, not turn the node red.
     """
-    state = parse_state(raw)
-    options = state["options"]
-    index = state["index"]
+    state = _loads(raw)
+    kind = normalize_type(state.get("type"))
+
+    # Shape 1 wins when present. Checked by KEY, not truthiness: "" and 0 and
+    # False are all perfectly ordinary selected values.
+    if "value" in state:
+        return coerce_value(state.get("value"), kind)
+
+    parsed = parse_state(state)
+    options = parsed["options"]
+    index = parsed["index"]
     if not options or index < 0 or index >= len(options):
-        return FALLBACKS[state["type"]]
-    return coerce_value(options[index].get("value"), state["type"])
+        return FALLBACKS[parsed["type"]]
+    return coerce_value(options[index].get("value"), parsed["type"])
