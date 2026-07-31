@@ -22,24 +22,23 @@ import re
 #   accepts: 5  5.  .5  5.5  +5  -3  1e3  1E3  -1e3
 #   refuses: 0x10  0b1  1_0  1,024  1024px  abc  Infinity  NaN  (and "")
 #
-# \d, KNOWINGLY, and this is the ONE place the two languages are allowed to
-# disagree. Python's \d also matches fullwidth and Arabic-Indic digits (what a
-# CJK IME produces in full-width mode) where JavaScript's \d is ASCII-only, so
-# "１０２４" is read here and refused there: the panel paints a warning on a row
-# that then works.
+# [0-9] and NOT \d. Python's \d also matches fullwidth and Arabic-Indic digits
+# (what a CJK IME produces in full-width mode) where JavaScript's \d is
+# ASCII-only by language definition. Enumerated, not assumed: JS \d matches
+# exactly the ten code points U+0030..U+0039.
 #
-# Tightening this to [0-9] to "restore parity" was tried and REVERTED. It makes
-# both sides agree by breaking the working half: a saved workflow whose entry
-# holds full-width digits would silently start emitting 0 instead of 1024, with
-# no error anywhere. A cosmetic warning on a rare input is a far smaller defect
-# than a silent wrong number in somebody's existing workflow, and the direction
-# of failure matters more than the symmetry.
+# This went back and forth, so the reasoning is recorded. The browser ALREADY
+# refuses these, which means the settings panel already paints the warning mark
+# on such a row and its tooltip already says the row sends 0. With \d here the
+# run then sent 1024 instead - the panel telling the truth and the run
+# contradicting it. Matching the browser makes the run do what the panel said.
 #
-# The asymmetry is deliberate, is asserted in _dropdown_parity.py so it cannot
-# drift unnoticed, and is safe ONLY in this direction (Python permissive, JS
-# strict). If it is ever inverted, the panel starts promising numbers the run
-# will not send, and that must be fixed immediately.
-_NUMBER_RE = re.compile(r"^[+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?$")
+# The counter-argument (raised twice in review) was that refusing them turns a
+# working 1024 into a silent 0. That would be decisive for a SHIPPED node, and
+# it is why the change is worth this comment - but this node has never been
+# released, so there is no saved workflow anywhere that relies on the old
+# behaviour. If that ever stops being true, weigh it again.
+_NUMBER_RE = re.compile(r"^[+-]?(?:[0-9]+\.?[0-9]*|\.[0-9]+)(?:[eE][+-]?[0-9]+)?$")
 
 # EXACTLY the code points JavaScript's String.prototype.trim removes, enumerated
 # by running it over U+0000..U+FFFF rather than read off the spec.
