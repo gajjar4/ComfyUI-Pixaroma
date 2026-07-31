@@ -89,8 +89,12 @@ export const GUIDES = [
     icon: "🧹",
     title: "Buttons or nodes missing?",
     tagline: "Almost always the browser cache. Here is the five second fix.",
-    keywords: "cache refresh blank broken missing stale empty buttons gone disappeared not showing",
+    keywords: "cache refresh blank broken missing stale empty buttons gone disappeared not showing hide hidden toolbar align workflows help bring back restore",
     sections: [
+      {
+        heading: "Is it only the Align, Workflows or Help button?",
+        body: "If everything else is fine and one of those three toolbar buttons is the only thing gone, it is probably switched off rather than broken. Open Settings, find the Pixaroma section, and look for the three \"Show the ... button in the top toolbar\" boxes. Tick the one you want back.\n\nWorth knowing either way: hiding a button never turns the feature off. Alt+W still opens Workflows and Alt+H still opens Help, and both are also on the right-click menu on empty canvas.",
+      },
       {
         heading: "Try this first",
         body: "Hold Ctrl and Shift and press R. On a Mac, hold Command and Shift and press R. That forces the browser to fetch the newest files instead of reusing what it saved earlier.",

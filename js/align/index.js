@@ -141,6 +141,8 @@ function mountToolbarButton() {
   // Wrap in a group element so it visually matches rgthree / native ComfyUI
   // button groups in the toolbar.
   const group = document.createElement("div");
+  // pixaroma-align-group is load-bearing: js/toolbar_visibility hides this
+  // group when the user turns the button off. Do not drop it.
   group.className = "comfyui-button-group pixaroma-align-group";
   group.appendChild(btn);
 

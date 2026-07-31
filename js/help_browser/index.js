@@ -475,6 +475,8 @@ function mountToolbarButton() {
   btn.addEventListener("click", toggleHelpBrowser);
 
   const group = document.createElement("div");
+  // pixhb-group-btn is load-bearing: js/toolbar_visibility hides this group
+  // when the user turns the button off. Do not drop it.
   group.className = "comfyui-button-group pixhb-group-btn";
   group.appendChild(btn);
 

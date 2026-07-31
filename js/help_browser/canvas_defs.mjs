@@ -22,7 +22,7 @@ export const CANVAS_FEATURES = [
     key: "canvas:align",
     title: "Align",
     tagline: "Nodes snap to line up with each other as you drag, with a guide showing what they lined up with.",
-    keywords: "snap guides tidy arrange distribute straight neat messy line up",
+    keywords: "snap guides tidy arrange distribute straight neat messy line up hide button toolbar remove",
     sections: [
       {
         heading: "What it does",
@@ -33,6 +33,7 @@ export const CANVAS_FEATURES = [
         bullets: [
           "Hold Shift while dragging to ignore snapping for that one move.",
           "The toolbar button turns it on and off, and lights up when it is on.",
+          "If you would rather not have that button, you can hide it in Settings under Pixaroma. Snapping is unaffected, and its on/off switch stays in Settings.",
           "How close an edge has to be before it snaps is in Settings, under the Pixaroma section.",
           "A pinned Pixaroma Group is left alone.",
         ],
@@ -153,7 +154,7 @@ export const CANVAS_FEATURES = [
     sections: [
       {
         heading: "What it does",
-        body: "Opens from the button shown beside the heading above, in the top toolbar next to the Help question mark. Alt+W does the same, and so does right-clicking empty canvas.\n\nIt reads the same folder ComfyUI already keeps your workflows in, so everything you have is there the first time you open it. Nothing is imported and nothing is moved.",
+        body: "Opens from the button shown beside the heading above, in the top toolbar next to the Help question mark. Alt+W does the same, and so does right-clicking empty canvas.\n\nIf you would rather keep the toolbar clear, you can hide that button in Settings under Pixaroma. Alt+W and the right-click entry still open the panel, so nothing is lost.\n\nIt reads the same folder ComfyUI already keeps your workflows in, so everything you have is there the first time you open it. Nothing is imported and nothing is moved.",
       },
       {
         heading: "Finding one",

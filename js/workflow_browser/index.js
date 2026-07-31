@@ -1552,7 +1552,10 @@ function mountToolbarButton() {
   }
 
   const group = document.createElement("div");
-  group.className = "comfyui-button-group";
+  // pixwb-group-btn is what js/toolbar_visibility hides when the user turns
+  // this button off. It has to be on the GROUP, not the button: the group
+  // carries the toolbar spacing, so hiding the button alone leaves its gap.
+  group.className = "comfyui-button-group pixwb-group-btn";
   const btn = document.createElement("button");
   btn.className = "comfyui-button pixwb-btn";
   btn.title = "Pixaroma Workflows: find, organise and open your workflows (Alt+W)";
