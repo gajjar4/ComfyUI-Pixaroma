@@ -1205,6 +1205,21 @@ function buildBar(bar) {
   input.type = "text";
   input.placeholder = "Search names, models, prompts, notes...";
   input.title = "Searches inside the files too: a model or LoRA filename, a phrase from a prompt, or your own note";
+  // buildBar CLEARS the toolbar and builds this input from scratch, and every
+  // control in the bar that changes state calls buildBar to redraw itself -
+  // Grid/List, Sort, and the size buttons. The value flow was one-way (the
+  // listener writes S.query, nothing wrote it back), so each of those wiped the
+  // box on screen while S.query kept filtering: the panel showed a subset of
+  // the workflows with an empty search box, which reads as "this is everything".
+  // Assigning .value does NOT fire the `input` event, so this cannot loop back
+  // into render().
+  input.value = S.query || "";
+  // Caret at the END, not at 0. The window's mousedown handler hands focus back
+  // here after any click that is not on a field (window.mjs), so the box is
+  // focused again a tick after this runs - and a fresh input focused with text
+  // already in it puts the caret at the start, so the next character typed
+  // would land in front of the query instead of continuing it.
+  try { input.selectionStart = input.selectionEnd = input.value.length; } catch { /* not selectable */ }
   input.addEventListener("input", () => {
     S.query = input.value;
     S.kbdRel = null;
