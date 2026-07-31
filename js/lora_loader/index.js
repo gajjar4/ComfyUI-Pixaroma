@@ -306,10 +306,13 @@ registerNodeHelp(CLASS, {
     {
       heading: "Comparing LoRAs side by side",
       body:
-        "XY Plot Pixaroma can drive this node. In its picker each row shows up under this " +
-        "node's name as LoRA 1, LoRA 2 and so on: pick the row itself to try a different " +
-        "LoRA file in every square, or pick LoRA 1 strength to sweep the weight (there is " +
-        "a separate clip strength entry when you have split model and clip in the gear). " +
+        "XY Plot Pixaroma can drive this node. In its picker your rows show up under this " +
+        "node's name, counted from the top: LoRA 1 file tries a different LoRA file in " +
+        "every square, LoRA 1 strength sweeps that row's weight, LoRA 2 file is the next " +
+        "row down, and so on (there is a separate clip strength entry when you have split " +
+        "model and clip in the gear). The list you then tick is every LoRA on your " +
+        "computer, because the point is to try ones you have not loaded yet, and each tick " +
+        "makes one more square rather than stacking them together. " +
         "An axis drives ONE row. The row being compared is switched on for every square, " +
         "and the other rows stay exactly as you left them, which means a second switched-on " +
         "LoRA is applied on top of every square and can hide what the compared row is doing. " +

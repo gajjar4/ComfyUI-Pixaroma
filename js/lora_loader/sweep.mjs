@@ -41,10 +41,16 @@ function rowLabel(idx) {
   return "LoRA " + (idx + 1);
 }
 
+// The strength entries always read as "LoRA 1 <what it changes>", and nobody
+// misreads THOSE. The file entry used to be the bare "LoRA 1", which reads as the
+// name of a LoRA rather than as a slot in the stack - so people picked it expecting
+// to have chosen a LoRA, then met a checklist of every LoRA on their machine and
+// could not see what it was for. Naming the thing it changes puts it in the same
+// shape as its siblings. Display only: the axis identity is the row id.
 function subLabel(base, sf) {
   if (sf === "sm") return base + " strength";
   if (sf === "sc") return base + " clip strength";
-  return base;
+  return base + " file";
 }
 
 // The sorted LoRA library, memoized on the cache ARRAY IDENTITY (api.mjs replaces the
@@ -104,7 +110,7 @@ function enumerate(node) {
     const noFile = !String(row.name || "").trim();
     const hint = noFile ? " (pick a LoRA for this row first)" : "";
     out.push({
-      name, subField: "name", label: base, type: "combo",
+      name, subField: "name", label: subLabel(base, "name"), type: "combo",
       options: fileOptions(row.name), cur: row.name || "(none)",
     });
     // precision 2 mirrors the node's own 2-decimal weights; realStep null means no

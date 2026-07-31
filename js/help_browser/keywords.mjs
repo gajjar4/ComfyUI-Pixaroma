@@ -84,7 +84,7 @@ export const KEYWORDS = {
   PixaromaLoopStart: "repeat iterate for each again loop",
   PixaromaLoopEnd: "repeat iterate finish end loop",
   PixaromaCombine: "merge batch accumulate gather join",
-  PixaromaXYPlot: "grid compare matrix sweep test chart contact sheet lora strength weight",
+  PixaromaXYPlot: "grid compare matrix sweep test chart contact sheet lora strength weight side by side versus vs combination example examples which sampler steps cfg",
   PixaromaRunTimer: "time clock how long duration speed stopwatch",
   PixaromaRunLog: "history times record log past runs",
   NotifyPixaroma: "sound alert ding beep finished done chime",

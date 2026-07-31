@@ -39,12 +39,36 @@ const XY_HELP = {
       heading: "The value box adapts to what you pick",
       defs: [
         ["Number", "A `Range` (Start / End / Steps) or a `List` of values."],
-        ["Dropdown", "A checklist - tick the samplers / models / schedulers you want to compare."],
-        ["LoRA", "Compare loras or their strengths. Pick a lora ROW to swap which lora file, or its `strength` entry to sweep the weight (e.g. 0.3, 0.6, 1.0). An axis sweeps ONE row, so any OTHER lora rows that are switched on stay applied in every square: for a clean A against B, switch them off, and if a row on a LoRA Loader Pixaroma would do that an orange line under the picker names it. To compare two loras in every combination instead, put one on X and the other on Y. Works with LoRA Loader Pixaroma (each row shows up as `LoRA 1`, `LoRA 1 strength`, and `LoRA 1 clip strength` when model and clip strengths are separate), the core Load LoRA node, and other multi-lora loaders. When you swap the FILE on a LoRA Loader Pixaroma row, that row's ticked trigger words are left out of every square, since they belonged to one particular lora - put any words you want in all squares into your prompt instead."],
+        ["Dropdown", "A checklist of VALUES to try, not a list of things to load at once: tick the samplers / models / loras you want to compare and each tick becomes one square."],
+        ["LoRA", "Compare loras or their strengths. Pick a lora ROW to swap which lora file, or its `strength` entry to sweep the weight (e.g. 0.3, 0.6, 1.0). An axis sweeps ONE row, so any OTHER lora rows that are switched on stay applied in every square: for a clean A against B, switch them off, and if a row on a LoRA Loader Pixaroma would do that an orange line under the picker names it. To compare two loras in every combination instead, put one on X and the other on Y. Works with LoRA Loader Pixaroma (each row shows up as `LoRA 1 file`, `LoRA 1 strength`, and `LoRA 1 clip strength` when model and clip strengths are separate, counted from the top of the node), the core Load LoRA node, and other multi-lora loaders. When you swap the FILE on a LoRA Loader Pixaroma row, that row's ticked trigger words are left out of every square, since they belonged to one particular lora - put any words you want in all squares into your prompt instead."],
         ["Prompt text", "`Full list` (one full prompt per line) or `Find & replace` (swap a word for each value)."],
       ],
       bullets: [
         "The checklist shows ALL your installed options (every lora, sampler, checkpoint, etc.), not just the one in the node - that is how you compare against ones you have not loaded yet. The `now:` line under the picker shows what the node is set to right now.",
+      ],
+    },
+    {
+      heading: "Examples: what to pick for what you want",
+      body:
+        "Two things to hold on to and the rest follows. The picker chooses WHICH setting changes. The value box under it chooses WHAT that setting becomes, and you get one square per value, not all of them at once.\n\n"
+        + "Two habits worth having. Watch the counter above the buttons, because it tells you how many images you just asked for and 4 across by 3 down is 12 runs. And leave Lock seed on unless you are plotting the seed itself, or two things change at once and you cannot tell which one did it.",
+      defs: [
+        ["Which sampler suits this image?",
+          "X: your KSampler's `sampler_name`. Tick the 4 or 5 you actually use. One row of squares, one sampler each."],
+        ["How many steps do I really need?",
+          "X: `steps`, `Range`, Start 10, End 40, Steps 4. That gives 10, 20, 30, 40, and you can see where it stops improving."],
+        ["Steps against cfg, all at once",
+          "X: `steps` (try 15, 25, 35). Y: `cfg` (try 3, 5, 7). Nine squares showing every pairing, which is far quicker than nine separate runs."],
+        ["Compare two LoRAs fairly",
+          "Keep ONE row switched on in the LoRA loader. Pick `LoRA 1 file` and tick both LoRAs. Two squares, one LoRA in each, nothing else in the way. If a second row is still on, an orange line under the picker will name it."],
+        ["What weight should this LoRA be?",
+          "Pick `LoRA 1 strength` and enter `0, 0.4, 0.7, 1` as a list. The `0` square is your before shot, since a LoRA at 0 does nothing."],
+        ["Two LoRAs together, every mix",
+          "X: `LoRA 1 file`. Y: `LoRA 2 file`. Tick a couple on each. Every combination gets a square, and here you WANT both rows on."],
+        ["Same prompt, one word different",
+          "Pick your prompt text and choose `Find & replace`. Put the word to swap in Find, and your alternatives in the values. Everything else in the prompt stays put."],
+        ["Which checkpoint handles this prompt best?",
+          "X: your checkpoint loader's `ckpt_name`. Tick the models to try. Turn `Lock seed` on so the seed is not also changing."],
       ],
     },
     {
@@ -115,6 +139,8 @@ export function injectCSS() {
    a truncated warning is worse than none. */
 .pix-xy-axisnote{font-size:10.5px;line-height:1.35;color:var(--pix-acc,#f66744);margin:4px 2px 0;display:flex;gap:5px;align-items:flex-start;}
 .pix-xy-axisnote .pix-xy-axisnote-ic{flex:0 0 auto;}
+/* Says what the checklist below it is for (values, one square per tick). */
+.pix-xy-listcapt{font-size:10.5px;line-height:1.35;color:#8a8a8a;margin:0 2px 5px;}
 /* custom dropdown (value + ▼ + ◀▶), Pixaroma convention - never native <select> */
 .pix-xy-combo{flex:1;display:flex;align-items:center;gap:8px;min-width:0;background:#1d1d1d;border:1px solid rgba(255,255,255,.14);border-radius:5px;padding:6px 9px;font-size:12.5px;cursor:pointer;}
 .pix-xy-combo:hover{border-color:var(--pix-acc,#f66744);}
@@ -562,6 +588,15 @@ function renderValueArea(node, axisKey, mount, refreshCounter, rerender) {
     const checkedSet = new Set(axis.raw.checked || []);
     const countEl = el("div", "pix-xy-count");
     const updateCount = () => { countEl.textContent = `${checkedSet.size} selected`; };
+
+    // What the checklist is FOR. Without it the list reads as "which of these do you
+    // want loaded", because it shows every sampler / checkpoint / LoRA on the machine
+    // and offers multi-select - so ticking two LoRAs looks like asking for both at
+    // once rather than for one square each. Reported from the wild ("maybe select 2
+    // Loras is stupid"), and it applies to every dropdown axis, not just LoRAs.
+    const capt = el("div", "pix-xy-listcapt", "Tick the ones to try. Each tick is one square.");
+    capt.title = "This is the list of VALUES for this axis. Every tick adds one square to the grid; it does not stack them together.";
+    mount.appendChild(capt);
 
     // Filter box - sampler / scheduler / checkpoint lists can be long.
     const filter = isolate(el("input", "pix-xy-input"));
