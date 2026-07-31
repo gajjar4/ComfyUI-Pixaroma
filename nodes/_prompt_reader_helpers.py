@@ -192,6 +192,17 @@ _PROMPT_PACK_CLASS = "PixaromaPromptPack"
 # `prompts` input back to the upstream Multi and indexes rowTexts.
 _PROMPT_FROM_LIST_CLASS = "PixaromaPromptFromList"
 
+# Dropdown Pixaroma: a user-written list of name -> value pairs, one output. The
+# browser injects the CHOSEN value into the hidden DropdownState at submit time,
+# so what produced this image is a direct read. Two shapes exist: the lean
+# {"type","value"} the browser actually sends, and the full {"type","index",
+# "options"} a hand-edited API file may carry.
+#
+# It only contributes when the node is set to TEXT. A whole number, a decimal or
+# an on/off is not prompt text, and splicing "1024" into the recovered prompt
+# would be worse than recovering nothing.
+_DROPDOWN_CLASS = "PixaromaDropdown"
+
 # Prompt Pixaroma: a prompt box whose typed text (with @tags ALREADY expanded and
 # every *category / #list random slot ALREADY rolled at submit time by
 # js/prompt/index.js's graphToPrompt hook) lives in the hidden
@@ -438,6 +449,57 @@ def _pix_prompt_multi_extract(inputs: dict) -> Optional[str]:
     return txt or None
 
 
+def _pix_dropdown_extract(inputs: dict) -> Optional[str]:
+    """Read the chosen value from a PixaromaDropdown's saved state.
+
+    The hidden DropdownState is normally the LEAN shape the browser injects:
+        { "version": 1, "type": "text"|"int"|"float"|"bool", "value": <chosen> }
+    A hand-written API file may instead carry the FULL shape:
+        { "type": ..., "index": N, "options": [{"name","value"}, ...] }
+
+    Returns the value only when the node is set to TEXT, else None: a number or
+    a true/false is not prompt text, and splicing it into the recovered prompt
+    would corrupt the reading rather than improve it.
+    """
+    raw = inputs.get("DropdownState")
+    if not isinstance(raw, str) or not raw:
+        return None
+    try:
+        state = json.loads(raw)
+    except (ValueError, TypeError, RecursionError):
+        return None
+    if not isinstance(state, dict):
+        return None
+
+    kind = state.get("type")
+    # Anything that is not explicitly text is refused, INCLUDING a missing type.
+    # An unknown/absent type most likely means a newer schema, and guessing
+    # "probably text" is how a stray number ends up inside someone's prompt.
+    if not isinstance(kind, str) or kind.strip().lower() not in ("text", "string", "str"):
+        return None
+
+    if "value" in state:                       # lean shape
+        value = state.get("value")
+    else:                                      # full shape
+        options = state.get("options")
+        if not isinstance(options, list):
+            return None
+        idx = state.get("index")
+        if isinstance(idx, bool) or not isinstance(idx, (int, float)):
+            idx = 0
+        idx = int(idx)
+        if idx < 0 or idx >= len(options):
+            return None
+        entry = options[idx]
+        if not isinstance(entry, dict):
+            return None
+        value = entry.get("value")
+
+    if not isinstance(value, str):
+        return None
+    return value or None
+
+
 def _pix_prompt_pack_extract(inputs: dict) -> Optional[str]:
     """Read the active prompt from a PixaromaPromptPack's saved state.
 
@@ -668,6 +730,18 @@ def _walk_for_text(
     # the hidden PromptPackState. Read it directly.
     if cls == _PROMPT_PACK_CLASS:
         text = _pix_prompt_pack_extract(inputs)
+        if text:
+            captured.append(text)
+        return
+
+    # Dropdown Pixaroma: the chosen value is baked into the hidden
+    # DropdownState at submit time, so the image carries exactly the entry that
+    # produced it. Contributes only when the node is set to text - see
+    # _pix_dropdown_extract. Typical chain is Dropdown -> Text Join / Prompt
+    # Pixaroma -> the sampler, so without this branch a workflow built that way
+    # records a prompt with the trigger words missing.
+    if cls == _DROPDOWN_CLASS:
+        text = _pix_dropdown_extract(inputs)
         if text:
             captured.append(text)
         return
