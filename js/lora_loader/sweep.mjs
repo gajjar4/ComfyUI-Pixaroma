@@ -146,6 +146,47 @@ function preview(node, axis) {
   return row.name || "(none)";
 }
 
+// A LoRA file name short enough to sit inside a one-sentence note: folder and known
+// extension dropped (the same reading the node's own rows give it), then capped.
+const EXT_RE = /\.(safetensors|safetensor|ckpt|pt|pth|bin|sft)$/i;
+function shortFile(name) {
+  const base = String(name || "").split(/[\\/]/).pop().replace(EXT_RE, "");
+  return base.length > 24 ? base.slice(0, 24) + "…" : base;
+}
+
+// The heads-up under the picker. THE confusion this node produces with XY Plot:
+// an axis sweeps ONE row, so every OTHER switched-on row is applied to every
+// square - reported from the wild as "I put 2 LoRAs in and only the first one is
+// applied", because the fixed row masks whatever the swept row is doing. Say it
+// where the axis is chosen instead of leaving people to work it out from a grid.
+//
+// A row parked at strength 0 is deliberately NOT counted: Python skips applying it
+// (both strengths zero = a no-op), so it does not reach the picture and naming it
+// would send the user hunting for something that is not there.
+function note(node, axis, otherAxis) {
+  const { rows, idx } = findRow(node, axis);
+  if (idx < 0) return "";
+  // A row the OTHER axis is sweeping is meant to be on: X = LoRA 1, Y = LoRA 2 is
+  // the documented way to plot every combination of two LoRAs, and "switch it off"
+  // would be advice that breaks exactly that grid. Only silence a row on THIS node
+  // (the other axis can legitimately point at a different LoRA Loader).
+  let otherIdx = -1;
+  if (otherAxis && owns(otherAxis) && String(otherAxis.nodeId) === String(node.id)) {
+    otherIdx = findRow(node, otherAxis).idx;
+  }
+  const others = rows.filter((r, i) => (
+    i !== idx && i !== otherIdx && r.on && String(r.name || "").trim() && !(r.sm === 0 && r.sc === 0)
+  ));
+  if (!others.length) return "";
+  if (others.length === 1) {
+    const i = rows.indexOf(others[0]);
+    return `${rowLabel(i)} (${shortFile(others[0].name)}) is on too, so it is in every square. `
+      + `Switch it off to compare this row on its own.`;
+  }
+  return `${others.length} other LoRAs on this node are on too, so they are in every square. `
+    + `Switch them off to compare this row on its own.`;
+}
+
 // The axis title drawn on the grid.
 function displayName(node, axis) {
   const { st, idx } = findRow(node, axis);
@@ -240,4 +281,4 @@ function inject(entry, axis, value, node) {
   entry.inputs[HIDDEN_INPUT] = JSON.stringify(ps);
 }
 
-registerSweepProvider(CLASS, { owns, enumerate, lookup, preview, displayName, inject });
+registerSweepProvider(CLASS, { owns, enumerate, lookup, preview, displayName, note, inject });

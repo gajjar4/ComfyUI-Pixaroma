@@ -4,7 +4,7 @@ import {
   readState, restoreFromProperties, resetState, resetAxis as resetAxisCore,
   resolveAxisValues, axisReady, computeCounts, axisDisplayName, targetNodeOf,
 } from "./core.mjs";
-import { injectCSS, buildRoot, renderBody, measureContentHeight, closePopupIfOwner } from "./ui.mjs";
+import { injectCSS, buildRoot, renderBody, measureContentHeight, closePopupIfOwner, refreshAxisNotes } from "./ui.mjs";
 import { buildGridPreview } from "./grid.mjs";
 import { applyAdaptiveCanvasOnly, isVueNodes, closeHelpPopup, installCanvasZoomPassthrough } from "../shared/index.mjs";
 import { isQueueLoopActive, runQueueLoop, feedsOnlyInactiveSwitch } from "../shared/queue_drivers.mjs";
@@ -200,6 +200,14 @@ app.registerExtension({
         // DOM-only render (no auto-grow) for the load path so the saved size
         // is trusted and the workflow isn't falsely flagged modified (#18).
         node._pixXyRenderOnly = () => renderBody(node, root, { rerender: handlers.rerender, growth: null, reset: handlers.reset, resetAxis: handlers.resetAxis });
+
+        // The axis heads-up lines describe ANOTHER node's state (which LoRA rows are
+        // switched on), so they can go stale with nothing to re-render them. Refresh
+        // them when the cursor arrives on this node - DOM only, so it can never dirty
+        // a workflow, and it costs nothing until the user actually looks.
+        root.addEventListener("pointerenter", () => {
+          try { refreshAxisNotes(node, root); } catch (_e) {}
+        });
 
         installNodeAccent(node, root);   // the face follows this node's accent colour
         const widget = node.addDOMWidget("xyplot", "pixaroma_xy_plot", root, {

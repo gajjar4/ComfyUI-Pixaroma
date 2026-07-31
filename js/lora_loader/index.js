@@ -310,8 +310,12 @@ registerNodeHelp(CLASS, {
         "node's name as LoRA 1, LoRA 2 and so on: pick the row itself to try a different " +
         "LoRA file in every square, or pick LoRA 1 strength to sweep the weight (there is " +
         "a separate clip strength entry when you have split model and clip in the gear). " +
-        "The row being compared is switched on for every square, and the other rows stay " +
-        "exactly as you left them, so switch off anything you are not comparing. One thing " +
+        "An axis drives ONE row. The row being compared is switched on for every square, " +
+        "and the other rows stay exactly as you left them, which means a second switched-on " +
+        "LoRA is applied on top of every square and can hide what the compared row is doing. " +
+        "Switch off anything you are not comparing, and XY Plot will name the row in an " +
+        "orange line under its picker when one would get in the way. To compare two LoRAs in " +
+        "every combination instead, put one on the X axis and the other on Y. One thing " +
         "to know when you compare LoRA FILES: that row's ticked trigger words are left out " +
         "of every square, because they belonged to one particular LoRA and keeping them " +
         "would give a single square wording none of the others have. Other rows keep their " +

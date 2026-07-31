@@ -18,8 +18,16 @@
 //     lookup(node, axis)                -> entry|null
 //     preview(node, axis)               -> string    // the "now: …" line
 //     displayName(node, axis)           -> string    // the grid's axis title
+//     note(node, axis)                  -> string    // OPTIONAL heads-up line
 //     inject(entry, axis, value, node)  -> void      // patch the prompt entry
 //   });
+//
+// `note` is the one hook that is optional: return a short sentence when something on
+// the node that the axis does NOT sweep will still land in every square, and XY Plot
+// draws it under the "now:" line. It exists because a state-blob node can hold a whole
+// stack of settings behind one axis - the LoRA Loader's other switched-on rows are
+// applied to every cell, which users read as "my second lora is being ignored" when it
+// is in fact being applied everywhere. Return "" when there is nothing to say.
 //
 // An `entry` has the SAME shape XY Plot's own classifyWidget returns, so the whole
 // downstream pipeline (value entry, rounding, snap, grid labels) is untouched:

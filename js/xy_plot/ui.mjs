@@ -8,7 +8,7 @@
 import { app } from "/scripts/app.js";
 import {
   readState, writeState,
-  enumerateTargets, lookupWidgetMeta, currentValuePreview, axisDisplayName,
+  enumerateTargets, lookupWidgetMeta, currentValuePreview, axisDisplayName, axisNote,
   resolveAxisValues, computeCounts, axisReady, setLiveAxisMeta,
 } from "./core.mjs";
 import { registerNodeHelp } from "../shared/index.mjs";
@@ -40,7 +40,7 @@ const XY_HELP = {
       defs: [
         ["Number", "A `Range` (Start / End / Steps) or a `List` of values."],
         ["Dropdown", "A checklist - tick the samplers / models / schedulers you want to compare."],
-        ["LoRA", "Compare loras or their strengths. Pick a lora ROW to swap which lora file, or its `strength` entry to sweep the weight (e.g. 0.3, 0.6, 1.0). Any OTHER lora rows stay applied in every square, so turn off the ones you are not comparing. Works with LoRA Loader Pixaroma (each row shows up as `LoRA 1`, `LoRA 1 strength`, and `LoRA 1 clip strength` when model and clip strengths are separate), the core Load LoRA node, and other multi-lora loaders. When you swap the FILE on a LoRA Loader Pixaroma row, that row's ticked trigger words are left out of every square, since they belonged to one particular lora - put any words you want in all squares into your prompt instead."],
+        ["LoRA", "Compare loras or their strengths. Pick a lora ROW to swap which lora file, or its `strength` entry to sweep the weight (e.g. 0.3, 0.6, 1.0). An axis sweeps ONE row, so any OTHER lora rows that are switched on stay applied in every square: for a clean A against B, switch them off, and if a row on a LoRA Loader Pixaroma would do that an orange line under the picker names it. To compare two loras in every combination instead, put one on X and the other on Y. Works with LoRA Loader Pixaroma (each row shows up as `LoRA 1`, `LoRA 1 strength`, and `LoRA 1 clip strength` when model and clip strengths are separate), the core Load LoRA node, and other multi-lora loaders. When you swap the FILE on a LoRA Loader Pixaroma row, that row's ticked trigger words are left out of every square, since they belonged to one particular lora - put any words you want in all squares into your prompt instead."],
         ["Prompt text", "`Full list` (one full prompt per line) or `Find & replace` (swap a word for each value)."],
       ],
       bullets: [
@@ -110,6 +110,11 @@ export function injectCSS() {
 .pix-xy-axis-reset .pix-xy-axis-reset-ic{font-size:12px;line-height:1;}
 .pix-xy-row{display:flex;align-items:center;gap:7px;}
 .pix-xy-curhint{font-size:10.5px;color:#8a8a8a;font-style:italic;margin:5px 2px 0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+/* Heads-up from the target node's sweep provider (e.g. "another LoRA row is on too,
+   so it is in every square"). Wraps rather than ellipsising - it is a sentence, and
+   a truncated warning is worse than none. */
+.pix-xy-axisnote{font-size:10.5px;line-height:1.35;color:var(--pix-acc,#f66744);margin:4px 2px 0;display:flex;gap:5px;align-items:flex-start;}
+.pix-xy-axisnote .pix-xy-axisnote-ic{flex:0 0 auto;}
 /* custom dropdown (value + ▼ + ◀▶), Pixaroma convention - never native <select> */
 .pix-xy-combo{flex:1;display:flex;align-items:center;gap:8px;min-width:0;background:#1d1d1d;border:1px solid rgba(255,255,255,.14);border-radius:5px;padding:6px 9px;font-size:12.5px;cursor:pointer;}
 .pix-xy-combo:hover{border-color:var(--pix-acc,#f66744);}
@@ -737,6 +742,39 @@ function buildSaveResControl(node, state) {
 
 // ── top-level render ─────────────────────────────────────────────────────────
 
+// Fill (or empty) one axis's heads-up slot. DOM only: it never touches node.size,
+// node.properties or a widget, so it cannot flag a workflow modified (#18). The
+// no-change early return keeps the pointerenter refresh from churning the DOM on
+// every pass over the node.
+function fillAxisNote(node, slot, axis, otherAxis) {
+  const txt = axisNote(node, axis, otherAxis);
+  if (slot.dataset.noteTxt === txt) return;
+  slot.dataset.noteTxt = txt;
+  slot.innerHTML = "";
+  if (!txt) return;
+  const note = el("div", "pix-xy-axisnote");
+  note.appendChild(el("span", "pix-xy-axisnote-ic", "⚠"));
+  note.appendChild(el("span", null, txt));
+  note.title = txt;
+  slot.appendChild(note);
+}
+
+// Re-read both heads-up lines WITHOUT rebuilding the body. The note reports state
+// that lives on ANOTHER node (the LoRA Loader's row toggles), and nothing re-renders
+// this node when that node changes - so a warning the user has just acted on would
+// sit there telling them to do it again, which is a worse bug than the one the note
+// fixes. Wired to pointerenter on the body: free until the cursor arrives, which is
+// exactly when the user comes back to look.
+export function refreshAxisNotes(node, root) {
+  if (!node || !root) return;
+  let state;
+  try { state = readState(node); } catch (_e) { return; }
+  for (const axisKey of ["x", "y"]) {
+    const slot = root.querySelector(`.pix-xy-axis[data-axis="${axisKey}"] .pix-xy-noteslot`);
+    if (slot) fillAxisNote(node, slot, state[axisKey], state[axisKey === "x" ? "y" : "x"]);
+  }
+}
+
 // handlers: { rerender(): full rebuild, growth(): re-measure node height }
 export function renderBody(node, root, handlers) {
   const state = readState(node);
@@ -786,6 +824,15 @@ export function renderBody(node, root, handlers) {
       hint.title = "Current value of the setting this axis points at. If it's not the one you meant, re-pick above.";
       card.appendChild(hint);
     }
+    // Anything else on the target node that lands in EVERY square (today: the LoRA
+    // Loader's other switched-on rows). Shown here rather than only in the picker
+    // popup because the surprise arrives when you look at the finished grid, not
+    // when you pick. A stable empty slot, so refreshAxisNotes can update it in
+    // place without rebuilding the card (which would drop the filter box's focus
+    // and the checklist's scroll position).
+    const noteSlot = el("div", "pix-xy-noteslot");
+    card.appendChild(noteSlot);
+    fillAxisNote(node, noteSlot, state[axisKey], state[axisKey === "x" ? "y" : "x"]);
     const valueArea = el("div", "pix-xy-valuearea");
     card.appendChild(valueArea);
     renderValueArea(node, axisKey, valueArea, refreshCounter, handlers.rerender);

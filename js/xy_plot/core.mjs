@@ -484,6 +484,36 @@ export function currentValuePreview(node, axis) {
   return v.length > 48 ? v.slice(0, 48) + "…" : v;
 }
 
+// A short heads-up about something on the TARGET node that will affect every
+// square, from the provider that owns the axis (optional hook - a provider without
+// one simply has nothing to say). It exists because a state-blob node can hold
+// settings the axis does NOT sweep but that still land in every cell: the LoRA
+// Loader's OTHER switched-on rows are applied to every square, which reads as "my
+// second lora is being ignored" when it is in fact being applied everywhere. Read
+// only, so it follows Pattern #14 and never passes a wantClass to targetNodeOf.
+export function axisNote(node, axis, otherAxis) {
+  if (!axis || axis.nodeId == null || !axis.widgetName) return "";
+  const target = targetNodeOf(node, axis);
+  if (!target) return "";
+  // Widgets always win (Pattern #12): a real widget of that name means this is an
+  // ordinary axis and the provider is not involved at all.
+  if (target.widgets?.some((x) => x && x.name === axis.widgetName)) return "";
+  const prov = sweepProviderFor(target, axis);
+  if (!prov || !prov.note) return "";
+  try {
+    // The OTHER axis is handed over so the provider can stay quiet about anything
+    // that axis is already sweeping on purpose: X = LoRA 1, Y = LoRA 2 is the
+    // documented way to plot every combination, and telling that user to switch a
+    // row off would be advice that breaks their grid.
+    const s = String(prov.note(target, axis, otherAxis) || "").replace(/\s+/g, " ").trim();
+    return s.length > 200 ? s.slice(0, 200) + "…" : s;
+  } catch (_e) {
+    // A throwing provider degrades to "nothing to say" - it must never break the
+    // node body render.
+    return "";
+  }
+}
+
 // Look up a fresh classification for an axis's currently-picked widget (so the
 // editor can rebuild combo option lists, number steps, etc. after reload). For an
 // object-valued lora row the widget yields several entries - return the one that
