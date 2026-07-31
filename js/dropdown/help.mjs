@@ -35,10 +35,9 @@ export const DROPDOWN_HELP = {
       body:
         "The node itself is one row. Click it to open your list, or use the `◀` and `▶` "
         + "arrows to step through without opening anything.\n\n"
-        + "The list shows each name on the left and a peek at its value on the right, so you "
-        + "can tell two similar entries apart. The name always gets the space first: the peek "
-        + "gives way rather than cutting a name short. If a name is still too long, make the "
-        + "node wider - the list opens at the node's width.",
+        + "The list shows just your names, sized so they fit, and its text follows your zoom "
+        + "so it stays in step with the node. Hold the mouse over an entry to peek at its "
+        + "value, or open the settings to see everything.",
     },
     {
       heading: "What comes out",

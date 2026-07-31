@@ -18,6 +18,7 @@
 // Both are lifted from Control Panel (js/sliders/ui.mjs), which is the only
 // other node in the pack doing this. Every trap it documents applies here.
 
+import { app } from "/scripts/app.js";
 import { isVueNodes, applyAdaptiveCanvasOnly } from "../shared/nodes2.mjs";
 import { installCanvasZoomPassthrough } from "../shared/canvas_zoom.mjs";
 import { installNodeAccent, accentOf, ACC } from "../shared/node_settings.mjs";
@@ -114,15 +115,18 @@ export function injectCSS() {
   }
 
   /* ── The option popup (lives on document.body, outside the node) ────────── */
+  /* Inner sizes and paddings are em ON PURPOSE: openPopup sets the root
+     font-size from the canvas zoom, and em lets that one number scale the
+     rows, gaps and padding together. Do not put px back on the rows. */
   .pix-dd-pop{
     position:fixed; z-index:1200; box-sizing:border-box;
-    background:#1d1d1d; border:1px solid #555; border-radius:6px; padding:4px;
+    background:#1d1d1d; border:1px solid #555; border-radius:6px; padding:.35em;
     max-height:320px; overflow-y:auto; overflow-x:hidden;
     font:12px 'Segoe UI',sans-serif; box-shadow:0 6px 20px rgba(0,0,0,.45);
   }
   .pix-dd-opt{
-    display:flex; align-items:baseline; gap:10px;
-    padding:6px 9px; border-radius:4px; cursor:pointer;
+    display:flex; align-items:baseline; gap:.85em;
+    padding:.5em .75em; border-radius:4px; cursor:pointer;
   }
   .pix-dd-opt:hover{ background:#2a2a2a; }
   .pix-dd-opt.sel{ background:${ACC}; }
@@ -133,16 +137,13 @@ export function injectCSS() {
        the whole popup still ellipsizes - the popup opens at the field's width,
        so widening the NODE is how you give a long name more room. */
     flex:none; max-width:100%; overflow:hidden; text-overflow:ellipsis;
-    white-space:nowrap; color:#ddd; font-size:12px;
+    white-space:nowrap; color:#ddd; font-size:1em;
   }
   .pix-dd-opt.sel .pix-dd-oname{ color:#fff; }
-  .pix-dd-ohint{
-    flex:1 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis;
-    white-space:nowrap; color:#888; font-size:11px; text-align:right;
-  }
-  .pix-dd-opt.sel .pix-dd-ohint{ color:rgba(255,255,255,.8); }
-  .pix-dd-opt.bad .pix-dd-ohint{ color:#e0703a; }
-  .pix-dd-pop-empty{ padding:8px 10px; color:#777; font-size:11px; font-style:italic; }
+  /* The warning suffix on a row whose value does not read as the type. */
+  .pix-dd-obad{ flex:none; color:#e0703a; font-size:.9em; }
+  .pix-dd-opt.sel .pix-dd-obad{ color:#fff; }
+  .pix-dd-pop-empty{ padding:.7em .85em; color:#777; font-size:.92em; font-style:italic; }
 
   /* ── Nodes 2.0 only ─────────────────────────────────────────────────────
      Every widget row reserves a 12px column for a widget-INPUT dot. This node
@@ -419,6 +420,19 @@ export function openPopup(node) {
   // the node's accent variable - set it here or the selected row is orange when
   // the node is not.
   pop.style.setProperty("--pix-acc", accentOf(node));
+  // It does not inherit the canvas ZOOM either: the node's row grows with the
+  // zoom while a fixed 12px popup shrinks next to it (user report, 2026-07-31).
+  // Track the zoom through the root font-size - the rows are sized in em, so
+  // this one number scales text, gaps and padding together. Floor 1 keeps
+  // today's size when zoomed OUT (a popup you open to read should not shrink
+  // with the graph); cap 2.5 keeps a deep zoom-in from producing poster text.
+  // Set before positioning: the flip-above branch measures offsetHeight.
+  const zoom = Math.min(2.5, Math.max(1, app.canvas?.ds?.scale || 1));
+  pop.style.fontSize = Math.round(12 * zoom * 10) / 10 + "px";
+  if (zoom > 1) {
+    pop.style.maxHeight =
+      Math.round(Math.min(320 * zoom, window.innerHeight * 0.6)) + "px";
+  }
 
   if (!st.options.length) {
     const empty = document.createElement("div");
@@ -437,12 +451,15 @@ export function openPopup(node) {
       const nm = document.createElement("span");
       nm.className = "pix-dd-oname";
       nm.textContent = o.name?.trim() || "(unnamed)";
-      const hint = document.createElement("span");
-      hint.className = "pix-dd-ohint";
-      // First line only: a value may be several lines and the raw string would
-      // blow the one-line row apart.
-      hint.textContent = previewText(o.value, st.type);
-      item.append(nm, hint);
+      item.append(nm);
+      // Names ONLY - the value peek was tried and removed the same day (user:
+      // it complicated the list). The value is one hover away via the title
+      // below, and always in the settings. A bad row keeps a mark though: an
+      // entry silently sending the fallback must not look identical to one
+      // that works.
+      if (!ok) item.append(Object.assign(document.createElement("span"), {
+        className: "pix-dd-obad", textContent: "⚠",
+      }));
       item.title = ok
         ? (o.value || "")
         : `Does not read as ${SOCKET_LABELS[st.type]}, so this one sends ${previewText(o.value, st.type)}.`;
@@ -462,8 +479,18 @@ export function openPopup(node) {
 
   document.body.appendChild(pop);
   const r = parts.field.getBoundingClientRect();
-  pop.style.left = Math.round(r.left) + "px";
-  pop.style.width = Math.max(200, Math.round(r.width)) + "px";
+  // The field's width is the MINIMUM, not the width: with the zoom-scaled font
+  // a popup locked to the field re-cut the very names pattern #1 freed. The
+  // popup grows to fit its longest row (the peek's own em cap stops a paragraph
+  // value from dragging it wide), bounded by the viewport.
+  pop.style.minWidth = Math.max(200, Math.round(r.width)) + "px";
+  pop.style.maxWidth = Math.min(Math.round(window.innerWidth * 0.9), Math.round(640 * zoom)) + "px";
+  // A grown popup can poke past the window's right edge (the field-width popup
+  // never could) - keep it on screen, left-aligned to the field otherwise.
+  const pw = pop.offsetWidth;
+  let left = Math.round(r.left);
+  if (left + pw > window.innerWidth - 8) left = Math.max(8, window.innerWidth - 8 - pw);
+  pop.style.left = left + "px";
   // Flip above when there is not room below.
   const h = pop.offsetHeight;
   const below = window.innerHeight - r.bottom;
