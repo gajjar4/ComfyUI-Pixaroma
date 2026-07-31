@@ -480,7 +480,13 @@ export function scheduleAlign(node) {
  * read every 350ms.
  */
 export function watchAlign(node) {
-  if (!isVueNodes() || node._pixDdPoll) return;
+  if (node._pixDdPoll) return;
+  // Deliberately NOT gated on isVueNodes(). The renderer can be switched while
+  // the node already exists, and that switch does not re-run onNodeCreated or
+  // onConfigure - so a node built in Classic and then switched to Nodes 2.0 was
+  // left with no aligner at all and its dot stayed in the corner forever
+  // (observed, not theorised). alignOutput early-returns in Classic, so the
+  // steady-state cost of running the poll either way is one boolean check.
   node._pixDdPoll = setInterval(() => {
     if (!node.graph) { unwatchAlign(node); return; }
     alignOutput(node);
