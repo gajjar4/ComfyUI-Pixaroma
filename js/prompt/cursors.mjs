@@ -170,10 +170,22 @@ export function commitPicks(queued) {
 // list that was edited to a different length starts its sequence over. A pick already
 // made and not yet spent on a run is REUSED (see _pending above) - the mode and pool
 // size must still match, or the pick no longer means anything.
-export function nextIndex(key, len, mode) {
+// `occ` is WHICH USE of this key we are answering within one prompt build: the first
+// `#fruit` in a box is 0, the second 1, the third 2. Repeats used to all collide on
+// the single held pick, so `#fruit #fruit #fruit` printed one word three times (users
+// asked for three different ones; this was invariant #39's documented "LEFT" item).
+// The hold is therefore an ARRAY of picks per key rather than one, which keeps BOTH
+// things the hold exists for: an un-queued build (Export, a Save button, a rejected
+// queue) still hands the same cards back to the real run, and a second Prompt node
+// starts its own count at 0 so it agrees with the first node's first use - which is
+// also what stops a parked, unwired node stealing a card off the deck.
+// IN ORDER is deliberately exempt: it advances once per RUN, so every use in one
+// build reports the same entry (the user's call - "only in order will be the same").
+export function nextIndex(key, len, mode, occ = 0) {
   const n = Math.floor(len);
   if (!(n > 0)) return -1;
   const m = cleanMode(mode);
+  const want = m === "order" ? 0 : Math.max(0, Math.floor(occ) || 0);
   const held = _pending.get(key);
   if (held && held.n === n && held.mode === m) {
     // RE-STAMP: this build is using the held pick, so it is this build's to spend.
@@ -181,23 +193,42 @@ export function nextIndex(key, len, mode) {
     // that build's stamp forever and never commit, so a real run using it would not
     // advance the sequence at all.
     held.build = _build;
-    return held.i;
+    // Deal as many further cards as this build has asked for, each continuing from the
+    // previous one's state so a shuffle keeps dealing down the SAME deck.
+    while (held.picks.length <= want) {
+      const more = rollIndex(key, n, m, held.state);
+      if (more.i < 0) break;
+      held.picks.push(more.i);
+      held.state = more.state;
+    }
+    return held.picks[Math.min(want, held.picks.length - 1)];
   }
   const r = rollIndex(key, n, m);
-  if (r.i >= 0) _pending.set(key, { i: r.i, n, mode: m, state: r.state, build: _build });
-  return r.i;
+  if (r.i < 0) return r.i;
+  const rec = { picks: [r.i], n, mode: m, state: r.state, build: _build };
+  _pending.set(key, rec);
+  while (rec.picks.length <= want) {
+    const more = rollIndex(key, n, m, rec.state);
+    if (more.i < 0) break;
+    rec.picks.push(more.i);
+    rec.state = more.state;
+  }
+  return rec.picks[Math.min(want, rec.picks.length - 1)];
 }
 
-// The actual draw. Only ever called by nextIndex, once per key per run.
+// The actual draw. Called by nextIndex - once per key for the first use in a build,
+// then again per extra use (a repeated #list in one box), each time continuing from
+// the previous draw's `from` state so a shuffle deals down the SAME deck instead of
+// re-reading the stored one and handing back the card it just dealt.
 // Returns { i, state }: `state` is what the stored cursor SHOULD become if this pick is
 // spent on a real run. It is deliberately NOT written here - commitPicks applies it.
-function rollIndex(key, n, m) {
-  if (m === "random" || n === 1) return { i: Math.floor(Math.random() * n), state: null };
+function rollIndex(key, n, m, from) {
+  if (m === "random" || n === 1) return { i: Math.floor(Math.random() * n), state: from ?? null };
   const map = all();
   // Nowhere to remember a position (settings not ready). Fall back to a plain random
   // pick rather than pretending to sequence and dropping the result.
   if (!map) return { i: Math.floor(Math.random() * n), state: null };
-  let st = map[key];
+  let st = from !== undefined ? from : map[key];
   if (!st || typeof st !== "object" || st.n !== n) st = null;   // pool changed -> restart
 
   if (m === "order") {

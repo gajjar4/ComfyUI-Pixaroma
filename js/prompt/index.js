@@ -10,6 +10,7 @@ import {
   tagMode, catMode, TEXT_BUCKET, LIST_BUCKET,
 } from "./library.mjs";
 import { nextIndex, listKey, catKey, commitPicks, beginPickBuild } from "./cursors.mjs";
+import { registerRunWorkflowPatcher, readNodeProp, writeNodeProp } from "../shared/run_seed_embed.mjs";
 import { api } from "/scripts/api.js";
 import { expandAll, hasTags, hasWilds, hasLists, scanTokens, prevCodePoint } from "./expand.mjs";
 import { openLibraryEditor, closeLibraryEditorFor } from "./library_editor.mjs";
@@ -47,6 +48,19 @@ function writeState(node, patch) {
   node.properties = node.properties || {};
   const cur = readState(node);
   node.properties[STATE_KEY] = { ...cur, ...patch };
+}
+// An image dragged back onto the canvas carries the words its run actually used, in
+// `promptState.lastRun` (written only into the queued copy - see the patcher below).
+// Seed the runtime readout from it so the expanded box shows THAT prompt straight
+// away instead of an unresolved `#fruit #fruit`. Read RAW rather than through
+// readState, which normalizes the key away on purpose: `writeState` then drops it on
+// the user's next edit, so it can never linger once the text has moved on.
+function restoreLastRun(node) {
+  const raw = node.properties && node.properties[STATE_KEY];
+  if (!raw || typeof raw !== "object") return;
+  if (typeof raw.lastRun === "string" && typeof raw.text === "string") {
+    node._pixPromptLastRun = { src: raw.text, out: raw.lastRun };
+  }
 }
 
 // ── CSS ────────────────────────────────────────────────────────────────────
@@ -195,16 +209,25 @@ const PROMPT_HELP = {
       ],
     },
     {
+      heading: "Using the same list twice in one prompt",
+      body:
+        "Write `#fruit #fruit #fruit` and you get three different fruits, not the same one three times. Each use takes the next one along, exactly as if you had dealt three cards.\n\n" +
+        "`In order` is the exception, and deliberately so: it moves on once per Run, so every `#name` in the same box shows the same entry that run, and the next Run moves to the next one.\n\n" +
+        "One thing to expect with a short list: if you use it more times than it has options left, it finishes the deck, shuffles again and carries on, so one option can appear twice in a long prompt. With `Random` that can happen at any time, because random is allowed to repeat itself.",
+    },
+    {
       heading: "Where it is up to",
       body:
         "Shuffle and In order remember their place between runs and even after you close ComfyUI. The card shows it (`next 3 of 12`, or how many are left in the deck) and the `↺` button next to it starts that list over.\n\n" +
-        "The position belongs to the list itself, so two Prompt nodes using the same `#list` move through it together. It is stored on your machine, never inside a workflow, so sharing a workflow shares nothing about where you were.",
+        "The position belongs to the list itself, so two Prompt nodes using the same `#list` both show the same first pick on a given Run. That is on purpose. A list is one deck, so if every node quietly took a card of its own, an old Prompt node parked in the corner of your workflow, wired to nothing, would still be drawing from your deck and you would never see what it took. Repeats inside one box still move along, so you keep full control from the box you are actually writing in.\n\n" +
+        "The position is stored on your machine, never inside a workflow, so sharing a workflow shares nothing about where you were.",
     },
     {
       heading: "Reading the colours",
       body:
         "Anything that rolls glows violet, so `*category` and `#list` share that colour; a plain `@tag` stays orange, and an unknown or empty one glows red so you spot a typo.\n\n" +
-        "`Show expanded` names the mode instead of guessing the pick: `[random: Styles]`, `[shuffled line: animals]`, `[next line: poses]`. The real choice only happens when you run, so wire a Show Text Pixaroma to the output to see exactly what was used. Tip: with a fixed seed the picture only changes when the pick changes, so use a random seed if you want a new image every run.",
+        "While you are typing, `Show expanded` names the slot instead of guessing: `[random: Styles]`, `[shuffled line: animals]`, `[next line: poses]`. It cannot show a real pick yet, because the choice is made when you press Run, and a live one would change under your hands at every keystroke.\n\n" +
+        "The moment you press Run it switches to the actual words that were used, so you can always see what a picture was made from. Edit the box and it goes back to naming the slots, because the old words no longer describe what you have written. The words also travel inside the picture: drag a finished image back onto the canvas and the box shows the prompt that made it, while your `#name` template stays exactly as you wrote it. Tip: with a fixed seed the picture only changes when the pick changes, so use a random seed if you want a new image every run.",
     },
     {
       heading: "Save text as a tag",
@@ -295,15 +318,17 @@ const MODE_WORD = { random: "random", shuffle: "shuffled", order: "next" };
 // mode (random / shuffle / in order - cursors.mjs owns the position). When the pick
 // lands on a LIST tag its lines are the options, so pick one of those too, using
 // THAT list's own mode (a category of lists composes: pick a list, then a line).
-function pickWild(name) {
+function pickWild(name, nextOcc) {
   const w = wildCat(name);
   if (!w) return null;
-  const i = nextIndex(catKey(w.canonical), w.pool.length, catMode(w.canonical));
+  const ck = catKey(w.canonical);
+  const i = nextIndex(ck, w.pool.length, catMode(w.canonical), nextOcc ? nextOcc(ck) : 0);
   const t = w.pool[i < 0 ? 0 : i];
   if (isListTag(t)) {
     const lines = tagLines(t.text);
     if (lines.length) {
-      const j = nextIndex(listKey(t.name), lines.length, tagMode(t));
+      const lk = listKey(t.name);
+      const j = nextIndex(lk, lines.length, tagMode(t), nextOcc ? nextOcc(lk) : 0);
       return lines[j < 0 ? 0 : j];
     }
   }
@@ -331,10 +356,11 @@ function listOf(name) {
   return lines.length ? { tag: t, lines } : null;
 }
 // RUN resolver: the next line at queue time, per this list's own mode.
-function pickList(name) {
+function pickList(name, nextOcc) {
   const l = listOf(name);
   if (!l) return null;
-  const i = nextIndex(listKey(l.tag.name), l.lines.length, tagMode(l.tag));
+  const lk = listKey(l.tag.name);
+  const i = nextIndex(lk, l.lines.length, tagMode(l.tag), nextOcc ? nextOcc(lk) : 0);
   return l.lines[i < 0 ? 0 : i];
 }
 // PREVIEW resolver: a STABLE placeholder, same reasoning as previewWild.
@@ -343,8 +369,40 @@ function previewList(name) {
   return l ? `[${MODE_WORD[tagMode(l.tag)]} line: ${l.tag.name}]` : null;
 }
 // Both random resolvers for the PREVIEW / the RUN, so every call site stays in step.
+// Carry the words a run actually used INTO the image, so dragging that picture back
+// shows what its prompt really was instead of an unresolved `#fruit #fruit`. Written
+// only into the copy handed to the queue (which becomes extra_pnginfo.workflow), so
+// Export and Ctrl+S keep your template untouched - the full reasoning is in
+// js/shared/run_seed_embed.mjs. It is an EXTRA key: `text` still holds your template,
+// so nothing you typed is ever overwritten.
+registerRunWorkflowPatcher((workflow) => {
+  let index = null;
+  for (const wfNode of workflow.nodes) {
+    if (!wfNode || wfNode.type !== "PixaromaPrompt") continue;
+    if (!index) index = buildPromptNodeIndex();
+    const live = findPromptNode(index, String(wfNode.id));
+    const ran = live && live._pixPromptLastRun;
+    if (!ran) continue;
+    const cur = readNodeProp(wfNode, "promptState");
+    if (!cur || !cur.value || typeof cur.value !== "object") continue;
+    if (cur.value.text !== ran.src) continue;   // the box moved on; do not embed a stale result
+    writeNodeProp(wfNode, "promptState", { ...cur.value, lastRun: ran.out }, cur.wasString);
+  }
+});
+
 const PREVIEW_RESOLVERS = { resolveWild: previewWild, resolveList: previewList };
-const RUN_RESOLVERS = { resolveWild: pickWild, resolveList: pickList };
+// The RUN resolvers are built FRESH per node expansion, because they carry the
+// per-use counter that makes a repeated `#list` in one box deal a new card. Starting
+// each node at 0 is what keeps two Prompt nodes in step on their first use (the
+// user's choice) and what stops a parked, unwired node consuming a card of its own.
+function makeRunResolvers() {
+  const used = new Map();
+  const nextOcc = (k) => { const n = used.get(k) || 0; used.set(k, n + 1); return n; };
+  return {
+    resolveWild: (name) => pickWild(name, nextOcc),
+    resolveList: (name) => pickList(name, nextOcc),
+  };
+}
 
 // A dark custom dropdown (never a native white <select> - house rule). Returns
 // { el, set(value) }. `options` is [{value,label}]; onChange(value) fires on pick.
@@ -841,7 +899,14 @@ function renderExpand(node) {
   const v = els.ta.value;
   if (!st.showExpanded || (!hasTags(v) && !hasWilds(v) && !hasLists(v) && !wired)) { els.expand.style.display = "none"; return; }
   els.expand.style.display = "block";
-  const mine = expandAll(v, PREVIEW_RESOLVERS).out;
+  // Once a build has happened, show the WORDS it actually produced rather than the
+  // [shuffled line: x] placeholder - otherwise there is no way to tell what a run
+  // used, and no way to read it back off an image you dragged in. Gated on the text
+  // being unchanged since, so editing the box returns to the placeholder by itself
+  // (a stale result would be worse than none). The placeholder is still what you see
+  // while typing, which is invariant #24's "never a live random, or it flickers".
+  const ran = node._pixPromptLastRun;
+  const mine = (ran && ran.src === v) ? ran.out : expandAll(v, PREVIEW_RESOLVERS).out;
   if (!wired) {
     els.expand.innerHTML = `<span class="mine">${escapeHTML(mine)}</span>`;
     return;
@@ -1150,6 +1215,7 @@ function setupNode(node) {
   if (node.size[1] < MIN_H) node.size[1] = DEFAULT_H;
 
   queueMicrotask(() => {
+    restoreLastRun(node);
     relabelInputSlot(node);
     applyAccent(node);
     applyOrderUI(node);
@@ -1175,6 +1241,7 @@ app.registerExtension({
     nodeType.prototype.onConfigure = function (info) {
       const r = origConfigure?.apply(this, arguments);
       queueMicrotask(() => {
+        restoreLastRun(this);
         const root = this._pixPromptRoot;
         if (root && root._els) {
           const st = readState(this);
@@ -1345,7 +1412,15 @@ app.graphToPrompt = async function (...args) {
           // queue time, so each run gets a fresh pick; @tags expand deterministically. A
           // different pick changes this string -> the cache key changes -> re-run (no
           // nonce needed, invariant #3).
-          const expanded = expandAll(st.text, RUN_RESOLVERS).out;
+          const expanded = expandAll(st.text, makeRunResolvers()).out;
+          // Remember what this build actually produced so the expanded box can show
+          // the REAL words instead of the [shuffled line: x] placeholder (users could
+          // not tell what a run had picked). RUNTIME ONLY - writing node.properties
+          // here would dirty a clean workflow on every run (invariant #4, the Seed
+          // lesson). `src` is the text it was expanded FROM, so a later edit to the
+          // box invalidates the readout by itself instead of showing a stale result.
+          node._pixPromptLastRun = { src: st.text, out: expanded };
+          queueMicrotask(() => { try { renderExpand(node); } catch { /* node may be gone */ } });
           entry.inputs = entry.inputs || {};
           // Cosmetic keys (accent, showExpanded) are DELIBERATELY excluded so a colour
           // pick can't change the run's cache key (project note on injected state).
