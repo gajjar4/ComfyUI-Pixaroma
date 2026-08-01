@@ -351,6 +351,9 @@ Master the Pixaroma suite with our video guides and workflow deep-dives:
 
 ## 🛠 Changelog
 
+### **August 1, 2026 · v1.4.73**
+- **Fixed: a confusing warning when ComfyUI starts up.** Yesterday's update accidentally saved one of the pack's own information files with an invisible marker at the very start, the kind Windows adds when a file is written a certain way. Your nodes still all loaded and worked, but ComfyUI printed a message on startup that blamed a missing piece called pydantic-settings. That was never the real cause, so anyone who followed it was installing something they did not need. ComfyUI Manager also could not read the pack's details properly while it was there. The file is fixed, and a new check now runs before every update goes out, so a stray invisible character cannot slip through again.
+
 ### **July 31, 2026 · v1.4.69–v1.4.72**
 - **You can hide the Align, Workflows and Help buttons.** Three tick boxes in Settings, in the Pixaroma section, one per button this pack adds to the top toolbar, for anyone who wants a cleaner bar. All three start ticked, so nothing changes unless you choose it. Hiding a button never turns the feature off: Alt+W still opens the Workflows panel and Alt+H the help, both stay on the right-click menu on empty canvas, and Align keeps snapping with its own switch still in Settings. The help's "Buttons or nodes missing?" page now asks about this first, since a hidden button looks exactly like a broken one.
 - **The Dropdown's list is easier to read.** It now shows your names in full instead of cutting them off halfway to make room for a peek of the value, it grows to fit your longest name, and its text follows your zoom so it stays in step with the node instead of reading tiny when you are zoomed in. The rows show just the names to keep things simple: hold the mouse over an entry to peek at its value, and the settings show everything.
