@@ -351,7 +351,8 @@ Master the Pixaroma suite with our video guides and workflow deep-dives:
 
 ## 🛠 Changelog
 
-### **August 1, 2026 · v1.4.73**
+### **August 1, 2026 · v1.4.73–v1.4.74**
+- **Fixed: a picture now remembers the seed that made it.** Drag a finished image back onto the canvas and the Seed node showed a different number from the one that actually made that picture, and it came back set to Random, so pressing Run gave you something else entirely. There was no way to get that image back. The seed that really ran is now saved inside the picture, and dragging it back brings the node up locked to that exact seed, so Run recreates it. Click **R** whenever you want to carry on trying new ones. The seed control in the Control Panel had the same problem and is fixed too. This works with Preview Image, Save Image, Save Mp4 and XY Plot, and exporting or saving a workflow is unchanged, so your own workflows keep whatever setting you left them on.
 - **Fixed: a confusing warning when ComfyUI starts up.** Yesterday's update accidentally saved one of the pack's own information files with an invisible marker at the very start, the kind Windows adds when a file is written a certain way. Your nodes still all loaded and worked, but ComfyUI printed a message on startup that blamed a missing piece called pydantic-settings. That was never the real cause, so anyone who followed it was installing something they did not need. ComfyUI Manager also could not read the pack's details properly while it was there. The file is fixed, and a new check now runs before every update goes out, so a stray invisible character cannot slip through again.
 
 ### **July 31, 2026 · v1.4.69–v1.4.72**
