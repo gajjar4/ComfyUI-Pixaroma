@@ -5,6 +5,7 @@ import { hideJsonWidget, applyAdaptiveCanvasOnly, isVueNodes, measureRootContent
 import { registerNodeSettings, installNodeAccent, ACC } from "../shared/node_settings.mjs";
 import { openSeedSettings, closeSeedSettingsFor } from "./settings.mjs";
 import { openSeedHistory, closeSeedHistoryFor, refreshSeedHistory } from "./history.mjs";
+import { registerRunWorkflowPatcher, readNodeProp, writeNodeProp } from "../shared/run_seed_embed.mjs";
 
 // ─────────────────────────────────────────────────────────────────────────
 // Seed Pixaroma — a seed source with Random / Fixed modes + buttons.
@@ -1309,6 +1310,39 @@ app.graphToPrompt = async function (...args) {
   }
   return result;
 };
+
+// ── Bake the run's seed into the workflow embedded in the output image ──────
+// Random mode keeps the rolled seed in a RUNTIME field so a Run can never
+// dirty the saved workflow (#1) - but that left the PNG carrying the STALE
+// stored seed, so dragging the image back and pressing Run gave a DIFFERENT
+// picture (discussion #70, two reports). We rewrite it in the QUEUED copy
+// only: that object becomes extra_pnginfo.workflow, so every save path picks
+// it up (Preview Image both save_modes, Save Image, Save Mp4, XY Plot, native
+// Save Image - they all read extra_pnginfo). Export and Ctrl+S are untouched,
+// which is exactly why this is not done in the graphToPrompt hook above.
+// Mode is written as "fixed" on purpose: the image is a record of ONE
+// generation, so dragging it back should reproduce it, not roll a new seed.
+registerRunWorkflowPatcher((workflow, output) => {
+  const ran = new Map();
+  for (const id in output) {
+    const entry = output[id];
+    if (!entry || entry.class_type !== "PixaromaSeed") continue;
+    try {
+      const injected = JSON.parse(entry.inputs?.[HIDDEN_INPUT_NAME] || "{}");
+      if (Number.isFinite(injected.runSeed)) ran.set(String(id), injected.runSeed);
+    } catch { /* a malformed entry just means no rewrite for that node */ }
+  }
+  if (!ran.size) return;
+
+  for (const wfNode of workflow.nodes) {
+    if (!wfNode || wfNode.type !== "PixaromaSeed") continue;
+    const seed = ran.get(String(wfNode.id));
+    if (seed == null) continue;
+    const cur = readNodeProp(wfNode, STATE_PROP);
+    if (!cur) continue;
+    writeNodeProp(wfNode, STATE_PROP, { ...cur.value, seed, mode: "fixed" }, cur.wasString);
+  }
+});
 
 // One opener shared by the right-click entry and the selection-toolbar gear.
 function openSeedPanel(node) {

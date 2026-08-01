@@ -3,8 +3,9 @@ import { isVueNodes } from "../shared/nodes2.mjs";
 import { isGraphLoading } from "../shared/graph_loading.mjs";
 import { registerNodeHelp } from "../shared/help.mjs";
 import { registerNodeSettings } from "../shared/node_settings.mjs";
+import { registerRunWorkflowPatcher, readNodeProp, writeNodeProp } from "../shared/run_seed_embed.mjs";
 import {
-  BRAND, MAX_SLIDERS,
+  BRAND, MAX_SLIDERS, STATE_PROP,
   readState, normalizeSliders, syncOutputs, addSlider, resolveAutoType, resetRowOnDisconnect,
   comboOptionsOf, randomSeed,
 } from "./core.mjs";
@@ -367,6 +368,48 @@ app.graphToPrompt = async function (...args) {
   }
   return result;
 };
+
+// ── Bake each run's seed into the workflow embedded in the output image ─────
+// Same fix, same reason as the Seed node (see js/seed/index.js and
+// js/shared/run_seed_embed.mjs): a randomize-each-run seed row keeps its
+// rolled value in the RUNTIME map `_pixSeedRun` so a Run can't dirty the
+// saved workflow, which left the PNG carrying the stale stored value. We
+// rewrite the QUEUED copy only, so Export and Ctrl+S are untouched.
+registerRunWorkflowPatcher((workflow, output) => {
+  const ran = new Map();
+  for (const id in output) {
+    const entry = output[id];
+    if (!entry || entry.class_type !== CLASS) continue;
+    try {
+      const injected = JSON.parse(entry.inputs?.[HIDDEN_INPUT] || "{}");
+      if (Array.isArray(injected.sliders)) ran.set(String(id), injected.sliders);
+    } catch { /* a malformed entry just means no rewrite for that node */ }
+  }
+  if (!ran.size) return;
+
+  for (const wfNode of workflow.nodes) {
+    if (!wfNode || wfNode.type !== CLASS) continue;
+    const injected = ran.get(String(wfNode.id));
+    if (!injected) continue;
+    const cur = readNodeProp(wfNode, STATE_PROP);
+    const rows = cur?.value?.sliders;
+    if (!Array.isArray(rows)) continue;
+
+    let changed = false;
+    for (let i = 0; i < injected.length; i++) {
+      // Only a seed row, and only where the SAVED row agrees it is one - an
+      // index mismatch must never stamp a seed onto a slider or a text field.
+      if (injected[i]?.type !== "seed") continue;
+      const row = rows[i];
+      if (!row || typeof row !== "object" || row.type !== "seed") continue;
+      if (!Number.isFinite(injected[i].value)) continue;
+      row.value = injected[i].value;
+      row.mode = "fixed";
+      changed = true;
+    }
+    if (changed) writeNodeProp(wfNode, STATE_PROP, cur.value, cur.wasString);
+  }
+});
 
 registerNodeHelp(CLASS, {
   title: "Control Panel Pixaroma",
