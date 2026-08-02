@@ -351,7 +351,8 @@ Master the Pixaroma suite with our video guides and workflow deep-dives:
 
 ## 🛠 Changelog
 
-### **August 2, 2026 · v1.4.76–v1.4.78**
+### **August 2, 2026 · v1.4.76–v1.4.79**
+- **A blocked Civitai lookup now says what actually came back**, instead of one vague line, and asks Civitai for plain data more clearly, which can get past some network blocks.
 - **XY Plot: long prompts are readable at last.** In the value box they wrap, with numbered lines so you can see where each one starts; as an axis label they wrap into the side strip instead of running across your pictures.
 - **XY Plot: the grid preview follows the node.** Widen the node and it grows, where before it froze at one size however big you made it. A saved plot with a prompt axis settles a little taller the first time you open it.
 - **LoRA Loader: add your Civitai API key** in the gear and lookups find models the site keeps from anyone not signed in. Pick civitai.com or civitai.red to ask first.

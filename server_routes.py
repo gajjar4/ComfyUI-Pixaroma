@@ -2269,7 +2269,26 @@ async def api_lora_civitai(request):
     timeout = aiohttp.ClientTimeout(total=30, connect=10)
     acc = _civitai_account()
     hosts = _civitai_hosts(acc.get("host"))
-    headers = {"User-Agent": "ComfyUI-Pixaroma"}
+    # `Accept`: an edge that sees no explicit Accept can answer with an HTML
+    # challenge page instead of the API; asking for JSON makes the intent
+    # unambiguous. `Accept-Encoding` is pinned to what CPython can always decode:
+    # aiohttp only advertises `br` when the brotli codec is importable
+    # (`_gen_default_accept_encoding`), so on a stock install this is ALREADY the
+    # effective value - measured, gzip/deflate, and Civitai returned no
+    # compression at all - but pinning it means an install that happens to carry
+    # brotli cannot be handed a `br` body by an edge and then fail to decode it.
+    #
+    # We deliberately do NOT send a browser User-Agent. It was suggested as a way
+    # past Cloudflare, but measured against both hosts it changed nothing, and
+    # impersonating Chrome to get through bot protection is not something this
+    # plugin should do. The API key likewise stays in the Authorization header
+    # and is NEVER put in the query string: a `?token=` lands in proxy and server
+    # logs, which is the whole reason invariant 16 keeps it out of URLs.
+    headers = {
+        "User-Agent": "ComfyUI-Pixaroma",
+        "Accept": "application/json",
+        "Accept-Encoding": "gzip, deflate",
+    }
     if acc.get("key"):
         # Sanitised on the way in AND on the way out of the file, so this cannot
         # carry a newline into the header. Never logged, never echoed to the page.
@@ -2332,11 +2351,28 @@ async def api_lora_civitai(request):
                         continue
                     # Cap the body so a malfunctioning endpoint can't spike memory (a real
                     # model-version response is tens of KB).
+                    # Captured BEFORE parsing so a non-JSON reply can name what
+                    # actually came back.
+                    ctype = (resp.headers.get("Content-Type") or "").split(";")[0].strip()
                     body = await resp.content.read(4 * 1024 * 1024 + 1)
                     if len(body) > 4 * 1024 * 1024:
                         return web.json_response({"ok": False, "reason": "offline",
                                                   "message": "Civitai response too large."})
-                    data = json.loads(body)
+                    try:
+                        data = json.loads(body)
+                    except Exception:
+                        # A 200 that is not JSON is a block / sign-in page from the
+                        # network or its protection layer, NOT Civitai saying no.
+                        # Naming the content type is what makes the next bug report
+                        # diagnosable instead of a guess - reports of this arrive
+                        # blaming compression, which the measurements rule out.
+                        # `continue`, never return: the other host is exactly the
+                        # backup for a per-domain block (invariant 16).
+                        data = None
+                        last_note = ("Civitai replied with {} instead of data - most likely a "
+                                     "block or sign-in page from your network or its protection "
+                                     "layer.".format(ctype or "an unknown format"))
+                        continue
                     break
         except Exception as exc:
             # Keep WHY it failed: a timeout, a DNS/TLS/proxy refusal and a block
@@ -2345,6 +2381,14 @@ async def api_lora_civitai(request):
             kind = type(exc).__name__
             if "Timeout" in kind or "Cancelled" in kind:
                 last_note = "Civitai timed out."
+            elif "ContentEncoding" in kind or "Decompress" in kind:
+                # Kept DISTINCT from the block-page line above on purpose: the two
+                # were being conflated in bug reports, and the fix for each is
+                # completely different. This one should now be unreachable (we pin
+                # Accept-Encoding to gzip/deflate), so if it ever shows up it is
+                # genuinely worth hearing about.
+                last_note = ("Civitai sent a compressed reply this install cannot read ({}). "
+                             "Please report this.".format(kind))
             elif "JSON" in kind or "Decode" in kind or "Value" in kind:
                 last_note = "Civitai sent an unreadable reply (a login or block page?)."
             else:
