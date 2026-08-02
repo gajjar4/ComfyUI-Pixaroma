@@ -523,9 +523,20 @@ def _blur_alpha(alpha, blend):
     ok_in, d_in = _scipy_call("distance_transform_edt", mb)
     ok_out, d_out = _scipy_call("distance_transform_edt", ~mb) if ok_in else (False, None)
     if ok_in and ok_out:
-        signed = d_in - d_out
-        t = np.clip(signed / float(k) + 1.0, 0.0, 1.0)
-        soft = (t * t * (3.0 - 2.0 * t)).astype(np.float32)
+        try:
+            signed = d_in - d_out
+            t = np.clip(signed / float(k) + 1.0, 0.0, 1.0)
+            soft = (t * t * (3.0 - 2.0 * t)).astype(np.float32)
+        except Exception:
+            # These lines are OURS, so they must not latch (that is the whole point of
+            # narrowing the guards) - but they still need a net, exactly like the one
+            # fill_holes keeps. Two ways to land here: this chain allocates several
+            # full-size float64 temporaries on top of the two distance transforms, so a
+            # big mask under memory pressure fails here; and a scipy that RETURNS a
+            # poisoned array instead of raising fails on the subtraction rather than in
+            # the call - which is precisely the numpy-2 breakage this fallback exists
+            # for. Leaving soft as None hands the mask to the gaussian path below.
+            soft = None
     if soft is None:
         # fallback (no scipy): gaussian-blur the binary mask for an outward
         # falloff, then force the interior back to 1.0 (outward-only).
