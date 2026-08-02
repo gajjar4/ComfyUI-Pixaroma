@@ -13,6 +13,28 @@ import time
 
 from PIL.PngImagePlugin import PngInfo
 
+# Honour ComfyUI's global --disable-metadata flag (same as core SaveImage).
+# Wrapped so these helpers still import on a build that lacks it, and so the
+# unit harness can run them with no ComfyUI on sys.path at all.
+try:
+    from comfy.cli_args import args as _comfy_cli_args
+except Exception:
+    _comfy_cli_args = None
+
+
+def _metadata_disabled():
+    """True when ComfyUI was launched with --disable-metadata.
+
+    Read LIVE on every call rather than cached at import: `args` is populated
+    during startup and import order between us and comfy is not guaranteed, so
+    a value snapshotted at import time could be the pre-parse default.
+
+    Fails OPEN (returns False) when the flag or the whole module is missing, so
+    a build without it keeps today's behaviour instead of silently losing every
+    embedded workflow.
+    """
+    return bool(getattr(_comfy_cli_args, "disable_metadata", False))
+
 
 def _json_safe(obj):
     """Recursively replace non-finite floats (NaN / Infinity) with None.
@@ -278,8 +300,19 @@ def _build_pnginfo(prompt=None, workflow=None, extra_pnginfo=None, parameters=No
 
     Any argument may be None / missing — its chunk is then skipped.
     Unserialisable extras are silently dropped (best-effort).
+
+    Returns an EMPTY PngInfo when ComfyUI was launched with --disable-metadata.
+    This is the single choke point for every Pixaroma PNG (Save Image, Preview
+    Image, and all four /pixaroma save routes), so gating it here is what makes
+    the flag actually hold. Empty rather than None so no caller can trip over a
+    missing object; PIL writes no tEXt chunks for an empty PngInfo. If you ever
+    add an `add_text` call OUTSIDE this function you have bypassed the flag —
+    build it here instead (the harness pins that: `only _save_helpers.py
+    constructs a PngInfo`).
     """
     pnginfo = PngInfo()
+    if _metadata_disabled():
+        return pnginfo
     if prompt is not None:
         try:
             pnginfo.add_text("prompt", json.dumps(_json_safe(prompt)))

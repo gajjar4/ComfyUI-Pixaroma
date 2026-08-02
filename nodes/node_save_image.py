@@ -24,6 +24,7 @@ from ._save_helpers import (
     _build_pnginfo,
     _expand_date_tokens,
     _json_safe,
+    _metadata_disabled,
     _next_counter,
     _resolve_save_folder,
     _safe_prefix,
@@ -146,6 +147,12 @@ def _build_jpeg_exif(prompt=None, workflow=None, parameters=None):
     the Civitai part and still leaves the workflow EXIF that used to fit, rather
     than losing everything.
     """
+    # PNG goes through _build_pnginfo, which gates itself; the JPG path builds
+    # its own bytes, so it needs the same gate here or --disable-metadata would
+    # hold for PNG and leak for JPG.
+    if _metadata_disabled():
+        return None
+
     def _user_comment(exif, include=True):
         if not include or not (isinstance(parameters, str) and parameters.strip()):
             return
@@ -322,7 +329,7 @@ class PixaromaSaveImage:
         # because metadata is a nice-to-have: nothing here may cost the user
         # their image.
         a1111 = None
-        if civitai_on:
+        if civitai_on and not _metadata_disabled():
             try:
                 from ._civitai_meta import build_metadata
                 a1111 = build_metadata(prompt, extra_pnginfo, unique_id, w, h)

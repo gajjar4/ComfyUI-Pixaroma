@@ -8,7 +8,12 @@ from PIL import Image
 # _json_safe: strip NaN/Inf (PROMPT's is_changed:[NaN]) so the ui payload sent
 # over the websocket is valid JSON - else the frontend JSON.parse drops the
 # whole executed message (preview frames + save metadata both lost).
-from ._save_helpers import _build_pnginfo, _json_safe, _safe_prefix
+from ._save_helpers import (
+    _build_pnginfo,
+    _json_safe,
+    _metadata_disabled,
+    _safe_prefix,
+)
 
 
 def _tensor_to_pil(tensor):
@@ -126,7 +131,8 @@ class PixaromaPreview:
         # toggle a no-op for exactly the default configuration. The fingerprint
         # cost only occurs when the user opted in, once per model.
         a1111 = None
-        if str(CivitaiMeta).strip().lower() in ("1", "true", "yes", "on"):
+        if (str(CivitaiMeta).strip().lower() in ("1", "true", "yes", "on")
+                and not _metadata_disabled()):
             try:
                 from ._civitai_meta import build_metadata
                 a1111 = build_metadata(prompt, extra_pnginfo, unique_id,
