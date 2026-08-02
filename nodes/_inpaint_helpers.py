@@ -24,6 +24,33 @@ except Exception:
     _ndimage = None
     _HAS_SCIPY = False
 
+# IMPORTING scipy successfully is NOT proof that scipy WORKS here. A scipy built or
+# written against numpy 1.x imports fine and then raises deep inside a call once the
+# user upgrades to numpy 2 - reported from the wild as
+#   [PixaromaInpaintCrop] crop error: Alias 'bool8' was removed in NumPy 2.0.
+# which comes out of a library we merely CALL (this plugin's own code has never
+# contained that name). An import-time flag cannot see that, so every scipy call is
+# also wrapped at CALL time and falls back to the pure PIL/numpy path that is already
+# written here for the no-scipy case. The failure LATCHES for the session, so a bad
+# install costs one warning rather than an exception per mask.
+_SCIPY_DEAD = False
+
+
+def _scipy_ok():
+    return _HAS_SCIPY and _ndimage is not None and not _SCIPY_DEAD
+
+
+def _scipy_failed(where, err):
+    global _SCIPY_DEAD
+    if not _SCIPY_DEAD:
+        _SCIPY_DEAD = True
+        print(
+            f"[Pixaroma] scipy is installed but unusable here - {type(err).__name__}: {err} "
+            f"(raised from {where}). Using the built-in mask code instead for the rest of "
+            f"this session; results are near-identical. If you recently upgraded NumPy, "
+            f"reinstalling scipy for that NumPy version clears this."
+        )
+
 
 # Must match the constant emitted by node_inpaint_crop.py / consumed by
 # node_inpaint_stitch.py - and it is deliberately the SAME string the Image Crop
@@ -135,9 +162,12 @@ def _dilate(m_bool, px):
     if px <= 0:
         return m_bool
     k = 2 * int(px) + 1
-    if _HAS_SCIPY:
-        # separable max filter -> O(W*H), fast even for a huge kernel
-        return _ndimage.maximum_filter(m_bool, size=k) > 0
+    if _scipy_ok():
+        try:
+            # separable max filter -> O(W*H), fast even for a huge kernel
+            return _ndimage.maximum_filter(m_bool, size=k) > 0
+        except Exception as e:
+            _scipy_failed("ndimage.maximum_filter", e)
     # no-scipy: two separable numpy max passes (rows then cols)
     a = m_bool.astype(np.uint8)
     a = _max1d(a, k)
@@ -152,7 +182,7 @@ def fill_holes(m_bool):
     the mask to solid - the "mask vanishes after the crop" bug. scipy when available
     (size-limited true fill); otherwise a PIL morphological close (small kernel,
     already naturally limited to small holes)."""
-    if _HAS_SCIPY:
+    if _scipy_ok():
         try:
             filled = _ndimage.binary_fill_holes(m_bool)
             added = filled & ~m_bool          # pixels binary_fill_holes would fill
@@ -167,8 +197,8 @@ def fill_holes(m_bool):
             small = np.where(sizes <= limit)[0]
             small = small[small != 0]              # drop label 0 (the non-hole area)
             return m_bool | np.isin(lbl, small)
-        except Exception:
-            pass
+        except Exception as e:
+            _scipy_failed("ndimage.binary_fill_holes", e)
     pim = Image.fromarray((m_bool * 255).astype(np.uint8), "L")
     k = 9
     pim = pim.filter(ImageFilter.MaxFilter(k)).filter(ImageFilter.MinFilter(k))
@@ -465,14 +495,18 @@ def _blur_alpha(alpha, blend):
     mb = a_np > 0.5
     if not mb.any() or mb.all():
         return torch.from_numpy(a_np.astype(np.float32))
-    if _HAS_SCIPY:
-        # signed distance to the mask edge (+ inside, - outside, in px). Map so
-        # signed >= 0 -> 1.0 and signed in [-k,0] ramps 1 -> 0 (smoothstep).
-        signed = (_ndimage.distance_transform_edt(mb)
-                  - _ndimage.distance_transform_edt(~mb))
-        t = np.clip(signed / float(k) + 1.0, 0.0, 1.0)
-        soft = (t * t * (3.0 - 2.0 * t)).astype(np.float32)
-    else:
+    soft = None
+    if _scipy_ok():
+        try:
+            # signed distance to the mask edge (+ inside, - outside, in px). Map so
+            # signed >= 0 -> 1.0 and signed in [-k,0] ramps 1 -> 0 (smoothstep).
+            signed = (_ndimage.distance_transform_edt(mb)
+                      - _ndimage.distance_transform_edt(~mb))
+            t = np.clip(signed / float(k) + 1.0, 0.0, 1.0)
+            soft = (t * t * (3.0 - 2.0 * t)).astype(np.float32)
+        except Exception as e:
+            _scipy_failed("ndimage.distance_transform_edt", e)
+    if soft is None:
         # fallback (no scipy): gaussian-blur the binary mask for an outward
         # falloff, then force the interior back to 1.0 (outward-only).
         mbf = mb.astype(np.float32)

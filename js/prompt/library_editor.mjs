@@ -12,6 +12,7 @@ import { BRAND } from "../shared/utils.mjs";
 import {
   getLibrary, reloadLibrary, isSameAsStored, commitLibrary, flushLibrary, exportLibraryJSON, parseImport, applyImport,
   importCategories, subsetImport, isListTag, tagLines, catOf, sideOfCat, tagMode, catMode,
+  reorderCategoryStep, reorderCategoryTo, canMoveCategory,
   TEXT_BUCKET, LIST_BUCKET, NAME_RE,
 } from "./library.mjs";
 import {
@@ -22,6 +23,18 @@ import {
 const PAL = ["#e0894b", "#5aa9e6", "#8e7bd6", "#5fbf8f", "#d76b98", "#c9a24b", "#6fb3b8"];
 const MAX_IMPORT_BYTES = 8 * 1024 * 1024;
 const ICON_BASE = "/pixaroma/assets/icons/ui/";
+// Dragging a category row carries its SIDE in the MIME TYPE, because the type list is
+// the only thing readable during dragover (getData is blocked until the drop). That is
+// what lets a Text row refuse a List row on sight instead of accepting the drop and
+// then explaining itself - see the drag wiring in mkCat.
+const CAT_MIME = (side) => `application/x-pixaroma-prompt-cat-${side}`;
+// The sidebar width the user dragged, remembered across opens in an UNREGISTERED
+// setting (Vue Compat #20: it persists without being declared, like the library
+// itself). Clamped on both write and read, so a hand-edited or stale value can never
+// leave the category list unusably narrow or wide enough to bury the cards.
+const SIDE_W_SETTING = "Pixaroma.Prompt.LibrarySidebar";
+const SIDE_W_DEFAULT = 220, SIDE_W_MIN = 150, SIDE_W_MAX = 460;
+const clampSideW = (n) => Math.max(SIDE_W_MIN, Math.min(SIDE_W_MAX, Math.round(Number(n) || 0) || SIDE_W_DEFAULT));
 
 let _overlay = null;
 let _node = null;
@@ -136,6 +149,20 @@ function injectCSS() {
     .pix-prled-bar .x:hover { background:rgba(255,255,255,.08); color:#fff; }
     .pix-prled-main { flex:1; display:flex; min-height:0; }
     .pix-prled-side { width:220px; flex:none; background:#1b1b1b; border-right:1px solid #101010; padding:10px; overflow-y:auto; display:flex; flex-direction:column; gap:3px; }
+    /* Drag the seam between the sidebar and the cards to widen the category list.
+       A 6px strip sitting ON the border, so the border itself stays 1px. */
+    .pix-prled-grip { flex:none; width:6px; margin-left:-3px; margin-right:-3px; z-index:2;
+      cursor:col-resize; background:transparent; transition:background .12s; }
+    .pix-prled-grip:hover, .pix-prled-grip.on { background:var(--acc); }
+    /* While dragging the seam, nothing else may take the pointer or paint a selection. */
+    .pix-prled.resizing { cursor:col-resize; user-select:none; }
+    .pix-prled.resizing .pix-prled-main * { pointer-events:none; }
+    .pix-prled.resizing .pix-prled-grip { pointer-events:auto; background:var(--acc); }
+    /* Reordering a category by hand: the accent line shows which side of the row it
+       lands on, and the row being carried dims. Same language as the Workflows folders. */
+    .pix-prled-cat.ins-above { box-shadow: inset 0 2px 0 0 var(--acc); }
+    .pix-prled-cat.ins-below { box-shadow: inset 0 -2px 0 0 var(--acc); }
+    .pix-prled-cat.dragging-me { opacity:.45; }
     .pix-prled-side .lbl { font:600 10px 'Segoe UI',sans-serif; letter-spacing:.1em; text-transform:uppercase; color:#767676; padding:4px 8px 8px; }
     .pix-prled-cat { display:flex; align-items:center; gap:9px; padding:9px 10px; border-radius:7px; cursor:pointer; color:#c9c9c9; font:13px 'Segoe UI',sans-serif; }
     .pix-prled-cat:hover { background:rgba(255,255,255,.05); color:#fff; }
@@ -704,9 +731,10 @@ function renderSidebar(sideEl) {
       r.title = `Not a category: it is where ${key === LIST_BUCKET ? "lists" : "tags"} with no category of their own are shown. ` +
         `It disappears once it is empty.`;
     }
+    if (menu === "cat") r.title = "Drag to move it up or down the list";
     r.innerHTML = (color ? `<span class="cd" style="background:${color}"></span>` : `<span style="width:11px"></span>`) +
       `<span class="nm">${esc(label)}</span>` +
-      (menu ? `<span class="act more" title="${bucket ? "What this row is, and what you can do with it" : "Rename, export or delete this category"}">⋯</span>` : "") +
+      (menu ? `<span class="act more" title="${bucket ? "What this row is, and what you can do with it" : "Move, rename, export or delete this category"}">⋯</span>` : "") +
       `<span class="cnt">${count}</span>`;
     r.addEventListener("click", (e) => {
       if (e.target.classList.contains("more")) {
@@ -735,6 +763,63 @@ function renderSidebar(sideEl) {
         e.preventDefault(); e.stopPropagation();
         const anchor = r.querySelector(".more") || r;
         if (bucket) openBucketActions(key, anchor); else openCatActions(r, key, anchor);
+      });
+    }
+    // ── drag to reorder (real categories only) ──
+    // A bucket is not stored anywhere, and "All tags" is not a category, so neither can
+    // be carried or dropped on. Same gesture as the Workflows folder list.
+    if (menu === "cat") {
+      const mime = CAT_MIME(sideOf(key));
+      const carries = (e) => !!e.dataTransfer && [...e.dataTransfer.types].includes(mime);
+      const dropAbove = (e) => {
+        const box = r.getBoundingClientRect();
+        return (e.clientY - box.top) < box.height / 2;
+      };
+      const clearMarks = () => r.classList.remove("ins-above", "ins-below");
+      r.draggable = true;
+      r.addEventListener("dragstart", (e) => {
+        // Mid-rename, or a grab that started on the ⋯ : neither is a reorder gesture,
+        // and letting the drag win would take the rename field's text selection away
+        // (node UI convention #11).
+        if (e.target.closest("input, textarea, .act")) { e.preventDefault(); return; }
+        e.dataTransfer.effectAllowed = "move";
+        e.dataTransfer.setData(mime, key);
+        e.dataTransfer.setData("text/plain", key);   // some browsers refuse a drag with no text/plain
+        r.classList.add("dragging-me");
+      });
+      r.addEventListener("dragend", () => {
+        r.classList.remove("dragging-me");
+        // A drag released over nothing never reaches a row's drop handler, so clear any
+        // line still showing anywhere in the sidebar rather than only on this row.
+        for (const el of sideEl.querySelectorAll(".ins-above, .ins-below")) el.classList.remove("ins-above", "ins-below");
+      });
+      r.addEventListener("dragover", (e) => {
+        // NOT preventing the default is what makes the browser show "you cannot drop
+        // here" over the other block. A category belongs to one side, and carrying it
+        // across would clear the category off every tag in it.
+        if (!carries(e)) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "move";
+        const above = dropAbove(e);
+        r.classList.toggle("ins-above", above);
+        r.classList.toggle("ins-below", !above);
+      });
+      r.addEventListener("dragleave", (e) => {
+        // The row has child spans (dot, name, ⋯, count). Crossing onto one fires
+        // dragleave on the row although the cursor never left it, so the line flickered.
+        if (e.relatedTarget && r.contains(e.relatedTarget)) return;
+        clearMarks();
+      });
+      r.addEventListener("drop", (e) => {
+        if (!carries(e)) return;
+        e.preventDefault();
+        const above = dropAbove(e);
+        clearMarks();
+        const moved = e.dataTransfer.getData(mime);
+        if (!moved || moved === key) return;
+        const next = reorderCategoryTo(_data, moved, key, above);
+        if (!next) return;   // refused, or it already sat there: no commit, no re-render
+        applyChange(() => { _data.categories = next; });
       });
     }
     return r;
@@ -820,8 +905,14 @@ function startRenameCat(row, cat) {
     // Nothing changed: put the label back in place instead of calling render().
     // A full render on blur destroyed whatever you were mousedown-ing on, so the
     // click never landed and the sidebar / a card button had to be clicked twice.
-    if (!v || v.toLowerCase() === cat.toLowerCase() || isReservedName(v) ||
-        _data.categories.some((c) => c.toLowerCase() === v.toLowerCase())) {
+    // "Nothing changed" is an EXACT comparison, and the taken-name check skips the row
+    // being renamed. Both used to fold case, so re-capitalising a category ("styles" ->
+    // "Styles") was read as a no-op AND as a clash with itself, and silently did
+    // nothing - people worked around it by adding a letter and deleting it again
+    // (reported 2026-08-02). A case-only rename is a real rename: it is the name people
+    // see on every row, in every menu and in an export file.
+    if (!v || v === cat || isReservedName(v) ||
+        _data.categories.some((c) => c !== cat && c.toLowerCase() === v.toLowerCase())) {
       if (inp.isConnected) inp.replaceWith(nmSpan);
       return;
     }
@@ -850,6 +941,14 @@ function startRenameCat(row, cat) {
   inp.addEventListener("keydown", (e) => { e.stopPropagation(); if (e.key === "Enter") commitRename(); if (e.key === "Escape") cancelRename(); });
   inp.addEventListener("blur", commitRename);
 }
+// One step up / down inside this category's own block. Non-destructive (nothing can be
+// lost and the reverse step puts it back), so it applies straight through like a rename
+// rather than asking first.
+function moveCatStep(cat, dir) {
+  const next = reorderCategoryStep(_data, cat, dir);
+  if (!next) return;
+  applyChange(() => { _data.categories = next; });
+}
 // Everything you can do to a category, in one place that is always on screen. The two
 // deletes are deliberately SEPARATE rows: "drop the folder, keep my tags" and "take
 // the tags with it" are completely different outcomes, and hiding both behind one
@@ -869,6 +968,14 @@ function openCatActions(row, cat, anchor) {
     if (fn) mi.addEventListener("click", () => { hideCatMenu(); fn(); });
     menu.appendChild(mi);
   };
+  // Reordering leads the menu: dragging a row is the quicker gesture but nothing on
+  // screen announces it, so this is where people find out the order is theirs to set.
+  // The dimmed state comes from the SAME function that performs the move, so a row
+  // that looks available can never turn out to do nothing (patterns #30, #43).
+  const canUp = canMoveCategory(_data, cat, -1), canDn = canMoveCategory(_data, cat, 1);
+  add("Move up", canUp ? "" : "already first", canUp ? "" : "dim", canUp ? () => moveCatStep(cat, -1) : null);
+  add("Move down", canDn ? "" : "already last", canDn ? "" : "dim", canDn ? () => moveCatStep(cat, 1) : null);
+  menu.appendChild(Object.assign(document.createElement("div"), { className: "msep" }));
   add("Rename", "", "", () => startRenameCat(row, cat));
   add("Export this category", n ? many(n) : "empty", "", () => exportScope(cat));
   menu.appendChild(Object.assign(document.createElement("div"), { className: "msep" }));

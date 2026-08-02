@@ -287,6 +287,92 @@ export function sideOfCat(name, data) {
 }
 export function isListCat(name, data) { return sideOfCat(name, data) === "list"; }
 
+// ── category ORDER ─────────────────────────────────────────────────────────
+// `categories` is ONE flat ordered list holding both sides, but the editor draws a
+// Text block and a List block, so the row ABOVE a category on screen is the previous
+// SAME-SIDE entry - not necessarily the previous entry in the array. Every helper
+// below therefore thinks in same-side terms and writes back into the flat list.
+//
+// Reorder touches `categories` and NOTHING ELSE, by design: normalize() re-derives
+// `listCats` order from it, `catModes` is keyed by NAME, the cursors are keyed by
+// NAME, and a tag points at its category by NAME. So moving a row can never orphan a
+// tag, lose a Picks mode, or restart a sequence. Keep it that way - the moment a
+// reorder has to touch a second structure, it can drift out of step with this one.
+
+// Where a category sits in the flat list. Exact match first (what every other caller
+// uses), then case-insensitive, so a hand-edited library whose tag says "styles"
+// while the list says "Styles" still resolves to the same row.
+function catIndex(list, name) {
+  const i = list.indexOf(name);
+  if (i > -1) return i;
+  const k = lc(name);
+  return list.findIndex((c) => lc(c) === k);
+}
+
+// The categories sharing `cat`'s side, in display order.
+export function catsOnSameSide(data, cat) {
+  const d = data || getLibrary();
+  const side = sideOfCat(cat, d);
+  return (d.categories || []).filter((c) => sideOfCat(c, d) === side);
+}
+
+// Move `cat` one row up (dir -1) or down (dir +1) inside its own side's block.
+// Returns a NEW ordered categories array, or null when it cannot move (already at
+// the end of its block, or the name is not a real category).
+export function reorderCategoryStep(data, cat, dir) {
+  const list = Array.isArray(data?.categories) ? data.categories : [];
+  const from = catIndex(list, cat);
+  if (from < 0 || (dir !== 1 && dir !== -1)) return null;
+  const side = sideOfCat(list[from], data);
+  // Walk the flat list for the nearest neighbour on the SAME side, stepping over the
+  // other side's entries - on screen they are in a different block entirely.
+  let to = -1;
+  for (let i = from + dir; i >= 0 && i < list.length; i += dir) {
+    if (sideOfCat(list[i], data) === side) { to = i; break; }
+  }
+  if (to < 0) return null;
+  const next = list.slice();
+  const tmp = next[from]; next[from] = next[to]; next[to] = tmp;
+  return next;
+}
+
+// Is that step possible? Deliberately answered BY the move itself, so a dimmed
+// "Move up" and a Move-up that does nothing can never disagree (the validator and
+// its display share one implementation - see .claude/patterns/prompt.md #30).
+export function canMoveCategory(data, cat, dir) {
+  return reorderCategoryStep(data, cat, dir) !== null;
+}
+
+// Move `moved` so it sits directly above (`above` true) or below `target`. Both must
+// be real categories on the SAME side - a category belongs to one block, and letting
+// a drag carry it across would clear the category off every tag in it (normalize's
+// "the tag's kind always wins"). Returns a NEW ordered categories array, or null when
+// the move is refused or would change nothing.
+export function reorderCategoryTo(data, moved, target, above) {
+  const list = Array.isArray(data?.categories) ? data.categories : [];
+  const from = catIndex(list, moved);
+  const t0 = catIndex(list, target);
+  if (from < 0 || t0 < 0 || from === t0) return null;
+  if (sideOfCat(list[from], data) !== sideOfCat(list[t0], data)) return null;
+  const side = sideOfCat(list[from], data);
+  const next = list.slice();
+  const [name] = next.splice(from, 1);
+  // Re-find the target: removing an entry ABOVE it has shifted it down one.
+  const t = catIndex(next, target);
+  if (t < 0) return null;
+  next.splice(above ? t : t + 1, 0, name);
+  // A drop that lands exactly where it already was is not a change. Compare the
+  // PER-SIDE sequence, never the flat array: the two sides are drawn as separate
+  // blocks, so where a Text category sits relative to a List category in the flat
+  // list is arbitrary and completely invisible. Dropping Styles just above Camera
+  // when it is already the row above DOES shift it past a List category in the
+  // array while changing nothing on screen - comparing the flat list called that a
+  // move and committed + re-rendered the whole editor for it.
+  const seq = (arr) => arr.filter((c) => sideOfCat(c, data) === side);
+  const a = seq(next), b = seq(list);
+  return a.every((c, i) => c === b[i]) ? null : next;
+}
+
 // How a list / a category picks: "random" | "shuffle" | "order" (see cursors.mjs).
 export function tagMode(t) { return cleanMode(t && t.mode); }
 export function catMode(name, data) {
