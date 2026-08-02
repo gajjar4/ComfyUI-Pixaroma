@@ -116,37 +116,41 @@ function injectCSS() {
     .pix-prm-ta { flex:1 1 auto; width:100%; height:100%; box-sizing:border-box; background:transparent; color:transparent;
       border:0; border-radius:4px; padding:6px 8px; font:12px/1.5 monospace; resize:none; outline:none; scrollbar-gutter:stable; caret-color:var(--acc); }
     .pix-prm-ta::placeholder { color:#6a6a6a; }
-    /* tags: coloured TEXT, no box - orange when known, a clearly-different bright red
-       when it looks like a typo (the old #e2554a was too close to the orange). NO
-       font-weight/decoration change: it must stay the SAME width as the transparent
-       textarea glyphs or the caret drifts (see the wrapping-parity note). */
+    /* ── WHERE A PIECE OF THE PROMPT CAME FROM (rebuilt 2026-08-02, user's design) ──
+       TWO things are encoded at once:
+         HUE  = which KIND of token produced it: @tag = your accent (orange by default),
+                *category = green, #list = violet, and red = broken whatever the kind.
+         SHADE = which ONE of that kind, cycling s0 -> s1 -> s2, so "@a @b" side by side
+                never blur into one run.
+       The SAME classes are used in the prompt box AND in the expanded preview, which is
+       the whole point: a green run downstairs can ONLY have come from a *category, and
+       its exact shade tells you WHICH one. The previous version rotated four colours by
+       position with no meaning at all, so a violet run read as "that came from the
+       #list" when it might have been the third @tag (user-reported, and right).
+       Colour ONLY - no weight/width change, or the caret drifts off the transparent
+       textarea (see the wrapping-parity note). The .bad rule is last so it beats any
+       shade. NOTE: no BACKTICKS anywhere in this CSS, not even inside a comment - the
+       whole block is a JS template literal, so a backtick ends the string and the rest
+       of the stylesheet is parsed as JavaScript. node --check does NOT catch it; the
+       browser just refuses the module and the node renders as an empty box. */
     .pix-prm-chip { color:var(--acc); }
-    .pix-prm-chip.bad { color:#ff4d4d; }
-    /* *wildcards: a distinct violet (clearly not the orange @tag), red when the
-       category is unknown/empty. Colour only - same glyph width so the caret can't drift. */
-    .pix-prm-wild { color:#b98cff; }
-    .pix-prm-wild.bad { color:#ff4d4d; }
-    /* #lists share the *wildcard VIOLET on purpose: violet means "this rolls again on
-       every run", orange means "a fixed tag", red means "broken". No new colour is
-       introduced for a third kind. Red when the tag is unknown or has no usable lines. */
+    .pix-prm-chip.s1 { color:color-mix(in srgb, var(--acc) 55%, #ffd27a); }
+    .pix-prm-chip.s2 { color:color-mix(in srgb, var(--acc) 25%, #ffe3a2); }
+    .pix-prm-wild { color:#4fc98a; }
+    .pix-prm-wild.s1 { color:#86d977; }
+    .pix-prm-wild.s2 { color:#b6e58d; }
     .pix-prm-list { color:#b98cff; }
-    .pix-prm-list.bad { color:#ff4d4d; }
+    .pix-prm-list.s1 { color:#d79bf0; }
+    .pix-prm-list.s2 { color:#efaadf; }
+    .pix-prm-chip.bad, .pix-prm-wild.bad, .pix-prm-list.bad { color:#ff4d4d; }
     /* preview GROWS with the node (flex, no fixed cap) so a big node shows more.
        LIGHTER gray (not the dark #1d1d1d of the editable inputs) so it reads as a
-       read-only preview, not another input box - the green text stays readable. */
+       read-only preview, not another input box. The plain colour lives on the CONTAINER,
+       not on .mine: a descendant rule such as .pix-prm-expand .mine would out-rank the
+       single-class token colours above and grey the whole thing out. */
     .pix-prm-expand { flex:1 1 0; background:#2d2d2d; border:1px solid #3a3a3a; border-radius:4px; padding:6px 8px;
-      font:11px/1.5 monospace; white-space:pre-wrap; min-height:30px; overflow-y:auto; }
+      font:11px/1.5 monospace; white-space:pre-wrap; min-height:30px; overflow-y:auto; color:#d8d8d8; }
     .pix-prm-expand .lbl { color:#6d6d6d; }
-    .pix-prm-expand .mine { color:#d8d8d8; }
-    /* Each tag's expanded words take the next colour in the rotation, so you can see
-       where one tag stops and the next starts (asked for on Discord, 2026-08-02).
-       Your OWN typed words stay plain, which is what makes a coloured run mean "this
-       came from a tag". Four is enough to separate neighbours without turning the box
-       into confetti; deliberately no blue, per the house palette rule. */
-    .pix-prm-expand .t0 { color:#9fd6b0; }
-    .pix-prm-expand .t1 { color:#e6c86e; }
-    .pix-prm-expand .t2 { color:#b98cff; }
-    .pix-prm-expand .t3 { color:#e8a87c; }
     .pix-prm-expand .note { color:#8a8a8a; font-style:italic; }
     .pix-prm-bar { display:flex; align-items:center; flex:0 0 auto; gap:4px; flex-wrap:wrap; row-gap:4px; padding:0 2px; user-select:none; }
     .pix-prm-btn { box-sizing:border-box; user-select:none; background:rgba(255,255,255,.05); border:1px solid rgba(255,255,255,.15);
@@ -234,10 +238,10 @@ const PROMPT_HELP = {
     {
       heading: "Reading the colours",
       body:
-        "Anything that rolls glows violet, so `*category` and `#list` share that colour; a plain `@tag` stays orange, and an unknown or empty one glows red so you spot a typo.\n\n" +
+        "The colour tells you what a thing is: `@tag` in your accent colour (orange unless you changed it), `*category` in green, `#list` in violet, and red for anything unknown or empty so you spot a typo.\n\n" +
         "While you are typing, `Show expanded` names the slot instead of guessing: `[random: Styles]`, `[shuffled line: animals]`, `[next line: poses]`. It cannot show a real pick yet, because the choice is made when you press Run, and a live one would change under your hands at every keystroke.\n\n" +
         "The moment you press Run it switches to the actual words that were used, so you can always see what a picture was made from. Edit the box and it goes back to naming the slots, because the old words no longer describe what you have written. The words also travel inside the picture: drag a finished image back onto the canvas and the box shows the prompt that made it, while your `#name` template stays exactly as you wrote it. Tip: with a fixed seed the picture only changes when the pick changes, so use a random seed if you want a new image every run.\n\n" +
-        "Each tag's words are coloured, cycling through four colours, so you can see where one tag stops and the next begins. Your own typed words stay plain, which means any colour you see came from a tag. A prompt read back off a picture you dragged in is shown in plain text, because the colouring is worked out as the prompt is built.",
+        "The expanded words are coloured to match what they came from, so you can trace any piece back: words in your accent colour came from an `@tag`, green from a `*category`, violet from a `#list`. Where you have several of the same kind, each takes a slightly different shade of that colour, so two tags next to each other never blur into one run. Your own typed words stay plain grey. A prompt read back off a picture you dragged in is shown in plain text, because the colouring is worked out while the prompt is being built.",
     },
     {
       heading: "Save text as a tag",
@@ -861,27 +865,39 @@ function syncBackdropBox(els) {
   else bd.style.width = Math.max(0, bd.offsetWidth - gap) + "px";  // padding can't go negative
 }
 
+// THE one place that decides what colour a piece of prompt gets. Both the prompt box
+// and the expanded preview call it, which is what lets you follow a colour from the
+// token you typed to the words it produced. They MUST also count tokens the same way -
+// `nth` is "the Nth token of this kind", counted over EVERY token of that kind
+// including unknown ones, so an unrecognised `@typo` cannot knock the two surfaces out
+// of step with each other.
+const KIND_CLASS = { tag: "pix-prm-chip", wild: "pix-prm-wild", list: "pix-prm-list" };
+const TOKEN_SHADES = 3;
+function tokenClass(kind, nth, known) {
+  const base = KIND_CLASS[kind] || KIND_CLASS.tag;
+  if (!known) return base + " bad";
+  const s = nth % TOKEN_SHADES;
+  return s ? `${base} s${s}` : base;
+}
+const newTokenCounts = () => ({ tag: 0, wild: 0, list: 0 });
+
 function renderBackdrop(node) {
   const els = node._pixPromptRoot?._els; if (!els) return;
-  // Colour the @tags AND *wildcards scanTokens counts (an email's @name / arithmetic
-  // *2 stay plain, matching the preview + the run). @tag: known=accent / unknown=red.
-  // *wildcard: known (category has tags)=violet / unknown-or-empty=red.
+  // Colour the @tags / *categories / #lists scanTokens counts (an email's @name and
+  // arithmetic like 2*2 stay plain, matching the preview + the run). Hue = kind,
+  // shade = which one of that kind, red = unknown; see the CSS block for the rules.
   const text = els.ta.value;
   const toks = scanTokens(text);
+  const seen = newTokenCounts();
   let html = "";
   let i = 0;
   for (const h of toks) {
     html += escapeHTML(text.slice(i, h.start));
-    if (h.kind === "tag") {
-      const known = !!findTag(h.name);
-      html += `<span class="pix-prm-chip${known ? "" : " bad"}">${escapeHTML(h.raw)}</span>`;
-    } else if (h.kind === "wild") {
-      const known = !!wildCat(h.name);
-      html += `<span class="pix-prm-wild${known ? "" : " bad"}">${escapeHTML(h.raw)}</span>`;
-    } else {
-      const known = !!listOf(h.name);
-      html += `<span class="pix-prm-list${known ? "" : " bad"}">${escapeHTML(h.raw)}</span>`;
-    }
+    const known = h.kind === "tag" ? !!findTag(h.name)
+      : h.kind === "wild" ? !!wildCat(h.name)
+      : !!listOf(h.name);
+    const nth = seen[h.kind]++;
+    html += `<span class="${tokenClass(h.kind, nth, known)}">${escapeHTML(h.raw)}</span>`;
     i = h.end;
   }
   html += escapeHTML(text.slice(i));
@@ -936,21 +952,28 @@ function renderExpand(node) {
     els.expand.innerHTML = `<span class="mine">${mineHTML}</span> <span class="note">(+ wired text goes ${where}, shown here once it can be read)</span>`;
   }
 }
-// Colour each tag's expanded words, rotating through four so neighbours differ. Every
-// piece is escaped exactly as before - the ONLY markup added is our own span wrappers,
-// so this cannot become an HTML injection route.
+// Colour each token's expanded words with the SAME class the prompt box gave that
+// token, so you can trace a run of colour back to what produced it. Every piece is
+// escaped exactly as before - the ONLY markup added is our own span wrappers, so this
+// cannot become an HTML injection route.
 function paintExpanded(text, spans) {
   if (!spans || !spans.length) return escapeHTML(text);
-  let html = "", i = 0, n = 0;
+  const seen = newTokenCounts();
+  let html = "", i = 0;
   for (const s of spans) {
+    // Count FIRST, and count every token of the kind exactly as renderBackdrop does -
+    // including one about to be skipped below. Counting after the skip would let a
+    // single malformed span shift every later shade, and the prompt box and this
+    // preview would quietly stop agreeing about which tag was which.
+    const nth = (s && seen[s.kind] !== undefined) ? seen[s.kind]++ : 0;
     // Defensive: a span that does not line up with this string (a stale record) is
     // skipped rather than allowed to slice the text apart at the wrong place.
     if (!s || s.start < i || s.end > text.length || s.end < s.start) continue;
     html += escapeHTML(text.slice(i, s.start));
     const body = escapeHTML(text.slice(s.start, s.end));
-    // An unknown token was left literal, so it is not tag text and stays plain (the
-    // prompt box above already marks it red).
-    html += s.known ? `<span class="t${n++ % 4}">${body}</span>` : body;
+    // An unknown token was left literal, so it is your text now, not tag text, and
+    // stays plain - the prompt box above already marks it red.
+    html += s.known ? `<span class="${tokenClass(s.kind, nth, true)}">${body}</span>` : body;
     i = s.end;
   }
   return html + escapeHTML(text.slice(i));
