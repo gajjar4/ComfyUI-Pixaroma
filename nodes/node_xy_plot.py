@@ -28,7 +28,7 @@ import numpy as np
 import torch
 from PIL import Image, ImageDraw, ImageFont
 
-from ._save_helpers import _json_safe
+from ._save_helpers import _build_pnginfo, _json_safe
 
 # Guards the module-level session state below. The node executes on ComfyUI's
 # worker thread while the save / restyle routes run on the aiohttp thread, so a
@@ -349,10 +349,16 @@ def restyle_session(session_id, theme):
         sess["theme"] = theme if theme in _THEMES else "dark"
         grid_pil = _assemble_grid(sess)   # reads cells; under lock so execute can't mutate mid-read
         grid_name = sess["grid_name"]
+        # Re-embed the workflow execute() put in this file. Read under the same
+        # lock as the assemble; without this, switching theme would REWRITE the
+        # grid PNG without metadata, so the plot silently lost its workflow the
+        # moment the user tried a different colour scheme.
+        grid_info = sess.get("pnginfo")
     temp_dir = folder_paths.get_temp_directory()
     os.makedirs(temp_dir, exist_ok=True)
     try:
-        grid_pil.save(os.path.join(temp_dir, grid_name), "PNG")   # I/O outside the lock
+        grid_pil.save(os.path.join(temp_dir, grid_name), "PNG",
+                      pnginfo=grid_info)   # I/O outside the lock
     except Exception:
         return None
     return grid_name
@@ -673,10 +679,32 @@ class PixaromaXYPlot:
             return {"ui": {}, "result": (image,)}
 
         # Write the grid PNG to temp/ for the preview (I/O outside the lock).
+        #
+        # The workflow/prompt go INTO the file, exactly as Preview Image does for
+        # its temp preview: this file is not only the in-node preview, it is what
+        # the user gets from Open-in-a-new-tab, from right-click Save image, and
+        # from dragging the grid off the node. Without this, those routes handed
+        # back a plot with no way to reload the graph that made it, while the
+        # Save Output / Save Disk buttons (which re-encode through the routes)
+        # embedded it - the same picture carrying metadata or not depending on
+        # which button you pressed. `_build_pnginfo` gates itself on
+        # --disable-metadata, so this honours that flag for free.
         temp_dir = folder_paths.get_temp_directory()
         os.makedirs(temp_dir, exist_ok=True)
         try:
-            grid_pil.save(os.path.join(temp_dir, grid_name), "PNG")
+            grid_info = _build_pnginfo(prompt=prompt, extra_pnginfo=extra_pnginfo)
+        except Exception as e:
+            # Metadata is a nice-to-have; it must never cost the user their plot.
+            print("[Pixaroma] XY Plot: grid metadata skipped: %s" % e)
+            grid_info = None
+        # Stash it so a THEME RESTYLE re-embeds instead of silently stripping it
+        # (that route re-renders this same file with no prompt in scope).
+        with _LOCK:
+            sess_now = _SESSIONS.get(session_id)
+            if sess_now is not None:
+                sess_now["pnginfo"] = grid_info
+        try:
+            grid_pil.save(os.path.join(temp_dir, grid_name), "PNG", pnginfo=grid_info)
         except Exception as e:
             print("[Pixaroma] XY Plot: failed to write grid PNG: %s" % e)
 
