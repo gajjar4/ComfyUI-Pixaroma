@@ -2276,6 +2276,10 @@ async def api_lora_civitai(request):
         headers["Authorization"] = "Bearer {}".format(acc["key"])
     data = None
     last_note = "Could not reach Civitai."
+    # A refusal aimed at the KEY is the most actionable thing we can report, so it is
+    # kept aside rather than being overwritten by whatever the second host happens to
+    # say afterwards (a timeout there would otherwise bury it).
+    key_note = None
     for i, host in enumerate(hosts):
         last = i == len(hosts) - 1
         url = "https://{}/api/v1/model-versions/by-hash/{}".format(host, sha)
@@ -2296,23 +2300,30 @@ async def api_lora_civitai(request):
                             continue
                         return web.json_response({"ok": True, "found": False, "reason": "notfound"})
                     if resp.status in (401, 403):
-                        # A refusal is only worth reporting straight away when there IS
-                        # a key to blame: the same key will be refused by both hosts, and
-                        # "check your key" is the useful answer. With NO key it must fall
-                        # through like any other non-200, because a 401/403 is the most
-                        # HOST-SPECIFIC failure there is (a Cloudflare or corporate block
-                        # page on one domain) and the backup host exists for exactly that.
-                        # Returning here regardless was a regression against the previous
-                        # release, and it told the user to add a key when their network
-                        # was simply blocking civitai.com.
+                        # NEVER returns from inside the loop, exactly like the 404 branch
+                        # above. A 401/403 is the most HOST-SPECIFIC failure there is - a
+                        # Cloudflare, corporate or ISP block page answers 403 for one
+                        # domain while the other domain answers fine - and the backup host
+                        # exists for precisely that. Returning here cost the user the
+                        # backup, which was a regression against the previous release.
+                        #
+                        # Having a key saved does NOT make it safe to stop early either: a
+                        # 403 does not say it is about the key, so blaming the key would
+                        # send someone with a perfectly good one to go and check it while
+                        # the host that would have worked was never asked. That is the
+                        # same mistake aimed at the people most likely to hit it, since
+                        # they are the ones who added a key BECAUSE lookups were failing.
                         if acc.get("key"):
-                            return web.json_response({
-                                "ok": False, "reason": "offline",
-                                "message": "Civitai refused the API key ({}). Check it in the "
-                                           "node settings.".format(resp.status),
-                            })
-                        last_note = ("Civitai refused the request ({}). This model may need an "
-                                     "API key - add one in the node settings.".format(resp.status))
+                            key_note = ("Civitai refused the API key ({}). Check it in the node "
+                                        "settings.".format(resp.status))
+                            last_note = key_note
+                        else:
+                            # Name the likelier cause FIRST. A network-level block covers
+                            # both civitai names, so by the time every host has refused,
+                            # "your network" is the better guess than "buy a key".
+                            last_note = ("Civitai refused the request ({}). Your network may be "
+                                         "blocking Civitai, or this model may need an API key - "
+                                         "add one in the node settings.".format(resp.status))
                         continue
                     if resp.status != 200:
                         # Rate limit / maintenance / gateway error: transient, so fall
@@ -2340,7 +2351,10 @@ async def api_lora_civitai(request):
                 last_note = "Could not reach Civitai ({}).".format(kind)
             continue
     if data is None:
-        return web.json_response({"ok": False, "reason": "offline", "message": last_note})
+        # A key refusal outranks whatever the later host said: "check your key" is
+        # something the user can act on, a trailing timeout is not.
+        return web.json_response({"ok": False, "reason": "offline",
+                                  "message": key_note or last_note})
     parsed = _lora_parse_civitai(data, allow_adult=bool(acc.get("adult_thumbs")))
     # Civitai answered 200 with a usable record -> FOUND, even when this version
     # happens to carry no trainedWords and no model.name (plenty do not; e.g.

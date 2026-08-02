@@ -383,7 +383,15 @@ export function openLoraPanel(node, refresh) {
 
     const msg = el("div", "pix-llp-msg");
     msg.style.display = "none";
-    const say = (t) => { msg.textContent = t || ""; msg.style.display = t ? "block" : "none"; };
+    // `ok` picks the colour. Sitting directly under the key row, a success note in
+    // the warning salmon read as a problem - and worse, the row immediately above
+    // had just turned green, so two adjacent lines disagreed about whether the save
+    // had worked. Green is the suite's success colour (convention #2).
+    const say = (t, ok) => {
+      msg.textContent = t || "";
+      msg.style.display = t ? "block" : "none";
+      msg.style.color = ok ? "#3ec371" : "";
+    };
 
     // ── the key row, which swaps between showing and editing ──
     //
@@ -417,6 +425,10 @@ export function openLoraPanel(node, refresh) {
 
     function showEditor() {
       editing = true;
+      // Clear any previous note. Now that the message sits directly under this row,
+      // "Key saved." left over from a moment ago would sit under a fresh EMPTY box
+      // and read as the result of something the user has not done yet.
+      say("");
       keyRow.textContent = "";
       const inp = el("input", "pix-llp-key");
       // A password field, so it cannot be read over a shoulder or captured in the
@@ -504,7 +516,7 @@ export function openLoraPanel(node, refresh) {
       }
       acc = res;
       if (opts?.closeEditor) editing = false;
-      say(okNote);
+      say(okNote, true);
       paint();
     }
 
