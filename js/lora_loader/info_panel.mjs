@@ -3,6 +3,7 @@
 // the triggers output, and offers the OPTIONAL Civitai lookup with its four states
 // (searching / found / not found / offline). Selections persist on the row.
 
+import { app } from "/scripts/app.js";
 import { readState, patchLora, accentOf, BRAND } from "./core.mjs";
 import { loraInfo, thumbUrl, civitaiLookup, invalidateInfo, deleteCivitai } from "./api.mjs";
 import { getNodeRect } from "./settings.mjs";
@@ -10,6 +11,8 @@ import { getNodeRect } from "./settings.mjs";
 let _panel = null;
 let _cleanup = null;
 let _ownerNode = null;
+let _followRaf = null;   // keeps the panel beside its node, see startFollowing()
+let _userMoved = false;  // the user dragged it, so stop following
 
 function injectCSS() {
   if (document.getElementById("pix-ll-info-css")) return;
@@ -91,6 +94,10 @@ function injectCSS() {
 export function closeInfoPanel() {
   if (_cleanup) { try { _cleanup(); } catch {} }
   _cleanup = null;
+  stopFollowing();
+  // Reset on CLOSE, not on open: a panel the user dragged must not teach the
+  // next one to sit still where the node is not.
+  _userMoved = false;
   if (_panel) { try { _panel.remove(); } catch {} }
   _panel = null;
   _ownerNode = null;
@@ -158,6 +165,8 @@ export async function openInfoPanel(node, id, refresh) {
   document.body.appendChild(panel);
   _panel = panel;
   _ownerNode = node;
+  // After _panel is assigned: the loop's first act is to check it owns the panel.
+  startFollowing(panel, node);
 
   // view data for this panel session
   let info = { title: name || "LoRA", triggers: [], file_triggers: [], sidecar_triggers: [], source: "file", has_preview: false };
@@ -490,6 +499,41 @@ export async function openInfoPanel(node, id, refresh) {
   };
 }
 
+/**
+ * Keep the info panel beside its node while the canvas moves - the same loop the
+ * settings panel uses, because the two open from the same node and anchor the
+ * same way, so one following and the other stranding reads as a bug in whichever
+ * you noticed second.
+ *
+ * A rAF loop rather than an event: LiteGraph emits nothing for a transform
+ * change. It compares three numbers per frame, so idle cost is nil, and it only
+ * runs while a panel is open. Stops the moment the user drags the panel.
+ *
+ * ⚠️ rAF is throttled almost to a standstill in the in-app browser (the pane is
+ * not displayed), so this looks completely dead when tested there. Pump frames.
+ */
+function startFollowing(panel, node) {
+  let lastScale = null, lastX = null, lastY = null;
+  const tick = () => {
+    if (!_panel || _panel !== panel || !panel.isConnected) { _followRaf = null; return; }
+    _followRaf = requestAnimationFrame(tick);
+    if (_userMoved) return;
+    const ds = app.canvas?.ds;
+    if (!ds) return;
+    const sc = ds.scale || 1;
+    const ox = ds.offset?.[0] ?? 0, oy = ds.offset?.[1] ?? 0;
+    if (sc === lastScale && ox === lastX && oy === lastY) return;
+    lastScale = sc; lastX = ox; lastY = oy;
+    place(panel, node);
+  };
+  _followRaf = requestAnimationFrame(tick);
+}
+
+function stopFollowing() {
+  if (_followRaf != null) cancelAnimationFrame(_followRaf);
+  _followRaf = null;
+}
+
 function dragBy(panel) {
   // Delegate on the PERSISTENT panel: renderBody() rebuilds the header on every
   // re-render (chip tick / Civitai state change), so wiring the header element itself
@@ -499,16 +543,35 @@ function dragBy(panel) {
     if (e.target.closest(".pix-ll-info-x")) return;
     const r = panel.getBoundingClientRect();
     const ox = e.clientX - r.left, oy = e.clientY - r.top;
+
+    // BOTH defences against a drag that sticks to the cursor: a pointerup can
+    // genuinely go missing (released outside the window, on a second monitor, or
+    // swallowed upstream) and synthetic events never reproduce it.
+    const handle = e.currentTarget;
+    try { handle.setPointerCapture(e.pointerId); } catch { /* not capturable */ }
+
     const move = (ev) => {
+      if (!panel.isConnected) return up();
+      if (!(ev.buttons & 1)) return up();
+      // From here the panel is where the USER put it, so stop following the node.
+      _userMoved = true;
       panel.style.left = Math.max(0, Math.min(window.innerWidth - panel.offsetWidth, ev.clientX - ox)) + "px";
       panel.style.top = Math.max(0, Math.min(window.innerHeight - panel.offsetHeight, ev.clientY - oy)) + "px";
     };
+    let done = false;
     const up = () => {
-      window.removeEventListener("pointermove", move, true);
-      window.removeEventListener("pointerup", up, true);
+      if (done) return;
+      done = true;
+      try { handle.releasePointerCapture(e.pointerId); } catch { /* already gone */ }
+      handle.removeEventListener("pointermove", move, true);
+      handle.removeEventListener("pointerup", up, true);
+      handle.removeEventListener("pointercancel", up, true);
+      handle.removeEventListener("lostpointercapture", up, true);
     };
-    window.addEventListener("pointermove", move, true);
-    window.addEventListener("pointerup", up, true);
+    handle.addEventListener("pointermove", move, true);
+    handle.addEventListener("pointerup", up, true);
+    handle.addEventListener("pointercancel", up, true);
+    handle.addEventListener("lostpointercapture", up, true);
   });
 }
 
