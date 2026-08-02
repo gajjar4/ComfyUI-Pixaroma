@@ -2349,15 +2349,36 @@ async def api_lora_civitai(request):
                         # through to the backup host before giving up.
                         last_note = "Civitai returned {}.".format(resp.status)
                         continue
-                    # Cap the body so a malfunctioning endpoint can't spike memory (a real
-                    # model-version response is tens of KB).
                     # Captured BEFORE parsing so a non-JSON reply can name what
                     # actually came back.
                     ctype = (resp.headers.get("Content-Type") or "").split(";")[0].strip()
-                    body = await resp.content.read(4 * 1024 * 1024 + 1)
-                    if len(body) > 4 * 1024 * 1024:
-                        return web.json_response({"ok": False, "reason": "offline",
-                                                  "message": "Civitai response too large."})
+                    # Read the WHOLE body, in a loop, with the memory cap kept.
+                    #
+                    # ⚠️ DO NOT go back to `await resp.content.read(N)` with a POSITIVE
+                    # N. That does NOT mean "read up to N bytes of the body" - aiohttp's
+                    # StreamReader.read only loops to EOF when n < 0; with a positive n
+                    # it waits for the FIRST data to arrive and then returns
+                    # `_read_nowait(n)`, which drains only what is buffered AT THAT
+                    # MOMENT. On any reply that spans more than one chunk it returns the
+                    # first chunk and silently drops the rest, so json.loads fails on
+                    # truncated JSON while Content-Type still says application/json -
+                    # which is precisely the "Civitai replied with application/json
+                    # instead of data" report. Measured: 4096 of 32726 bytes, 5 times out
+                    # of 5, against a server chunking at 4KB. It is invisible on a fast
+                    # link (the whole reply lands in one buffer), which is why this
+                    # survived two rounds of "cannot reproduce" and got misattributed to
+                    # brotli. Harness: D:\Claude Tests\_civitai_partial_read_test.py.
+                    #
+                    # iter_chunked keeps the cap that a bare read()/text() would lose.
+                    chunks = []
+                    total = 0
+                    async for chunk in resp.content.iter_chunked(65536):
+                        total += len(chunk)
+                        if total > 4 * 1024 * 1024:
+                            return web.json_response({"ok": False, "reason": "offline",
+                                                      "message": "Civitai response too large."})
+                        chunks.append(chunk)
+                    body = b"".join(chunks)
                     try:
                         data = json.loads(body)
                     except Exception:

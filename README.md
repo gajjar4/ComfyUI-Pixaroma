@@ -351,7 +351,8 @@ Master the Pixaroma suite with our video guides and workflow deep-dives:
 
 ## 🛠 Changelog
 
-### **August 2, 2026 · v1.4.76–v1.4.80**
+### **August 2, 2026 · v1.4.76–v1.4.81**
+- **Try Civitai works on more connections.** Some lookups came back as an unreadable reply because we only read the first part of Civitai's answer when it arrived in pieces, which depends on your connection and your distance from their servers. We now read all of it. Thank you to everyone who reported this and kept reporting it.
 - **Start ComfyUI with `--disable-metadata` and Pixaroma now writes nothing into your pictures**: no workflow, no prompt, no Civitai info. Before, only the video saver paid attention to that setting.
 - **The XY Plot grid picture carries its workflow**, so a saved plot drags back into ComfyUI like any other image, and it keeps it when you switch the grid's colour theme.
 - **Export (API) gives you the whole workflow again when a Pause node is in it.** Before, exporting while a gate was paused quietly left out everything after the gate.
