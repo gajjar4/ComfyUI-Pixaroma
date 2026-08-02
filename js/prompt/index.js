@@ -142,17 +142,19 @@ function injectCSS() {
     .pix-prm-list { color:#b98cff; }
     .pix-prm-list.s1 { color:#d79bf0; }
     .pix-prm-list.s2 { color:#efaadf; }
-    /* A name we cannot find. The old flat #ff4d4d was a WARM red sitting right next to
-       the #f66744 accent, so an unknown tag read as just another orange one (user
-       reported it twice). Two changes, because colour alone can never carry this:
-       a rose-red with no orange in it, AND a spellchecker-style wavy underline - which
-       is the only part that still works for the ~1 in 12 men who cannot separate red
-       from orange at all. The underline is safe for the caret: text-decoration is
-       PAINTED, it does not change glyph advance or line breaking, so the transparent
-       textarea on top still wraps identically (measured, not assumed - see the
-       wrapping-parity note). NO BACKTICKS in this comment; see the warning above. */
+    /* A name we cannot find - INCLUDING every half-typed one, since a tag is unknown
+       until the moment its last letter lands. So the TEXT stays white and readable and
+       only a red wavy underline marks it, exactly like a spellchecker: you can read
+       what you are typing, and it takes its real colour the instant it matches. Two
+       earlier attempts were worse - a warm #ff4d4d was mistaken for the #f66744 accent,
+       and a stronger rose-red fixed that but made typing feel like an error state.
+       The underline also carries the meaning for the ~1 in 12 men who cannot separate
+       red from orange at all, which no choice of red could. It is safe for the caret:
+       text-decoration is PAINTED, it changes no glyph advance and no line breaking, so
+       the transparent textarea on top still wraps identically (measured, not assumed -
+       see the wrapping-parity note). NO BACKTICKS in this comment; see above. */
     .pix-prm-chip.bad, .pix-prm-wild.bad, .pix-prm-list.bad {
-      color:#ff2d55; text-decoration:underline wavy #ff2d55; text-underline-offset:2px; }
+      color:#f0f0f0; text-decoration:underline wavy #ff2d55; text-underline-offset:2px; }
     /* preview GROWS with the node (flex, no fixed cap) so a big node shows more.
        LIGHTER gray (not the dark #1d1d1d of the editable inputs) so it reads as a
        read-only preview, not another input box. The plain colour lives on the CONTAINER,
@@ -248,7 +250,8 @@ const PROMPT_HELP = {
     {
       heading: "Reading the colours",
       body:
-        "The colour tells you what a thing is: `@tag` in your accent colour (orange unless you changed it), `*category` in green, `#list` in violet, and red for anything unknown or empty so you spot a typo.\n\n" +
+        "The colour tells you what a thing is: `@tag` in your accent colour (orange unless you changed it), `*category` in green, `#list` in violet.\n\n" +
+        "A name that does not match anything yet stays plain white with a red wavy underline, the way a spellchecker marks a word. That is what you see while you are still typing a name, so it stays easy to read, and it takes its real colour the moment it matches something in your library. An underline left behind after you have finished typing means a typo, or a tag you have since renamed or deleted.\n\n" +
         "While you are typing, `Show expanded` names the slot instead of guessing: `[random: Styles]`, `[shuffled line: animals]`, `[next line: poses]`. It cannot show a real pick yet, because the choice is made when you press Run, and a live one would change under your hands at every keystroke.\n\n" +
         "The moment you press Run it switches to the actual words that were used, so you can always see what a picture was made from. Edit the box and it goes back to naming the slots, because the old words no longer describe what you have written. The words also travel inside the picture: drag a finished image back onto the canvas and the box shows the prompt that made it, while your `#name` template stays exactly as you wrote it. Tip: with a fixed seed the picture only changes when the pick changes, so use a random seed if you want a new image every run.\n\n" +
         "The expanded words are coloured to match what they came from, so you can trace any piece back: words in your accent colour came from an `@tag`, green from a `*category`, violet from a `#list`. Where you have several of the same kind, each takes a slightly different shade of that colour, so two tags next to each other never blur into one run. Your own typed words stay plain grey. A prompt read back off a picture you dragged in is shown in plain text, because the colouring is worked out while the prompt is being built.",
