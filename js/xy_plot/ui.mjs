@@ -545,7 +545,7 @@ function buildPreview(axis) {
 // Deliberately NOT solved by self-disconnecting on !isConnected inside the
 // helper: Nodes 2.0 re-parents the widget root, which momentarily detaches the
 // element, and that would kill a live gutter.
-function detachLineGutters(el) {
+export function detachLineGutters(el) {
   if (!el) return;
   el.querySelectorAll("textarea").forEach((t) => {
     try { t._pixLnDetach?.(); } catch (_e) {}

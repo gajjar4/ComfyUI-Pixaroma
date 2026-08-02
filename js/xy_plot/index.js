@@ -4,7 +4,7 @@ import {
   readState, restoreFromProperties, resetState, resetAxis as resetAxisCore,
   resolveAxisValues, axisReady, computeCounts, axisDisplayName, targetNodeOf,
 } from "./core.mjs";
-import { injectCSS, buildRoot, renderBody, measureContentHeight, closePopupIfOwner, refreshAxisNotes } from "./ui.mjs";
+import { injectCSS, buildRoot, renderBody, measureContentHeight, closePopupIfOwner, refreshAxisNotes, detachLineGutters } from "./ui.mjs";
 import { buildGridPreview } from "./grid.mjs";
 import { applyAdaptiveCanvasOnly, isVueNodes, closeHelpPopup, installCanvasZoomPassthrough } from "../shared/index.mjs";
 import { isQueueLoopActive, runQueueLoop, feedsOnlyInactiveSwitch } from "../shared/queue_drivers.mjs";
@@ -307,6 +307,14 @@ app.registerExtension({
       // The preview's width-follows-the-node observer (grid.mjs).
       try { this._pixXyCapRO?.disconnect(); } catch (_e) {}
       this._pixXyCapRO = null;
+      // The line-number gutters' observers. The two RE-RENDER paths release
+      // their own, but a workflow open / tab switch runs graph.clear() ->
+      // onRemoved and the card is never re-rendered, so without this the
+      // outgoing node's textarea + wrap + gutter + mirror stay pinned for the
+      // rest of the session - one tree per workflow switch. This is also the
+      // one place where the helper's "Nodes 2.0 re-parents the root" hazard
+      // cannot apply: the node really is going away.
+      try { detachLineGutters(this._pixXyRoot); } catch (_e) {}
       this._pixXyRoot = null;
       this._pixXyRerender = null;
       this._pixXyRenderOnly = null;

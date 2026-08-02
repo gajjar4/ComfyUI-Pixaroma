@@ -55,8 +55,24 @@ function copyTextMetrics(el, cs) {
   el.style.fontWeight = cs.fontWeight;
   el.style.fontSize = cs.fontSize;
   el.style.fontFamily = cs.fontFamily;
+  // fontStretch was carried by the `font` shorthand this replaced, so leaving it
+  // out would be a strict NARROWING: a theme that condenses the box would wrap
+  // the mirror at different characters from the textarea, and per the header
+  // note that error accumulates down the box - the very scattering this
+  // function exists to prevent, arriving through a different door.
+  el.style.fontStretch = cs.fontStretch;
   el.style.letterSpacing = cs.letterSpacing;
   el.style.lineHeight = cs.lineHeight;
+}
+
+// The relayout-skip signature. Built from the same longhands copyTextMetrics
+// copies, NOT the `font` shorthand: on the engine the longhand change targets
+// the shorthand serialises to "", so the signature would silently lose its font
+// term and a theme switch that restyled the box would leave the numbers parked
+// at the old wrap points until the user typed or resized.
+function textMetricsSig(cs) {
+  return [cs.fontStyle, cs.fontVariant, cs.fontWeight, cs.fontSize,
+          cs.fontFamily, cs.fontStretch, cs.letterSpacing, cs.lineHeight].join("|");
 }
 
 // Wrap `ta` in a gutter. Returns a detach() that puts the DOM back as it was.
@@ -124,7 +140,7 @@ export function attachLineNumbers(ta, opts = {}) {
     const contentW = Math.max(0, ta.clientWidth - padLeft - padR);
 
     // Skip the rebuild when nothing that affects wrapping changed.
-    const sig = contentW + "|" + cs.font + "|" + cs.letterSpacing + "|" + ta.value;
+    const sig = contentW + "|" + textMetricsSig(cs) + "|" + ta.value;
     if (!force && sig === lastSig) return;
     lastSig = sig;
 

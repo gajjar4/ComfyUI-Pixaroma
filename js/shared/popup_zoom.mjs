@@ -73,7 +73,8 @@ export function applyPopupZoom(pop, opts = {}) {
 //   baseMaxHeightPx   scroll height at 100% zoom (omit to leave it to CSS)
 //   maxHeightVh       viewport fraction ceiling for the above (default .6)
 //   minWidthPx        hard floor for the width (default 200)
-//   baseMaxWidthPx    width ceiling at 100% zoom, scaled by zoom (omit = no cap)
+//   baseMaxWidthPx    width ceiling at 100% zoom, scaled by zoom
+//                     (omit and it still caps at 90vw, never uncapped)
 //   anchorWidthIsMin  anchor width becomes min-width (default true)
 //   gap               px between anchor and popup (default 4)
 //   margin            px kept clear of the viewport edges (default 8)

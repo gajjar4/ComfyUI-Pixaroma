@@ -157,17 +157,19 @@ def _ellipsize(draw, text, font, max_w):
     return (t + "…") if t else "…"
 
 
-def _wrap_lines(draw, text, font, max_w, max_lines=None):
-    """Greedy word wrap of `text` into lines that each fit `max_w`.
+def _wrap_ex(draw, text, font, max_w, max_lines=None):
+    """`_wrap_lines`, plus whether a WORD had to be split mid-way.
 
-    Returns at least one line. When `max_lines` is given the last kept line is
-    ellipsized, so a clipped label never reads as if it were complete."""
+    The flag lets _fit_wrapped prefer a slightly smaller font over a word cut in
+    half: on a narrow strip a word only a pixel or two too wide gets guillotined
+    ("photorealisti / c" - seen on a real 384px-cell grid), which reads as a
+    rendering fault rather than as wrapping."""
     if max_w <= 0:
-        return [str(text)]
+        return [str(text)], False
     words = str(text).split()
     if not words:
-        return [""]
-    lines, cur = [], ""
+        return [""], False
+    lines, cur, broke = [], "", False
     for w in words:
         trial = (cur + " " + w) if cur else w
         if _measure(draw, trial, font)[0] <= max_w:
@@ -180,6 +182,7 @@ def _wrap_lines(draw, text, font, max_w, max_lines=None):
             cur = w
         else:
             pieces = _hard_break(draw, w, font, max_w)
+            broke = True
             lines.extend(pieces[:-1])
             cur = pieces[-1]
     if cur:
@@ -187,7 +190,15 @@ def _wrap_lines(draw, text, font, max_w, max_lines=None):
     if max_lines and len(lines) > max_lines:
         lines = lines[:max_lines]
         lines[-1] = _ellipsize(draw, lines[-1], font, max_w)
-    return lines
+    return lines, broke
+
+
+def _wrap_lines(draw, text, font, max_w, max_lines=None):
+    """Greedy word wrap of `text` into lines that each fit `max_w`.
+
+    Returns at least one line. When `max_lines` is given the last kept line is
+    ellipsized, so a clipped label never reads as if it were complete."""
+    return _wrap_ex(draw, text, font, max_w, max_lines)[0]
 
 
 # _assemble_grid runs once PER CELL and re-lays-out every label each time, which
@@ -210,18 +221,32 @@ def _fit_wrapped(draw, text, base_size, max_w, max_h, min_size=9):
     key = (str(text), int(base_size), int(max_w), int(max_h), int(min_size))
     hit = _WRAP_MEMO.get(key)
     if hit is not None:
-        return hit
+        # Hand back a COPY of the line list. The memo outlives the assemble, so
+        # one future `lines.insert(...)` in a caller would silently corrupt every
+        # later cell, theme restyle and Save export of that plot - the
+        # wrong-output-without-an-error class. Microseconds against a layout that
+        # costs milliseconds, so the memo's speedup is untouched.
+        return (hit[0], list(hit[1]), hit[2])
 
     size = int(base_size)
     out = None
+    first_fit = None      # largest size that fits by HEIGHT, even if it split a word
     while size >= min_size:
         f = _load_font(size)
         lh = _line_h(draw, f)
-        lines = _wrap_lines(draw, text, f, max_w)
+        lines, broke = _wrap_ex(draw, text, f, max_w)
         if len(lines) * lh <= max_h:
-            out = (f, lines, lh)
-            break
+            if not broke:
+                out = (f, lines, lh)      # fits AND keeps every word whole
+                break
+            if first_fit is None:
+                first_fit = (f, lines, lh)
         size -= 1
+    # A word wider than the strip at EVERY size (a 400-char token) can never be
+    # kept whole, so fall back to the largest size that fitted rather than
+    # shrinking all the way down for nothing.
+    if out is None:
+        out = first_fit
     if out is None:
         f = _load_font(min_size)
         lh = _line_h(draw, f)
@@ -231,7 +256,7 @@ def _fit_wrapped(draw, text, base_size, max_w, max_h, min_size=9):
     if len(_WRAP_MEMO) >= _WRAP_MEMO_MAX:
         _WRAP_MEMO.clear()   # bounded reset; the next assemble re-derives cheaply
     _WRAP_MEMO[key] = out
-    return out
+    return (out[0], list(out[1]), out[2])
 
 
 # A prompt on the X axis would otherwise make the header strip taller than the
@@ -368,7 +393,8 @@ def _assemble_grid(sess, max_long_side=_GRID_LONG_SIDE_CAP):
     y_name = sess.get("y_name") or ""
 
     x_label_lines = []
-    x_font = font
+    # Only the BASE line height is shared now - each column carries its own font
+    # (they shrink independently), so there is no single x_font any more.
     x_lh = _line_h(sdraw, font)
     if draw_labels:
         # Row-label strip: wide enough to show the full Y label (sampler /
