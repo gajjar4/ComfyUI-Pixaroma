@@ -351,44 +351,97 @@ function makeIsOutput() {
 // gate pruned it away).
 const MODE_RANK = { continue: 0, pause: 1, pass: 2 };
 
+// Every Pause Image entry in a prompt, with the mode that should apply to it.
+// Shared by both hooks below so the INJECT and the PRUNE can never disagree
+// about what a gate is doing.
+function collectGates(out) {
+  let index = null;
+  const gates = [];
+  for (const id in out) {
+    const entry = out[id];
+    if (!entry || entry.class_type !== CLASS) continue;
+    if (!index) index = buildNodeIndex();
+    const node = findNode(index, id);
+    // Effective mode: a one-shot button override (Continue/Regenerate) wins,
+    // otherwise the persistent toggle (Pause default, or Pass). If the live
+    // node can't be resolved (rare - a subgraph id edge case), default to the
+    // harmless "pass" (no prune) rather than the destructive "pause" (which
+    // would silently truncate a workflow we couldn't positively identify).
+    const submit = node?._pixPauseSubmitMode;
+    let mode;
+    if (submit === "continue" || submit === "pause") {
+      mode = submit;
+    } else if (node) {
+      mode = node.properties?.[STATE_PROP]?.gate === "pass" ? "pass" : "pause";
+    } else {
+      mode = "pass";
+    }
+    gates.push({ id, entry, mode });
+  }
+  return gates;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TWO hooks, two jobs (the Switch split - see js/switch/index.js and
+// `.claude/patterns/pause-image.md`):
+//
+//   graphToPrompt   -> INJECT the mode only. It runs for a RUN *and* for
+//                      "Export (API)", workflow SHARING, and several Pixaroma
+//                      Save buttons, all of which serialise `.output`.
+//   api.queuePrompt -> PRUNE. Runs ONLY when a prompt is actually submitted.
+//
+// WHY: the prune used to live in graphToPrompt, so "Export (API)" exported a
+// TRUNCATED workflow - a gate left on Pause (the default) exported with its
+// whole downstream deleted, and a gate on Continue exported with the generation
+// chain's outputs stripped. The user got a quietly incomplete file with nothing
+// to say it had been cut. Unlike the Switch, lazy inputs cannot replace this
+// prune (it deletes whole NODES, it is a gate rather than a branch selector) -
+// but moving WHERE it runs costs nothing and fixes the export.
+//
+// The one-shot `_pixPauseSubmitMode` is still live at prune time: queueWithMode
+// clears it in a `finally` AFTER `await app.queuePrompt(...)` resolves, and
+// api.queuePrompt runs inside that await.
+// ─────────────────────────────────────────────────────────────────────────────
 const _origGraphToPrompt = app.graphToPrompt.bind(app);
 app.graphToPrompt = async function (...args) {
   const result = await _origGraphToPrompt(...args);
   const out = result?.output;
   if (out) {
-    // Gather every Pause Image entry + its effective mode first.
-    let index = null;
-    const isOutput = makeIsOutput();
-    const gates = [];
-    for (const id in out) {
-      const entry = out[id];
-      if (!entry || entry.class_type !== CLASS) continue;
-      if (!index) index = buildNodeIndex();
-      const node = findNode(index, id);
-      // Effective mode: a one-shot button override (Continue/Regenerate) wins,
-      // otherwise the persistent toggle (Pause default, or Pass). If the live
-      // node can't be resolved (rare - a subgraph id edge case), default to the
-      // harmless "pass" (no prune) rather than the destructive "pause" (which
-      // would silently truncate a workflow we couldn't positively identify).
-      const submit = node?._pixPauseSubmitMode;
-      let mode;
-      if (submit === "continue" || submit === "pause") {
-        mode = submit;
-      } else if (node) {
-        mode = node.properties?.[STATE_PROP]?.gate === "pass" ? "pass" : "pause";
-      } else {
-        mode = "pass";
-      }
-      gates.push({ id, entry, mode });
-    }
-    gates.sort((a, b) => MODE_RANK[a.mode] - MODE_RANK[b.mode]);
-    for (const g of gates) {
-      if (!out[g.id]) continue;  // already pruned away by an earlier continue gate
-      applyGateMode(out, g.id, g.entry, g.mode, isOutput, HIDDEN_INPUT);
+    for (const g of collectGates(out)) {
+      g.entry.inputs = g.entry.inputs || {};
+      g.entry.inputs[HIDDEN_INPUT] = JSON.stringify({ mode: g.mode });
     }
   }
   return result;
 };
+
+// Submit-time prune. api.queuePrompt(number, {output, workflow}, options) is the
+// single funnel every browser run goes through (normal Run, partial "Execute
+// Node", and the Prompt Multi / Prompt Pack / XY Plot queue loops, which all
+// call app.queuePrompt -> api.queuePrompt). Forward ...args untouched so
+// partialExecutionTargets and any future option survive.
+if (!api._pixPauseQueueWrapped) {
+  api._pixPauseQueueWrapped = true;
+  const _origQueuePrompt = api.queuePrompt.bind(api);
+  api.queuePrompt = async function (...args) {
+    try {
+      const out = args[1]?.output;
+      if (out) {
+        const isOutput = makeIsOutput();
+        const gates = collectGates(out);
+        gates.sort((a, b) => MODE_RANK[a.mode] - MODE_RANK[b.mode]);
+        for (const g of gates) {
+          if (!out[g.id]) continue;  // already pruned away by an earlier continue gate
+          applyGateMode(out, g.id, g.entry, g.mode, isOutput, HIDDEN_INPUT);
+        }
+      }
+    } catch (err) {
+      // A prune failure must never block the user's run.
+      console.error("[Pause Image] submit-time prune failed", err);
+    }
+    return _origQueuePrompt(...args);
+  };
+}
 
 // The colour option: a right-click "Pause Image settings" entry, the gear in the
 // selection toolbar, and the shared colour panel behind both.

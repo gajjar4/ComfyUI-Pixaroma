@@ -411,48 +411,94 @@ function editedTextOf(node) {
 // gate that sits UPSTREAM of them - so continue must run BEFORE pause/pass.
 const MODE_RANK = { continue: 0, pause: 1, pass: 2 };
 
+// Every Pause Text entry in a prompt, with the mode + edited text that should
+// apply to it. Shared by both hooks below so the INJECT and the PRUNE can never
+// disagree about what a gate is doing.
+function collectGates(out) {
+  let index = null;
+  const gates = [];
+  for (const id in out) {
+    const entry = out[id];
+    if (!entry || entry.class_type !== CLASS) continue;
+    if (!index) index = buildNodeIndex();
+    const node = findNode(index, id);
+    const submit = node?._pixPtSubmitMode;
+    let mode;
+    if (submit === "continue" || submit === "pause") {
+      mode = submit;
+    } else if (node) {
+      // A plain Run: the toggle decides. Keep behaves like Continue on EVERY run
+      // (skip the model, reuse the current text, let the downstream make a fresh
+      // image) - it's Continue turned into a persistent mode.
+      const g = node.properties?.[STATE_PROP]?.gate;
+      mode = g === "pass" ? "pass" : g === "keep" ? "continue" : "pause";
+    } else {
+      // Can't resolve the live node: default to the harmless "pass" (no prune)
+      // rather than the destructive "pause" (which truncates the workflow).
+      mode = "pass";
+    }
+    const editedText = node ? editedTextOf(node) : "";
+    gates.push({ id, entry, mode, editedText });
+  }
+  return gates;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TWO hooks, two jobs - the Switch split. Identical reasoning to Pause Image
+// (see the long comment in js/pause_image/index.js and
+// `.claude/patterns/pause-text.md`): graphToPrompt runs for "Export (API)",
+// workflow SHARING and several Pixaroma Save buttons as well as for a run, so
+// it may only INJECT. Deleting there handed the user a silently TRUNCATED
+// export. The prune moves to api.queuePrompt, the single browser-submit funnel.
+//
+// `_pixPtSubmitMode` and the live textarea are both still readable at prune
+// time: the one-shot is cleared in a `finally` AFTER `await app.queuePrompt(...)`
+// resolves, and api.queuePrompt runs inside that await.
+// ─────────────────────────────────────────────────────────────────────────────
 const _origGraphToPrompt = app.graphToPrompt.bind(app);
 app.graphToPrompt = async function (...args) {
   const result = await _origGraphToPrompt(...args);
   const out = result?.output;
   if (out) {
-    let index = null;
-    const isOutput = makeIsOutput();
-    const gates = [];
-    for (const id in out) {
-      const entry = out[id];
-      if (!entry || entry.class_type !== CLASS) continue;
-      if (!index) index = buildNodeIndex();
-      const node = findNode(index, id);
-      const submit = node?._pixPtSubmitMode;
-      let mode;
-      if (submit === "continue" || submit === "pause") {
-        mode = submit;
-      } else if (node) {
-        // A plain Run: the toggle decides. Keep behaves like Continue on EVERY run
-        // (skip the model, reuse the current text, let the downstream make a fresh
-        // image) - it's Continue turned into a persistent mode.
-        const g = node.properties?.[STATE_PROP]?.gate;
-        mode = g === "pass" ? "pass" : g === "keep" ? "continue" : "pause";
-      } else {
-        // Can't resolve the live node: default to the harmless "pass" (no prune)
-        // rather than the destructive "pause" (which truncates the workflow).
-        mode = "pass";
-      }
-      const editedText = node ? editedTextOf(node) : "";
-      gates.push({ id, entry, mode, editedText });
-    }
-    gates.sort((a, b) => MODE_RANK[a.mode] - MODE_RANK[b.mode]);
-    for (const g of gates) {
-      if (!out[g.id]) continue;  // already pruned by an earlier continue gate
-      applyGateMode(out, g.id, g.entry, g.mode, isOutput, HIDDEN_INPUT, {
-        inputKey: "text",
-        editedText: g.editedText,
+    for (const g of collectGates(out)) {
+      g.entry.inputs = g.entry.inputs || {};
+      g.entry.inputs[HIDDEN_INPUT] = JSON.stringify({
+        mode: g.mode, text: g.editedText,
       });
     }
   }
   return result;
 };
+
+// Submit-time prune. api.queuePrompt(number, {output, workflow}, options) is the
+// single funnel every browser run goes through (normal Run, partial "Execute
+// Node", and the Prompt Multi / Prompt Pack / XY Plot queue loops). Forward
+// ...args untouched so partialExecutionTargets and any future option survive.
+if (!api._pixPtQueueWrapped) {
+  api._pixPtQueueWrapped = true;
+  const _origQueuePrompt = api.queuePrompt.bind(api);
+  api.queuePrompt = async function (...args) {
+    try {
+      const out = args[1]?.output;
+      if (out) {
+        const isOutput = makeIsOutput();
+        const gates = collectGates(out);
+        gates.sort((a, b) => MODE_RANK[a.mode] - MODE_RANK[b.mode]);
+        for (const g of gates) {
+          if (!out[g.id]) continue;  // already pruned by an earlier continue gate
+          applyGateMode(out, g.id, g.entry, g.mode, isOutput, HIDDEN_INPUT, {
+            inputKey: "text",
+            editedText: g.editedText,
+          });
+        }
+      }
+    } catch (err) {
+      // A prune failure must never block the user's run.
+      console.error("[Pause Text] submit-time prune failed", err);
+    }
+    return _origQueuePrompt(...args);
+  };
+}
 
 // The colour option: a right-click "Pause Text settings" entry, the gear in the
 // selection toolbar, and the shared colour panel behind both.
