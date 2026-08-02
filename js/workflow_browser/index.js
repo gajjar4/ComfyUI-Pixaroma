@@ -19,6 +19,7 @@ import {
 import { openContextMenu, closeContextMenu, setMenuFocusHome } from "./menu.mjs";
 import { renderGrid, beginRename, setRenameLostNotifier, dropRename } from "./grid.mjs";
 import { renderTidy } from "./tidy.mjs";
+import { CARD_MIME } from "./drag.mjs";
 import { renderDetail } from "./detail.mjs";
 import { searchEntries } from "./search.mjs";
 import { installOutputCoverCapture, hasHandCover } from "./cover.mjs";
@@ -714,6 +715,12 @@ const HANDLERS = {
     // Dragging an unselected card drags THAT card, not the old selection.
     if (!S.selected.has(entry.rel)) S.selected = new Set([entry.rel]);
     e.dataTransfer.effectAllowed = "move";
+    // The custom type is what the drop guard recognises. A card drag used to
+    // carry text/plain ALONE, so there was nothing to tell it apart from
+    // somebody dragging ordinary text - which meant the guard could not cancel
+    // it without also breaking real text drops into the note box.
+    e.dataTransfer.setData(CARD_MIME, entry.rel);
+    // Kept deliberately; drag.mjs explains why it is guarded rather than removed.
     e.dataTransfer.setData("text/plain", entry.rel);
   },
 };

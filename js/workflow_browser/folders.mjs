@@ -15,6 +15,7 @@
 // a file, so dropping onto one would promise a move that cannot happen.
 
 import { el, markRendering, isRendering } from "./window.mjs";
+import { FOLDER_MIME, isFolderDrag, DROP_TARGET_ATTR } from "./drag.mjs";
 
 // Two clicks on the same folder row this close together mean "rename". Module
 // scope on purpose: the row element does not survive the first click, so the
@@ -24,11 +25,11 @@ import { el, markRendering, isRendering } from "./window.mjs";
 const DBL_MS = 400;
 let lastFoldClick = { path: null, at: 0 };
 
-// Marks a drag as "a folder being re-ordered" rather than "workflow cards being
-// filed". Only the TYPE is readable during dragover - getData is blocked until
-// the drop - so the distinction has to live in the type, not the payload.
-const FOLDER_MIME = "application/x-pixaroma-folder";
-const isFolderDrag = (e) => !!e.dataTransfer && [...e.dataTransfer.types].includes(FOLDER_MIME);
+// The MIME that marks a drag as "a folder being re-ordered" rather than
+// "workflow cards being filed", and the test for it, both live in drag.mjs now -
+// the drop guard there needs the same two constants, and two copies of a MIME
+// string is exactly the drift that lets a guard silently stop recognising the
+// drag it exists to catch.
 
 const FOLDER_COLORS = ["#4d7ea8", "#7ea84d", "#a8794d", "#8a4da8", "#a84d4d", "#4da8a0", "#8f8f8f", "#6d78a8"];
 
@@ -217,6 +218,13 @@ export function renderFolders(side, state, { onPick, onDropOn, onRenameFolder, o
       const clearMarks = () => b.classList.remove(
         "pixwb-droptarget", "pixwb-insert-above", "pixwb-insert-below");
 
+      // Marks this row as somewhere a Pixaroma drag may legitimately land. The
+      // guard in drag.mjs cancels our drags everywhere else, so a row that
+      // really accepts a drop has to say so - and only the rows inside this
+      // branch do, which is why the class name alone would be wrong (the
+      // shortcuts and the collections are the same `.pixwb-fold` button).
+      b.dataset[DROP_TARGET_ATTR] = "1";
+
       b.addEventListener("dragover", (e) => {
         e.preventDefault();
         if (e.dataTransfer) e.dataTransfer.dropEffect = "move";
@@ -260,7 +268,9 @@ export function renderFolders(side, state, { onPick, onDropOn, onRenameFolder, o
         if (e.target.tagName === "INPUT") { e.preventDefault(); return; }  // mid-rename
         e.dataTransfer.effectAllowed = "move";
         e.dataTransfer.setData(FOLDER_MIME, folderPath);
-        // Some browsers refuse a drag with no text/plain payload at all.
+        // The text/plain copy stays (see drag.mjs for why it is not simply
+        // dropped) and is what makes every text box on the page a drop target
+        // for this path - installDropGuard is what stops that landing.
         e.dataTransfer.setData("text/plain", folderPath);
         b.classList.add("pixwb-dragging-me");
       });

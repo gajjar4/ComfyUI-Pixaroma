@@ -18,6 +18,7 @@
 import { globalAccent, BRAND } from "../shared/index.mjs";
 import { el, makeRect, startDrag } from "../shared/floating_window.mjs";
 import { injectWorkflowCSS } from "./css.mjs";
+import { installDropGuard } from "./drag.mjs";
 
 const RECT_SETTING = "Pixaroma.Workflows.Rect";
 
@@ -106,6 +107,10 @@ export async function copyText(text) {
 
 export function createWorkflowWindow({ onRender, onClose }) {
   injectWorkflowCSS();
+  // Listens on `document`, not on this window: a drag that starts on a card can
+  // be released anywhere, including a prompt box on the canvas behind the panel.
+  // Idempotent, so rebuilding the panel cannot stack listeners.
+  installDropGuard();
 
   const win = el("div", "pixwb-win");
   win.style.display = "none";
