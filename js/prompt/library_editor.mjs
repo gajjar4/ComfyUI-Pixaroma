@@ -1718,6 +1718,24 @@ export function openLibraryEditor(node, opts) {
   ov.querySelector(".imp-import").addEventListener("click", pickImportFile);
   ov.querySelector(".imp-more").addEventListener("click", (e) => openLibraryMenu(e.currentTarget));
   installSidebarResize(ov);
+  // A dragged category row carries its name as text/plain as well, so the drag starts
+  // on every browser - but that ALSO makes every text field in here a native drop
+  // target. Releasing a row over a tag card's text box would splice the category name
+  // into that snippet, and the card's own input handler commits to the library on the
+  // spot, with no undo. There is no drag handle on a row, so overshooting onto the card
+  // grid is the normal learning gesture, and no insert line appears there to warn you.
+  // Cancel any drop that carries one of OUR row types and did not land on a category
+  // row; capture phase, so it beats the field's own default. Ordinary text dragged in
+  // from elsewhere carries neither type and is untouched, so dropping text into a tag
+  // box still works.
+  ov.addEventListener("drop", (e) => {
+    if (!e.dataTransfer) return;
+    const t = [...e.dataTransfer.types];
+    if (!t.includes(CAT_MIME("text")) && !t.includes(CAT_MIME("list"))) return;
+    if (e.target.closest && e.target.closest(".pix-prled-cat")) return;   // a real reorder target
+    e.preventDefault();
+    e.stopPropagation();
+  }, true);
 
   render();
   // Coming from "save selection as a tag": the text is already in the create form,
