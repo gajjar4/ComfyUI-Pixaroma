@@ -43,7 +43,7 @@ const XY_HELP = {
         ["Number", "A `Range` (Start / End / Steps) or a `List` of values."],
         ["Dropdown", "A checklist of VALUES to try, not a list of things to load at once: tick the samplers / models / loras you want to compare and each tick becomes one square."],
         ["LoRA", "A checklist of lora files, or a number when you pick a weight. Loras get a section of their own further down, because they work one level differently from every other setting."],
-        ["Prompt text", "`Full list` (one full prompt per line) or `Find & replace` (swap a word for each value)."],
+        ["Prompt text", "`Full list` (one full prompt per line) or `Find & replace` (swap a word for each value). Long prompts wrap onto several rows, and the numbers down the left count your VALUES, so you can always see where the next one starts. The numbers are just a guide - you cannot type in them."],
       ],
       bullets: [
         "The checklist shows ALL your installed options (every lora, sampler, checkpoint, etc.), not just the one in the node - that is how you compare against ones you have not loaded yet. The `now:` line under the picker shows what the node is set to right now.",
@@ -124,6 +124,7 @@ const XY_HELP = {
         "The full-size grid is built only when you click Save, so choosing a bigger size never slows your runs down.",
         "Save Disk saves to your computer and Save Output goes to ComfyUI's output folder, both at the Save size. Copy and Open use the smaller on-screen preview.",
         "The grid sent out of the node's image dot (top right) always stays 4096, to keep anything wired after it fast.",
+        "Want the preview bigger on the canvas? Make the NODE wider and it grows with it (and smaller again when you narrow it). A very tall grid stops growing at a point, so the node stays a size you can still work with - use Open for a proper look at that one.",
       ],
     },
   ],
