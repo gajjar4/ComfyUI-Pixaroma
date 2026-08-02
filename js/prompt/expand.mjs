@@ -80,6 +80,9 @@ export function expandAll(text, opts = {}) {
   if (typeof text !== "string" || !/[@*#]/.test(text)) {
     return {
       out: typeof text === "string" ? text : "",
+      // `spans` must be present on EVERY return, not just the one that fills it, or a
+      // caller reading r.spans.length on a prompt with no tokens gets undefined.
+      spans: [],
       knownTags: [], unknownTags: [], knownWilds: [], unknownWilds: [], knownLists: [], unknownLists: [],
     };
   }
@@ -88,27 +91,36 @@ export function expandAll(text, opts = {}) {
   for (const t of list) map.set(t.name.toLowerCase(), t.text);
   const toks = scanTokens(text);
   const knownTags = [], unknownTags = [], knownWilds = [], unknownWilds = [], knownLists = [], unknownLists = [];
+  // Where each token's replacement ENDED UP in `out`, so a reader can colour the
+  // expanded text one run per tag and see where one stops and the next starts. Purely
+  // additive - `out` is byte-identical with or without this - and the caller is free
+  // to ignore it. `known` is false for a token left literal (unknown name), which is
+  // not tag text and so is not coloured.
+  const spans = [];
   let out = "";
   let i = 0;
   for (const h of toks) {
     out += text.slice(i, h.start);
+    const at = out.length;
+    let known = false;
     if (h.kind === "tag") {
       const v = map.get(h.name.toLowerCase());
-      if (v != null) { out += v; knownTags.push(h.name); }
+      if (v != null) { out += v; knownTags.push(h.name); known = true; }
       else { out += h.raw; unknownTags.push(h.name); } // unknown tag left literal
     } else if (h.kind === "wild") {
       const rep = typeof resolveWild === "function" ? resolveWild(h.name) : null;
-      if (rep != null) { out += rep; knownWilds.push(h.name); }
+      if (rep != null) { out += rep; knownWilds.push(h.name); known = true; }
       else { out += h.raw; unknownWilds.push(h.name); } // unknown / empty category left literal
     } else {
       const rep = typeof resolveList === "function" ? resolveList(h.name) : null;
-      if (rep != null) { out += rep; knownLists.push(h.name); }
+      if (rep != null) { out += rep; knownLists.push(h.name); known = true; }
       else { out += h.raw; unknownLists.push(h.name); } // unknown tag / no usable lines left literal
     }
+    spans.push({ start: at, end: out.length, kind: h.kind, name: h.name, known });
     i = h.end;
   }
   out += text.slice(i);
-  return { out, knownTags, unknownTags, knownWilds, unknownWilds, knownLists, unknownLists };
+  return { out, spans, knownTags, unknownTags, knownWilds, unknownWilds, knownLists, unknownLists };
 }
 
 // Expand @tags only (deterministic). Kept as the single @-only path; delegates to

@@ -1644,6 +1644,7 @@ function showLibraryHelp() {
     `<p><b>Edit a tag.</b> Click a card's name or its text and change it - your edits save on their own.</p>` +
     `<p><b>Text or List.</b> Every card has a switch at the bottom with both choices on it. <b>Text</b> is one piece of writing and <b>@name</b> drops in all of it. <b>List</b> holds one option per line (cat, dog, mouse) and <b>#name</b> drops in a random one, fresh every run. Flip the switch any time: it changes what the card is for, never what your saved prompts do. While the create box at the top is set to List, Enter starts the next option and Ctrl+Enter adds the tag.</p>` +
     `<p><b>Categories.</b> Make them in the left sidebar. Click a card's coloured pill to move that tag to another category. The <b>⋯</b> on a category row (right-clicking the row does the same) lets you rename it, export just that category, or delete it. Typing <b>*category</b> in a prompt picks a random tag from it each run.</p>` +
+    `<p><b>Put the categories in your own order.</b> Drag a category row up or down to move it, or use <b>Move up</b> and <b>Move down</b> in its <b>⋯</b> menu. The order you set is the order you see everywhere: the sidebar, the export menu, the pill on a card, and the list that pops up when you type <b>@</b>, <b>#</b> or <b>*</b>. Text and List categories are two separate groups, so a row moves within its own group. You can also drag the divider between the sidebar and the cards to make the category list wider, and it stays that way next time you open it (double-click the divider to put it back).</p>` +
     `<p><b>The italic Text and List rows are not categories.</b> They are where tags with no category of their own are shown, so there is nothing to rename or delete about the row itself. Their <b>⋯</b> can file them all into a category at once (and the row then disappears by itself), export them, or delete them.</p>` +
     `<p><b>Deleting.</b> Anything that removes something asks you first and shows you exactly what will go, so you can check it is the one you meant. Deleting a category gives you two choices: keep its tags (they move to Text or List) or delete them along with it. The <b>⋯</b> next to Export and Import has <b>Delete everything</b> for starting over. Where a whole group is going, the question also offers to save you a backup file first. There is no undo, so the answer is final once you give it.</p>` +
     `<p><b>Picks: Shuffle, Random or In order.</b> A List card, and the header of anything you can roll with <b>*name</b>, each have a <b>Picks</b> control for how they choose. <b>Shuffle</b> is the default: it deals a shuffled deck, so every option comes up once before any repeat. <b>Random</b> is any one every time, so the same one can come up twice in a row. <b>In order</b> goes 1, 2, 3 and around again. Shuffle and In order remember their place between runs (the card shows it) and the <b>↺</b> button starts that list over.</p>` +
@@ -1679,7 +1680,9 @@ export function openLibraryEditor(node, opts) {
     `<span class="priv">private to you · survives plugin updates</span>` +
     `<span class="help" title="How the tag library works"><span class="pix-prled-svg" style="-webkit-mask-image:url(${ICON_BASE}help.svg);mask-image:url(${ICON_BASE}help.svg)"></span></span>` +
     `<span class="x" title="Close">✕</span></div>` +
-    `<div class="pix-prled-main"><div class="pix-prled-side"></div><div class="pix-prled-content"></div></div>` +
+    `<div class="pix-prled-main"><div class="pix-prled-side"></div>` +
+    `<div class="pix-prled-grip" title="Drag to resize the category list. Double-click to reset."></div>` +
+    `<div class="pix-prled-content"></div></div>` +
     `<div class="pix-prled-foot"><button class="pix-prled-btn imp-export" title="Save your tags to a file: everything, or just one category"><span>⭳</span> Export ▾</button>` +
     `<button class="pix-prled-btn imp-import" title="Bring tags in from a file - you choose which categories"><span>⭱</span> Import</button>` +
     `<button class="pix-prled-btn imp-more" title="More library actions">⋯</button>` +
@@ -1696,6 +1699,7 @@ export function openLibraryEditor(node, opts) {
   ov.querySelector(".imp-export").addEventListener("click", (e) => openExportMenu(e.currentTarget));
   ov.querySelector(".imp-import").addEventListener("click", pickImportFile);
   ov.querySelector(".imp-more").addEventListener("click", (e) => openLibraryMenu(e.currentTarget));
+  installSidebarResize(ov);
 
   render();
   // Coming from "save selection as a tag": the text is already in the create form,
@@ -1709,6 +1713,69 @@ export function openLibraryEditor(node, opts) {
 
   _undoGuardOff = installGraphUndoGuard(() => !!_overlay && _overlay.isConnected);
   window.addEventListener("keydown", onKey, true);
+}
+// ── the category sidebar's width ───────────────────────────────────────
+// Remembered across opens in an UNREGISTERED setting (Vue Compat #20 - it persists
+// without being declared anywhere, exactly like the library itself). Never fatal: a
+// width is a convenience, so every read and write is wrapped and falls back to the
+// default rather than taking the editor down with it.
+function readSidebarWidth() {
+  try {
+    const v = app.ui?.settings?.getSettingValue(SIDE_W_SETTING);
+    return v == null ? SIDE_W_DEFAULT : clampSideW(v);
+  } catch { return SIDE_W_DEFAULT; }
+}
+function writeSidebarWidth(px) {
+  try {
+    const s = app.ui?.settings, w = clampSideW(px);
+    if (typeof s?.setSettingValueAsync === "function") s.setSettingValueAsync(SIDE_W_SETTING, w);
+    else if (typeof s?.setSettingValue === "function") s.setSettingValue(SIDE_W_SETTING, w);
+  } catch { /* ignore */ }
+}
+function installSidebarResize(overlay) {
+  const side = overlay.querySelector(".pix-prled-side");
+  const grip = overlay.querySelector(".pix-prled-grip");
+  if (!side || !grip) return;
+  side.style.width = readSidebarWidth() + "px";
+  let pid = null, startX = 0, startW = 0;
+  const move = (ev) => {
+    // BOTH defences are required (node UI convention #20). A real mouse can lose its
+    // release - the pointer leaves the viewport, or something else takes capture - and
+    // the seam then follows the cursor for ever with no way to put it down. Synthetic
+    // events never reproduce it, so this guard cannot be "tested away".
+    if (!(ev.buttons & 1)) { end(); return; }
+    side.style.width = clampSideW(startW + (ev.clientX - startX)) + "px";
+  };
+  const end = () => {
+    if (pid === null) return;                 // idempotent: the guard above also calls it
+    try { grip.releasePointerCapture(pid); } catch { /* already released */ }
+    pid = null;
+    grip.classList.remove("on");
+    overlay.classList.remove("resizing");
+    window.removeEventListener("pointermove", move);
+    window.removeEventListener("pointerup", end);
+    window.removeEventListener("pointercancel", end);
+    writeSidebarWidth(parseFloat(side.style.width));
+  };
+  grip.addEventListener("pointerdown", (e) => {
+    if (e.button !== 0) return;
+    pid = e.pointerId;
+    startX = e.clientX;
+    startW = side.getBoundingClientRect().width;
+    try { grip.setPointerCapture(pid); } catch { /* window listeners still cover it */ }
+    grip.classList.add("on");
+    overlay.classList.add("resizing");
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", end);
+    window.addEventListener("pointercancel", end);
+    e.preventDefault();
+  });
+  grip.addEventListener("lostpointercapture", end);
+  // A discoverable way back from a width dragged too far.
+  grip.addEventListener("dblclick", () => {
+    side.style.width = SIDE_W_DEFAULT + "px";
+    writeSidebarWidth(SIDE_W_DEFAULT);
+  });
 }
 function onKey(e) {
   if (e.key !== "Escape") return;

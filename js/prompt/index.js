@@ -137,7 +137,16 @@ function injectCSS() {
     .pix-prm-expand { flex:1 1 0; background:#2d2d2d; border:1px solid #3a3a3a; border-radius:4px; padding:6px 8px;
       font:11px/1.5 monospace; white-space:pre-wrap; min-height:30px; overflow-y:auto; }
     .pix-prm-expand .lbl { color:#6d6d6d; }
-    .pix-prm-expand .mine { color:#9fd6b0; }
+    .pix-prm-expand .mine { color:#d8d8d8; }
+    /* Each tag's expanded words take the next colour in the rotation, so you can see
+       where one tag stops and the next starts (asked for on Discord, 2026-08-02).
+       Your OWN typed words stay plain, which is what makes a coloured run mean "this
+       came from a tag". Four is enough to separate neighbours without turning the box
+       into confetti; deliberately no blue, per the house palette rule. */
+    .pix-prm-expand .t0 { color:#9fd6b0; }
+    .pix-prm-expand .t1 { color:#e6c86e; }
+    .pix-prm-expand .t2 { color:#b98cff; }
+    .pix-prm-expand .t3 { color:#e8a87c; }
     .pix-prm-expand .note { color:#8a8a8a; font-style:italic; }
     .pix-prm-bar { display:flex; align-items:center; flex:0 0 auto; gap:4px; flex-wrap:wrap; row-gap:4px; padding:0 2px; user-select:none; }
     .pix-prm-btn { box-sizing:border-box; user-select:none; background:rgba(255,255,255,.05); border:1px solid rgba(255,255,255,.15);
@@ -227,7 +236,8 @@ const PROMPT_HELP = {
       body:
         "Anything that rolls glows violet, so `*category` and `#list` share that colour; a plain `@tag` stays orange, and an unknown or empty one glows red so you spot a typo.\n\n" +
         "While you are typing, `Show expanded` names the slot instead of guessing: `[random: Styles]`, `[shuffled line: animals]`, `[next line: poses]`. It cannot show a real pick yet, because the choice is made when you press Run, and a live one would change under your hands at every keystroke.\n\n" +
-        "The moment you press Run it switches to the actual words that were used, so you can always see what a picture was made from. Edit the box and it goes back to naming the slots, because the old words no longer describe what you have written. The words also travel inside the picture: drag a finished image back onto the canvas and the box shows the prompt that made it, while your `#name` template stays exactly as you wrote it. Tip: with a fixed seed the picture only changes when the pick changes, so use a random seed if you want a new image every run.",
+        "The moment you press Run it switches to the actual words that were used, so you can always see what a picture was made from. Edit the box and it goes back to naming the slots, because the old words no longer describe what you have written. The words also travel inside the picture: drag a finished image back onto the canvas and the box shows the prompt that made it, while your `#name` template stays exactly as you wrote it. Tip: with a fixed seed the picture only changes when the pick changes, so use a random seed if you want a new image every run.\n\n" +
+        "Each tag's words are coloured, cycling through four colours, so you can see where one tag stops and the next begins. Your own typed words stay plain, which means any colour you see came from a tag. A prompt read back off a picture you dragged in is shown in plain text, because the colouring is worked out as the prompt is built.",
     },
     {
       heading: "Save text as a tag",
@@ -906,20 +916,53 @@ function renderExpand(node) {
   // (a stale result would be worse than none). The placeholder is still what you see
   // while typing, which is invariant #24's "never a live random, or it flickers".
   const ran = node._pixPromptLastRun;
-  const mine = (ran && ran.src === v) ? ran.out : expandAll(v, PREVIEW_RESOLVERS).out;
+  const useRan = ran && ran.src === v;
+  const res = useRan ? null : expandAll(v, PREVIEW_RESOLVERS);
+  const mine = useRan ? ran.out : res.out;
+  // A run restored from an image carries the words but not the spans (they are runtime
+  // only), so that case simply reads back uncoloured rather than guessing.
+  const mineHTML = paintExpanded(mine, useRan ? ran.spans : res.spans);
   if (!wired) {
-    els.expand.innerHTML = `<span class="mine">${escapeHTML(mine)}</span>`;
+    els.expand.innerHTML = `<span class="mine">${mineHTML}</span>`;
     return;
   }
   const other = resolveWiredText(node);
   if (other != null) {
     // The wired text is readable now -> show the REAL combined result, in order.
-    els.expand.innerHTML = `<span class="mine">${escapeHTML(joinLikePython(mine, other, st.order, st.sep))}</span>`;
+    els.expand.innerHTML = `<span class="mine">${joinHTML(mineHTML, mine, other, st.order, st.sep)}</span>`;
   } else {
     // Wired from something the browser can't read yet (e.g. a model output not run).
     const where = st.order === "wired" ? "before" : "after";
-    els.expand.innerHTML = `<span class="mine">${escapeHTML(mine)}</span> <span class="note">(+ wired text goes ${where}, shown here once it can be read)</span>`;
+    els.expand.innerHTML = `<span class="mine">${mineHTML}</span> <span class="note">(+ wired text goes ${where}, shown here once it can be read)</span>`;
   }
+}
+// Colour each tag's expanded words, rotating through four so neighbours differ. Every
+// piece is escaped exactly as before - the ONLY markup added is our own span wrappers,
+// so this cannot become an HTML injection route.
+function paintExpanded(text, spans) {
+  if (!spans || !spans.length) return escapeHTML(text);
+  let html = "", i = 0, n = 0;
+  for (const s of spans) {
+    // Defensive: a span that does not line up with this string (a stale record) is
+    // skipped rather than allowed to slice the text apart at the wrong place.
+    if (!s || s.start < i || s.end > text.length || s.end < s.start) continue;
+    html += escapeHTML(text.slice(i, s.start));
+    const body = escapeHTML(text.slice(s.start, s.end));
+    // An unknown token was left literal, so it is not tag text and stays plain (the
+    // prompt box above already marks it red).
+    html += s.known ? `<span class="t${n++ % 4}">${body}</span>` : body;
+    i = s.end;
+  }
+  return html + escapeHTML(text.slice(i));
+}
+// The HTML twin of joinLikePython, INCLUDING both blank-side short-circuits. These two
+// must stay in lockstep with each other and with node_prompt.py::run (invariant #29) -
+// change one, change all three.
+function joinHTML(mineHTML, mineRaw, other, order, sep) {
+  if (!String(other).trim()) return mineHTML;
+  if (!String(mineRaw).trim()) return escapeHTML(other);
+  const o = escapeHTML(other), s = escapeHTML(sep);
+  return order === "wired" ? (o + s + mineHTML) : (mineHTML + s + o);
 }
 function refreshBody(node) {
   renderBackdrop(node);
@@ -1412,14 +1455,18 @@ app.graphToPrompt = async function (...args) {
           // queue time, so each run gets a fresh pick; @tags expand deterministically. A
           // different pick changes this string -> the cache key changes -> re-run (no
           // nonce needed, invariant #3).
-          const expanded = expandAll(st.text, makeRunResolvers()).out;
+          const ranRes = expandAll(st.text, makeRunResolvers());
+          const expanded = ranRes.out;
           // Remember what this build actually produced so the expanded box can show
           // the REAL words instead of the [shuffled line: x] placeholder (users could
           // not tell what a run had picked). RUNTIME ONLY - writing node.properties
           // here would dirty a clean workflow on every run (invariant #4, the Seed
           // lesson). `src` is the text it was expanded FROM, so a later edit to the
           // box invalidates the readout by itself instead of showing a stale result.
-          node._pixPromptLastRun = { src: st.text, out: expanded };
+          // `spans` rides along so the readout can colour each tag's words. Runtime
+          // only, like the rest of this object - it is deliberately NOT part of the
+          // `lastRun` that goes into the image, which stays the plain text.
+          node._pixPromptLastRun = { src: st.text, out: expanded, spans: ranRes.spans };
           queueMicrotask(() => { try { renderExpand(node); } catch { /* node may be gone */ } });
           entry.inputs = entry.inputs || {};
           // Cosmetic keys (accent, showExpanded) are DELIBERATELY excluded so a colour
