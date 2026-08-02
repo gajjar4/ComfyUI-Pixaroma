@@ -111,6 +111,39 @@ export async function civitaiLookup(name) {
   }
 }
 
+// ── the Civitai account (the optional API key + the two lookup preferences) ──
+//
+// The KEY IS NEVER SENT TO THE PAGE. These two calls only ever carry
+// {configured, hint, host, adultThumbs}; the key itself lives in a file the
+// server reads. Deliberately NOT cached: it is read when the settings panel
+// opens, which is rare, and a cached "not configured" after the user just set one
+// would look like the save had failed.
+
+export async function getCivitaiAccount() {
+  try {
+    const r = await fetch("/pixaroma/api/civitai/account", { cache: "no-store" });
+    return await r.json();
+  } catch {
+    return { ok: false, message: "Could not reach the server." };
+  }
+}
+
+/** Patch any of {key, host, adultThumbs}. Omit a field to leave it alone; pass
+ *  key:"" to remove the key. Answers with the stored state, so the panel repaints
+ *  from what the server kept rather than from what it hoped it sent. */
+export async function setCivitaiAccount(patch) {
+  try {
+    const r = await fetch("/pixaroma/api/civitai/account", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(patch || {}),
+    });
+    return await r.json();
+  } catch {
+    return { ok: false, message: "Could not reach the server." };
+  }
+}
+
 // Delete the saved Civitai sidecar (<base>.civitai.info) next to the LoRA, so its
 // info reverts to the file's own words. Caller should invalidateInfo(name) after.
 export async function deleteCivitai(name) {

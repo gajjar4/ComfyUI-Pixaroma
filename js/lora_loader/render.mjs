@@ -110,8 +110,16 @@ export function injectCSS() {
     .pix-ll-all .cnt { font-size:11px; white-space:nowrap; }
     .pix-ll-gear { flex:0 0 auto; width:32px; display:flex; align-items:center; justify-content:center;
       background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.14); border-radius:5px;
-      color:#bbb; font-size:14px; cursor:pointer; user-select:none; }
-    .pix-ll-gear:hover { border-color:var(--acc,${BRAND}); color:#fff; }
+      cursor:pointer; user-select:none; }
+    /* The bundled gear SVG as a mask, NOT the ⚙ emoji: an emoji is drawn by the
+       operating system, so it is a different shape on Windows, Mac and Linux and
+       on some of them it arrives in colour. This is the same icon as the gear on
+       the node selection toolbar and on Dropdown Pixaroma. */
+    .pix-ll-gear::before { content:""; display:block; width:14px; height:14px; background:#bbb;
+      -webkit-mask:url("/pixaroma/assets/icons/note/gear.svg") center/contain no-repeat;
+      mask:url("/pixaroma/assets/icons/note/gear.svg") center/contain no-repeat; }
+    .pix-ll-gear:hover { border-color:var(--acc,${BRAND}); }
+    .pix-ll-gear:hover::before { background:var(--acc,${BRAND}); }
 
     .pix-ll-rows { display:flex; flex-direction:column; gap:${ROW_GAP}px; }
     .pix-ll-row { box-sizing:border-box; height:${ROW_H}px; display:flex; align-items:center; gap:6px;
@@ -227,7 +235,7 @@ export function renderNode(node) {
   const gear = document.createElement("div");
   gear.className = "pix-ll-gear";
   gear.dataset.act = "gear";
-  gear.textContent = "⚙";
+  // No textContent: the icon is drawn by the ::before mask above.
   gear.title = "LoRA Loader settings";
   toprow.append(all, gear);
   band.appendChild(toprow);

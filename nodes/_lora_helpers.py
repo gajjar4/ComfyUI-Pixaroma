@@ -12,6 +12,9 @@ The design is offline-first:
   - file_sha256 / parse_civitai_modelversion / save_sidecar_cache support the OPTIONAL
     online Civitai lookup, which the server route performs (this module never opens a
     socket).
+  - sanitize_civitai_key / mask_civitai_key / civitai_hosts / read_civitai_account /
+    write_civitai_account back the optional Civitai API key. They take an explicit
+    path, so they stay folder_paths-free and testable; the route decides WHERE.
 """
 import hashlib
 import json
@@ -374,10 +377,15 @@ def _thumb_url(url):
     return _ORIGINAL_SEG_RE.sub("/width=256/", url, count=1)
 
 
-def parse_civitai_modelversion(obj):
+def parse_civitai_modelversion(obj, allow_adult=False):
     """Pull the fields we care about from a Civitai model-version response:
     {name?, type?, base_model?, triggers?, thumbnail?}. Prefers the first
-    non-explicit image as the thumbnail, falling back to the first image. Never raises."""
+    non-explicit image as the thumbnail, falling back to the first image. Never raises.
+
+    `allow_adult` opts into using an explicit gallery image as the thumbnail. It is
+    OFF by default and only ever turned on by the user, in the LoRA Loader's own
+    settings: a model whose gallery is entirely explicit otherwise gets no picture
+    at all, which reads as a failed lookup rather than as a deliberate choice."""
     if not isinstance(obj, dict):
         return {}
     out = {}
@@ -401,11 +409,14 @@ def parse_civitai_modelversion(obj):
     imgs = obj.get("images")
     if isinstance(imgs, list):
         fallback = None
+        any_img = None
         for im in imgs:
             if not isinstance(im, dict) or not im.get("url"):
                 continue
             nsfw = im.get("nsfw")
             level = im.get("nsfwLevel")
+            if any_img is None:
+                any_img = im["url"]
             if nsfw in (None, False, "None", "Soft") and level in (None, 0, 1, 2):
                 out["thumbnail"] = _thumb_url(im["url"])
                 break
@@ -417,7 +428,120 @@ def parse_civitai_modelversion(obj):
                 fallback = im["url"]
         if "thumbnail" not in out and fallback:
             out["thumbnail"] = _thumb_url(fallback)
+        # Last resort, and ONLY when the user asked for it: an entirely explicit
+        # gallery. Without this an adult LoRA looks up correctly and still shows an
+        # empty picture box, which is indistinguishable from the lookup failing.
+        if "thumbnail" not in out and allow_adult and any_img:
+            out["thumbnail"] = _thumb_url(any_img)
     return out
+
+
+# ── Civitai account: the optional API key + which host to ask first ──────────
+#
+# WHY there is a key at all: Civitai hides adult-rated models from an anonymous
+# API request, and `model-versions/by-hash` answers a plain 404 for one. From the
+# node that is indistinguishable from "this file is not on Civitai" - so a user
+# whose LoRAs are adult-rated sees the lookup simply never work, with no clue why.
+# A key from an account whose own browsing settings allow that content makes the
+# same request return the record.
+#
+# WHERE it is kept, and why NOT in the obvious places:
+#   - NOT in node.properties: that is serialised into the workflow .json, so the
+#     key would travel to anyone the workflow is shared with, and into any image
+#     carrying an embedded workflow.
+#   - NOT in a registered ComfyUI setting: comfy.settings.json is handed to the
+#     browser in full, so the key would be readable by every extension on the page
+#     and would sit in a file people copy between machines.
+#   - It lives in a file only the server reads, and the browser is never told the
+#     key itself - only whether one is set, plus the last few characters so the
+#     user can tell WHICH key it is.
+
+_CIVITAI_HOST_PREFS = ("com", "red")
+
+
+def sanitize_civitai_key(raw):
+    """Clean a pasted API key, or return "" if it cannot be one.
+
+    REJECTS rather than strips when it finds anything unexpected. The key goes
+    into an HTTP request header, and a stray CR or LF there is header injection -
+    so the safe answer to "this does not look like a key" is to refuse it and let
+    the user see that it did not take, not to quietly repair it into something
+    that gets sent. Surrounding whitespace is the one exception: a copy-paste
+    almost always brings a trailing newline and that is not the user's mistake."""
+    if not isinstance(raw, str):
+        return ""
+    k = raw.strip()
+    if not k or len(k) > 200:
+        return ""
+    for ch in k:
+        # Printable ASCII only - no control characters, no spaces, nothing exotic.
+        if ord(ch) < 33 or ord(ch) > 126:
+            return ""
+    return k
+
+
+def mask_civitai_key(key):
+    """A safe-to-display hint: the last 4 characters only. Enough to tell two keys
+    apart, useless to anyone reading it over a shoulder or in a screenshot."""
+    if not isinstance(key, str) or not key:
+        return ""
+    tail = key[-4:] if len(key) > 4 else key
+    return "•" * 6 + tail
+
+
+def civitai_hosts(pref):
+    """The API hosts to try, in order, for a host preference.
+
+    Both hosts always appear: the preference chooses which is asked FIRST, and the
+    other stays as the backup that already existed for networks blocking one of
+    them by name. `red` is Civitai's unrestricted domain, so a user who has adult
+    LoRAs wants it asked first; everyone else is better served by the main host."""
+    if pref == "red":
+        return ("civitai.red", "civitai.com")
+    return ("civitai.com", "civitai.red")
+
+
+def read_civitai_account(path):
+    """Read the account file. Always returns the full shape, never raises: a
+    missing or damaged file must leave the lookup working exactly as it does with
+    no key at all, not break the node."""
+    out = {"key": "", "host": "com", "adult_thumbs": False}
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            obj = json.load(f)
+    except Exception:
+        return out
+    if not isinstance(obj, dict):
+        return out
+    out["key"] = sanitize_civitai_key(obj.get("key"))
+    if obj.get("host") in _CIVITAI_HOST_PREFS:
+        out["host"] = obj["host"]
+    out["adult_thumbs"] = bool(obj.get("adult_thumbs"))
+    return out
+
+
+def write_civitai_account(path, account):
+    """Write the account file. Returns True on success, never raises.
+
+    Written 0600 where the OS honours it (a no-op on most Windows setups, but it
+    costs nothing and matters on Linux/macOS, where ComfyUI's user folder is
+    otherwise world-readable). Every value is re-sanitised on the way in, so a
+    direct POST cannot put a newline into the file for the next read to trust."""
+    data = {
+        "key": sanitize_civitai_key(account.get("key")),
+        "host": account.get("host") if account.get("host") in _CIVITAI_HOST_PREFS else "com",
+        "adult_thumbs": bool(account.get("adult_thumbs")),
+    }
+    try:
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2)
+        try:
+            os.chmod(path, 0o600)
+        except Exception:
+            pass
+        return True
+    except Exception:
+        return False
 
 
 def save_sidecar_cache(lora_path, civitai_obj):

@@ -8,6 +8,7 @@ import { GLOBAL_ACCENT_SETTING, repaintAllAccents } from "../shared/node_setting
 import {
   readState, writeState, accentOf, saveDefaults, roundStrength, BRAND,
 } from "./core.mjs";
+import { getCivitaiAccount, setCivitaiAccount } from "./api.mjs";
 
 let _panel = null;
 let _panelNode = null;
@@ -61,6 +62,23 @@ function injectCSS() {
       padding:6px 12px; font:12px 'Segoe UI',sans-serif; cursor:pointer; }
     .pix-llp-btn:hover { border-color:var(--acc,${BRAND}); color:#fff; }
     .pix-llp-push { margin-left:auto; }
+    /* The Civitai block. Everything above it is per-node; this is stored once on
+       the machine, so it gets a rule and a heading that say so. */
+    .pix-llp-head { margin-top:2px; padding-top:11px; border-top:1px solid #333;
+      color:var(--acc,${BRAND}); font-size:11px; letter-spacing:.04em; text-transform:uppercase; }
+    .pix-llp-head .sub { display:block; margin-top:3px; text-transform:none; letter-spacing:0;
+      color:#7a7a7a; font-size:10px; line-height:1.4; }
+    .pix-llp-key { flex:1; min-width:0; box-sizing:border-box; background:#161616;
+      border:1px solid #4a4a4a; border-radius:6px; color:#fff; font:12px monospace;
+      padding:6px 8px; outline:none; }
+    .pix-llp-key:focus { border-color:var(--acc,${BRAND}); }
+    .pix-llp-mini { flex:0 0 auto; border:1px solid #444; background:rgba(255,255,255,0.04);
+      color:#d8d8d8; border-radius:5px; padding:5px 9px; font:11px 'Segoe UI',sans-serif;
+      cursor:pointer; user-select:none; }
+    .pix-llp-mini:hover { border-color:var(--acc,${BRAND}); color:#fff; }
+    .pix-llp-state { flex:1; font-size:11px; color:#7a7a7a; }
+    .pix-llp-state.set { color:#3ec371; }
+    .pix-llp-msg { font-size:10px; line-height:1.4; color:#c98a6a; }
   `;
   document.head.appendChild(s);
 }
@@ -248,6 +266,157 @@ export function openLoraPanel(node, refresh) {
     "Show the optional online lookup in the info panel", "civitai"));
   body.appendChild(toggleRow("Show preview thumbnails",
     "In the info panel", "thumbs"));
+
+  // ── Civitai account ────────────────────────────────────────────────────────
+  //
+  // Why this exists: Civitai hides adult-rated models from an anonymous API
+  // request, answering the same plain 404 it uses for "no such file". From the
+  // node those are indistinguishable, so a user whose LoRAs are adult-rated just
+  // sees the lookup never work. A key from an account that is allowed to see that
+  // content makes the identical request return the record.
+  //
+  // Unlike every other row in this panel these three are stored ONCE ON THIS
+  // MACHINE, not on the node - a key on the node would be written into the
+  // workflow file and travel to anyone it is shared with. The heading says so,
+  // because "Set as default" in the footer sits a few pixels away and would
+  // otherwise look like it covers them.
+  //
+  // The key is never sent back to the page: the server answers with whether one
+  // is set plus its last four characters, which is enough to tell two keys apart
+  // and useless in a screenshot.
+  {
+    const head = el("div", "pix-llp-head", "Civitai account");
+    head.appendChild(el("span", "sub",
+      "Saved on this computer, never in your workflows. A key lets the lookup see "
+      + "models that Civitai hides from anonymous requests."));
+    body.appendChild(head);
+
+    let acc = { configured: false, hint: "", host: "com", adultThumbs: false };
+
+    const msg = el("div", "pix-llp-msg");
+    msg.style.display = "none";
+    const say = (t) => { msg.textContent = t || ""; msg.style.display = t ? "block" : "none"; };
+
+    // ── the key row, which swaps between showing and editing ──
+    const keyRow = el("div", "pix-llp-row");
+    const paintKeyRow = () => {
+      keyRow.textContent = "";
+      const state = el("div", "pix-llp-state" + (acc.configured ? " set" : ""),
+        acc.configured ? "✓ Key saved  " + acc.hint : "No key - anonymous lookups");
+      const edit = el("div", "pix-llp-mini", acc.configured ? "Change" : "Add key");
+      edit.title = acc.configured
+        ? "Replace the saved key with a different one"
+        : "Paste a key from civitai.com > Account settings > API Keys";
+      edit.addEventListener("click", showEditor);
+      keyRow.append(state, edit);
+      if (acc.configured) {
+        const rm = el("div", "pix-llp-mini", "Remove");
+        rm.title = "Forget the key. Lookups go back to anonymous.";
+        rm.addEventListener("click", () => save({ key: "" }, "Key removed."));
+        keyRow.appendChild(rm);
+      }
+    };
+
+    function showEditor() {
+      keyRow.textContent = "";
+      const inp = el("input", "pix-llp-key");
+      // A password field, so it cannot be read over a shoulder or captured in the
+      // screenshot people attach when they report that something did not work.
+      inp.type = "password";
+      inp.placeholder = "Paste your API key";
+      inp.autocomplete = "off";
+      inp.spellcheck = false;
+      // Without this, typing in here reaches ComfyUI's global shortcuts - and
+      // Delete there removes the selected node while you are mid-paste.
+      inp.addEventListener("keydown", (e) => {
+        e.stopPropagation();
+        if (e.key === "Enter") { e.preventDefault(); commit(); }
+      });
+      const ok = el("div", "pix-llp-mini", "Save");
+      const no = el("div", "pix-llp-mini", "Cancel");
+      const commit = () => {
+        const v = inp.value.trim();
+        if (!v) { say("Nothing to save - paste a key first."); return; }
+        save({ key: v }, "Key saved.");
+      };
+      ok.addEventListener("click", commit);
+      no.addEventListener("click", () => { say(""); paintKeyRow(); });
+      keyRow.append(inp, ok, no);
+      inp.focus();
+    }
+
+    // ── which host to ask first ──
+    const hostRow = el("div", "pix-llp-row");
+    const hostLab = el("div", "lab");
+    hostLab.append(el("span", null, "Ask this site first"));
+    const hostHint = el("span", "hint", "");
+    hostLab.appendChild(hostHint);
+    const hostSeg = el("div", "pix-llp-seg");
+    const HOSTS = [
+      { v: "com", label: "Standard", hint: "civitai.com, then civitai.red as a backup",
+        title: "The usual choice" },
+      { v: "red", label: "Unrestricted", hint: "civitai.red first, for adult-rated models",
+        title: "Civitai's unrestricted domain. Use this if your LoRAs are not found." },
+    ];
+    for (const o of HOSTS) {
+      const b = el("div", "pix-llp-segb", o.label);
+      b.dataset.v = o.v;
+      b.title = o.title;
+      b.addEventListener("click", () => save({ host: o.v }, ""));
+      hostSeg.appendChild(b);
+    }
+    hostRow.append(hostLab, hostSeg);
+
+    // ── adult preview images ──
+    const adultRow = el("div", "pix-llp-row");
+    const adultLab = el("div", "lab");
+    adultLab.append(el("span", null, "Allow adult preview images"));
+    adultLab.appendChild(el("span", "hint",
+      "Off: a model whose pictures are all adult shows no thumbnail"));
+    const adultSw = el("div", "pix-llp-sw");
+    adultSw.addEventListener("click", () => save({ adultThumbs: !acc.adultThumbs }, ""));
+    adultRow.append(adultLab, adultSw);
+
+    // Split from paint() on purpose - see the failure branch in save().
+    const paintRest = () => {
+      for (const b of hostSeg.children) b.classList.toggle("on", b.dataset.v === acc.host);
+      const h = HOSTS.find((x) => x.v === acc.host);
+      hostHint.textContent = h ? h.hint : "";
+      adultSw.classList.toggle("on", !!acc.adultThumbs);
+    };
+    const paint = () => { paintKeyRow(); paintRest(); };
+
+    // Repaint from what the SERVER stored, never from what we hoped it took: a
+    // refused key must not leave the panel claiming one is saved.
+    async function save(patch, okNote) {
+      const res = await setCivitaiAccount(patch);
+      if (!res || !res.ok) {
+        say((res && res.message) || "Could not save.");
+        // Deliberately NOT a full repaint. paintKeyRow() rebuilds the row from
+        // scratch, which throws away the editor and everything typed into it - so
+        // a refused key used to clear the box and close the editor, leaving the
+        // user to find and re-paste the key to try again while an error sat
+        // underneath. The error is the one moment the text matters most.
+        paintRest();
+        return;
+      }
+      acc = res;
+      say(okNote);
+      paint();
+    }
+
+    body.append(keyRow, hostRow, adultRow, msg);
+    paint();
+    getCivitaiAccount().then((res) => {
+      if (!res || !res.ok) { say("Could not read the Civitai settings."); return; }
+      // The panel can be closed and reopened before this lands; writing into a
+      // detached DOM would be harmless but pointless, and repainting a panel the
+      // user has replaced would fight the newer one.
+      if (!keyRow.isConnected) return;
+      acc = res;
+      paint();
+    });
+  }
 
   // accent
   const accRow = el("div", "pix-llp-row");

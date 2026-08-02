@@ -92,7 +92,9 @@ export const KEYWORDS = {
   PixaromaVersionCheck: "version diagnostic about update which version",
 
   // ── Utility and editors ──
-  PixaromaLoraLoader: "lora stack weight trigger civitai xy plot compare grid sweep",
+  PixaromaLoraLoader: "lora stack weight trigger civitai xy plot compare grid sweep "
+    + "api key token login account not found missing nsfw adult uncensored mature "
+    + "civitai.red unrestricted thumbnail preview blocked hidden",
   Pixaroma3D: "mesh glb obj camera light render scene 3d",
   PixaromaPaint: "brush draw sketch layers erase paint",
   PixaromaImageComposition: "collage blend layers grade montage composite",

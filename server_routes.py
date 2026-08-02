@@ -40,6 +40,11 @@ from .nodes._lora_helpers import (
     parse_civitai_modelversion as _lora_parse_civitai,
     save_sidecar_cache as _lora_save_sidecar,
     delete_sidecar_cache as _lora_delete_sidecar,
+    sanitize_civitai_key as _civitai_sanitize_key,
+    mask_civitai_key as _civitai_mask_key,
+    civitai_hosts as _civitai_hosts,
+    read_civitai_account as _civitai_read_account,
+    write_civitai_account as _civitai_write_account,
 )
 from .nodes.node_krea_lora_convert import (
     inspect_lora as _krea_lora_inspect,
@@ -2071,13 +2076,97 @@ def _lora_dirs():
         return []
 
 
-# Civitai API hosts, tried in order. `.com` is the real home; `.red` serves the
-# IDENTICAL API on separate DNS, so it is a useful backup when a network or ISP
-# blocks civitai.com by name (verified 2026-07-25: byte-identical response). It is
-# only ever reached after `.com` has already failed. `.green` is deliberately NOT
-# here - its API 301-redirects straight back to civitai.com, so it is a redundant
-# hop, not an independent route.
-_CIVITAI_HOSTS = ("civitai.com", "civitai.red")
+# Civitai API hosts. `.com` is the real home; `.red` is Civitai's UNRESTRICTED
+# domain and serves the same API on separate DNS, so it doubles as the backup when
+# a network or ISP blocks civitai.com by name (verified 2026-07-25: byte-identical
+# response for a public model). Which one is asked FIRST is the user's choice - see
+# civitai_hosts() in _lora_helpers.py. `.green` is deliberately absent: its API
+# 301-redirects straight back to civitai.com, so it is a redundant hop rather than
+# an independent route.
+
+
+def _civitai_account_file():
+    """Where the Civitai key lives: <ComfyUI user dir>/pixaroma/civitai.json.
+
+    Deliberately OUTSIDE this plugin's folder, which is a git repo - a key sitting
+    in the working tree is one `git add -A` away from being published, and a
+    Manager reinstall would wipe it. ComfyUI's user directory is the same place
+    core keeps its own per-install settings, so it survives updates and is already
+    excluded from anything shared."""
+    base = None
+    try:
+        base = folder_paths.get_user_directory()
+    except Exception:
+        base = None
+    if not base:
+        # Very old ComfyUI without get_user_directory: fall back to a sibling of
+        # this plugin rather than refusing to store anything at all.
+        base = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "user")
+    d = os.path.join(base, "pixaroma")
+    try:
+        os.makedirs(d, exist_ok=True)
+    except Exception:
+        pass
+    return os.path.join(d, "civitai.json")
+
+
+def _civitai_account():
+    return _civitai_read_account(_civitai_account_file())
+
+
+def _civitai_public_account(acc):
+    """The ONLY shape the browser is ever given. The key itself never leaves the
+    server: `configured` says whether there is one and `hint` shows its last four
+    characters so the user can tell which key is loaded."""
+    return {
+        "ok": True,
+        "configured": bool(acc.get("key")),
+        "hint": _civitai_mask_key(acc.get("key")),
+        "host": acc.get("host", "com"),
+        "adultThumbs": bool(acc.get("adult_thumbs")),
+    }
+
+
+@PromptServer.instance.routes.get("/pixaroma/api/civitai/account")
+async def api_civitai_account_get(request):
+    """Whether a key is configured, and the two lookup preferences. Never the key."""
+    return web.json_response(_civitai_public_account(_civitai_account()),
+                             headers={"Cache-Control": "no-store"})
+
+
+@PromptServer.instance.routes.post("/pixaroma/api/civitai/account")
+async def api_civitai_account_set(request):
+    """Set the key and/or the preferences. An absent field is left alone; `key: ""`
+    clears the key. Answers with the same public shape, so the panel repaints from
+    what the server actually stored rather than from what it hoped it sent."""
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    if not isinstance(body, dict):
+        body = {}
+    acc = _civitai_account()
+    if "key" in body:
+        raw = body.get("key")
+        if isinstance(raw, str) and raw.strip() == "":
+            acc["key"] = ""
+        else:
+            k = _civitai_sanitize_key(raw)
+            if not k:
+                return web.json_response({
+                    "ok": False,
+                    "message": "That does not look like an API key - it should be one "
+                               "run of ordinary characters with no spaces.",
+                }, headers={"Cache-Control": "no-store"})
+            acc["key"] = k
+    if body.get("host") in ("com", "red"):
+        acc["host"] = body["host"]
+    if "adultThumbs" in body:
+        acc["adult_thumbs"] = bool(body.get("adultThumbs"))
+    if not _civitai_write_account(_civitai_account_file(), acc):
+        return web.json_response({"ok": False, "message": "Could not save the settings file."},
+                                 headers={"Cache-Control": "no-store"})
+    return web.json_response(_civitai_public_account(acc), headers={"Cache-Control": "no-store"})
 
 
 def _resolve_lora_path(name):
@@ -2178,18 +2267,46 @@ async def api_lora_civitai(request):
     # link. The hash is already computed by this point, so this budget is purely
     # the HTTP round trip.
     timeout = aiohttp.ClientTimeout(total=30, connect=10)
+    acc = _civitai_account()
+    hosts = _civitai_hosts(acc.get("host"))
+    headers = {"User-Agent": "ComfyUI-Pixaroma"}
+    if acc.get("key"):
+        # Sanitised on the way in AND on the way out of the file, so this cannot
+        # carry a newline into the header. Never logged, never echoed to the page.
+        headers["Authorization"] = "Bearer {}".format(acc["key"])
     data = None
     last_note = "Could not reach Civitai."
-    for host in _CIVITAI_HOSTS:
+    for i, host in enumerate(hosts):
+        last = i == len(hosts) - 1
         url = "https://{}/api/v1/model-versions/by-hash/{}".format(host, sha)
         try:
             async with aiohttp.ClientSession(timeout=timeout) as session:
-                async with session.get(url, headers={"User-Agent": "ComfyUI-Pixaroma"}) as resp:
+                async with session.get(url, headers=headers) as resp:
                     if resp.status == 404:
-                        # Definitive: this exact file is not on Civitai. Do NOT try the
-                        # backup host - it serves the same catalogue and would only add
-                        # a pointless second round trip.
+                        # A 404 is only definitive on the LAST host. It used to end the
+                        # search immediately, on the reasoning that both hosts serve one
+                        # catalogue - true for a public model, but NOT for an adult-rated
+                        # one: the main host hides it behind exactly this 404 while the
+                        # unrestricted host returns it. That made a whole class of LoRAs
+                        # report "not on Civitai" no matter how many times you asked.
+                        # Costs one extra round trip in the genuinely-absent case, on a
+                        # lookup the user clicked and which already spent longer hashing.
+                        if not last:
+                            last_note = "Not found on {}.".format(host)
+                            continue
                         return web.json_response({"ok": True, "found": False, "reason": "notfound"})
+                    if resp.status in (401, 403):
+                        # Say which of the two it is: a key that has been revoked or
+                        # mistyped otherwise reads as "Civitai is down", and the user
+                        # has no reason to look at the one thing they just changed.
+                        return web.json_response({
+                            "ok": False, "reason": "offline",
+                            "message": ("Civitai refused the API key ({}). Check it in the "
+                                        "node settings.".format(resp.status)) if acc.get("key")
+                                       else ("Civitai refused the request ({}). This model may "
+                                             "need an API key - add one in the node "
+                                             "settings.".format(resp.status)),
+                        })
                     if resp.status != 200:
                         # Rate limit / maintenance / gateway error: transient, so fall
                         # through to the backup host before giving up.
@@ -2217,7 +2334,7 @@ async def api_lora_civitai(request):
             continue
     if data is None:
         return web.json_response({"ok": False, "reason": "offline", "message": last_note})
-    parsed = _lora_parse_civitai(data)
+    parsed = _lora_parse_civitai(data, allow_adult=bool(acc.get("adult_thumbs")))
     # Civitai answered 200 with a usable record -> FOUND, even when this version
     # happens to carry no trainedWords and no model.name (plenty do not; e.g.
     # COOLKIDS_MERGE_V2.5 has an empty trainedWords list). Requiring those two

@@ -329,8 +329,28 @@ registerNodeHelp(CLASS, {
       body:
         "Add LoRA, the all on/off switch, and the gear sit in the middle of the node. The gear opens the " +
         "settings (default strength, step size, separate model and clip strengths, the trigger separator, " +
-        "the Civitai button, thumbnails, and the highlight colour). Right-click a row to move it, duplicate " +
-        "it, or remove it.",
+        "the Civitai button, thumbnails, your Civitai account, and the highlight colour). Right-click a row " +
+        "to move it, duplicate it, or remove it.",
+    },
+    {
+      heading: "When Civitai cannot find your LoRA",
+      body:
+        "Civitai hides adult-rated models from anyone who has not signed in, and it hides them by " +
+        "answering exactly the same way it answers for a file it has never seen. So the lookup " +
+        "reports \"not found\" and there is no way to tell the two apart. If that is happening to " +
+        "you, the Civitai account section in the gear has the two things that fix it.\n\n" +
+        "Add key takes an API key from your Civitai account (on their site: your profile menu, " +
+        "Account settings, then API Keys). The lookup then asks as you rather than as a stranger, " +
+        "so anything your own Civitai settings let you see comes back normally. Ask this site " +
+        "first switches between civitai.com and civitai.red, their unrestricted address - try " +
+        "Unrestricted if a LoRA still is not found. Either way the other address is still used as " +
+        "a backup, so nothing you could reach before stops working.\n\n" +
+        "Your key is kept on this computer, in ComfyUI's own user folder, and is never written " +
+        "into a workflow - so sharing a workflow, or an image with a workflow inside it, cannot " +
+        "give your key away. It is not shown again after you save it either: the settings only " +
+        "show the last four characters so you can tell which key is loaded.\n\n" +
+        "Allow adult preview images is separate and off to begin with. A LoRA whose example " +
+        "pictures are all adult shows no picture at all unless you turn this on.",
     },
     {
       heading: "LoRA memory use",
