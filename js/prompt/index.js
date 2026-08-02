@@ -142,7 +142,17 @@ function injectCSS() {
     .pix-prm-list { color:#b98cff; }
     .pix-prm-list.s1 { color:#d79bf0; }
     .pix-prm-list.s2 { color:#efaadf; }
-    .pix-prm-chip.bad, .pix-prm-wild.bad, .pix-prm-list.bad { color:#ff4d4d; }
+    /* A name we cannot find. The old flat #ff4d4d was a WARM red sitting right next to
+       the #f66744 accent, so an unknown tag read as just another orange one (user
+       reported it twice). Two changes, because colour alone can never carry this:
+       a rose-red with no orange in it, AND a spellchecker-style wavy underline - which
+       is the only part that still works for the ~1 in 12 men who cannot separate red
+       from orange at all. The underline is safe for the caret: text-decoration is
+       PAINTED, it does not change glyph advance or line breaking, so the transparent
+       textarea on top still wraps identically (measured, not assumed - see the
+       wrapping-parity note). NO BACKTICKS in this comment; see the warning above. */
+    .pix-prm-chip.bad, .pix-prm-wild.bad, .pix-prm-list.bad {
+      color:#ff2d55; text-decoration:underline wavy #ff2d55; text-underline-offset:2px; }
     /* preview GROWS with the node (flex, no fixed cap) so a big node shows more.
        LIGHTER gray (not the dark #1d1d1d of the editable inputs) so it reads as a
        read-only preview, not another input box. The plain colour lives on the CONTAINER,
@@ -909,15 +919,6 @@ function renderBackdrop(node) {
   if (text.endsWith("\n")) html += " ";
   els.backdrop.innerHTML = html;
 }
-// EXACT mirror of nodes/node_prompt.py run(): when either side is blank the separator
-// is dropped and the other side stands alone. Without the blank checks a freshly
-// wired node with nothing typed yet previewed ", their text" - a stray separator that
-// the real run never produces. Keep this in lockstep with the Python.
-function joinLikePython(mine, other, order, sep) {
-  if (!String(other).trim()) return mine;
-  if (!String(mine).trim()) return other;
-  return order === "wired" ? (other + sep + mine) : (mine + sep + other);
-}
 function renderExpand(node) {
   const els = node._pixPromptRoot?._els; if (!els) return;
   const st = readState(node);
@@ -978,9 +979,16 @@ function paintExpanded(text, spans) {
   }
   return html + escapeHTML(text.slice(i));
 }
-// The HTML twin of joinLikePython, INCLUDING both blank-side short-circuits. These two
-// must stay in lockstep with each other and with node_prompt.py::run (invariant #29) -
-// change one, change all three.
+// THE preview's join, and an EXACT mirror of nodes/node_prompt.py run(): when either
+// side is blank the separator is dropped and the other side stands alone. Without the
+// blank checks a freshly wired node with nothing typed yet previews ", their text" - a
+// stray separator the real run never produces. Keep it in lockstep with the Python
+// (invariant #29). It takes the already-escaped `mineHTML` plus the RAW `mineRaw`,
+// because the blank test has to run on the real text, not on escaped markup.
+// (There used to be a second, plain-string `joinLikePython` here. It lost its last
+// caller when this was added, and leaving two functions claiming one contract is how a
+// future edit gets made to the dead one - so it was deleted rather than kept "just in
+// case". This is the only join the preview has.)
 function joinHTML(mineHTML, mineRaw, other, order, sep) {
   if (!String(other).trim()) return mineHTML;
   if (!String(mineRaw).trim()) return escapeHTML(other);

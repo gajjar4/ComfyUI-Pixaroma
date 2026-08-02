@@ -40,6 +40,24 @@ def _scipy_ok():
     return _HAS_SCIPY and _ndimage is not None and not _SCIPY_DEAD
 
 
+def _scipy_call(name, *args, **kwargs):
+    """Run ONE scipy call. Returns (True, result), or (False, None) after latching the
+    fallback on.
+
+    ONLY the scipy call itself is inside the try. Surrounding numpy/PIL work must never
+    be able to arm the latch: a MemoryError in our own np.bincount would otherwise
+    disable scipy for the whole session across all three call sites and print a warning
+    blaming scipy for something it did not do.
+    """
+    if not _scipy_ok():
+        return False, None
+    try:
+        return True, getattr(_ndimage, name)(*args, **kwargs)
+    except Exception as e:
+        _scipy_failed("ndimage." + name, e)
+        return False, None
+
+
 def _scipy_failed(where, err):
     global _SCIPY_DEAD
     if not _SCIPY_DEAD:
@@ -162,12 +180,10 @@ def _dilate(m_bool, px):
     if px <= 0:
         return m_bool
     k = 2 * int(px) + 1
-    if _scipy_ok():
-        try:
-            # separable max filter -> O(W*H), fast even for a huge kernel
-            return _ndimage.maximum_filter(m_bool, size=k) > 0
-        except Exception as e:
-            _scipy_failed("ndimage.maximum_filter", e)
+    # separable max filter -> O(W*H), fast even for a huge kernel
+    ok, filtered = _scipy_call("maximum_filter", m_bool, size=k)
+    if ok:
+        return filtered > 0
     # no-scipy: two separable numpy max passes (rows then cols)
     a = m_bool.astype(np.uint8)
     a = _max1d(a, k)
@@ -182,9 +198,9 @@ def fill_holes(m_bool):
     the mask to solid - the "mask vanishes after the crop" bug. scipy when available
     (size-limited true fill); otherwise a PIL morphological close (small kernel,
     already naturally limited to small holes)."""
-    if _scipy_ok():
+    ok, filled = _scipy_call("binary_fill_holes", m_bool)
+    if ok:
         try:
-            filled = _ndimage.binary_fill_holes(m_bool)
             added = filled & ~m_bool          # pixels binary_fill_holes would fill
             if not added.any():
                 return filled
@@ -192,13 +208,18 @@ def fill_holes(m_bool):
             # subject hole is far bigger and is left UNfilled so the mask survives.
             H, W = m_bool.shape
             limit = max(256, int(0.005 * H * W))   # ~0.5% of the image
-            lbl, n = _ndimage.label(added)
-            sizes = np.bincount(lbl.ravel())
-            small = np.where(sizes <= limit)[0]
-            small = small[small != 0]              # drop label 0 (the non-hole area)
-            return m_bool | np.isin(lbl, small)
-        except Exception as e:
-            _scipy_failed("ndimage.binary_fill_holes", e)
+            ok2, labelled = _scipy_call("label", added)
+            if ok2:
+                lbl = labelled[0]
+                sizes = np.bincount(lbl.ravel())
+                small = np.where(sizes <= limit)[0]
+                small = small[small != 0]          # drop label 0 (the non-hole area)
+                return m_bool | np.isin(lbl, small)
+        except Exception:
+            # OUR numpy arithmetic failed, not scipy's. Fall back for THIS mask only and
+            # leave scipy alive for the next one - latching here would blame scipy and
+            # silently downgrade dilate + feather for the rest of the session.
+            pass
     pim = Image.fromarray((m_bool * 255).astype(np.uint8), "L")
     k = 9
     pim = pim.filter(ImageFilter.MaxFilter(k)).filter(ImageFilter.MinFilter(k))
@@ -496,16 +517,15 @@ def _blur_alpha(alpha, blend):
     if not mb.any() or mb.all():
         return torch.from_numpy(a_np.astype(np.float32))
     soft = None
-    if _scipy_ok():
-        try:
-            # signed distance to the mask edge (+ inside, - outside, in px). Map so
-            # signed >= 0 -> 1.0 and signed in [-k,0] ramps 1 -> 0 (smoothstep).
-            signed = (_ndimage.distance_transform_edt(mb)
-                      - _ndimage.distance_transform_edt(~mb))
-            t = np.clip(signed / float(k) + 1.0, 0.0, 1.0)
-            soft = (t * t * (3.0 - 2.0 * t)).astype(np.float32)
-        except Exception as e:
-            _scipy_failed("ndimage.distance_transform_edt", e)
+    # signed distance to the mask edge (+ inside, - outside, in px). Map so
+    # signed >= 0 -> 1.0 and signed in [-k,0] ramps 1 -> 0 (smoothstep). The two scipy
+    # calls latch on their own; the arithmetic below them is ours and must not.
+    ok_in, d_in = _scipy_call("distance_transform_edt", mb)
+    ok_out, d_out = _scipy_call("distance_transform_edt", ~mb) if ok_in else (False, None)
+    if ok_in and ok_out:
+        signed = d_in - d_out
+        t = np.clip(signed / float(k) + 1.0, 0.0, 1.0)
+        soft = (t * t * (3.0 - 2.0 * t)).astype(np.float32)
     if soft is None:
         # fallback (no scipy): gaussian-blur the binary mask for an outward
         # falloff, then force the interior back to 1.0 (outward-only).

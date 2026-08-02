@@ -779,9 +779,17 @@ function renderSidebar(sideEl) {
       r.draggable = true;
       r.addEventListener("dragstart", (e) => {
         // Mid-rename, or a grab that started on the ⋯ : neither is a reorder gesture,
-        // and letting the drag win would take the rename field's text selection away
-        // (node UI convention #11).
+        // and letting the drag win would take the rename field's text selection away.
+        // BELT: this target test is NOT trusted on its own. Node UI convention #11
+        // records that with draggable on the ROW the browser fires dragstart with
+        // e.target set to the row itself, in which case closest() can never match and
+        // this line does nothing. The real protection is startRenameCat turning
+        // draggable OFF for the duration of the rename, which is correct whichever
+        // element the browser reports. Keep BOTH - they cover different builds.
         if (e.target.closest("input, textarea, .act")) { e.preventDefault(); return; }
+        // BRACES: a rename field anywhere in this row means the row is being edited,
+        // regardless of where the drag was reported from.
+        if (r.querySelector("input, textarea")) { e.preventDefault(); return; }
         e.dataTransfer.effectAllowed = "move";
         e.dataTransfer.setData(mime, key);
         e.dataTransfer.setData("text/plain", key);   // some browsers refuse a drag with no text/plain
@@ -895,6 +903,15 @@ function startRenameCat(row, cat) {
   if (!nmSpan) return;   // already renaming this row (the label is swapped out)
   const inp = document.createElement("input");
   inp.className = "catinput"; inp.value = cat;
+  // A draggable ANCESTOR hijacks a drag-select inside its own text field: the browser
+  // starts dragging the row and the selection silently fails (node UI convention #11).
+  // Turning it off for the life of the field is the fix that does not depend on which
+  // element the browser names as the dragstart target. Restored on every exit path
+  // below - commit, cancel, and the render() that a real rename triggers, which
+  // rebuilds the row from scratch with draggable back on.
+  const wasDraggable = row.draggable;
+  row.draggable = false;
+  const restoreDrag = () => { row.draggable = wasDraggable; };
   nmSpan.replaceWith(inp); inp.focus(); inp.select();
   // Clicking inside the field to place the cursor / select letters must NOT bubble
   // to the row's click handler (which re-renders the sidebar and destroys the field).
@@ -914,6 +931,7 @@ function startRenameCat(row, cat) {
     if (!v || v === cat || isReservedName(v) ||
         _data.categories.some((c) => c !== cat && c.toLowerCase() === v.toLowerCase())) {
       if (inp.isConnected) inp.replaceWith(nmSpan);
+      restoreDrag();     // this row stays on screen, so it must be draggable again
       return;
     }
     const idx = _data.categories.indexOf(cat);
@@ -931,7 +949,7 @@ function startRenameCat(row, cat) {
     commit();
     render();   // the name really changed, so the sidebar and the header must follow
   };
-  const cancelRename = () => { if (inp.isConnected) inp.replaceWith(nmSpan); };
+  const cancelRename = () => { if (inp.isConnected) inp.replaceWith(nmSpan); restoreDrag(); };
   // onKey is a CAPTURE-phase window listener, so this field's own keydown never sees
   // Escape. Expose the cancel as a handle it can call directly - the same fix the
   // new-category field already had. Without it, onKey's generic `active.blur()` ran the
