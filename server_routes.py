@@ -2296,17 +2296,24 @@ async def api_lora_civitai(request):
                             continue
                         return web.json_response({"ok": True, "found": False, "reason": "notfound"})
                     if resp.status in (401, 403):
-                        # Say which of the two it is: a key that has been revoked or
-                        # mistyped otherwise reads as "Civitai is down", and the user
-                        # has no reason to look at the one thing they just changed.
-                        return web.json_response({
-                            "ok": False, "reason": "offline",
-                            "message": ("Civitai refused the API key ({}). Check it in the "
-                                        "node settings.".format(resp.status)) if acc.get("key")
-                                       else ("Civitai refused the request ({}). This model may "
-                                             "need an API key - add one in the node "
-                                             "settings.".format(resp.status)),
-                        })
+                        # A refusal is only worth reporting straight away when there IS
+                        # a key to blame: the same key will be refused by both hosts, and
+                        # "check your key" is the useful answer. With NO key it must fall
+                        # through like any other non-200, because a 401/403 is the most
+                        # HOST-SPECIFIC failure there is (a Cloudflare or corporate block
+                        # page on one domain) and the backup host exists for exactly that.
+                        # Returning here regardless was a regression against the previous
+                        # release, and it told the user to add a key when their network
+                        # was simply blocking civitai.com.
+                        if acc.get("key"):
+                            return web.json_response({
+                                "ok": False, "reason": "offline",
+                                "message": "Civitai refused the API key ({}). Check it in the "
+                                           "node settings.".format(resp.status),
+                            })
+                        last_note = ("Civitai refused the request ({}). This model may need an "
+                                     "API key - add one in the node settings.".format(resp.status))
+                        continue
                     if resp.status != 200:
                         # Rate limit / maintenance / gateway error: transient, so fall
                         # through to the backup host before giving up.

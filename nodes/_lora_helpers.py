@@ -533,8 +533,19 @@ def write_civitai_account(path, account):
         "adult_thumbs": bool(account.get("adult_thumbs")),
     }
     try:
-        with open(path, "w", encoding="utf-8") as f:
+        # CREATED already restricted, not created-then-repaired. `open(path,"w")`
+        # makes the file 0644 under the usual umask, and the chmod that follows is
+        # a separate syscall - so on a shared Linux/macOS box the key sat
+        # world-readable for the window between them, in a directory os.makedirs
+        # left traversable. It is a short window and only on the FIRST write (a
+        # later rewrite reuses the existing mode), but the first write is the one
+        # carrying the key the user just pasted.
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=2)
+        # Still chmod afterwards: this is what re-tightens a file left at 0644 by
+        # a build that shipped before the line above existed. os.open's mode only
+        # applies when it CREATES the file.
         try:
             os.chmod(path, 0o600)
         except Exception:

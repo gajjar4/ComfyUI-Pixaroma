@@ -540,7 +540,13 @@ function dragBy(panel) {
   // would go dead after the first re-render.
   panel.addEventListener("pointerdown", (e) => {
     if (!e.target.closest?.(".pix-ll-info-top")) return;
-    if (e.target.closest(".pix-ll-info-x")) return;
+    // Every CLICKABLE thing inside the drag handle must bail out here, not just
+    // the ✕. Once setPointerCapture is set on the panel, Chromium retargets that
+    // pointer's mouseup - and therefore its click - to the capture element, so the
+    // clicked child never sees the click at all, and releasing capture on pointerup
+    // does not undo it. That silently killed "View on Civitai ↗": the link is in
+    // the header, so it was captured and stopped opening the model page.
+    if (e.target.closest(".pix-ll-info-x, .pix-ll-civlink")) return;
     const r = panel.getBoundingClientRect();
     const ox = e.clientX - r.left, oy = e.clientY - r.top;
 

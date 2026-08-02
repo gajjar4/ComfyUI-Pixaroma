@@ -138,7 +138,25 @@ function startFollowing(panel, node) {
     if (!ds) return;
     const sc = ds.scale || 1;
     const ox = ds.offset?.[0] ?? 0, oy = ds.offset?.[1] ?? 0;
+    // Cheap numeric compare FIRST: this returns on almost every frame, so the
+    // querySelector below only runs when the canvas genuinely moved.
     if (sc === lastScale && ox === lastX && oy === lastY) return;
+    // Park while the colour picker is open, for the same reason as a user drag: the
+    // picker anchors to the swatch ONCE and never re-anchors, so a panel sliding out
+    // from under it would leave it floating over empty canvas, still open and no
+    // longer attached to the thing it belongs to. A wheel is not a pointerdown, so
+    // nothing would have closed either of them.
+    //
+    // Asks the DOM, NOT `_cpHandle`. The picker closes ITSELF on an outside click or
+    // Escape and tells us nothing, so the handle stays truthy long after the picker
+    // has gone - parking this loop for the rest of the panel's life. Reading the DOM
+    // is self-healing, and it is the same selector the panel's own outside-close
+    // guard already trusts.
+    //
+    // Deliberately does NOT update last* while parked, so the panel catches up on
+    // the very next frame after the picker closes instead of staying stale until
+    // something else happens to move.
+    if (document.querySelector(".pix-cp-popup, .pix-cp-modal-backdrop")) return;
     lastScale = sc; lastX = ox; lastY = oy;
     placeBeside(panel, getNodeRect(node));
   };
@@ -368,8 +386,18 @@ export function openLoraPanel(node, refresh) {
     const say = (t) => { msg.textContent = t || ""; msg.style.display = t ? "block" : "none"; };
 
     // ── the key row, which swaps between showing and editing ──
+    //
+    // `editing` is the whole reason this row needs a state flag: paintKeyRow's
+    // first act is to empty the row, so ANY repaint while the editor is open
+    // destroys the box and the key that was pasted into it, with no message. Two
+    // separate things reach that repaint - a click on the host or adult rows (they
+    // save, succeed, and repaint everything) and the reply to the account GET fired
+    // when the panel opened, which can land seconds later on a busy server. Both
+    // are ordinary things to do while typing a key in.
+    let editing = false;
     const keyRow = el("div", "pix-llp-row");
     const paintKeyRow = () => {
+      editing = false;
       keyRow.textContent = "";
       const state = el("div", "pix-llp-state" + (acc.configured ? " set" : ""),
         acc.configured ? "✓ Key saved  " + acc.hint : "No key - anonymous lookups");
@@ -388,6 +416,7 @@ export function openLoraPanel(node, refresh) {
     };
 
     function showEditor() {
+      editing = true;
       keyRow.textContent = "";
       const inp = el("input", "pix-llp-key");
       // A password field, so it cannot be read over a shoulder or captured in the
@@ -407,7 +436,9 @@ export function openLoraPanel(node, refresh) {
       const commit = () => {
         const v = inp.value.trim();
         if (!v) { say("Nothing to save - paste a key first."); return; }
-        save({ key: v }, "Key saved.");
+        // closeEditor: this is the ONE save that should replace the editor with the
+        // status row, and only once the server has confirmed it.
+        save({ key: v }, "Key saved.", { closeEditor: true });
       };
       ok.addEventListener("click", commit);
       no.addEventListener("click", () => { say(""); paintKeyRow(); });
@@ -454,11 +485,12 @@ export function openLoraPanel(node, refresh) {
       hostHint.textContent = h ? h.hint : "";
       adultSw.classList.toggle("on", !!acc.adultThumbs);
     };
-    const paint = () => { paintKeyRow(); paintRest(); };
+    // Never rebuilds the key row while the editor is open - see `editing` above.
+    const paint = () => { if (!editing) paintKeyRow(); paintRest(); };
 
     // Repaint from what the SERVER stored, never from what we hoped it took: a
     // refused key must not leave the panel claiming one is saved.
-    async function save(patch, okNote) {
+    async function save(patch, okNote, opts) {
       const res = await setCivitaiAccount(patch);
       if (!res || !res.ok) {
         say((res && res.message) || "Could not save.");
@@ -471,11 +503,16 @@ export function openLoraPanel(node, refresh) {
         return;
       }
       acc = res;
+      if (opts?.closeEditor) editing = false;
       say(okNote);
       paint();
     }
 
-    body.append(keyRow, hostRow, adultRow, msg);
+    // msg goes directly under the KEY row, not at the end: every message it carries
+    // is about the key, and appended last it rendered two unrelated rows below the
+    // box that caused it (and could fall below the panel's scroll fold). It is
+    // display:none until say() writes something, so it costs no layout when idle.
+    body.append(keyRow, msg, hostRow, adultRow);
     paint();
     getCivitaiAccount().then((res) => {
       if (!res || !res.ok) { say("Could not read the Civitai settings."); return; }

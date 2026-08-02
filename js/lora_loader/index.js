@@ -343,8 +343,10 @@ registerNodeHelp(CLASS, {
         "Account settings, then API Keys). The lookup then asks as you rather than as a stranger, " +
         "so anything your own Civitai settings let you see comes back normally. Ask this site " +
         "first switches between civitai.com and civitai.red, their unrestricted address - try " +
-        "Unrestricted if a LoRA still is not found. Either way the other address is still used as " +
-        "a backup, so nothing you could reach before stops working.\n\n" +
+        "Unrestricted if a LoRA still is not found. Whichever you choose, the other address is " +
+        "asked as well when the first one comes back with nothing, so nothing you could reach " +
+        "before stops working. Your key is sent to whichever of the two is being asked, since " +
+        "that is what lets either of them show you a hidden model.\n\n" +
         "Your key is kept on this computer, in ComfyUI's own user folder, and is never written " +
         "into a workflow - so sharing a workflow, or an image with a workflow inside it, cannot " +
         "give your key away. It is not shown again after you save it either: the settings only " +
