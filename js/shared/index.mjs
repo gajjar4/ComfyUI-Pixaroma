@@ -42,6 +42,14 @@ export { installResizeFloor, measureRootContent } from "./resize_floor.mjs";
 
 export { installCanvasZoomPassthrough } from "./canvas_zoom.mjs";
 
+// Node UI convention #27 - a document.body popup must track the canvas zoom and
+// grow to fit, or it reads tiny beside a zoomed-in node. Use this for EVERY new
+// picker popup rather than re-deriving the traps.
+export { placeZoomedPopup, applyPopupZoom, popupZoom } from "./popup_zoom.mjs";
+
+// A read-only numbered gutter for a WRAPPING "one value per line" textarea.
+export { attachLineNumbers } from "./line_numbers.mjs";
+
 export { onNodeDefsRefresh, runRefreshHandlers, installRefreshHook } from "./refresh.mjs";
 
 export { registerSweepProvider, getSweepProvider, sweepProviderFor, anyProviderOwns } from "./sweep_targets.mjs";

@@ -293,6 +293,9 @@ app.registerExtension({
       try { closePopupIfOwner(this); } catch (_e) {}   // only close OUR popup, not another node's
       try { closeHelpPopup(); } catch (_e) {}          // close the Help panel if it's open
       try { this._pixXyCancelConfirm?.(); } catch (_e) {}
+      // The preview's width-follows-the-node observer (grid.mjs).
+      try { this._pixXyCapRO?.disconnect(); } catch (_e) {}
+      this._pixXyCapRO = null;
       this._pixXyRoot = null;
       this._pixXyRerender = null;
       this._pixXyRenderOnly = null;

@@ -21,6 +21,7 @@
 import { app } from "/scripts/app.js";
 import { isVueNodes, applyAdaptiveCanvasOnly } from "../shared/nodes2.mjs";
 import { installCanvasZoomPassthrough } from "../shared/canvas_zoom.mjs";
+import { placeZoomedPopup } from "../shared/popup_zoom.mjs";
 import { installNodeAccent, accentOf, ACC } from "../shared/node_settings.mjs";
 import {
   ROW_H, MIN_W, BODY_PAD, readState, writeState, shownIndex, MODE_LETTERS, MODE_LABELS, MODES,
@@ -420,19 +421,12 @@ export function openPopup(node) {
   // the node's accent variable - set it here or the selected row is orange when
   // the node is not.
   pop.style.setProperty("--pix-acc", accentOf(node));
-  // It does not inherit the canvas ZOOM either: the node's row grows with the
-  // zoom while a fixed 12px popup shrinks next to it (user report, 2026-07-31).
-  // Track the zoom through the root font-size - the rows are sized in em, so
-  // this one number scales text, gaps and padding together. Floor 1 keeps
-  // today's size when zoomed OUT (a popup you open to read should not shrink
-  // with the graph); cap 2.5 keeps a deep zoom-in from producing poster text.
-  // Set before positioning: the flip-above branch measures offsetHeight.
-  const zoom = Math.min(2.5, Math.max(1, app.canvas?.ds?.scale || 1));
-  pop.style.fontSize = Math.round(12 * zoom * 10) / 10 + "px";
-  if (zoom > 1) {
-    pop.style.maxHeight =
-      Math.round(Math.min(320 * zoom, window.innerHeight * 0.6)) + "px";
-  }
+  // The zoom-tracking font + grow-to-fit + placement all live in the shared
+  // helper now (js/shared/popup_zoom.mjs, node UI convention #27) so every
+  // other node's picker gets the same behaviour instead of re-deriving it. It
+  // is applied AFTER the rows are in, at the placeZoomedPopup call below -
+  // which is also where the measuring happens, so the order is right by
+  // construction. This node's numbers were the original ones.
 
   if (!st.options.length) {
     const empty = document.createElement("div");
@@ -478,25 +472,16 @@ export function openPopup(node) {
   }
 
   document.body.appendChild(pop);
-  const r = parts.field.getBoundingClientRect();
+  // Zoom font + grow-to-fit + on-screen placement, in the one order that works.
   // The field's width is the MINIMUM, not the width: with the zoom-scaled font
   // a popup locked to the field re-cut the very names pattern #1 freed. The
-  // popup grows to fit its longest row (the peek's own em cap stops a paragraph
-  // value from dragging it wide), bounded by the viewport.
-  pop.style.minWidth = Math.max(200, Math.round(r.width)) + "px";
-  pop.style.maxWidth = Math.min(Math.round(window.innerWidth * 0.9), Math.round(640 * zoom)) + "px";
-  // A grown popup can poke past the window's right edge (the field-width popup
-  // never could) - keep it on screen, left-aligned to the field otherwise.
-  const pw = pop.offsetWidth;
-  let left = Math.round(r.left);
-  if (left + pw > window.innerWidth - 8) left = Math.max(8, window.innerWidth - 8 - pw);
-  pop.style.left = left + "px";
-  // Flip above when there is not room below.
-  const h = pop.offsetHeight;
-  const below = window.innerHeight - r.bottom;
-  pop.style.top = (below < h + 8 && r.top > h + 8)
-    ? Math.round(r.top - h - 4) + "px"
-    : Math.round(r.bottom + 4) + "px";
+  // popup grows to fit its longest row, bounded by the viewport, and a grown
+  // popup is clamped so it cannot poke past the window's right edge.
+  placeZoomedPopup(pop, parts.field, {
+    baseMaxHeightPx: 320,
+    baseMaxWidthPx: 640,
+    minWidthPx: 200,
+  });
 
   parts.field.classList.add("open");
   _pop = pop;

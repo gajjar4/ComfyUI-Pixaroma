@@ -223,6 +223,39 @@ export function buildGridPreview(node, mount) {
   box.appendChild(img);
   mount.appendChild(box);
 
+  // ── Preview size follows the node ─────────────────────────────────────────
+  // The <img> is width-constrained (max-width:100%), so its height follows its
+  // aspect ratio - until a FLAT max-height cap stops it. With the old constant
+  // 360px, a square or tall grid hit the cap almost immediately and then never
+  // grew again however wide the node was dragged: measured 532x360 at a
+  // 900-wide node AND at a 1300-wide node. That is the "preview freezes"
+  // report.
+  //
+  // The cap now scales with the box's WIDTH, so widening the node genuinely
+  // enlarges the preview and narrowing it shrinks it back. Keying off WIDTH is
+  // what makes this safe: the image only ever influences the node's HEIGHT
+  // (through measureContentHeight -> getMinHeight), so there is no feedback
+  // loop - and the observer early-returns unless the width actually changed,
+  // which is the second guard. Nothing here calls setSize, so it cannot fight
+  // Align's resize guard mid-drag either.
+  const CAP_FLOOR = 360;    // never tighter than the old constant
+  const CAP_RATIO = 2;      // up to a 1:2 tall preview before capping
+  let lastCapW = -1;
+  const applyCap = () => {
+    if (!img.isConnected) return;
+    const w = box.clientWidth;
+    if (w <= 0 || w === lastCapW) return;
+    lastCapW = w;
+    img.style.maxHeight = Math.round(Math.max(CAP_FLOOR, w * CAP_RATIO)) + "px";
+  };
+  applyCap();
+  let capRO = null;
+  try {
+    capRO = new ResizeObserver(applyCap);
+    capRO.observe(box);
+  } catch (_e) {}
+  node._pixXyCapRO = capRO;
+
   const bar = el("div", "pix-xy-savebar");
   const mk = (label, fn) => { const b = el("div", "pix-xy-sb", label); b.addEventListener("click", () => fn(node)); return b; };
   const bSave = mk("Save Disk", doSaveDisk);

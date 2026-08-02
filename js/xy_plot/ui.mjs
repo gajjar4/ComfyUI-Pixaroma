@@ -13,6 +13,8 @@ import {
 } from "./core.mjs";
 import { registerNodeHelp } from "../shared/index.mjs";
 import { isGraphLoading } from "../shared/graph_loading.mjs";
+import { attachLineNumbers } from "../shared/line_numbers.mjs";
+import { placeZoomedPopup } from "../shared/popup_zoom.mjs";
 
 const BRAND = "#f66744";
 
@@ -171,17 +173,30 @@ export function injectCSS() {
 .pix-xy-nav{width:22px;height:30px;flex:0 0 auto;display:grid;place-items:center;background:#1d1d1d;border:1px solid rgba(255,255,255,.14);border-radius:5px;color:var(--pix-acc,#f66744);font-size:11px;cursor:pointer;}
 .pix-xy-nav:hover{border-color:var(--pix-acc,#f66744);}
 .pix-xy-nav.disabled{opacity:.35;cursor:default;}
-/* popup */
-.pix-xy-popup{position:fixed;z-index:99999;background:#1d1d1d;border:1px solid rgba(255,255,255,.18);border-radius:7px;box-shadow:0 10px 30px rgba(0,0,0,.6);max-height:340px;overflow:auto;padding:5px;min-width:220px;}
-.pix-xy-pop-section{font-size:10px;color:var(--pix-acc,#f66744);font-weight:700;text-transform:uppercase;letter-spacing:.5px;padding:7px 8px 3px;}
-.pix-xy-pop-item{display:flex;flex-direction:column;gap:1px;padding:6px 9px;border-radius:4px;font-size:12.5px;cursor:pointer;}
+/* popup
+   Inner sizes are em ON PURPOSE: placeZoomedPopup sets the root font-size from
+   the canvas zoom, and em lets that one number scale the rows, gaps and padding
+   together (node UI convention #27 - the popup is position:fixed on
+   document.body so it inherits no canvas transform and would otherwise read
+   tiny beside a zoomed-in node). Do not put px back on the rows. At 100% zoom
+   the em values reproduce the previous px sizes exactly. */
+.pix-xy-popup{position:fixed;z-index:99999;background:#1d1d1d;border:1px solid rgba(255,255,255,.18);border-radius:7px;box-shadow:0 10px 30px rgba(0,0,0,.6);max-height:340px;overflow:auto;padding:.42em;min-width:220px;box-sizing:border-box;}
+.pix-xy-pop-section{font-size:.84em;color:var(--pix-acc,#f66744);font-weight:700;text-transform:uppercase;letter-spacing:.5px;padding:.58em .67em .25em;}
+.pix-xy-pop-item{display:flex;flex-direction:column;gap:.08em;padding:.5em .75em;border-radius:4px;font-size:1.04em;cursor:pointer;}
 .pix-xy-pop-item:hover{background:#2a2a2a;}
 .pix-xy-pop-item.sel{background:color-mix(in srgb, var(--pix-acc,#f66744) 18%, transparent);}
-.pix-xy-pop-item-top{display:flex;align-items:center;gap:8px;}
+.pix-xy-pop-item-top{display:flex;align-items:center;gap:.67em;}
 .pix-xy-pop-item .pix-xy-wname{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-.pix-xy-pop-item .pix-xy-wtype{font-size:10px;color:#888;flex:0 0 auto;}
-.pix-xy-pop-prev{font-size:10px;color:#8a8a8a;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%;}
+.pix-xy-pop-item .pix-xy-wtype{font-size:.8em;color:#888;flex:0 0 auto;}
+.pix-xy-pop-prev{font-size:.8em;color:#8a8a8a;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%;}
 .pix-xy-empty{padding:10px;color:#888;font-size:12px;text-align:center;}
+/* Scoped so the shared px rules above keep their size in the NODE BODY (the
+   checklist reuses .pix-xy-empty, and the font shorthand on .pix-xy-input would
+   otherwise pin the popup's filter box at 12px while the rows scale).
+   NOTE: no backticks in this comment - it lives inside a JS template literal,
+   where a backtick ends the string and empties the whole module. */
+.pix-xy-popup .pix-xy-empty{padding:.84em;font-size:1em;}
+.pix-xy-popup .pix-xy-input{font-size:1em;}
 /* value area */
 .pix-xy-valuearea{margin-top:9px;}
 .pix-xy-seg{display:inline-flex;background:rgba(0,0,0,.3);border-radius:6px;padding:2px;gap:2px;margin-bottom:8px;}
@@ -198,7 +213,13 @@ export function injectCSS() {
 .pix-xy-field input{width:100%;background:transparent;border:none;outline:none;color:#e0e0e0;font-size:13px;padding:0;}
 .pix-xy-input{width:100%;box-sizing:border-box;background:#1d1d1d;border:1px solid rgba(255,255,255,.14);border-radius:5px;padding:6px 8px;color:#e0e0e0;font:12px monospace;outline:none;}
 .pix-xy-input:focus{border-color:var(--pix-acc,#f66744);}
-textarea.pix-xy-input{resize:vertical;min-height:46px;white-space:pre;}
+/* WRAPS (pre-wrap, not pre): one value per line means the lines are whole
+   prompts, and a straight un-wrapped line pushed them off the right edge behind
+   a horizontal scrollbar (user report, 2026-08-02). Newlines still separate
+   values - wrapping is purely visual, the value is always split on "\\n".
+   min-height is ~5 wrapped rows because a wrapped prompt needs more room than
+   an un-wrapped one did; resize:vertical still lets it be dragged bigger. */
+textarea.pix-xy-input{resize:vertical;min-height:92px;white-space:pre-wrap;overflow-wrap:break-word;}
 .pix-xy-preview{font-size:11.5px;color:#9a9a9a;background:rgba(0,0,0,.25);border-radius:5px;padding:6px 8px;margin-top:6px;word-break:break-word;}
 .pix-xy-preview b{color:#8fd19e;font-weight:600;}
 .pix-xy-check{max-height:140px;overflow:auto;border:1px solid rgba(255,255,255,.14);border-radius:5px;background:#1d1d1d;}
@@ -229,6 +250,10 @@ textarea.pix-xy-input{resize:vertical;min-height:46px;white-space:pre;}
 /* grid preview + buttons */
 .pix-xy-gridmount{display:flex;flex-direction:column;gap:8px;}
 .pix-xy-gridbox{border:1px solid rgba(255,255,255,.12);border-radius:6px;background:#161616;min-height:60px;display:flex;align-items:center;justify-content:center;overflow:hidden;}
+/* max-height is set from JS (grid.mjs) so the preview SCALES with the node
+   instead of freezing at a constant - a square or tall grid used to hit a flat
+   360px cap and then never grow however wide you made the node (user report,
+   2026-08-02). The 360 here is only the pre-JS fallback. */
 .pix-xy-gridimg{max-width:100%;max-height:360px;display:block;}
 .pix-xy-gridhint{color:#777;font-size:12px;padding:14px;text-align:center;}
 .pix-xy-savebar{display:flex;gap:6px;}
@@ -416,12 +441,16 @@ function openPicker(node, axisKey, anchorEl, rerender) {
     filter.addEventListener("input", () => applyFilter(filter.value));
   }
   document.body.appendChild(popup);
-  // position under the anchor, clamped to viewport
-  const r = anchorEl.getBoundingClientRect();
-  popup.style.left = Math.max(8, Math.min(r.left, window.innerWidth - popup.offsetWidth - 8)) + "px";
-  let top = r.bottom + 4;
-  if (top + popup.offsetHeight > window.innerHeight - 8) top = Math.max(8, r.top - popup.offsetHeight - 4);
-  popup.style.top = top + "px";
+  // Zoom-aware sizing + placement (shared, node UI convention #27): the root
+  // font tracks the canvas zoom so the list does not read tiny beside a
+  // zoomed-in node, the popup grows to fit its longest row instead of being
+  // locked to the anchor's width, and it stays inside the viewport. The helper
+  // sets the font BEFORE measuring, which the flip-above branch depends on.
+  placeZoomedPopup(popup, anchorEl, {
+    baseMaxHeightPx: 340,   // matches the stylesheet's 100%-zoom max-height
+    baseMaxWidthPx: 640,
+    minWidthPx: 220,
+  });
 
   const onDown = (e) => { if (!popup.contains(e.target)) closePopup(); };
   const onWheel = (e) => { if (!popup.contains(e.target)) closePopup(); };
@@ -675,12 +704,20 @@ function renderValueArea(node, axisKey, mount, refreshCounter, rerender) {
       rep.value = axis.raw.srReplace || "";
       rep.addEventListener("input", () => { axis.raw.srReplace = rep.value; save(); refreshPreview(); });
       mount.appendChild(rep);
+      // Same one-per-line contract as Full list, so it gets the same gutter.
+      // Must run AFTER the box is in the document - the gutter measures it.
+      attachLineNumbers(rep);
     } else {
       const ta = isolate(el("textarea", "pix-xy-input"));
       ta.placeholder = "One full value per line";
       ta.value = axis.raw.listText || "";
       ta.addEventListener("input", () => { axis.raw.listText = ta.value; save(); refreshPreview(); });
       mount.appendChild(ta);
+      // Numbered lines: with wrapping on, one prompt spans several visual rows,
+      // so without numbers you cannot see where the next value starts (the
+      // user's other half of the same report). Read-only by construction - the
+      // numbers are a sibling element, never part of the textarea's value.
+      attachLineNumbers(ta);
     }
     mount.appendChild(buildPreview(axis));
   }

@@ -121,6 +121,100 @@ def _fit_font(draw, text, base_size, max_w, min_size=10):
     return _load_font(max(min_size, int(base_size * max_w / w)))
 
 
+# ── label wrapping ──────────────────────────────────────────────────────────
+# A value on an axis can be a whole PROMPT, not just a sampler name. Shrinking
+# such a label to one line bottoms out at the min font size and then simply
+# overflows its strip - the row labels ran straight across the first column of
+# images (user report, 2026-08-02). These wrap it into the strip instead, which
+# is also what makes a long label readable rather than merely contained.
+# Short labels wrap to a single line, so sampler/checkpoint grids are unchanged.
+
+def _line_h(draw, font):
+    """Line pitch for `font`: ascender-to-descender plus a little leading."""
+    return max(1, _measure(draw, "Ayg", font)[1] + 3)
+
+
+def _hard_break(draw, word, font, max_w):
+    """Split one over-wide word (a URL, a run_of_underscores) into chunks that
+    fit. Without this a single long token would overflow no matter the wrap."""
+    out, cur = [], ""
+    for ch in word:
+        trial = cur + ch
+        if cur and _measure(draw, trial, font)[0] > max_w:
+            out.append(cur)
+            cur = ch
+        else:
+            cur = trial
+    if cur:
+        out.append(cur)
+    return out or [word]
+
+
+def _ellipsize(draw, text, font, max_w):
+    t = text
+    while t and _measure(draw, t + "…", font)[0] > max_w:
+        t = t[:-1]
+    return (t + "…") if t else "…"
+
+
+def _wrap_lines(draw, text, font, max_w, max_lines=None):
+    """Greedy word wrap of `text` into lines that each fit `max_w`.
+
+    Returns at least one line. When `max_lines` is given the last kept line is
+    ellipsized, so a clipped label never reads as if it were complete."""
+    if max_w <= 0:
+        return [str(text)]
+    words = str(text).split()
+    if not words:
+        return [""]
+    lines, cur = [], ""
+    for w in words:
+        trial = (cur + " " + w) if cur else w
+        if _measure(draw, trial, font)[0] <= max_w:
+            cur = trial
+            continue
+        if cur:
+            lines.append(cur)
+            cur = ""
+        if _measure(draw, w, font)[0] <= max_w:
+            cur = w
+        else:
+            pieces = _hard_break(draw, w, font, max_w)
+            lines.extend(pieces[:-1])
+            cur = pieces[-1]
+    if cur:
+        lines.append(cur)
+    if max_lines and len(lines) > max_lines:
+        lines = lines[:max_lines]
+        lines[-1] = _ellipsize(draw, lines[-1], font, max_w)
+    return lines
+
+
+def _fit_wrapped(draw, text, base_size, max_w, max_h, min_size=9):
+    """Wrap `text` into (font, lines, line_height) fitting `max_w` x `max_h`.
+
+    Shrinks the font a step at a time until the wrapped block fits the cell's
+    height; only if it still does not at `min_size` does it clip (with the
+    ellipsis from _wrap_lines) rather than spill over the neighbouring image."""
+    size = int(base_size)
+    while size >= min_size:
+        f = _load_font(size)
+        lh = _line_h(draw, f)
+        lines = _wrap_lines(draw, text, f, max_w)
+        if len(lines) * lh <= max_h:
+            return f, lines, lh
+        size -= 1
+    f = _load_font(min_size)
+    lh = _line_h(draw, f)
+    keep = max(1, int(max_h // lh))
+    return f, _wrap_lines(draw, text, f, max_w, max_lines=keep), lh
+
+
+# A prompt on the X axis would otherwise make the header strip taller than the
+# pictures; 3 lines is enough to recognise which value a column is.
+_X_LABEL_MAX_LINES = 3
+
+
 def _tensor_to_pil(frame):
     """HxWxC float [0,1] tensor -> RGB PIL.Image.
 
@@ -249,11 +343,13 @@ def _assemble_grid(sess, max_long_side=_GRID_LONG_SIDE_CAP):
     x_name = sess.get("x_name") or ""
     y_name = sess.get("y_name") or ""
 
+    x_label_lines = []
+    x_font = font
+    x_lh = _line_h(sdraw, font)
     if draw_labels:
-        col_label_h = font_size + 2 * pad
         # Row-label strip: wide enough to show the full Y label (sampler /
-        # checkpoint names can be long). Shrink-to-fit handles anything that
-        # still overflows, so we never chop a name down to "dpm…".
+        # checkpoint names can be long). A label too long for the cap is
+        # WRAPPED into the strip when drawn, not shrunk until it overflows.
         row_w_cap = max(160, round(cell_w * 0.5))
         widest = 0
         for lab in y_labels:
@@ -262,6 +358,18 @@ def _assemble_grid(sess, max_long_side=_GRID_LONG_SIDE_CAP):
         for nm in (("↓ " + y_name), ("→ " + x_name)):
             widest = max(widest, _measure(sdraw, nm, _load_font(max(11, round(font_size * 0.8))))[0])
         row_label_w = max(60, min(row_w_cap, widest + 2 * pad))
+
+        # Column labels wrap too, so the header strip has to be as tall as the
+        # tallest wrapped label. A one-line label (every sampler / checkpoint
+        # grid) leaves this at the previous single-line height.
+        for ci in range(cols):
+            lab = str(x_labels[ci]) if ci < len(x_labels) else ""
+            x_label_lines.append(
+                _wrap_lines(sdraw, lab, x_font, cell_w - 6, max_lines=_X_LABEL_MAX_LINES)
+                if lab else []
+            )
+        tallest = max([len(l) for l in x_label_lines] or [1]) or 1
+        col_label_h = tallest * x_lh + 2 * pad
     else:
         col_label_h = 0
         row_label_w = 0
@@ -296,26 +404,32 @@ def _assemble_grid(sess, max_long_side=_GRID_LONG_SIDE_CAP):
                 draw.rectangle([x, y, x + cell_w - 1, y + cell_h - 1], fill=pal["cell"])
 
     if draw_labels:
-        # Column labels (X values) centered above each column - shrink to fit
-        # the cell width, never truncate.
+        # Column labels (X values), wrapped and centered above each column.
         for ci in range(cols):
-            lab = str(x_labels[ci]) if ci < len(x_labels) else ""
-            if not lab:
+            lines = x_label_lines[ci] if ci < len(x_label_lines) else []
+            if not lines:
                 continue
-            lf = _fit_font(draw, lab, font_size, cell_w - 6)
             cx, _ = cell_xy(ci, 0)
-            tw, th = _measure(draw, lab, lf)
-            draw.text((cx + (cell_w - tw) / 2, (col_label_h - th) / 2), lab, font=lf, fill=pal["label"])
-        # Row labels (Y values) centered in the left strip - shrink to fit the
-        # (wide) strip, never truncate, so the full name is always readable.
+            ty = (col_label_h - len(lines) * x_lh) / 2
+            for line in lines:
+                tw = _measure(draw, line, x_font)[0]
+                draw.text((cx + (cell_w - tw) / 2, ty), line, font=x_font, fill=pal["label"])
+                ty += x_lh
+        # Row labels (Y values), wrapped into the left strip and centered
+        # against their row. Wrapping (rather than shrinking one long line) is
+        # what stops a prompt-length label running across the first image.
+        y_avail_w = max(1, row_label_w - 2 * pad)
         for ri in range(rows):
             lab = str(y_labels[ri]) if ri < len(y_labels) else ""
             if not lab:
                 continue
-            lf = _fit_font(draw, lab, font_size, row_label_w - 2 * pad)
+            lf, lines, lh = _fit_wrapped(draw, lab, font_size, y_avail_w, cell_h - 4)
             _, cy = cell_xy(0, ri)
-            tw, th = _measure(draw, lab, lf)
-            draw.text((max(2, (row_label_w - tw) / 2), cy + (cell_h - th) / 2), lab, font=lf, fill=pal["label"])
+            ty = cy + (cell_h - len(lines) * lh) / 2
+            for line in lines:
+                tw = _measure(draw, line, lf)[0]
+                draw.text((pad + max(0, (y_avail_w - tw) / 2), ty), line, font=lf, fill=pal["label"])
+                ty += lh
         # Axis names in the top-left corner: "↓ y_name" over "→ x_name".
         corner_lines = []
         if y_name:
