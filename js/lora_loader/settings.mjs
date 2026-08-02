@@ -14,6 +14,8 @@ let _panel = null;
 let _panelNode = null;
 let _refresh = null;
 let _cpHandle = null;
+let _followRaf = null;   // the canvas-follow loop, see startFollowing()
+let _userMoved = false;  // the user dragged the panel, so stop following it
 
 function el(tag, cls, text) {
   const e = document.createElement(tag);
@@ -110,19 +112,83 @@ function placeBeside(panel, rect) {
   panel.style.left = left + "px";
   panel.style.top = Math.max(pad, top) + "px";
 }
+/**
+ * Keep the panel beside its node while the canvas moves.
+ *
+ * Without this the panel is written to a fixed screen position ONCE and stays
+ * there, so zooming or panning strands it somewhere unrelated - and with two of
+ * these nodes on the canvas there is then nothing to say which one it is editing.
+ *
+ * A rAF loop rather than an event, because LiteGraph emits nothing for a
+ * transform change and a zoom has to be followed smoothly rather than caught up
+ * with afterwards. It compares three numbers per frame and returns, so the idle
+ * cost is nil, and it only runs while a panel is open.
+ *
+ * Stops the moment the user DRAGS the panel: from then on it is where they put
+ * it on purpose, and moving it out from under them would be worse than letting
+ * it sit still.
+ */
+function startFollowing(panel, node) {
+  let lastScale = null, lastX = null, lastY = null;
+  const tick = () => {
+    if (!_panel || _panel !== panel || !panel.isConnected) { _followRaf = null; return; }
+    _followRaf = requestAnimationFrame(tick);
+    if (_userMoved) return;
+    const ds = app.canvas?.ds;
+    if (!ds) return;
+    const sc = ds.scale || 1;
+    const ox = ds.offset?.[0] ?? 0, oy = ds.offset?.[1] ?? 0;
+    if (sc === lastScale && ox === lastX && oy === lastY) return;
+    lastScale = sc; lastX = ox; lastY = oy;
+    placeBeside(panel, getNodeRect(node));
+  };
+  _followRaf = requestAnimationFrame(tick);
+}
+
+function stopFollowing() {
+  if (_followRaf != null) cancelAnimationFrame(_followRaf);
+  _followRaf = null;
+}
+
 function makeDraggable(panel, handle) {
   handle.addEventListener("pointerdown", (e) => {
     if (e.target.closest(".x")) return;
     e.preventDefault();
     const r = panel.getBoundingClientRect();
     const ox = e.clientX - r.left, oy = e.clientY - r.top;
+
+    // BOTH defences against a drag that sticks to the cursor, because a pointerup
+    // can genuinely go missing: released outside the window, on a second monitor,
+    // or swallowed upstream. Synthetic events never reproduce it, so a green
+    // scripted test proves nothing here - this is a house rule earned from a
+    // human report on the Help window.
+    try { handle.setPointerCapture(e.pointerId); } catch { /* not capturable */ }
+
     const move = (ev) => {
+      if (!panel.isConnected) return up();
+      // The button is no longer held: the release was lost, so end the drag.
+      if (!(ev.buttons & 1)) return up();
+      // From here the panel is where the USER put it, so stop following the node.
+      _userMoved = true;
       panel.style.left = Math.max(0, Math.min(window.innerWidth - panel.offsetWidth, ev.clientX - ox)) + "px";
       panel.style.top = Math.max(0, Math.min(window.innerHeight - panel.offsetHeight, ev.clientY - oy)) + "px";
     };
-    const up = () => { window.removeEventListener("pointermove", move, true); window.removeEventListener("pointerup", up, true); };
-    window.addEventListener("pointermove", move, true);
-    window.addEventListener("pointerup", up, true);
+    // Idempotent: the buttons guard above can call this as well as a real
+    // release, and lostpointercapture fires after we release it ourselves.
+    let done = false;
+    const up = () => {
+      if (done) return;
+      done = true;
+      try { handle.releasePointerCapture(e.pointerId); } catch { /* already gone */ }
+      handle.removeEventListener("pointermove", move, true);
+      handle.removeEventListener("pointerup", up, true);
+      handle.removeEventListener("pointercancel", up, true);
+      handle.removeEventListener("lostpointercapture", up, true);
+    };
+    handle.addEventListener("pointermove", move, true);
+    handle.addEventListener("pointerup", up, true);
+    handle.addEventListener("pointercancel", up, true);
+    handle.addEventListener("lostpointercapture", up, true);
   });
 }
 
@@ -143,6 +209,10 @@ function escClose(e) {
 export function closeLoraPanel() {
   try { _cpHandle?.close(); } catch {}
   _cpHandle = null;
+  stopFollowing();
+  // Reset here, not on open: a panel the user dragged must not teach the NEXT one
+  // to sit still where the node is not.
+  _userMoved = false;
   if (_panel) { try { _panel.remove(); } catch {} }
   _panel = null; _panelNode = null; _refresh = null;
   document.removeEventListener("pointerdown", outsideClose, true);
@@ -483,4 +553,6 @@ export function openLoraPanel(node, refresh) {
     document.addEventListener("keydown", escClose, true);
   }, 0);
   _panel = panel;
+  // After _panel is assigned: the loop's first act is to check it owns the panel.
+  startFollowing(panel, node);
 }
