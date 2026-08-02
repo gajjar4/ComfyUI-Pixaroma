@@ -190,24 +190,48 @@ def _wrap_lines(draw, text, font, max_w, max_lines=None):
     return lines
 
 
+# _assemble_grid runs once PER CELL and re-lays-out every label each time, which
+# is cubic in the grid side: measured 462ms per assemble for a 369-char prompt on
+# a 10x10 (13,787 _measure calls), about 46s of CPU across the plot, for a result
+# that is identical every time. `draw` is deliberately NOT part of the key -
+# _measure was verified byte-identical across RGB / RGBA / L draw contexts at
+# four different canvas sizes, so the layout depends only on the text, the font
+# size and the box. Callers must treat the returned list as read-only.
+_WRAP_MEMO = {}
+_WRAP_MEMO_MAX = 512
+
+
 def _fit_wrapped(draw, text, base_size, max_w, max_h, min_size=9):
     """Wrap `text` into (font, lines, line_height) fitting `max_w` x `max_h`.
 
-    Shrinks the font a step at a time until the wrapped block fits the cell's
-    height; only if it still does not at `min_size` does it clip (with the
-    ellipsis from _wrap_lines) rather than spill over the neighbouring image."""
+    Shrinks the font a step at a time until the wrapped block fits the box;
+    only if it still does not at `min_size` does it clip (with the ellipsis from
+    _wrap_lines) rather than spill over the neighbouring image."""
+    key = (str(text), int(base_size), int(max_w), int(max_h), int(min_size))
+    hit = _WRAP_MEMO.get(key)
+    if hit is not None:
+        return hit
+
     size = int(base_size)
+    out = None
     while size >= min_size:
         f = _load_font(size)
         lh = _line_h(draw, f)
         lines = _wrap_lines(draw, text, f, max_w)
         if len(lines) * lh <= max_h:
-            return f, lines, lh
+            out = (f, lines, lh)
+            break
         size -= 1
-    f = _load_font(min_size)
-    lh = _line_h(draw, f)
-    keep = max(1, int(max_h // lh))
-    return f, _wrap_lines(draw, text, f, max_w, max_lines=keep), lh
+    if out is None:
+        f = _load_font(min_size)
+        lh = _line_h(draw, f)
+        keep = max(1, int(max_h // lh))
+        out = (f, _wrap_lines(draw, text, f, max_w, max_lines=keep), lh)
+
+    if len(_WRAP_MEMO) >= _WRAP_MEMO_MAX:
+        _WRAP_MEMO.clear()   # bounded reset; the next assemble re-derives cheaply
+    _WRAP_MEMO[key] = out
+    return out
 
 
 # A prompt on the X axis would otherwise make the header strip taller than the
@@ -362,14 +386,24 @@ def _assemble_grid(sess, max_long_side=_GRID_LONG_SIDE_CAP):
         # Column labels wrap too, so the header strip has to be as tall as the
         # tallest wrapped label. A one-line label (every sampler / checkpoint
         # grid) leaves this at the previous single-line height.
+        #
+        # They SHRINK to fit that budget rather than being hard-clipped at
+        # _X_LABEL_MAX_LINES. Clipping was a real regression: prompt sweeps
+        # almost always share a long prefix and differ near the END, so two
+        # different values rendered BYTE-IDENTICAL column headers - verified on
+        # a pair differing at char 176 of 194, at cell 512 and 1024 - leaving no
+        # way to tell the columns apart in the saved grid. (The old single-line
+        # code at least painted the difference, illegibly.) Shrinking also makes
+        # the header SHORTER than clipping did, so the budget still holds.
+        x_budget_h = _X_LABEL_MAX_LINES * x_lh
         for ci in range(cols):
             lab = str(x_labels[ci]) if ci < len(x_labels) else ""
-            x_label_lines.append(
-                _wrap_lines(sdraw, lab, x_font, cell_w - 6, max_lines=_X_LABEL_MAX_LINES)
-                if lab else []
-            )
-        tallest = max([len(l) for l in x_label_lines] or [1]) or 1
-        col_label_h = tallest * x_lh + 2 * pad
+            if not lab:
+                x_label_lines.append(None)
+                continue
+            x_label_lines.append(_fit_wrapped(sdraw, lab, font_size, cell_w - 6, x_budget_h))
+        blocks = [len(e[1]) * e[2] for e in x_label_lines if e]
+        col_label_h = (max(blocks) if blocks else x_lh) + 2 * pad
     else:
         col_label_h = 0
         row_label_w = 0
@@ -404,17 +438,21 @@ def _assemble_grid(sess, max_long_side=_GRID_LONG_SIDE_CAP):
                 draw.rectangle([x, y, x + cell_w - 1, y + cell_h - 1], fill=pal["cell"])
 
     if draw_labels:
-        # Column labels (X values), wrapped and centered above each column.
+        # Column labels (X values), wrapped and centered above each column. Each
+        # column carries its OWN font and line height (they shrink independently
+        # to fit the shared budget), so read them back per column rather than
+        # reusing the base font.
         for ci in range(cols):
-            lines = x_label_lines[ci] if ci < len(x_label_lines) else []
-            if not lines:
+            entry = x_label_lines[ci] if ci < len(x_label_lines) else None
+            if not entry:
                 continue
+            lf, lines, lh = entry
             cx, _ = cell_xy(ci, 0)
-            ty = (col_label_h - len(lines) * x_lh) / 2
+            ty = (col_label_h - len(lines) * lh) / 2
             for line in lines:
-                tw = _measure(draw, line, x_font)[0]
-                draw.text((cx + (cell_w - tw) / 2, ty), line, font=x_font, fill=pal["label"])
-                ty += x_lh
+                tw = _measure(draw, line, lf)[0]
+                draw.text((cx + (cell_w - tw) / 2, ty), line, font=lf, fill=pal["label"])
+                ty += lh
         # Row labels (Y values), wrapped into the left strip and centered
         # against their row. Wrapping (rather than shrinking one long line) is
         # what stops a prompt-length label running across the first image.

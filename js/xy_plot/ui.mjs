@@ -535,7 +535,24 @@ function buildPreview(axis) {
   return box;
 }
 
+// Release any line-number gutters under `el` before its DOM is thrown away.
+// attachLineNumbers installs a ResizeObserver per textarea and a Document holds
+// its observers strongly, so wiping innerHTML without this pins the detached
+// textarea + wrap + gutter + mirror for the rest of the session. These cards are
+// rebuilt on every picker change, mode switch, workflow open and tab switch, so
+// it accumulates rather than staying at one.
+// Deliberately NOT solved by self-disconnecting on !isConnected inside the
+// helper: Nodes 2.0 re-parents the widget root, which momentarily detaches the
+// element, and that would kill a live gutter.
+function detachLineGutters(el) {
+  if (!el) return;
+  el.querySelectorAll("textarea").forEach((t) => {
+    try { t._pixLnDetach?.(); } catch (_e) {}
+  });
+}
+
 function renderValueArea(node, axisKey, mount, refreshCounter, rerender) {
+  detachLineGutters(mount);
   mount.innerHTML = "";
   const state = readState(node);
   const axis = state[axisKey];
@@ -885,6 +902,7 @@ export function renderBody(node, root, handlers) {
 
   for (const axisKey of ["x", "y"]) {
     const card = root.querySelector(`.pix-xy-axis[data-axis="${axisKey}"]`);
+    detachLineGutters(card);   // the value area's textarea lives in here
     card.innerHTML = "";
     const head = el("div", "pix-xy-axis-head");
     head.appendChild(el("span", "pix-xy-badge", axisKey.toUpperCase()));

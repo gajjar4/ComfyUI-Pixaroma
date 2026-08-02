@@ -238,15 +238,34 @@ export function buildGridPreview(node, mount) {
   // loop - and the observer early-returns unless the width actually changed,
   // which is the second guard. Nothing here calls setSize, so it cannot fight
   // Align's resize guard mid-drag either.
-  const CAP_FLOOR = 360;    // never tighter than the old constant
+  // CAP_MAX is NOT optional. The image's height feeds measureContentHeight ->
+  // getMinHeight -> the node's minimum, so an uncapped ratio makes a TALL grid
+  // produce a node that cannot be dragged shorter. The sharp case is a common
+  // one: a single Y axis with 10 values is a 1-col x 10-row grid, which at a
+  // 900-wide node measured a 227px-wide SLIVER 1722px tall inside a node whose
+  // computeSize minimum was 2402. A preview taller than ~1100 is unreadable in
+  // the node anyway - that is what Open and Save Disk are for.
+  // Do NOT key the ceiling off window.innerHeight: the window is not observed
+  // here, so it would go stale on a window resize.
+  const CAP_FLOOR = 360;    // degenerate/zero-width layout guard (MIN_W 420 means
+                            // w*RATIO normally dominates; this is not the old constant)
   const CAP_RATIO = 2;      // up to a 1:2 tall preview before capping
+  // 900 rather than something looser: it leaves the shapes a 2D plot actually
+  // produces (square and wider) completely UNCAPPED at ordinary node widths -
+  // a 3x3 grid on a 900-wide node measures 861 tall, a 3x2 on a 1300-wide node
+  // 853 - so the "widening the node enlarges the preview" behaviour this whole
+  // change is about is untouched, while the single-column pathological case is
+  // bounded at a node you can still work with. It is also still 2.5x the flat
+  // 360 that caused the report, so nobody will read 900 as "frozen small".
+  const CAP_MAX = 900;
   let lastCapW = -1;
   const applyCap = () => {
     if (!img.isConnected) return;
     const w = box.clientWidth;
     if (w <= 0 || w === lastCapW) return;
     lastCapW = w;
-    img.style.maxHeight = Math.round(Math.max(CAP_FLOOR, w * CAP_RATIO)) + "px";
+    const cap = Math.min(Math.max(CAP_FLOOR, w * CAP_RATIO), CAP_MAX);
+    img.style.maxHeight = Math.round(cap) + "px";
   };
   applyCap();
   let capRO = null;
@@ -254,6 +273,10 @@ export function buildGridPreview(node, mount) {
     capRO = new ResizeObserver(applyCap);
     capRO.observe(box);
   } catch (_e) {}
+  // This function opens with mount.innerHTML = "", which advertises it as safe
+  // to re-call; honour that by releasing any previous observer rather than
+  // orphaning it in the single-slot handle.
+  try { node._pixXyCapRO?.disconnect(); } catch (_e) {}
   node._pixXyCapRO = capRO;
 
   const bar = el("div", "pix-xy-savebar");

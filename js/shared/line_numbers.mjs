@@ -27,6 +27,9 @@ function injectCSS() {
   s.id = CSS_ID;
   s.textContent = `
 .pix-ln-wrap{position:relative;display:block;}
+/* A textarea is inline-block/baseline by default, so the wrap ends up a few px
+   taller than the box and the gutter's fill hangs below its rounded corner. */
+.pix-ln-wrap > textarea{display:block;}
 /* pointer-events:none so a drag-select that crosses the gutter still selects
    text in the textarea underneath instead of stalling on the numbers. */
 .pix-ln-gutter{position:absolute;left:0;top:0;bottom:0;overflow:hidden;pointer-events:none;user-select:none;
@@ -40,10 +43,29 @@ function injectCSS() {
   document.head.appendChild(s);
 }
 
+// Copy the text metrics as LONGHANDS, never the `font` shorthand. The computed
+// shorthand serialises to "" in Firefox whenever a sub-property makes it
+// unserialisable; the mirror would then silently fall back to the node body's
+// font, wrap at completely different points, and the numbers would scatter -
+// invisible on this project's Chromium-only dev surfaces. The shorthand also
+// RESETS line-height, so longhands remove that ordering hazard too.
+function copyTextMetrics(el, cs) {
+  el.style.fontStyle = cs.fontStyle;
+  el.style.fontVariant = cs.fontVariant;
+  el.style.fontWeight = cs.fontWeight;
+  el.style.fontSize = cs.fontSize;
+  el.style.fontFamily = cs.fontFamily;
+  el.style.letterSpacing = cs.letterSpacing;
+  el.style.lineHeight = cs.lineHeight;
+}
+
 // Wrap `ta` in a gutter. Returns a detach() that puts the DOM back as it was.
 // opts.minDigits - reserve room for at least this many digits (default 2).
 export function attachLineNumbers(ta, opts = {}) {
-  if (!ta || ta._pixLnDetach) return ta && ta._pixLnDetach;
+  // Always hand back a callable, so `const off = attach(x); … off()` cannot
+  // throw on the miss paths.
+  if (!ta) return () => {};
+  if (ta._pixLnDetach) return ta._pixLnDetach;
   injectCSS();
   const minDigits = opts.minDigits || 2;
 
@@ -65,19 +87,25 @@ export function attachLineNumbers(ta, opts = {}) {
   mirror.className = "pix-ln-mirror";
   wrap.appendChild(mirror);
 
-  const basePadLeft = parseFloat(getComputedStyle(ta).paddingLeft) || 8;
+  // Captured on the FIRST relayout, not here: at attach time the element can
+  // still be detached (Nodes 2.0 re-parents the widget root), and
+  // getComputedStyle on a detached element returns "" -> parseFloat -> NaN, so
+  // reading it now would silently take the fallback. relayout early-returns
+  // while detached, so by the time it runs the real padding is readable - and
+  // it must be read BEFORE we start writing paddingLeft ourselves.
+  let basePadLeft = null;
   let lastSig = "";
 
   const relayout = (force) => {
     if (!ta.isConnected) return;
     const cs = getComputedStyle(ta);
+    if (basePadLeft == null) basePadLeft = parseFloat(cs.paddingLeft) || 8;
     const lines = ta.value.split("\n");
     const digits = Math.max(minDigits, String(lines.length).length);
 
     // Gutter width from the REAL glyph metrics, not a guessed px-per-digit:
     // the box is monospace today but a theme could change that.
-    mirror.style.font = cs.font;
-    mirror.style.letterSpacing = cs.letterSpacing;
+    copyTextMetrics(mirror, cs);
     mirror.style.whiteSpace = "pre";
     mirror.style.width = "auto";
     mirror.textContent = "0".repeat(digits);
@@ -104,7 +132,6 @@ export function attachLineNumbers(ta, opts = {}) {
     mirror.style.whiteSpace = cs.whiteSpace;
     mirror.style.overflowWrap = cs.overflowWrap;
     mirror.style.wordBreak = cs.wordBreak;
-    mirror.style.lineHeight = cs.lineHeight;
     mirror.style.tabSize = cs.tabSize;
     mirror.style.width = contentW + "px";
     mirror.textContent = "";
@@ -129,8 +156,7 @@ export function attachLineNumbers(ta, opts = {}) {
       nEl.className = "pix-ln-num";
       nEl.textContent = String(i + 1);
       nEl.style.top = (kids[i].offsetTop + padTop) + "px";
-      nEl.style.font = cs.font;
-      nEl.style.lineHeight = cs.lineHeight;
+      copyTextMetrics(nEl, cs);
       nf.appendChild(nEl);
     }
     inner.textContent = "";

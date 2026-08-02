@@ -49,10 +49,18 @@ export function applyPopupZoom(pop, opts = {}) {
   const zoom = popupZoom();
   const base = opts.baseFontPx || POPUP_BASE_FONT_PX;
   pop.style.fontSize = Math.round(base * zoom * 10) / 10 + "px";
-  if (opts.baseMaxHeightPx && zoom > 1) {
-    const vh = opts.maxHeightVh == null ? 0.6 : opts.maxHeightVh;
-    pop.style.maxHeight =
-      Math.round(Math.min(opts.baseMaxHeightPx * zoom, window.innerHeight * vh)) + "px";
+  if (opts.baseMaxHeightPx) {
+    if (zoom > 1) {
+      const vh = opts.maxHeightVh == null ? 0.6 : opts.maxHeightVh;
+      pop.style.maxHeight =
+        Math.round(Math.min(opts.baseMaxHeightPx * zoom, window.innerHeight * vh)) + "px";
+    } else {
+      // Cleared, not left alone: both callers today build a fresh element per
+      // open, but a caller that REUSES one popup would otherwise keep a stale
+      // zoomed max-height after the user zoomed back out. At zoom 1 the
+      // stylesheet's own max-height is the right answer.
+      pop.style.maxHeight = "";
+    }
   }
   return zoom;
 }
@@ -85,10 +93,14 @@ export function placeZoomedPopup(pop, anchorEl, opts = {}) {
   // high zoom it can exceed the cap - a 1409px popup on a 1350px window, hanging
   // off the right edge with the left clamp unable to save it. The ceiling has to
   // be worked out FIRST and the floor clamped under it.
+  // Always APPLY the ceiling, not just compute it. Omitting baseMaxWidthPx used
+  // to mean the 90vw figure was used to clamp min-width but never enforced as a
+  // real max-width, so a long-content popup could still outgrow the window and
+  // the left clamp would then pin it at `margin` with its right edge off screen.
   const maxW = opts.baseMaxWidthPx
     ? Math.min(Math.round(window.innerWidth * 0.9), Math.round(opts.baseMaxWidthPx * zoom))
     : Math.round(window.innerWidth * 0.9);
-  if (opts.baseMaxWidthPx) pop.style.maxWidth = maxW + "px";
+  pop.style.maxWidth = maxW + "px";
   if (opts.anchorWidthIsMin !== false) {
     const wantMin = Math.max(opts.minWidthPx || 200, Math.round(r.width));
     pop.style.minWidth = Math.min(wantMin, maxW) + "px";

@@ -120,6 +120,17 @@ function growNode(node, root) {
 function fitNode(node, root) {
   requestAnimationFrame(() => {
     if (!node._pixXyRoot) return;   // node removed between schedule and run
+    // ENFORCE the "never on workflow load" promise the comment above makes,
+    // rather than relying on every caller to honour it. The restore path in
+    // onNodeCreated re-shows a surviving grid, and a rebuilt node has no
+    // _pixXyGridDims, so grid.mjs's onload treats it as a NEW grid and calls
+    // back here. That used to be harmless because the image was 360px tall
+    // both when saved and when restored, so `desired` landed inside the 3px
+    // deadband; now the height tracks the node width and can be 1000px away,
+    // so the write fires, node.size (SERIALIZED) changes, and an untouched
+    // workflow is flagged modified (Vue Compat #18/#19). A no-op for every
+    // intended caller, all of which are user actions.
+    if (isGraphLoading()) return;
     // Use ComfyUI's own computeSize() for the height target - it accounts for
     // the title bar + slots + the widget's getMinHeight, so it matches what the
     // layout actually wants. (A hand-rolled measureContentHeight + fixed chrome
