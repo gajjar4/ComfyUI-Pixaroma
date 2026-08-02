@@ -902,6 +902,7 @@ const HELP = {
           "`Mode` switches between `Save` (files are written on every run) and `Preview` (the images show on the node but nothing goes to your folder; frames use ComfyUI's temporary folder, cleared on restart). So the node can also replace a preview node while you iterate.",
           "`Copy`, `Open`, and `Folder` sit in the button row: Copy puts the shown image on your clipboard, Open shows it in a new browser tab, Folder opens the save location in your file explorer (the window can appear on the taskbar instead of in front; that is a Windows limitation). Right-clicking the preview image gives the same `Open image`, `Copy image`, and `Save image` (download) options.",
           "Right-click the node for `Save Image settings`: date style (the order the + Date chip inserts, e.g. dd-MM-yyyy), counter digits (how many zeros %counter% uses), JPG quality, workflow embedding, and Civitai generation info. `Reset node size` in the same menu returns the node to its default size.",
+          "If ComfyUI itself was started with `--disable-metadata`, nothing is written into your images: no workflow, no prompt, no Civitai info, whatever the settings above say. That is a ComfyUI-wide switch you would have added yourself, and it is off unless you did.",
         ],
       },
       {
@@ -951,7 +952,7 @@ const HELP = {
     sections: [
       {
         heading: "What it does",
-        body: "Shows every image in a batch as thumbnails on the node. Click a thumbnail to expand it; use the `◀ ▶` arrow keys (or click the image) to flip through the batch; press `Esc` to collapse. Toggle `Strip` (one row) and `Grid` (fills the body) layouts with the small icon in the preview's top-right corner.\n\nFour buttons act on the selected frame: `Save Disk` saves to a folder you choose, `Save Output` writes to ComfyUI's output folder, `Copy` puts the frame on your clipboard, `Open` opens it in a new tab. Both Save buttons embed the workflow into the PNG so you can drag it back in later.\n\nSet `save_mode` to `save` and the node becomes a drop-in for the native Save Image node: every frame is written to output on each Run.",
+        body: "Shows every image in a batch as thumbnails on the node. Click a thumbnail to expand it; use the `◀ ▶` arrow keys (or click the image) to flip through the batch; press `Esc` to collapse. Toggle `Strip` (one row) and `Grid` (fills the body) layouts with the small icon in the preview's top-right corner.\n\nFour buttons act on the selected frame: `Save Disk` saves to a folder you choose, `Save Output` writes to ComfyUI's output folder, `Copy` puts the frame on your clipboard, `Open` opens it in a new tab. Both Save buttons embed the workflow into the PNG so you can drag it back in later.\n\nSet `save_mode` to `save` and the node becomes a drop-in for the native Save Image node: every frame is written to output on each Run.\n\nIf ComfyUI itself was started with `--disable-metadata`, nothing is written into your images: no workflow, no prompt, no Civitai info. That is a ComfyUI-wide switch you would have added yourself, and it is off unless you did.",
       },
       {
         heading: "How to use",
