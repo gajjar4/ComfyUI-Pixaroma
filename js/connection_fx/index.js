@@ -1,4 +1,5 @@
 import { app } from "/scripts/app.js";
+import { slotAccepts } from "../shared/slot_types.mjs";
 
 const SETTING_ID = "Pixaroma.Connection.FX";
 const PROXIMITY_RADIUS = 110;
@@ -90,9 +91,11 @@ function getConnectingInfo() {
 }
 
 function typesCompatible(a, b) {
-  if (!a || !b) return true;
-  if (a === "*" || b === "*") return true;
-  return a === b;
+  // slotAccepts, not "a === b": a ComfyUI multi-type input arrives as the
+  // comma-joined "FLOAT,INT,BOOLEAN" (core's Math Expression), so an equality
+  // test left the magnets dark on exactly the slots the drag COULD land on.
+  // It keeps the "" / "*" wildcard behaviour this used to have (Vue Compat #22).
+  return slotAccepts(a, b);
 }
 
 function isVueNodes() {
