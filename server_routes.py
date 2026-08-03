@@ -28,6 +28,16 @@ from .nodes._bg_removal_helpers import (
     is_birefnet_model_id,
     run_birefnet_on_pil,
 )
+from .nodes._path_guard import (
+    is_path_under as _is_path_under,
+    safe_join as _safe_join,
+    folder_allowed as _pix_folder_allowed,
+    remember_folder as _pix_remember_folder,
+    denied_message as _pix_denied_message,
+    comfy_roots as _pix_comfy_roots,
+    remembered_folders as _pix_remembered_folders,
+    prescreen as _pix_prescreen,
+)
 from .nodes._font_catalog import full_catalog as _font_full_catalog
 from .nodes._font_catalog import (
     get_custom_fonts_dir as _font_custom_dir,
@@ -513,6 +523,28 @@ def _decode_image(b64_data: str) -> Image.Image | None:
         return img
     except Exception:
         return None
+
+
+_MAX_IMAGE_EDGE = 16384
+
+
+def _decode_bare_b64_image(b64_raw: str):
+    """Decode a BARE base64 image body (no data: prefix) with the SAME
+    decompression-bomb guard _decode_image applies.
+
+    Exists because /pixaroma/remove_bg hand-rolled its decode and kept only the
+    byte cap, dropping the dimension check every other decode site has
+    (2026-08-03 audit). A ~89 Mpx PNG compresses to well under the 50 MB cap and
+    then goes straight into a BiRefNet / rembg forward pass, so the missing
+    check was the difference between a rejected request and an OOM.
+    """
+    img = Image.open(io.BytesIO(base64.b64decode(b64_raw)))
+    if img.width > _MAX_IMAGE_EDGE or img.height > _MAX_IMAGE_EDGE:
+        raise ValueError(
+            f"image is {img.width}x{img.height}; the limit is "
+            f"{_MAX_IMAGE_EDGE}x{_MAX_IMAGE_EDGE}"
+        )
+    return img
 
 
 def _embed_workflow_metadata(workflow, prompt) -> PngInfo:
@@ -1158,8 +1190,7 @@ async def remove_bg(request):
     # the Pixaroma loader instead of rembg. No rembg dep required.
     if is_birefnet_model_id(model):
         try:
-            input_data = base64.b64decode(b64_data)
-            input_image = Image.open(io.BytesIO(input_data))
+            input_image = _decode_bare_b64_image(b64_data)
             print(f"[Pixaroma] AI Remove Background: BiRefNet {model!r} on {input_image.size[0]}x{input_image.size[1]}...")
             output_image = run_birefnet_on_pil(input_image, model)
             buffered = io.BytesIO()
@@ -1215,8 +1246,7 @@ async def remove_bg(request):
     try:
         session, model_used = _open_session(model)
 
-        input_data = base64.b64decode(b64_data)
-        input_image = Image.open(io.BytesIO(input_data))
+        input_image = _decode_bare_b64_image(b64_data)
         print(f"[Pixaroma] AI Remove Background: processing {input_image.size[0]}x{input_image.size[1]} image with '{model_used}'...")
         output_image = remove(input_image, session=session)
 
@@ -1520,71 +1550,10 @@ async def api_xy_plot_restyle(request):
     return web.json_response({"status": "success", "filename": name})
 
 
-def _is_path_under(child: str, *parents: str) -> bool:
-    """Return True iff `child` is inside ANY of the given parent directories.
-
-    STRICT realpath-on-both-sides is the primary and usually the ONLY test, so
-    ordinary paths behave exactly as they always have. A LEXICAL (abspath) test
-    runs as a fallback for one narrow case: when the strict comparison could not
-    even be made because the two sides resolved onto DIFFERENT DRIVES.
-
-    That case is real and was a live bug (2026-07-25): splitting models across
-    disks by junctioning a subfolder (e.g. models\\loras\\sd15 -> another drive) makes
-    realpath(child) land on another drive than realpath(parent), os.path.commonpath
-    raises ValueError("Paths don't have the same drive"), and we failed closed - so
-    every LoRA behind such a junction reported "LoRA not found" (no info, no
-    thumbnail, no Civitai lookup) while the very same file loaded and generated
-    normally. This helper is SHARED, so Prompt Reader / Save Image / XY Plot had
-    the same blind spot.
-
-    Gating the lexical branch behind the cross-drive outcome is deliberate and
-    load-bearing: a same-drive symlink that escapes a root is still refused,
-    exactly as before, so the accepted surface grows ONLY by "a symlink pointing
-    at another disk" - which is precisely the setup we must support. abspath
-    collapses "..", so ../../ traversal can never escape either branch, and a
-    remote caller only ever supplies the name, never the root.
-    """
-    if not child or not isinstance(child, str):
-        return False
-    try:
-        child_abs = os.path.abspath(child)
-        child_real = os.path.realpath(child)
-    except (OSError, ValueError, TypeError):
-        return False
-    for p in parents:
-        if not p or not isinstance(p, str):
-            continue
-        # 1) STRICT: realpath on both sides. This is the original behaviour and
-        #    stays the ONLY test for every ordinary path, so nothing is widened.
-        cross_drive = False
-        try:
-            parent_real = os.path.realpath(p)
-            if os.path.commonpath([child_real, parent_real]) == parent_real:
-                return True
-        except ValueError:
-            # "Paths don't have the same drive" - either an unrelated root, or the
-            # junction case below. Only this outcome unlocks the lexical fallback.
-            cross_drive = True
-        except (OSError, TypeError):
-            continue
-        # 2) LEXICAL fallback, ONLY when the strict test was defeated by a
-        #    cross-drive resolution - i.e. a junction/symlink pointing at another
-        #    disk, the split-models-across-drives setup. abspath collapses "..",
-        #    so traversal still cannot escape; normcase makes it case-insensitive
-        #    on Windows (abspath, unlike realpath, does not normalise case).
-        #    Keeping this branch behind `cross_drive` matters: a same-drive symlink
-        #    that escapes a root is still refused, exactly as before.
-        if not cross_drive:
-            continue
-        try:
-            parent_abs = os.path.abspath(p)
-            c = os.path.normcase(child_abs)
-            pa = os.path.normcase(parent_abs)
-            if os.path.commonpath([c, pa]) == pa:
-                return True
-        except (OSError, ValueError, TypeError):
-            continue
-    return False
+# _is_path_under used to be DEFINED here. It moved to nodes/_path_guard.py
+# (2026-08-03) and is imported at the top of this file, so the nodes and the
+# routes share ONE copy of the containment logic instead of two that drift.
+# All existing call sites below are unchanged - same name, same behaviour.
 
 
 @PromptServer.instance.routes.get("/pixaroma/api/prompt_reader/extract")
@@ -1703,8 +1672,24 @@ async def api_lif_list(request):
     hdrs = {"Cache-Control": "no-store"}
     folder = request.query.get("path", "")
     recursive = request.query.get("recursive", "0") == "1"
+    # prescreen BEFORE isdir: on Windows, isdir on \\host\share alone opens an
+    # SMB connection and leaks an NTLM hash, so a UNC value must be judged
+    # lexically before any filesystem call touches it.
+    if not _pix_prescreen(folder):
+        return web.json_response(
+            {"ok": False, "message": _pix_denied_message(folder), "denied": True, "files": []},
+            headers=hdrs,
+        )
     if not folder or not os.path.isdir(folder):
         return web.json_response({"ok": False, "message": "Folder not found.", "files": []}, headers=hdrs)
+    # Containment (2026-08-03, ComfyUI-Manager PR #3118). This route is
+    # unauthenticated, so without this `?path=C:\&recursive=1` enumerated every
+    # image on the host and /thumb then served them back as JPEG bytes.
+    if not _pix_folder_allowed(folder):
+        return web.json_response(
+            {"ok": False, "message": _pix_denied_message(folder), "denied": True, "files": []},
+            headers=hdrs,
+        )
     real = os.path.realpath(folder)
     try:
         import asyncio
@@ -1731,8 +1716,17 @@ async def api_lif_thumb(request):
     """Serve a small JPEG thumbnail for one image. ?path=<folder>&file=<rel>"""
     folder = request.query.get("path", "")
     rel = request.query.get("file", "")
+    if not _pix_prescreen(folder):      # before isdir - see the list route
+        return web.Response(status=403)
     if not folder or not rel or not os.path.isdir(folder):
         return web.Response(status=404)
+    # The _is_path_under below only proves the file sits inside the folder the
+    # CALLER named, which is no containment at all while `folder` is arbitrary
+    # (2026-08-03, ComfyUI-Manager PR #3118: this served any image-extension
+    # file on the host back as a JPEG). Root the folder first, then keep the
+    # existing per-file check so `rel` still cannot climb out of it.
+    if not _pix_folder_allowed(folder):
+        return web.Response(status=403)
     full = os.path.realpath(os.path.join(folder, rel))
     if (
         not _is_path_under(full, folder)
@@ -1757,29 +1751,56 @@ async def api_lif_thumb(request):
 
 @PromptServer.instance.routes.get("/pixaroma/api/load_images_folder/browse")
 async def api_lif_browse(request):
-    """Navigate the server filesystem for the in-app folder picker.
-    ?path=<dir>  (empty = list drives on Windows / '/' on POSIX).
+    """Navigate the server filesystem for the in-app folder picker, WITHIN the
+    approved folders only. ?path=<dir> (empty = list the approved roots).
     Returns {ok, path, parent, dirs:[{name, path, images}]}; images = -1 means
-    'not counted' (skipped for folders with many sub-folders, to stay fast)."""
+    'not counted' (skipped for folders with many sub-folders, to stay fast).
+
+    Containment added 2026-08-03 (ComfyUI-Manager PR #3118): this used to walk
+    anything, so an unauthenticated caller could map the whole disk (and reach
+    UNC paths, which on Windows leaks an NTLM hash just by being stat'd).
+
+    The empty-path branch used to enumerate drive letters; it now lists the
+    approved roots instead. That is both the containment AND a better landing
+    screen - the user sees "output", "D:\\MyArt" rather than every drive. To add
+    somewhere new they use the Browse button, which opens the real OS dialog and
+    approves whatever they pick (see nodes/_path_guard)."""
     path = request.query.get("path", "")
     try:
         if not path:
             dirs = []
-            if os.name == "nt":
-                import string
-                for letter in string.ascii_uppercase:
-                    d = f"{letter}:\\"
-                    if os.path.isdir(d):
-                        dirs.append({"name": d, "path": d, "images": -1})
-            else:
-                dirs.append({"name": "/", "path": "/", "images": -1})
+            seen = set()
+            for d in list(_pix_comfy_roots()) + list(_pix_remembered_folders()):
+                try:
+                    if not d or not os.path.isdir(d):
+                        continue
+                    key = os.path.normcase(os.path.realpath(d))
+                    if key in seen:
+                        continue
+                    seen.add(key)
+                except OSError:
+                    continue
+                dirs.append({"name": os.path.basename(d.rstrip("\\/")) or d,
+                             "path": d, "images": -1})
             return web.json_response({"ok": True, "path": "", "parent": None, "dirs": dirs})
 
+        if not _pix_prescreen(path):    # before isdir - see the list route
+            return web.json_response(
+                {"ok": False, "message": _pix_denied_message(path), "denied": True, "dirs": []}
+            )
         if not os.path.isdir(path):
             return web.json_response({"ok": False, "message": "Folder not found.", "dirs": []})
+        if not _pix_folder_allowed(path):
+            return web.json_response(
+                {"ok": False, "message": _pix_denied_message(path), "denied": True, "dirs": []}
+            )
         real = os.path.realpath(path)
         parent = os.path.dirname(real)
         if parent == real:  # already at a drive / filesystem root
+            parent = ""
+        # Do not offer an "up" that would just be refused: once we are at the
+        # top of an approved root, Up returns to the roots list ("") instead.
+        if parent and not _pix_folder_allowed(parent):
             parent = ""
 
         subdirs = []
@@ -1946,6 +1967,16 @@ async def api_lif_pick_native(request):
         if path is None:
             return web.json_response({"ok": False, "busy": True})
         if path and os.path.isdir(path):
+            # THE approval point for the whole allowlist (see nodes/_path_guard).
+            # A folder that came back from the native OS dialog was chosen by a
+            # human at the keyboard: an attacker can make this dialog APPEAR,
+            # but the selection and the OK click happen in the operating system,
+            # outside anything a request can influence. That is the only
+            # authorisation signal available to us, so this is the ONLY place
+            # allowed to call remember_folder. Do not call it from a route that
+            # takes the folder from the request body - that would let an
+            # attacker approve their own target and make the guard decorative.
+            _pix_remember_folder(path)
             return web.json_response({"ok": True, "path": path})
         return web.json_response({"ok": False, "cancelled": True})
     except Exception as e:
@@ -1992,10 +2023,24 @@ async def api_save_image_next_counter(request):
         digits = 3
 
     def _scan():
+        # prescreen the RAW string first: _resolve_save_folder calls realpath,
+        # which on Windows already reaches out over SMB for a UNC path.
+        if not _pix_prescreen(folder_raw):
+            return 1, "", True
         base, _inside = _resolve_save_folder(folder_raw)
+        # Containment (2026-08-03). Without this the preview was a directory
+        # read-oracle on ANY path: _resolve_save_folder deliberately accepts an
+        # absolute folder, and _next_counter lists it. It returns no bytes, but
+        # the max-match it reports leaks whether files exist anywhere on disk.
+        # The refusal returns a CONSTANT (1, "") so nothing about the folder -
+        # not even whether it exists - can be inferred from the answer, and a
+        # `denied` flag so the node's preview can say so instead of quietly
+        # showing a number that a Run would never produce.
+        if not _pix_folder_allowed(base):
+            return 1, "", True
         parts = [p for p in name.replace("\\", "/").split("/") if p]
         if not parts:
-            return 1, ""
+            return 1, "", False
         # Mirror the save-time order (node_save_image.py): %counter% in a
         # FOLDER segment resolves against existing sibling dirs FIRST, then
         # the FILE counter scans inside that resolved directory - so the
@@ -2010,15 +2055,17 @@ async def api_save_image_next_counter(request):
             parent = os.path.join(parent, seg)
         counter = _next_counter(parent, parts[-1])
         fname = parts[-1].replace("%counter%", f"{counter:0{digits}}")
-        return counter, "/".join(resolved_dirs + [fname])
+        return counter, "/".join(resolved_dirs + [fname]), False
 
     try:
         import asyncio
         loop = asyncio.get_running_loop()
-        counter, resolved = await loop.run_in_executor(None, _scan)
-        return web.json_response(
-            {"ok": True, "counter": counter, "resolved": resolved}
-        )
+        counter, resolved, denied = await loop.run_in_executor(None, _scan)
+        out = {"ok": True, "counter": counter, "resolved": resolved}
+        if denied:
+            out["denied"] = True
+            out["message"] = _pix_denied_message(str(folder_raw))
+        return web.json_response(out)
     except Exception as e:
         return web.json_response(
             {"ok": False, "message": str(e), "counter": 1, "resolved": ""}
@@ -2027,16 +2074,30 @@ async def api_save_image_next_counter(request):
 
 @PromptServer.instance.routes.post("/pixaroma/api/save_image/open_folder")
 async def api_save_image_open_folder(request):
-    """Open the OS file explorer at the node's save folder. Local-install QoL,
-    same trust level as the native folder dialog (the server IS the user's
-    machine); the path is resolved the same way the save does and must already
-    exist as a directory."""
+    """Open the OS file explorer at the node's save folder, IF that folder is
+    approved. Local-install QoL; the path is resolved the same way the save
+    does and must already exist as a directory.
+
+    Containment added 2026-08-03 (ComfyUI-Manager PR #3118). This route is
+    unauthenticated and was handing any absolute path to os.startfile /
+    xdg-open, so any web page could pop file-manager windows on the user's
+    desktop. Worse on Windows: a UNC path like \\\\attacker\\share makes the
+    os.path.isdir check ALONE reach out over SMB and leak an NTLM hash, before
+    startfile is even called - so the check has to come BEFORE the isdir, not
+    just before the launch. The sibling /workflows/reveal route already did
+    this correctly; this one is now consistent with it."""
     try:
         data = await request.json()
     except Exception:
         data = {}
     folder_raw = str(data.get("folder", "") or "")
+    if not _pix_prescreen(folder_raw):
+        return web.json_response(
+            {"ok": False, "message": _pix_denied_message(folder_raw), "denied": True}
+        )
     path, _inside = _resolve_save_folder(folder_raw)
+    if not _pix_folder_allowed(path):
+        return web.json_response({"ok": False, "message": _pix_denied_message(path), "denied": True})
     if not os.path.isdir(path):
         return web.json_response({
             "ok": False,

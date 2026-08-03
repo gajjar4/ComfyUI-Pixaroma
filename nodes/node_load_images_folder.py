@@ -19,6 +19,11 @@ import numpy as np
 import torch
 from PIL import Image, ImageOps, ImageSequence
 
+from ._path_guard import (
+    folder_allowed as _pix_folder_allowed,
+    prescreen as _pix_prescreen,
+    denied_message as _pix_denied_message,
+)
 from ._resize_helpers import _resize_frame
 
 
@@ -145,11 +150,23 @@ class PixaromaLoadImagesFolder:
         folder = state.get("folder", "") or ""
         selected = state.get("selected", []) or []
 
+        # CONTAINMENT (2026-08-03, ComfyUI-Manager PR #3118).
+        # The per-file check further down is correct, but it only ever proved
+        # each file sits inside `folder` - and `folder` itself comes from the
+        # hidden state blob, which an unauthenticated /prompt fully controls. So
+        # the node would happily read any PIL-decodable file on the host and
+        # hand it out on the `image` output. Root the FOLDER too.
+        # prescreen runs before isdir because isdir on a UNC path already leaks
+        # an NTLM hash over SMB on Windows.
+        if not _pix_prescreen(folder):
+            raise ValueError(_pix_denied_message(str(folder)))
         if not folder or not os.path.isdir(folder):
             raise ValueError(
                 "Load Images from Folder: folder not found. Pick a folder on the node "
                 "(type or paste a path, or use Browse)."
             )
+        if not _pix_folder_allowed(folder):
+            raise ValueError(_pix_denied_message(folder))
         if not selected:
             raise ValueError(
                 "Load Images from Folder: no images selected. Click 'Pick images' and "
@@ -214,6 +231,13 @@ class PixaromaLoadImagesFolder:
     def IS_CHANGED(cls, LoadImagesFolderState: str = ""):
         state = _parse_state(LoadImagesFolderState)
         folder = state.get("folder", "") or ""
+        # Same containment as load(): without it this was an mtime/existence
+        # oracle over any directory (blind - the digest is not returned to the
+        # caller - but it is the same class of bug, and IS_CHANGED is exactly
+        # the entry point that got missed on four other nodes). A refused folder
+        # hashes as a constant, so the node simply does not re-run on it.
+        if not _pix_prescreen(folder) or not _pix_folder_allowed(folder):
+            return hashlib.sha256(b"pixaroma:folder-not-approved").hexdigest()
         real_folder = os.path.realpath(folder)
         # Everything except `selected` (options + resize) goes in as a stable blob;
         # selected files contribute their per-file mtime so edits on disk re-run.

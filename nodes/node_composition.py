@@ -7,6 +7,7 @@ import time
 import folder_paths
 from server import PromptServer
 from .node_ref import any_type, FlexibleOptionalInputType
+from ._path_guard import safe_join
 from ._fx_adjust_engine import apply_fx, is_neutral, _fx_seed
 from ._bg_removal_helpers import (
     is_birefnet_model_id,
@@ -381,9 +382,11 @@ class PixaromaImageComposition:
             meta = json.loads(project_json)
             composite_path = meta.get("composite_path", "")
             if composite_path:
-                input_dir = folder_paths.get_input_directory()
-                full_path = os.path.join(input_dir, composite_path)
-                if os.path.exists(full_path):
+                # safe_join, not os.path.join - see _path_guard.safe_join.
+                # load_composite / _load_server_image were already guarded;
+                # this IS_CHANGED twin was not.
+                full_path = safe_join(folder_paths.get_input_directory(), composite_path)
+                if full_path and os.path.exists(full_path):
                     return os.path.getmtime(full_path)
         except Exception:
             pass

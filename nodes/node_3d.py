@@ -5,6 +5,7 @@ import os
 import json
 import folder_paths
 from .node_ref import any_type, FlexibleOptionalInputType
+from ._path_guard import safe_join
 
 class Pixaroma3D:
     @classmethod
@@ -48,9 +49,13 @@ class Pixaroma3D:
             meta = json.loads(scene_json)
             composite_path = meta.get("composite_path", "")
             if composite_path:
-                input_dir = folder_paths.get_input_directory()
-                full_path = os.path.join(input_dir, composite_path)
-                if os.path.exists(full_path):
+                # safe_join, not os.path.join: composite_path comes from the
+                # hidden state blob and /prompt is unauthenticated, so an
+                # absolute value would discard input_dir entirely. See
+                # _path_guard.safe_join. (load_render below was already guarded;
+                # this IS_CHANGED twin was the one that got missed.)
+                full_path = safe_join(folder_paths.get_input_directory(), composite_path)
+                if full_path and os.path.exists(full_path):
                     return os.path.getmtime(full_path)
         except Exception:
             pass

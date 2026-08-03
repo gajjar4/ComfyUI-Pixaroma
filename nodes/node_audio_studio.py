@@ -16,6 +16,7 @@ Source resolution at exec time:
 from __future__ import annotations
 
 import json
+import os
 import wave
 from pathlib import Path
 
@@ -30,9 +31,35 @@ from ._audio_react_engine import (
     params_from_dict,
     validate_params,
 )
+from ._path_guard import is_path_under
 
 
 PIXAROMA_INPUT_ROOT = Path(folder_paths.get_input_directory()) / "pixaroma"
+
+
+def _resolve_inline(rel_path, what: str) -> str:
+    """Resolve an editor-supplied relative path INSIDE PIXAROMA_INPUT_ROOT.
+
+    SECURITY (fixed 2026-08-03, reported on ComfyUI-Manager PR #3118): these
+    paths arrive in the hidden `studio_json` widget, and /prompt is
+    unauthenticated, so the value is attacker-controlled. The old code did
+    `PIXAROMA_INPUT_ROOT / rel_path`, and BOTH pathlib's `/` and os.path.join
+    DISCARD the base when the right-hand side is absolute
+    (Path('/base')/'/etc/passwd' == Path('/etc/passwd')), so an absolute
+    rel_path read any file on the host and returned it as a tensor - which the
+    graph could then route to a Save or Preview node. '../' escaped too.
+
+    Containment is the realpath check, not string inspection: rejecting '..'
+    by hand misses symlinks and the absolute-path case above.
+    """
+    root = str(PIXAROMA_INPUT_ROOT)
+    candidate = os.path.realpath(os.path.join(root, str(rel_path or "")))
+    if not is_path_under(candidate, root):
+        raise ValueError(
+            f"[Pixaroma] AudioReact -- refusing to read {what} from outside the "
+            f"plugin's input folder. Re-open the editor and re-pick the {what}."
+        )
+    return candidate
 
 
 def _migrate_cfg(cfg: dict) -> dict:
@@ -47,8 +74,8 @@ def _migrate_cfg(cfg: dict) -> dict:
 def _load_inline_image(rel_path: str) -> torch.Tensor:
     """Load PNG/JPG/WebP from input/pixaroma/audio_studio/... -> IMAGE tensor
     [1, H, W, 3] in [0, 1]."""
-    abs_path = PIXAROMA_INPUT_ROOT / rel_path
-    if not abs_path.exists():
+    abs_path = _resolve_inline(rel_path, "image")
+    if not os.path.exists(abs_path):
         raise ValueError(
             f"[Pixaroma] AudioReact -- inline image missing at {abs_path}. "
             f"Re-open the editor and re-pick the image."
@@ -65,8 +92,8 @@ def _load_inline_audio(rel_path: str) -> dict:
     before upload via the Web Audio API + an inline 16-bit PCM writer.
     Keeps the Python side dependency-free (stdlib `wave` module).
     """
-    abs_path = PIXAROMA_INPUT_ROOT / rel_path
-    if not abs_path.exists():
+    abs_path = _resolve_inline(rel_path, "audio")
+    if not os.path.exists(abs_path):
         raise ValueError(
             f"[Pixaroma] AudioReact -- inline audio missing at {abs_path}. "
             f"Re-open the editor and re-pick the audio."

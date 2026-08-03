@@ -5,6 +5,7 @@ import os
 import json
 import folder_paths
 from .node_ref import any_type, FlexibleOptionalInputType
+from ._path_guard import safe_join
 
 
 class PixaromaPaint:
@@ -54,9 +55,10 @@ class PixaromaPaint:
             meta = json.loads(paint_json)
             composite_path = meta.get("composite_path", "")
             if composite_path:
-                input_dir = folder_paths.get_input_directory()
-                full_path = os.path.join(input_dir, composite_path)
-                if os.path.exists(full_path):
+                # safe_join, not os.path.join - see _path_guard.safe_join.
+                # load_painting below was already guarded; this twin was not.
+                full_path = safe_join(folder_paths.get_input_directory(), composite_path)
+                if full_path and os.path.exists(full_path):
                     return os.path.getmtime(full_path)
         except Exception:
             pass

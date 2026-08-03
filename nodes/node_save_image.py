@@ -20,6 +20,11 @@ import folder_paths
 import numpy as np
 from PIL import Image
 
+from ._path_guard import (
+    folder_allowed as _pix_folder_allowed,
+    prescreen as _pix_prescreen,
+    denied_message as _pix_denied_message,
+)
 from ._save_helpers import (
     _build_pnginfo,
     _expand_date_tokens,
@@ -275,7 +280,24 @@ class PixaromaSaveImage:
 
         h = int(images.shape[1])
         w = int(images.shape[2])
-        folder_abs, inside_output = _resolve_save_folder(state.get("folder", ""))
+        folder_raw = state.get("folder", "")
+        # CONTAINMENT (2026-08-03, ComfyUI-Manager PR #3118).
+        # `folder` arrives in the hidden SaveImageState blob and /prompt is
+        # unauthenticated, so this string is attacker-controlled. It used to be
+        # honoured verbatim for any absolute path: `inside_output` was computed
+        # but only ever picked the UI payload shape, never gated the write. A
+        # crafted prompt could therefore drop PNG/JPG files anywhere the ComfyUI
+        # process can write. Saving to your own folders still works - see
+        # _path_guard: anything you picked with the Browse button is approved,
+        # and so are ComfyUI's own folders.
+        # prescreen first (raw string, no filesystem touch) because
+        # _resolve_save_folder calls realpath, which reaches out over SMB for a
+        # UNC path before we would otherwise get a look at it.
+        if not _pix_prescreen(folder_raw):
+            raise ValueError(_pix_denied_message(str(folder_raw)))
+        folder_abs, inside_output = _resolve_save_folder(folder_raw)
+        if not _pix_folder_allowed(folder_abs):
+            raise ValueError(_pix_denied_message(folder_abs))
 
         # Saving switched off: the node acts as a pure PREVIEW. Frames go to
         # ComfyUI's temp/ folder (auto-cleared on restart, /view-servable,

@@ -134,7 +134,7 @@ export function buildRoot() {
   folderInput.type = "text";
   folderInput.spellcheck = false;
   folderInput.placeholder = "ComfyUI output folder";
-  folderInput.title = "Where the images are saved. Type or paste any path on your computer, or click Browse. Empty = ComfyUI's output folder.";
+  folderInput.title = "Where the images are saved. Empty = ComfyUI's output folder. To use a folder of your own, click Browse and pick it once - that approves it for good, and you can type or paste it from then on.";
   const browseBtn = el("button", "pix-si-btn");
   browseBtn.type = "button";
   const browseLbl = el("span", null, "Browse");
@@ -144,7 +144,7 @@ export function buildRoot() {
   rowF.appendChild(browseBtn);
   secFolder.appendChild(rowF);
   secFolder.appendChild(
-    el("div", "pix-si-hint", "Leave empty to use the ComfyUI output folder. You can paste any path.")
+    el("div", "pix-si-hint", "Leave empty for the ComfyUI output folder. For your own folder, click Browse once.")
   );
   inner.appendChild(secFolder);
 

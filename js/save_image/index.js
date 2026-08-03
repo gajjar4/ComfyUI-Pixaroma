@@ -570,6 +570,10 @@ function scheduleCounterFetch(node, folderRaw, nameWithExt, digits) {
       // the server also resolves %counter% in FOLDER segments (sibling-dir
       // scan, exactly like the save) - the exact path a Run would create
       node._pixSiCntResolved = (j && j.resolved) || "";
+      // The folder is not on the approved list, so a Run would refuse it. Say
+      // so HERE rather than letting the preview show a path that will never be
+      // written - the whole point of this line is to be believable.
+      node._pixSiCntDenied = !!(j && j.denied);
       node._pixSiCntResolvedFor = key;
       updatePreview(node);
     } catch {}
@@ -612,7 +616,22 @@ function updatePreview(node) {
     (folder ? folder.replace(/\//g, "\\") : "…\\ComfyUI\\output") +
     "\\" +
     rel.split("/").filter(Boolean).join("\\");
-  ui.prevPath.textContent = display;
+  // Denial is keyed to the same cntKey as the resolved path, so a stale answer
+  // for a folder the user has since edited can never colour the new one.
+  if (
+    node._pixSiCntDenied &&
+    node._pixSiCntResolvedFor === cntKey(st.folder || "", s + ext, digits)
+  ) {
+    ui.prevPath.textContent = "This folder is not approved - click Browse and pick it once";
+    ui.prevPath.style.color = "#f66744";
+    ui.prevPath.title =
+      "Pixaroma only writes to ComfyUI's own folders and to folders you picked " +
+      "with Browse. Picking this folder in the system dialog approves it for good.";
+  } else {
+    ui.prevPath.textContent = display;
+    ui.prevPath.style.color = "";
+    ui.prevPath.title = "";
+  }
   scheduleCounterFetch(node, st.folder || "", s + ext, digits);
 }
 
