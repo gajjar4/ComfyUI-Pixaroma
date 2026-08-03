@@ -5,7 +5,7 @@ import { applyAdaptiveCanvasOnly, isVueNodes, installResizeFloor,
 import { installNodeAccent, registerNodeSettings, ACC } from "../shared/node_settings.mjs";
 import {
   STATE_PROP, HIDDEN_INPUT_NAME, MULTIPLES, DEFAULT_STATE,
-  readState, writeState, nextMultiple, multipleLabel,
+  readState, writeState, nextMultiple, multipleLabel, previewSize,
 } from "./state.mjs";
 import { openPortraitPanel, closePortraitPanelFor } from "./settings.mjs";
 
@@ -178,6 +178,15 @@ function injectCSS() {
       mask: url("/pixaroma/assets/icons/note/gear.svg") center/contain no-repeat;
     }
     .pix-pl-gear:hover::before { background: ${ACC}; }
+    /* The size the node will actually send. Sits after the gear, in the space
+       left over before the output labels, and ellipsises rather than pushing
+       into them on a narrow node. */
+    .pix-pl-preview {
+      flex: 0 1 auto; min-width: 0; height: 20px; line-height: 20px;
+      font-size: 11px; color: ${ACC}; white-space: nowrap;
+      overflow: hidden; text-overflow: ellipsis;
+    }
+    .pix-pl-preview.dim { color: rgba(255,255,255,0.4); font-style: italic; }
   `;
   document.head.appendChild(style);
 }
@@ -308,6 +317,10 @@ function buildTopRow(node) {
     node.graph?.setDirtyCanvas?.(true, true);
   });
 
+  // What will actually go out, so a change is visible before you run.
+  const prev = document.createElement("span");
+  prev.className = "pix-pl-preview";
+
   function refresh() {
     const m = readState(node).multiple;
     step.textContent = multipleLabel(m);
@@ -315,9 +328,15 @@ function buildTopRow(node) {
     step.title = m > 0
       ? `Sizes are rounded to the nearest ${m} pixels. Click for the next step.`
       : "Sizes go out exactly as typed. Click to round them to 8, 16, 32 or 64.";
+    const p = previewSize(node);
+    prev.textContent = p.text;
+    prev.classList.toggle("dim", p.wired);
+    prev.title = p.wired
+      ? "A size is coming from a wire, so it is only known when you run."
+      : `This node will send ${p.text}`;
   }
 
-  row.append(step, gear);
+  row.append(step, gear, prev);
   refresh();
   return { row, refresh };
 }
@@ -359,7 +378,10 @@ function buildRoot(node) {
     b.addEventListener("click", (e) => {
       e.stopPropagation();
       writeOrient(node, b.dataset.value);
-      refresh();
+      // The WHOLE face, not just the pills: the preview in the band shows the
+      // orientation applied, so refreshing only these two left it showing the
+      // portrait size after clicking Landscape.
+      (node._pixPlRefresh || refresh)();
       node.graph?.setDirtyCanvas?.(true, true);
     });
   }
@@ -387,6 +409,21 @@ function setupNode(node) {
   // Measured: a node saved with [null,900,1300,""] reloaded as width=null,
   // height=900. So the band floats out of the flow instead (the LoRA Loader
   // technique) and the widget list is left exactly as it was.
+  // The preview has to follow the two NATIVE number widgets as well as our own
+  // controls, so wrap their callbacks. Wrapping (not replacing) keeps whatever
+  // ComfyUI already had on them.
+  for (const name of ["width", "height"]) {
+    const w = node.widgets?.find((x) => x.name === name);
+    if (!w || w._pixPlWrapped) continue;
+    w._pixPlWrapped = true;
+    const orig = w.callback;
+    w.callback = function (...args) {
+      const r = orig?.apply(this, args);
+      node._pixPlRefresh?.();
+      return r;
+    };
+  }
+
   applyBandPlacement(node);
   watchBandPark(node);
   watchRenderer();
@@ -469,6 +506,16 @@ app.registerExtension({
       if (isVueNodes()) return;
       if (this.flags?.collapsed) return;
       if (this.size[0] < MIN_W) this.size[0] = MIN_W;
+    };
+
+    // Wiring a size in (or unplugging it) changes what the preview can honestly
+    // say, so repaint. DOM ONLY - it writes no serialized state, so it needs no
+    // isGraphLoading guard and cannot flag a workflow modified (Vue Compat #19).
+    const _origConnChange = nodeType.prototype.onConnectionsChange;
+    nodeType.prototype.onConnectionsChange = function () {
+      const r = _origConnChange?.apply(this, arguments);
+      queueMicrotask(() => this._pixPlRefresh?.());
+      return r;
     };
 
     const _origOnRemoved = nodeType.prototype.onRemoved;

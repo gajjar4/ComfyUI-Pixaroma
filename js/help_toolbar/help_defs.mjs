@@ -1226,7 +1226,11 @@ const HELP = {
           + "is one step. Off sends your numbers exactly as typed.\n\n"
           + "Each node keeps its own step, so one workflow can hold several set up differently. The "
           + "gear beside the button opens the same choice as a row of buttons, along with the node's "
-          + "colour.",
+          + "colour.\n\n"
+          + "Beside the gear the node shows the size it will actually send, like `896x1312`, and it "
+          + "updates as you change the step, flip the orientation or edit the numbers, so you can see "
+          + "the result before you run. If a size is coming in from a wire it says 'from input' "
+          + "instead, because the value is only known once the workflow runs.",
       },
       {
         heading: "Outputs",

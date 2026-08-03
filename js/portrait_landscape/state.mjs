@@ -52,3 +52,47 @@ export function nextMultiple(current) {
 export function multipleLabel(m) {
   return Number(m) > 0 ? `x${m}` : "Off";
 }
+
+/**
+ * The browser mirror of snap_to_multiple in nodes/node_portrait_landscape.py.
+ * Python is the authority - it is what actually runs - so a change here needs
+ * the same change there, checked by _portrait_landscape_test.py's parity block.
+ *
+ * Integer arithmetic, matching Python exactly: `(v + m//2) // m * m`. Doing it
+ * as `Math.round(v / m) * m` would bring float representation into a
+ * whole-pixel decision AND round halves the other way from Python on some
+ * values, so the face would promise a size the run did not produce.
+ */
+export function snapToMultiple(value, multiple) {
+  const v = Math.trunc(Number(value));
+  const m = Math.trunc(Number(multiple));
+  if (!Number.isFinite(v) || !Number.isFinite(m) || m <= 1) return v;
+  const snapped = Math.floor((v + Math.floor(m / 2)) / m) * m;
+  return Math.max(m, snapped);
+}
+
+/**
+ * What the node will actually send, for the little preview on the face.
+ * Returns { text, wired }. `wired` means a size is coming down a wire, so the
+ * browser cannot know it - we say so rather than show a number that is wrong.
+ */
+export function previewSize(node) {
+  const wired = (name) => {
+    const inp = (node?.inputs || []).find((i) => (i.widget?.name || i.name) === name);
+    return !!inp && inp.link != null;
+  };
+  if (wired("width") || wired("height")) return { text: "from input", wired: true };
+
+  const val = (name) => Number(node?.widgets?.find((w) => w.name === name)?.value);
+  const w = val("width");
+  const h = val("height");
+  if (!Number.isFinite(w) || !Number.isFinite(h)) return { text: "", wired: false };
+
+  const st = readState(node);
+  const sw = snapToMultiple(w, st.multiple);
+  const sh = snapToMultiple(h, st.multiple);
+  const lo = Math.min(sw, sh);
+  const hi = Math.max(sw, sh);
+  const [outW, outH] = st.orient === "landscape" ? [hi, lo] : [lo, hi];
+  return { text: `${outW}x${outH}`, wired: false };
+}
