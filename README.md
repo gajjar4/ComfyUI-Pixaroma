@@ -351,6 +351,13 @@ Master the Pixaroma suite with our video guides and workflow deep-dives:
 
 ## 🛠 Changelog
 
+### **August 3, 2026 · v1.4.82**
+- **Please update: Pixaroma now only reads and writes where you have said it can.** ComfyUI has no password on it, so anything able to reach it could ask a node to open or save a file anywhere on your computer. Pixaroma now stays inside ComfyUI's own input, output and temp folders, plus the folders you choose yourself. Found during a security review, and no report of it being used against anyone.
+- **Your own folders work exactly as before.** Click **Browse** on the node and pick the folder once: choosing it in the system window approves it for good, and you can type or paste that folder from then on. A network drive works the same way.
+- **The node warns you before you run**, not after. If a folder has not been approved yet, the "Will save as" line says so, instead of showing a path that would never be written.
+- **Nothing you already save to ComfyUI's own output folder changes** - that keeps working with no setup at all.
+- Running ComfyUI without a desktop, such as on a server or in Colab? There is no window to click, so approve your folders by editing **allowed_folders.json** in ComfyUI's user folder. The message on screen tells you where it is.
+
 ### **August 2, 2026 · v1.4.76–v1.4.81**
 - **Try Civitai works on more connections.** Some lookups came back as an unreadable reply because we only read the first part of Civitai's answer when it arrived in pieces, which depends on your connection and your distance from their servers. We now read all of it. Thank you to everyone who reported this and kept reporting it.
 - **Start ComfyUI with `--disable-metadata` and Pixaroma now writes nothing into your pictures**: no workflow, no prompt, no Civitai info. Before, only the video saver paid attention to that setting.
