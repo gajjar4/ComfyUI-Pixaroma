@@ -44,6 +44,11 @@ const LABEL_RESERVE = 62;
 // between the slots and the pill row.
 const CLASSIC_BAND_TOP = -94;
 
+// Left inset for the band's controls so they line up with the width/height
+// fields underneath. LiteGraph draws a native number widget inset further than
+// the DOM widget root is, so the band needs its own (larger) padding.
+const BAND_INSET = 11;
+
 const BTN_H = 30;
 const PAD = 6;
 const GAP = 6;
@@ -112,7 +117,10 @@ function injectCSS() {
     .pix-pl-toprow {
       display: flex; align-items: flex-start; justify-content: flex-start; gap: 5px;
       box-sizing: border-box; height: ${TOPROW_H}px;
-      padding: 0 0 0 ${PAD}px; background: transparent; user-select: none;
+      /* BAND_INSET, not PAD: LiteGraph insets a native number widget further
+         than the DOM widget root is inset, so at PAD the button sat ~5px left of
+         the width field below it and the edges did not line up. */
+      padding: 0 0 0 ${BAND_INSET}px; background: transparent; user-select: none;
       /* The band lies OVER both output rows. Transparent to the pointer so the
          real dots underneath stay hoverable and wireable; the two controls put
          it back for themselves. */
@@ -124,6 +132,12 @@ function injectCSS() {
        widget top, which is why it keeps the plain in-flow row instead. */
     .pix-pl-toprow.classic {
       position: absolute; left: 0; right: 0; top: ${CLASSIC_BAND_TOP}px;
+    }
+    /* NODES 2.0: parked inside the output-slot block, so it simply fills it -
+       no offset to measure and nothing to re-tune if the slot count changes. */
+    .pix-pl-toprow.parked {
+      position: absolute; inset: 0; height: auto; align-items: center;
+      padding-left: ${BAND_INSET}px;
     }
     .pix-pl-toprow > * { pointer-events: auto; }
     /* ComfyUI wraps every DOM widget in its own div, and THAT is what was
@@ -150,8 +164,12 @@ function injectCSS() {
     }
     /* The bundled gear SVG as a mask, never the emoji: an emoji is drawn by the
        OS, so it is a different shape and baseline on every platform. */
+    /* Same 20px box as the button beside it, with the icon centred inside, so
+       the two share a centre line. At 16px it was top-aligned to a 20px button
+       and read as sitting high. */
     .pix-pl-gear {
-      flex: none; width: 16px; height: 16px; padding: 0; margin: 0; line-height: 0;
+      flex: none; width: 20px; height: 20px; padding: 0; margin: 0;
+      display: flex; align-items: center; justify-content: center;
       background: none; border: none; cursor: pointer;
     }
     .pix-pl-gear::before {
@@ -187,8 +205,64 @@ function writeOrient(node, orient) {
 // above the widget top, so there it stays a plain row above the pills. Re-run
 // whenever the renderer might have changed. DOM only - it writes no node state,
 // so it can never dirty a saved workflow.
+// ── where the band lives, per renderer ──────────────────────────────────────
+// CLASSIC: float it up out of the widget flow into the slot dead-space.
+// NODES 2.0: Vue clips anything above the widget top, so the float is no use -
+// instead PARK the band inside the output-slot block itself. That block is the
+// dead-space, so the band lands exactly on it with no measuring at all, and it
+// keeps the node as short as the Classic one instead of adding a row at the
+// bottom. Same family as the Load Image Mini nudge, but simpler: Mini pulls the
+// block out of flow so its FIRST widget rises into the band, which would put
+// this node's width field there rather than the button.
+//
+// DOM only, wrapped in try/catch: if a future frontend defeats it the band falls
+// back to a plain row and the node still works.
+function vueSlotBlock(el) {
+  return el?.querySelector(".lg-slot--output")?.parentElement?.parentElement || null;
+}
+
+function parkBandInSlots(node) {
+  if (!isVueNodes()) return;
+  try {
+    const band = node._pixPlTopRow;
+    if (!band) return;
+    const el = document.querySelector(`.lg-node[data-node-id="${node.id}"]`);
+    const block = vueSlotBlock(el);
+    if (!block) return;
+    if (band.parentElement === block) return;   // steady state, no work
+    block.style.position = "relative";
+    block.appendChild(band);
+    band.classList.add("parked");
+  } catch { /* band stays a row in the body; the node still works */ }
+}
+
 function applyBandPlacement(node) {
-  node._pixPlTopRow?.classList.toggle("classic", !isVueNodes());
+  const classic = !isVueNodes();
+  const band = node._pixPlTopRow;
+  if (!band) return;
+  band.classList.toggle("classic", classic);
+  if (classic) {
+    // Coming back from Nodes 2.0 the band is still parked in the slot block,
+    // which does not exist in Classic - put it back at the top of our own root.
+    band.classList.remove("parked");
+    const root = node._pixPlRoot;
+    if (root && band.parentElement !== root) root.insertBefore(band, root.firstChild);
+  } else {
+    parkBandInSlots(node);
+  }
+}
+
+// Vue REPLACES the node element on re-render, which orphans the parked band, and
+// it can add the slots a frame late. A self-heal poll is required (the Load Image
+// Mini lesson); the parent check above makes the steady state one comparison.
+function watchBandPark(node) {
+  if (node._pixPlParkPoll) return;
+  node._pixPlParkPoll = setInterval(() => {
+    if (!node.graph) { clearInterval(node._pixPlParkPoll); node._pixPlParkPoll = null; return; }
+    if (isVueNodes()) parkBandInSlots(node);
+  }, 350);
+  requestAnimationFrame(() => parkBandInSlots(node));
+  setTimeout(() => parkBandInSlots(node), 150);
 }
 
 // Switching renderer fires no hook we can hang off, and the two placements are
@@ -314,6 +388,7 @@ function setupNode(node) {
   // height=900. So the band floats out of the flow instead (the LoRA Loader
   // technique) and the widget list is left exactly as it was.
   applyBandPlacement(node);
+  watchBandPark(node);
   watchRenderer();
 
   const measureHeight = () => WIDGET_H;
@@ -400,6 +475,7 @@ app.registerExtension({
     nodeType.prototype.onRemoved = function () {
       this._pixPlFloorOff?.();
       this._pixPlFloorOff = null;
+      if (this._pixPlParkPoll) { clearInterval(this._pixPlParkPoll); this._pixPlParkPoll = null; }
       closePortraitPanelFor(this);
       this._pixPlTopRow = null;
       return _origOnRemoved?.apply(this, arguments);
