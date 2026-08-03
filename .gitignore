@@ -221,3 +221,7 @@ CLAUDE.md
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# Local-only settings written at runtime (allowed folders, Civitai key fallback).
+# Never publish these - they contain the user's own paths and secrets.
+/user/

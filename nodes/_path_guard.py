@@ -178,8 +178,17 @@ def comfy_roots() -> list:
 
 
 def _config_path() -> str:
-    """<ComfyUI user dir>/pixaroma/allowed_folders.json (same home as the
-    Civitai key - outside this plugin's git working tree)."""
+    """<ComfyUI user dir>/pixaroma/allowed_folders.json.
+
+    The fallback (very old ComfyUI with no get_user_directory) goes to the
+    user's HOME, deliberately NOT to a `user/` folder inside this plugin.
+    The plugin folder is a git working tree, and this file lists the user's
+    personal folder paths - one `git add -A` from being published. Caught
+    2026-08-03 when a harness with no ComfyUI on the path silently created
+    `ComfyUI-Pixaroma/user/pixaroma/` inside the repo, where nothing was
+    ignoring it. (`user/` is now in .gitignore as a second line of defence,
+    which also covers the Civitai key's older same-shaped fallback.)
+    """
     base = None
     try:
         import folder_paths
@@ -187,9 +196,7 @@ def _config_path() -> str:
     except Exception:
         base = None
     if not base:
-        base = os.path.join(
-            os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "user"
-        )
+        base = os.path.join(os.path.expanduser("~"), ".pixaroma")
     d = os.path.join(base, "pixaroma")
     try:
         os.makedirs(d, exist_ok=True)
