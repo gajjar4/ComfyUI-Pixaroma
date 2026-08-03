@@ -4,6 +4,7 @@ import { isGraphLoading } from "../shared/graph_loading.mjs";
 import { registerNodeHelp } from "../shared/help.mjs";
 import { registerNodeSettings } from "../shared/node_settings.mjs";
 import { registerRunWorkflowPatcher, readNodeProp, writeNodeProp } from "../shared/run_seed_embed.mjs";
+import { narrowSlotType } from "../shared/slot_types.mjs";
 import {
   BRAND, MAX_SLIDERS, STATE_PROP,
   readState, normalizeSliders, syncOutputs, addSlider, resolveAutoType, resetRowOnDisconnect,
@@ -15,7 +16,9 @@ import {
 function isValueTarget(node, link) {
   const target = node.graph?.getNodeById?.(link.target_id);
   const inp = target?.inputs?.[link.target_slot];
-  const t = String(inp?.type || "").toUpperCase();
+  // Narrowed, not read raw: a multi-type input ("FLOAT,INT,BOOLEAN") matched none
+  // of these and the caller severed the wire a tick after it was drawn.
+  const t = narrowSlotType(inp?.type);
   if (t === "INT" || t === "FLOAT" || t === "BOOLEAN" || t === "COMBO" || t === "STRING") return true;
   // "*" or no type = a pass-through / any input (Reroute, Set, Preview) - a valid,
   // common routing target, so never sever it.

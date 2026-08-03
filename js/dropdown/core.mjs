@@ -7,6 +7,7 @@
 
 import { isGraphLoading } from "../shared/graph_loading.mjs";
 import { accentOf } from "../shared/node_settings.mjs";
+import { slotAccepts } from "../shared/slot_types.mjs";
 import { SOCKET_TYPES, normalizeType } from "./coerce.mjs";
 
 export const CLASS = "PixaromaDropdown";
@@ -260,8 +261,11 @@ export function dropIncompatibleLinks(node) {
     const slot = target?.inputs?.[link.target_slot];
     if (!slot) continue;
     const accepts = slot.type;
-    // "*" on either side means anything goes (Reroute, Set/Get, Preview Any).
-    if (accepts === "*" || want === "*" || accepts === want) continue;
+    // slotAccepts, not "===": it covers the "*" wildcard on either side (Reroute,
+    // Set/Get, Preview Any) AND a ComfyUI multi-type input, which arrives as the
+    // comma-joined "FLOAT,INT,BOOLEAN" (core's Math Expression). An equality test
+    // read that as one unknown name and cut a wire the user had just drawn.
+    if (slotAccepts(accepts, want)) continue;
     target.disconnectInput?.(link.target_slot);
     cut++;
   }

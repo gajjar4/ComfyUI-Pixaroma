@@ -14,6 +14,7 @@
 
 import { app } from "/scripts/app.js";
 import { globalAccent } from "../shared/node_settings.mjs";
+import { narrowSlotType } from "../shared/slot_types.mjs";
 
 export const STATE_PROP = "slidersState";
 export const MAX_SLIDERS = 16;          // must match MAX_SLIDERS in node_sliders.py
@@ -334,7 +335,11 @@ function resolveToggleOut(node, s, slotIndex, link) {
 
   const target = node.graph?.getNodeById?.(link.target_id);
   const inp = target?.inputs?.[link.target_slot];
-  const t = String(inp?.type || "").toUpperCase();
+  // narrowSlotType, not a bare read: a ComfyUI multi-type input arrives as the
+  // comma-joined string "FLOAT,INT,BOOLEAN" (core's Math Expression), which every
+  // equality test below would miss - and the caller then SEVERS the wire. A
+  // single-type slot comes back unchanged, so the comparisons stay as they were.
+  const t = narrowSlotType(inp?.type);
   if (t === "BOOLEAN") s.out = "bool";
   else if (t === "INT" || t === "FLOAT") s.out = "int";
   else return false;   // unknown target family: leave it auto
@@ -398,7 +403,11 @@ export function resolveAutoType(node, slotIndex, link) {
 
   const target = node.graph?.getNodeById?.(link.target_id);
   const inp = target?.inputs?.[link.target_slot];
-  const t = String(inp?.type || "").toUpperCase();
+  // narrowSlotType, not a bare read: a ComfyUI multi-type input arrives as the
+  // comma-joined string "FLOAT,INT,BOOLEAN" (core's Math Expression), which every
+  // equality test below would miss - and the caller then SEVERS the wire. A
+  // single-type slot comes back unchanged, so the comparisons stay as they were.
+  const t = narrowSlotType(inp?.type);
   const twname = inp?.widget?.name || inp?.name;
 
   // The control ALWAYS follows its target: decide the kind the target calls for,
