@@ -124,6 +124,8 @@ from .nodes.node_text_join import NODE_CLASS_MAPPINGS as _MAPS_TEXT_JOIN
 from .nodes.node_text_join import NODE_DISPLAY_NAME_MAPPINGS as _NAMES_TEXT_JOIN
 from .nodes.node_dropdown import NODE_CLASS_MAPPINGS as _MAPS_DROPDOWN
 from .nodes.node_dropdown import NODE_DISPLAY_NAME_MAPPINGS as _NAMES_DROPDOWN
+from .nodes.node_duration import NODE_CLASS_MAPPINGS as _MAPS_DURATION
+from .nodes.node_duration import NODE_DISPLAY_NAME_MAPPINGS as _NAMES_DURATION
 
 # development mode for loading additional refrence nodes
 dev_mode = False
@@ -199,6 +201,7 @@ NODE_CLASS_MAPPINGS = {
     **_MAPS_SIZES,
     **_MAPS_TEXT_JOIN,
     **_MAPS_DROPDOWN,
+    **_MAPS_DURATION,
 }
 
 # combine all node display name mappings
@@ -266,6 +269,7 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     **_NAMES_SIZES,
     **_NAMES_TEXT_JOIN,
     **_NAMES_DROPDOWN,
+    **_NAMES_DURATION,
 }
 
 # web directory for loading js files
