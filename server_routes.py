@@ -3239,3 +3239,63 @@ async def api_workflows_cover_get(request):
     # file that has gone now 404s straight away and the card falls back to the
     # drawn map.
     return web.FileResponse(path, headers={"Cache-Control": "no-cache"})
+
+
+# ── Duration Pixaroma: preview a CUSTOM formula ────────────────────────────
+# The recipe maths is mirrored in the browser so the node face updates the
+# instant you click. A user-written FORMULA is not mirrored on purpose: a second
+# expression evaluator in JS would agree with Python's simpleeval only until it
+# did not, and the node would then show one number and generate another. So the
+# face asks the one real evaluator what it will produce.
+#
+# Read-only and side-effect free: it evaluates the same sandboxed expression the
+# node itself would run, touches no filesystem and stores nothing. The formula
+# is attacker-supplied like every other input on this unauthenticated server,
+# which is exactly why it goes through _duration_helpers (simpleeval, capped
+# length, capped exponent) and never near eval().
+@PromptServer.instance.routes.post("/pixaroma/api/duration/preview")
+async def api_duration_preview(request):
+    import math
+
+    from .nodes._duration_helpers import (
+        frames_from_formula, frames_from_seconds, MAX_FORMULA_LEN,
+    )
+
+    try:
+        # aiohttp's content.read(N) returns only what is BUFFERED for a positive
+        # N, so it can silently truncate. json() reads the whole body; the size
+        # ceiling is the client_max_size aiohttp already enforces.
+        data = await request.json()
+    except Exception:
+        return web.json_response({"ok": False, "error": "bad request"}, status=400)
+    if not isinstance(data, dict):
+        return web.json_response({"ok": False, "error": "bad request"}, status=400)
+
+    formula = data.get("formula")
+    if not isinstance(formula, str) or len(formula) > MAX_FORMULA_LEN:
+        formula = ""
+
+    def _f(key, fallback):
+        try:
+            value = float(data.get(key, fallback))
+        except (TypeError, ValueError, OverflowError):
+            return float(fallback)
+        return value if math.isfinite(value) else float(fallback)
+
+    seconds = _f("seconds", 5.0)
+    fps = _f("fps", 24.0)
+    step = _f("step", 17)
+    plus = _f("plus", 5)
+    min_frames = _f("minFrames", 5)
+
+    frames = frames_from_formula(formula, seconds, fps)
+    ok = frames is not None
+    if not ok:
+        # Report the fallback the node itself would use, so the face can say
+        # what will really happen instead of only that something is wrong.
+        frames = frames_from_seconds(seconds, fps, step, plus, min_frames)
+    actual = (frames / fps) if fps > 0 else 0.0
+    return web.json_response(
+        {"ok": ok, "frames": int(frames), "actual": float(actual)},
+        headers={"Cache-Control": "no-store"},
+    )
