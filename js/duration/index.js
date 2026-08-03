@@ -25,6 +25,36 @@ registerNodeSettings(CLASS, {
   closeFor: (node) => closeDurationPanelFor(node),
 });
 
+// Pull the widget body up over Classic's output-slot band. Not serialized (it is
+// litegraph's own field for custom slot layouts), Classic-only, and re-asserted
+// on configure because a saved node arrives without it.
+function liftOverSlots(node) {
+  if (!isVueNodes()) node.widgets_start_y = 2;
+}
+
+// The two layouts are NOT interchangeable - Classic lays the picker into the
+// output-slot band, which does not exist in Nodes 2.0 - and switching renderer
+// fires no hook we can hang off: verified live that an existing node kept the
+// Classic class (and so the Classic layout) after the toggle, while a node
+// created afterwards was correct. So watch the flag. One boolean compare a
+// second, only while a Duration node is on the canvas, and it stops again when
+// the last one goes.
+let _rendererWatch = 0;
+let _lastVue = null;
+function watchRenderer() {
+  if (_rendererWatch) return;
+  _lastVue = isVueNodes();
+  _rendererWatch = setInterval(() => {
+    const nodes = (app.graph?._nodes || app.graph?.nodes || [])
+      .filter((n) => n.comfyClass === CLASS);
+    if (!nodes.length) { clearInterval(_rendererWatch); _rendererWatch = 0; return; }
+    const now = isVueNodes();
+    if (now === _lastVue) return;
+    _lastVue = now;
+    for (const n of nodes) { liftOverSlots(n); renderFace(n); }
+  }, 1000);
+}
+
 function openPanel(node) {
   openDurationPanel(node, (n) => {
     renderFace(n);
@@ -48,25 +78,38 @@ app.registerExtension({
     const _created = nodeType.prototype.onNodeCreated;
     nodeType.prototype.onNodeCreated = function () {
       _created?.apply(this, arguments);
+      liftOverSlots(this);
       buildFace(this, openPanel);
+
+      // Classic reserves a 20px slot row per output above the widgets. We lift
+      // the body over that band and lay the readout into its empty left half, so
+      // the node owns its own height - hence the instance computeSize. MIN_W and
+      // never this.size[0]: computeSize()[0] is also the drag MINIMUM, so
+      // returning the live width would ratchet the floor up on every widen.
+      if (!isVueNodes()) {
+        this.computeSize = function () { return [MIN_W, bodyHeight(false)]; };
+      }
 
       // Fresh size, SYNCHRONOUSLY. configure() runs right after onNodeCreated
       // and restores a saved size, so a deferred write here would clobber the
       // user's own size on every reload and every duplicate (convention #9).
       if (!Array.isArray(this.size)) this.size = [DEFAULT_W, bodyHeight()];
       this.size[0] = DEFAULT_W;
-      this.size[1] = bodyHeight() + (isVueNodes() ? 56 : 34);
+      this.size[1] = isVueNodes() ? bodyHeight(true) + 56 : bodyHeight(false);
 
       queueMicrotask(() => renderFace(this));
+      watchRenderer();
     };
 
     const _configure = nodeType.prototype.onConfigure;
     nodeType.prototype.onConfigure = function () {
       const r = _configure?.apply(this, arguments);
+      liftOverSlots(this);
       // DOM ONLY. Nothing here may write node.size or add/remove slots, or an
       // untouched workflow opens flagged "modified" (Vue Compat #18).
       renderFace(this);
       queueMicrotask(() => renderFace(this));
+      watchRenderer();
       return r;
     };
 
@@ -77,7 +120,10 @@ app.registerExtension({
     nodeType.prototype.onResize = function (size) {
       if (!isVueNodes()) {
         if (size[0] < MIN_W) size[0] = MIN_W;
-        if (size[1] < bodyHeight() + 34) size[1] = bodyHeight() + 34;
+        // A FLOOR, not a fixed height: the chip row wraps when there are many
+        // durations, and forcing the height would clip the extra rows with no
+        // way to get them back.
+        if (size[1] < bodyHeight(false)) size[1] = bodyHeight(false);
       }
       return _resize?.apply(this, arguments);
     };

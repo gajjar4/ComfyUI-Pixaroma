@@ -10,8 +10,13 @@ export const CLASS = "PixaromaDuration";
 export const HIDDEN_INPUT = "DurationState";
 export const STATE_PROP = "durationState";
 
-export const MIN_W = 240;
-export const DEFAULT_W = 260;
+// Wider than it used to be, and shorter. In Classic the picker row sits IN the
+// output-slot band, so it has to share that line with the right-aligned "frames"
+// / "seconds" labels - at 260 the fourth chip wrapped onto its own line and
+// stretched full width. A control node is better wide and flat than narrow and
+// tall, and this buys back more height than it costs width.
+export const MIN_W = 280;
+export const DEFAULT_W = 330;
 export const ROW_H = 26;
 export const READOUT_H = 18;
 export const BODY_PAD = 6;
@@ -33,7 +38,7 @@ export const DEFAULT_STATE = {
   formula: "",
   // --- how the face behaves (never sent; see injectedState) -----------------
   pick: PICK_CHIPS,
-  values: [3, 5, 8, 10],   // chips mode
+  values: [3, 5, 10, 15],  // chips mode
   min: 1,                  // slider mode
   max: 10,
   stepSec: 0.5,

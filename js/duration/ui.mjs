@@ -5,7 +5,7 @@
 // readout that always states what will be SENT, because snapping to the model's
 // pattern changes the length and that must never be hidden.
 
-import { applyAdaptiveCanvasOnly } from "../shared/nodes2.mjs";
+import { applyAdaptiveCanvasOnly, isVueNodes } from "../shared/nodes2.mjs";
 import { installCanvasZoomPassthrough } from "../shared/canvas_zoom.mjs";
 import { installNodeAccent, ACC } from "../shared/node_settings.mjs";
 import { installResizeFloor } from "../shared/resize_floor.mjs";
@@ -24,8 +24,22 @@ const WIDGET_TYPE = "pixaroma_duration";
 
 let _cssDone = false;
 
-export function bodyHeight() {
-  return ROW_H + READOUT_H + BODY_PAD * 2 + 4;
+// Classic stacks one 20px slot row per output ABOVE the widgets, and our two
+// output labels are right-aligned - so the left half of that 40px band is dead
+// space, and the body used to start 46px down with a visible gap. We lift the
+// widget over the band (widgets_start_y in index.js) and put the READOUT there,
+// reserving the right for the labels. Nodes 2.0 renders the dots in their own
+// block, so it has no band to reclaim and keeps the plain stacked layout.
+export const SLOT_BAND = 40;
+// Room for the longest right-aligned label plus its dot ("seconds" + margin).
+export const LABEL_RESERVE = 92;
+// Classic hands the DOM widget `node.size[1] - widgets_start_y - 2*margin`, so
+// the node has to be that much taller than the content. Measured, not guessed.
+const CLASSIC_CHROME = 22;
+
+export function bodyHeight(vue = isVueNodes()) {
+  const content = ROW_H + 4 + READOUT_H + BODY_PAD + 2;
+  return vue ? ROW_H + READOUT_H + BODY_PAD * 2 + 6 : content + CLASSIC_CHROME;
 }
 
 export function injectCSS() {
@@ -35,10 +49,18 @@ export function injectCSS() {
   .${ROOT_CLASS}{
     box-sizing:border-box; display:flex; flex-direction:column; gap:4px;
     padding:${BODY_PAD}px; font:12px 'Segoe UI',sans-serif; user-select:none;
-    min-height:${bodyHeight()}px;
-    /* Transparent, not a panel colour: in Nodes 2.0 an opaque root would cover
-       the slot labels the node draws beside it. */
+    /* Transparent, not a panel colour: an opaque root would cover the slot
+       labels the node paints in the same band. */
     background:transparent;
+  }
+  /* Classic: the body is lifted over the output-slot band, and the PICKER takes
+     the empty left half of it - putting the buttons themselves ~50px higher,
+     which is the point. It reserves the right for the "frames" / "seconds"
+     labels the node paints there. The readout then runs full width underneath,
+     where it has room for the longer text. */
+  .${ROOT_CLASS}.classic{ padding-top:2px; }
+  .${ROOT_CLASS}.classic .pix-dur-pickrow{
+    order:-1; padding-right:${LABEL_RESERVE}px;
   }
   .pix-dur-pickrow{ display:flex; align-items:center; gap:5px; min-height:${ROW_H}px; }
 
@@ -109,7 +131,7 @@ function fmt(value, places = 2) {
 
 export function buildFace(node, openPanel) {
   const root = document.createElement("div");
-  root.className = ROOT_CLASS;
+  root.className = ROOT_CLASS + (isVueNodes() ? "" : " classic");
 
   const pickRow = document.createElement("div");
   pickRow.className = "pix-dur-pickrow";
@@ -238,6 +260,9 @@ export function renderFace(node) {
   const pickRow = node?._pixDurPickRow;
   const readout = node?._pixDurReadout;
   if (!pickRow || !readout) return;
+  // Re-asserted every render, not just at build: the renderer can be switched
+  // while the node is on the canvas, and the two layouts are not interchangeable.
+  node._pixDurRoot?.classList.toggle("classic", !isVueNodes());
   const st = readState(node);
 
   pickRow.textContent = "";
