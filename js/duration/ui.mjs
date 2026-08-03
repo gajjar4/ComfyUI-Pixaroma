@@ -171,6 +171,12 @@ export function buildFace(node, openPanel) {
     serialize: false,
     getMinHeight: () => bodyHeight(),
   });
+  // BOTH flags, they are not the same one: options.serialize keeps the widget
+  // out of the PROMPT, widget.serialize (top level) keeps it out of the saved
+  // WORKFLOW. With only the first, the node wrote widgets_values: [""] into
+  // every saved file - state that means nothing and can differ between
+  // renderers, which is how a clean workflow starts opening "modified".
+  widget.serialize = false;
   // canvasOnly must be TRUE in Classic (keeps it out of the Parameters tab) and
   // FALSE in Nodes 2.0 (or the Vue body renders nothing) - hence the live getter.
   applyAdaptiveCanvasOnly(widget);
