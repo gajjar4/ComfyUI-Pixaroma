@@ -31,8 +31,11 @@ let _cssDone = false;
 // reserving the right for the labels. Nodes 2.0 renders the dots in their own
 // block, so it has no band to reclaim and keeps the plain stacked layout.
 export const SLOT_BAND = 40;
-// Room for the longest right-aligned label plus its dot ("seconds" + margin).
-export const LABEL_RESERVE = 92;
+// Room for the longest right-aligned output label plus its dot. MEASURED, not
+// guessed: at LiteGraph's 14px node font "seconds" is 52px and "frames" 43, and
+// the dot sits ~18px outboard. 92 was ~18px too generous and showed up as a
+// visible gap between the gear and the labels.
+export const LABEL_RESERVE = 74;
 // Classic hands the DOM widget `node.size[1] - widgets_start_y - 2*margin`, so
 // the node has to be that much taller than the content. Measured, not guessed.
 const CLASSIC_CHROME = 22;
@@ -62,11 +65,23 @@ export function injectCSS() {
   .${ROOT_CLASS}.classic .pix-dur-pickrow{
     order:-1; padding-right:${LABEL_RESERVE}px;
   }
+  /* The readout lands on the SECOND slot row, where "seconds" is painted, so it
+     needs the same reserve - otherwise a long readout on a narrow node runs
+     straight under the label. It already ellipsises, so it shortens instead. */
+  .${ROOT_CLASS}.classic .pix-dur-readout{ padding-right:${LABEL_RESERVE}px; }
   .pix-dur-pickrow{ display:flex; align-items:center; gap:5px; min-height:${ROW_H}px; }
 
-  .pix-dur-chips{ display:flex; gap:4px; flex:1 1 auto; min-width:0; flex-wrap:wrap; }
+  /* NEVER wrap. Wrapping pushed a second row of buttons down into the readout
+     and the two drew on top of each other as soon as the node was dragged
+     narrow. The buttons shrink together instead, which is what someone
+     deliberately making the node smaller is asking for; overflow:hidden is the
+     backstop for a chip list long enough that even that runs out. */
+  .pix-dur-chips{
+    display:flex; gap:4px; flex:1 1 auto; min-width:0;
+    flex-wrap:nowrap; overflow:hidden;
+  }
   .pix-dur-chip{
-    flex:1 1 auto; min-width:34px; box-sizing:border-box;
+    flex:1 1 auto; min-width:28px; box-sizing:border-box;
     background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.14);
     border-radius:4px; color:rgba(255,255,255,0.72); font-size:12px;
     padding:4px 6px; cursor:pointer; text-align:center; line-height:1.1;
@@ -202,13 +217,20 @@ function renderSlider(node, st, pickRow) {
   box.append(fill, val);
   box.title = `Drag to set the length (${fmt(lo)} to ${fmt(hi)} seconds)`;
 
+  // Update IN PLACE - never renderFace from here. renderFace rebuilds the row,
+  // which would replace this very element under the user's finger: the drag
+  // listeners and the pointer capture would go with it, so the slider moved
+  // once on pointerdown and then stopped following the cursor.
   const setFromEvent = (ev) => {
     const r = box.getBoundingClientRect();
     if (r.width <= 0) return;
     const f = Math.max(0, Math.min(1, (ev.clientX - r.left) / r.width));
     const next = clampToPick(readState(node), lo + f * (hi - lo));
-    writeState(node, { seconds: next });
-    renderFace(node);
+    const st2 = writeState(node, { seconds: next });
+    fill.style.width = `${Math.max(0, Math.min(1, hi > lo ? (next - lo) / (hi - lo) : 0)) * 100}%`;
+    num.textContent = fmt(next) + " s";
+    paintReadout(node, st2, node._pixDurReadout);
+    node.setDirtyCanvas?.(true, false);
   };
   const end = () => {
     box.onpointermove = null;

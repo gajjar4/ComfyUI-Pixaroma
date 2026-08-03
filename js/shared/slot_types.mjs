@@ -33,9 +33,17 @@ export function slotTypeList(type) {
     .filter(Boolean);
 }
 
-/** True for the wildcard slot and for an untyped one - both accept anything. */
+/**
+ * True for the wildcard slot and for an untyped one - both accept anything.
+ *
+ * EVERY falsy value counts, not just null/"". The call sites this replaced all
+ * read the type as `String(slot.type || "")`, so 0 - which LiteGraph uses as a
+ * wildcard in places - collapsed to "" and was accepted. Treating it as the
+ * literal type "0" instead would make a node sever a wire it used to allow,
+ * which is the exact bug this module exists to stop.
+ */
 export function isWildcardType(type) {
-  if (type == null) return true;
+  if (!type) return true;
   const s = String(type).trim();
   return s === "" || s === "*";
 }
