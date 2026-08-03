@@ -1960,6 +1960,17 @@ async def api_lif_pick_native(request):
     if not _lif_dialog_available():
         return web.json_response({"ok": False, "unavailable": True})
     start = request.query.get("path", "")
+    # `?path=` is only where the dialog OPENS, so any ordinary local folder is
+    # fine and deliberately not restricted to approved ones - you have to be
+    # able to navigate somewhere new to approve it. But it is still attacker
+    # supplied, and all three platform helpers call os.path.isdir on it (and
+    # Windows hands it to the WinForms dialog), so a UNC value would fire an SMB
+    # connection and leak an NTLM hash before a folder is ever chosen. Same
+    # class as the open_folder fix; MISSED in the first pass and caught by the
+    # round-2 ordering audit. Drop a refused value rather than erroring: the
+    # dialog just opens at its default location.
+    if not _pix_prescreen(start):
+        start = ""
     try:
         import asyncio
         loop = asyncio.get_running_loop()
