@@ -1216,6 +1216,19 @@ const HELP = {
         ],
       },
       {
+        heading: "Rounding sizes to a step",
+        body:
+          "Models are usually fussy about sizes, wanting them in steps of 8, 16, 32 or 64. The small "
+          + "button at the top left of the node sets that. Click it to step through Off, 8, 16, 32 and "
+          + "64, and back to Off.\n\n"
+          + "When a step is set, both numbers are rounded to the NEAREST one before they go out, so at "
+          + "64 a width of 900 leaves as 896. It never rounds down to nothing: the smallest you can get "
+          + "is one step. Off sends your numbers exactly as typed.\n\n"
+          + "Each node keeps its own step, so one workflow can hold several set up differently. The "
+          + "gear beside the button opens the same choice as a row of buttons, along with the node's "
+          + "colour.",
+      },
+      {
         heading: "Outputs",
         defs: [
           ["width", "The output width. Portrait = the smaller of your two numbers, Landscape = the larger."],

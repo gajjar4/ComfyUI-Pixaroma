@@ -2,7 +2,12 @@ import { app } from "/scripts/app.js";
 import { applyAdaptiveCanvasOnly, isVueNodes, installResizeFloor,
   installCanvasZoomPassthrough,
 } from "../shared/index.mjs";
-import { installNodeAccent, registerNodeAccent } from "../shared/node_settings.mjs";
+import { installNodeAccent, registerNodeSettings, ACC } from "../shared/node_settings.mjs";
+import {
+  STATE_PROP, HIDDEN_INPUT_NAME, MULTIPLES, DEFAULT_STATE,
+  readState, writeState, nextMultiple, multipleLabel,
+} from "./state.mjs";
+import { openPortraitPanel, closePortraitPanelFor } from "./settings.mjs";
 
 // Portrait Landscape Pixaroma - two pill buttons (Portrait | Landscape) that
 // choose the orientation of the width/height the node outputs. The node's
@@ -12,9 +17,32 @@ import { installNodeAccent, registerNodeAccent } from "../shared/node_settings.m
 // app.graphToPrompt hook below (Switch WH / Resolution pattern, Vue Compat #9).
 
 const BRAND = "#f66744";
-const STATE_PROP = "portraitLandscapeState";
-const HIDDEN_INPUT_NAME = "PortraitLandscapeState";
-const DEFAULT_STATE = "portrait";
+
+// The top row's own height, and how much of its right edge belongs to the
+// output labels. Derived the same way Duration's was, by measuring the drawn
+// node rather than guessing: with LiteGraph's 14px node font "height" is the
+// wider of the two labels, and the content edge lands at
+// nodeW - 16 - LABEL_RESERVE. See .claude/patterns/duration.md #14.
+// The row spans the WHOLE band (one 20px slot row per output, two outputs), not
+// just the first. At 22px it covered "width" and left the native width field
+// sitting on top of "height", hiding it. Being transparent and pointer-through,
+// covering the band costs nothing: both labels and both dots show through and
+// stay clickable, and only the little button and gear are opaque.
+const SLOT_BAND = 40;
+const TOPROW_H = SLOT_BAND;
+const LABEL_RESERVE = 62;
+
+// How far the band floats UP from the top of the pills widget to reach the
+// output-slot band, in Classic. A constant for this node's fixed layout (two
+// number fields between the slots and the pills).
+//
+// MEASURED, not guessed: on a fresh node the widget root starts at node-local
+// y=98 and the two output dots sit at y=14 and y=34, so the band has to start
+// at y=4 for its 20px button to centre on the first dot row and its 40px height
+// to cover both. 4 - 98 = -94. Re-measure the same way (getConnectionPos for the
+// dots, getBoundingClientRect for the root) if a widget is ever added or removed
+// between the slots and the pill row.
+const CLASSIC_BAND_TOP = -94;
 
 const BTN_H = 30;
 const PAD = 6;
@@ -73,23 +101,158 @@ function injectCSS() {
       color: #fff;
       border-color: var(--pix-acc,#f66744);
     }
+
+    /* The top row lives IN the output-slot band, so it reserves the right for
+       the "width" / "height" labels the node paints there. Transparent, or it
+       would cover them. Classic only - Nodes 2.0 draws the dots in their own
+       block and has no band to reclaim. */
+    /* The widget root is the positioning context for the floated band. */
+    .pix-pl-outer { position: relative; display: flex; flex-direction: column; }
+
+    .pix-pl-toprow {
+      display: flex; align-items: flex-start; justify-content: flex-start; gap: 5px;
+      box-sizing: border-box; height: ${TOPROW_H}px;
+      padding: 0 0 0 ${PAD}px; background: transparent; user-select: none;
+      /* The band lies OVER both output rows. Transparent to the pointer so the
+         real dots underneath stay hoverable and wireable; the two controls put
+         it back for themselves. */
+      pointer-events: none;
+    }
+    /* CLASSIC: float the band UP out of the widget flow into the empty slot
+       band between the dots. Nothing between the .dom-widget wrapper and the
+       viewport clips upward, so this works; Nodes 2.0 DOES clip above the
+       widget top, which is why it keeps the plain in-flow row instead. */
+    .pix-pl-toprow.classic {
+      position: absolute; left: 0; right: 0; top: ${CLASSIC_BAND_TOP}px;
+    }
+    .pix-pl-toprow > * { pointer-events: auto; }
+    /* ComfyUI wraps every DOM widget in its own div, and THAT is what was
+       swallowing clicks meant for the output dots underneath - making the row
+       transparent is not enough on its own. A descendant with pointer-events
+       back on still receives them, so the button and gear are unaffected.
+       !important is required, not stylistic: ComfyUI writes pointer-events:auto
+       as an INLINE style on that wrapper, and an inline style beats any
+       stylesheet rule without it. Verified by reading parent.style.pointerEvents
+       while the rule was already matching. */
+    .dom-widget:has(> .pix-pl-toprow) { pointer-events: none !important; }
+    .pix-pl-toprow.classic { padding-right: ${LABEL_RESERVE}px; }
+    .pix-pl-step {
+      flex: none; min-width: 42px; box-sizing: border-box; height: 20px;
+      border-radius: 4px; cursor: pointer; font-family: inherit; font-size: 11px;
+      padding: 0 7px; line-height: 1;
+      border: 1px solid rgba(255,255,255,0.15);
+      background: rgba(255,255,255,0.05);
+      color: rgba(255,255,255,0.7);
+    }
+    .pix-pl-step:hover { border-color: ${ACC}; color: #ddd; }
+    .pix-pl-step.on, .pix-pl-step.on:hover {
+      background: ${ACC}; border-color: ${ACC}; color: #fff;
+    }
+    /* The bundled gear SVG as a mask, never the emoji: an emoji is drawn by the
+       OS, so it is a different shape and baseline on every platform. */
+    .pix-pl-gear {
+      flex: none; width: 16px; height: 16px; padding: 0; margin: 0; line-height: 0;
+      background: none; border: none; cursor: pointer;
+    }
+    .pix-pl-gear::before {
+      content: ""; display: block; width: 14px; height: 14px; background: #bbb;
+      -webkit-mask: url("/pixaroma/assets/icons/note/gear.svg") center/contain no-repeat;
+      mask: url("/pixaroma/assets/icons/note/gear.svg") center/contain no-repeat;
+    }
+    .pix-pl-gear:hover::before { background: ${ACC}; }
   `;
   document.head.appendChild(style);
 }
 
-function readState(node) {
-  const v = node.properties?.[STATE_PROP];
-  return v === "portrait" || v === "landscape" ? v : DEFAULT_STATE;
+// Orientation only, for the two pills. The size step is read straight from
+// readState where it is needed.
+function readOrient(node) {
+  return readState(node).orient;
 }
 
-function writeState(node, state) {
-  if (!node.properties) node.properties = {};
-  node.properties[STATE_PROP] = state;
+function writeOrient(node, orient) {
+  writeState(node, { orient });
+}
+
+// ── the top row: the gear and the size-step button ─────────────────────────
+// It sits IN the output-slot band. Classic stacks one 20px row per output above
+// the widgets, and the two labels are right-aligned, so the left of that 40px
+// band is dead space - the same trick Duration uses. The row reserves the right
+// for the "width" / "height" labels.
+// Pull the widgets up over Classic's output-slot band. Not serialized (it is
+// litegraph's own field for custom slot layouts) and Classic-only: Nodes 2.0
+// renders the dots in their own block, so there is no band to reclaim and the
+// row simply sits at the top of the body as normal.
+// Classic floats the band up into the slot dead-space; Nodes 2.0 clips anything
+// above the widget top, so there it stays a plain row above the pills. Re-run
+// whenever the renderer might have changed. DOM only - it writes no node state,
+// so it can never dirty a saved workflow.
+function applyBandPlacement(node) {
+  node._pixPlTopRow?.classList.toggle("classic", !isVueNodes());
+}
+
+// Switching renderer fires no hook we can hang off, and the two placements are
+// NOT interchangeable: the Classic float is clipped by the Nodes 2.0 node body,
+// so a node built in Classic lost its band entirely after the toggle (verified
+// live). Watch the flag instead. One boolean compare a second, only while such a
+// node is on the canvas, and it stops when the last one goes.
+let _rendererWatch = 0;
+let _lastVue = null;
+function watchRenderer() {
+  if (_rendererWatch) return;
+  _lastVue = isVueNodes();
+  _rendererWatch = setInterval(() => {
+    const nodes = (app.graph?._nodes || app.graph?.nodes || [])
+      .filter((n) => n.comfyClass === "PixaromaPortraitLandscape");
+    if (!nodes.length) { clearInterval(_rendererWatch); _rendererWatch = 0; return; }
+    const now = isVueNodes();
+    if (now === _lastVue) return;
+    _lastVue = now;
+    for (const n of nodes) { applyBandPlacement(n); n._pixPlRefresh?.(); }
+  }, 1000);
+}
+
+function buildTopRow(node) {
+  const row = document.createElement("div");
+  row.className = "pix-pl-toprow";
+
+  const step = document.createElement("button");
+  step.className = "pix-pl-step";
+
+  const gear = document.createElement("button");
+  gear.className = "pix-pl-gear";
+  gear.title = "Portrait Landscape settings";
+  gear.addEventListener("click", (e) => {
+    e.stopPropagation();
+    openPortraitPanel(node, (n) => { n._pixPlRefresh?.(); n.setDirtyCanvas?.(true, true); });
+  });
+
+  step.addEventListener("click", (e) => {
+    e.stopPropagation();
+    writeState(node, { multiple: nextMultiple(readState(node).multiple) });
+    refresh();
+    node.graph?.setDirtyCanvas?.(true, true);
+  });
+
+  function refresh() {
+    const m = readState(node).multiple;
+    step.textContent = multipleLabel(m);
+    step.classList.toggle("on", m > 0);
+    step.title = m > 0
+      ? `Sizes are rounded to the nearest ${m} pixels. Click for the next step.`
+      : "Sizes go out exactly as typed. Click to round them to 8, 16, 32 or 64.";
+  }
+
+  row.append(step, gear);
+  refresh();
+  return { row, refresh };
 }
 
 function buildRoot(node) {
   const root = document.createElement("div");
-  root.className = "pix-pl-root";
+  root.className = "pix-pl-outer";
+  const pills = document.createElement("div");
+  pills.className = "pix-pl-root";
 
   const btnP = document.createElement("button");
   btnP.className = "pix-pl-btn";
@@ -103,11 +266,17 @@ function buildRoot(node) {
   btnL.title = "Wide: the larger number becomes the width";
   btnL.dataset.value = "landscape";
 
-  root.appendChild(btnP);
-  root.appendChild(btnL);
+  pills.appendChild(btnP);
+  pills.appendChild(btnL);
+  // The band goes FIRST in the DOM so that when it is NOT floated (Nodes 2.0,
+  // which clips anything above the widget top) it simply sits above the pills.
+  const top = buildTopRow(node);
+  root.append(top.row, pills);
+  node._pixPlTopRow = top.row;
+  node._pixPlTopRefresh = top.refresh;
 
   function refresh() {
-    const s = readState(node);
+    const s = readOrient(node);
     btnP.classList.toggle("active", s === "portrait");
     btnL.classList.toggle("active", s === "landscape");
   }
@@ -115,7 +284,7 @@ function buildRoot(node) {
   for (const b of [btnP, btnL]) {
     b.addEventListener("click", (e) => {
       e.stopPropagation();
-      writeState(node, b.dataset.value);
+      writeOrient(node, b.dataset.value);
       refresh();
       node.graph?.setDirtyCanvas?.(true, true);
     });
@@ -129,7 +298,23 @@ function setupNode(node) {
   injectCSS();
   const { root, refresh } = buildRoot(node);
   node._pixPlRoot = root;
-  node._pixPlRefresh = refresh;
+  // Both faces have to repaint: the pills show the orientation, the band the
+  // size step, and the settings panel can change either.
+  node._pixPlRefresh = () => { refresh(); node._pixPlTopRefresh?.(); };
+
+  // The band is a CHILD of the pills root, NOT a widget of its own.
+  //
+  // Adding a widget BEFORE the native width/height ones corrupts saved
+  // workflows, and it is worth writing down why: LGraphNode.serialize writes
+  // `widgets_values[n]` using the FULL widget index and simply skips a
+  // serialize:false widget, which leaves a HOLE; configure reads the array
+  // SEQUENTIALLY, skipping those same widgets. Save and load therefore disagree
+  // the moment a non-serializing widget sits in front of a serializing one.
+  // Measured: a node saved with [null,900,1300,""] reloaded as width=null,
+  // height=900. So the band floats out of the flow instead (the LoRA Loader
+  // technique) and the widget list is left exactly as it was.
+  applyBandPlacement(node);
+  watchRenderer();
 
   const measureHeight = () => WIDGET_H;
 
@@ -174,8 +359,13 @@ app.registerExtension({
     const _origConfigure = nodeType.prototype.onConfigure;
     nodeType.prototype.onConfigure = function (info) {
       const r = _origConfigure?.apply(this, arguments);
-      // Defer so node.properties is settled before we read it.
-      queueMicrotask(() => this._pixPlRefresh?.());
+      // Defer so node.properties is settled before we read it. The lift is
+      // re-asserted because a saved node arrives without widgets_start_y.
+      // DOM only - nothing here may write node.size or an untouched workflow
+      // opens flagged "modified" (Vue Compat #18).
+      applyBandPlacement(this);
+      queueMicrotask(() => { applyBandPlacement(this); this._pixPlRefresh?.(); });
+      watchRenderer();
       return r;
     };
 
@@ -210,6 +400,8 @@ app.registerExtension({
     nodeType.prototype.onRemoved = function () {
       this._pixPlFloorOff?.();
       this._pixPlFloorOff = null;
+      closePortraitPanelFor(this);
+      this._pixPlTopRow = null;
       return _origOnRemoved?.apply(this, arguments);
     };
   },
@@ -262,9 +454,12 @@ app.graphToPrompt = async function (...args) {
       if (!entry || entry.class_type !== "PixaromaPortraitLandscape") continue;
       if (!index) index = buildPixaromaNodeIndex();
       const node = findPixaromaNode(index, id);
-      const state = node?.properties?.[STATE_PROP] || DEFAULT_STATE;
+      // JSON now that there is a size step as well as an orientation. Python's
+      // parse_state still accepts the bare legacy string, so a workflow saved
+      // before this existed keeps working until it is re-saved.
+      const st = node ? readState(node) : { ...DEFAULT_STATE };
       entry.inputs = entry.inputs || {};
-      entry.inputs[HIDDEN_INPUT_NAME] = state;
+      entry.inputs[HIDDEN_INPUT_NAME] = JSON.stringify(st);
     }
   }
   return result;
@@ -272,4 +467,15 @@ app.graphToPrompt = async function (...args) {
 
 // The colour option: a right-click "Portrait Landscape settings" entry, the gear in the
 // selection toolbar, and the shared colour panel behind both.
-registerNodeAccent("PixaromaPortraitLandscape", { title: "Portrait Landscape" });
+// Its own panel (the size step is PER NODE, which a shared settings row cannot
+// express), so it registers as a custom settings host. The colour option is
+// still offered inside that panel via createAccentSection.
+registerNodeSettings("PixaromaPortraitLandscape", {
+  title: "Portrait Landscape",
+  ownMenuItem: false,
+  open: (node) => openPortraitPanel(node, (n) => {
+    n._pixPlRefresh?.();
+    n.setDirtyCanvas?.(true, true);
+  }),
+  closeFor: (node) => closePortraitPanelFor(node),
+});

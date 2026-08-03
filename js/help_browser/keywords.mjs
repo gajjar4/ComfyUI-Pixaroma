@@ -73,7 +73,7 @@ export const KEYWORDS = {
   PixaromaDuration: "duration seconds length how long video length frames frame count fps frame rate clip length 5 seconds 10 seconds convert seconds to frames how many frames minimax h3 wan hunyuan ltx 4n+1 8n+1 17n+5 multiple of 4 plus 1 length must be math expression formula video too short video too long sampler rejected frame count",
   PixaromaDropdown: "dropdown drop down list options preset choose pick select menu combo trigger word lora trigger shortcut saved values my own list named values swap between",
   PixaromaWH: "width height size dimensions",
-  PixaromaPortraitLandscape: "rotate orientation flip tall wide",
+  PixaromaPortraitLandscape: "rotate orientation flip tall wide multiple of 8 16 32 64 round size snap size divisible by step size must be multiple resolution not accepted size error round to nearest",
 
   // ── Logic and flow ──
   PixaromaSwitch: "route select choose pick multiplexer",
