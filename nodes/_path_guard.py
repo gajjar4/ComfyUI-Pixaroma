@@ -53,6 +53,7 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 import threading
 
 _LOCK = threading.Lock()
@@ -122,6 +123,50 @@ def is_path_under(child: str, *parents: str) -> bool:
     return False
 
 
+def _norm_raw(p) -> str:
+    """Strip whitespace and the quotes Explorer's "Copy as path" adds.
+
+    ONE normaliser, used by unc_like, prescreen and _lexically_under_any. They
+    used to disagree: unc_like stripped quotes and _lexically_under_any did not,
+    so a quoted "\\\\nas\\renders\\job1" was detected as UNC and then failed to
+    match the approved \\\\nas\\renders (abspath treated the leading quote as a
+    relative path). That refused exactly the NAS users the UNC branch exists to
+    serve. Found in the round-3 review, 2026-08-03.
+    """
+    if not p or not isinstance(p, str):
+        return ""
+    return p.strip().strip('"').strip("'").strip()
+
+
+def rel_is_rooted(rel) -> bool:
+    r"""True when `rel` is NOT a plain relative name - i.e. it would escape.
+
+    MUST be checked BEFORE safe_join's realpath. os.path.join DISCARDS the base
+    whenever the right-hand side is absolute, drive-qualified or UNC (verified:
+    join(r"D:\in", r"\\host\s\a.png") == r"\\host\s\a.png"), so realpath then
+    runs on the attacker's own path. For a UNC that is a forced-authentication
+    leak - Windows opens SMB and hands over an NTLM hash - and it happens
+    BEFORE is_path_under gets to refuse the read. Refusing the read is not
+    enough; the resolve itself is the attack.
+
+    This is the child-string twin of prescreen(), and it was the gap the first
+    pass left: every FOLDER string was screened, every CHILD string was not.
+    Deliberately does NOT reject "..", which is a legitimate shape to *test*
+    and is caught safely afterwards by is_path_under without any remote touch.
+    """
+    q = _norm_raw(rel)
+    if not q:
+        return False
+    if q.replace("/", "\\").startswith("\\\\"):
+        return True          # UNC, and \\?\ extended-length
+    try:
+        if os.path.splitdrive(q)[0]:
+            return True      # C:\..., C:file, //server/share
+        return bool(os.path.isabs(q))
+    except (ValueError, TypeError):
+        return True          # unparseable -> refuse
+
+
 def safe_join(root: str, rel) -> str:
     """Join `rel` under `root`, returning the absolute path ONLY if it stayed
     inside. Returns None on any escape, so callers read as:
@@ -138,6 +183,10 @@ def safe_join(root: str, rel) -> str:
     directly above a correctly-guarded loader in the same file).
     """
     if not root or not isinstance(root, str):
+        return None
+    # LEXICAL reject BEFORE realpath - see rel_is_rooted. Doing this after the
+    # resolve would already have leaked the credential for a UNC value.
+    if rel_is_rooted(rel):
         return None
     try:
         candidate = os.path.realpath(os.path.join(root, str(rel or "")))
@@ -160,11 +209,16 @@ def comfy_roots() -> list:
         import folder_paths
     except Exception:
         return roots
+    # NOT get_user_directory. That folder holds comfy.settings.json, every
+    # workflow, the Civitai key sidecar and THIS GUARD'S OWN allowlist, and
+    # nothing that calls folder_allowed ever needs to reach it (the workflow
+    # routes root themselves on _wf_root and never consult this module). It was
+    # in the tuple in the first pass; dropped in the round-3 review as
+    # gratuitous - a guard should not default-allow the thing protecting it.
     for getter in (
         "get_input_directory",
         "get_output_directory",
         "get_temp_directory",
-        "get_user_directory",
     ):
         try:
             d = getattr(folder_paths, getter, None)
@@ -197,28 +251,38 @@ def _config_path() -> str:
         base = None
     if not base:
         base = os.path.join(os.path.expanduser("~"), ".pixaroma")
-    d = os.path.join(base, "pixaroma")
-    try:
-        os.makedirs(d, exist_ok=True)
-    except Exception:
-        pass
-    return os.path.join(d, _CONFIG_NAME)
+    # NO makedirs here: this is called on every read, and the read path runs
+    # per file in a gallery. Creating the directory is the WRITER's job.
+    return os.path.join(base, "pixaroma", _CONFIG_NAME)
 
 
 def _read_config() -> dict:
     """Never raises. A missing or damaged file must mean 'nothing extra is
-    allowed', never an exception in the middle of someone's render."""
-    out = {"folders": [], "allow_any": False}
+    allowed', never an exception in the middle of someone's render.
+
+    `damaged` distinguishes "file exists but did not parse" from "no file yet".
+    Without it, remember_folder would happily write a fresh one-entry list over
+    a config that was merely corrupt or locked, destroying every folder the user
+    had approved (round-3 review).
+    """
+    out = {"folders": [], "allow_any": False, "damaged": False}
+    path = _config_path()
+    if not os.path.exists(path):
+        return out
     try:
-        with open(_config_path(), "r", encoding="utf-8") as f:
+        with open(path, "r", encoding="utf-8") as f:
             obj = json.load(f)
     except Exception:
+        out["damaged"] = True
         return out
     if not isinstance(obj, dict):
+        out["damaged"] = True
         return out
     folders = obj.get("folders")
     if isinstance(folders, list):
         out["folders"] = [x for x in folders if isinstance(x, str) and x.strip()]
+    elif folders is not None:
+        out["damaged"] = True
     out["allow_any"] = obj.get("allow_any") is True
     return out
 
@@ -231,6 +295,22 @@ def allow_any() -> bool:
 
 def remembered_folders() -> list:
     return _read_config()["folders"]
+
+
+def dialog_available() -> bool:
+    """Whether a native folder dialog can plausibly be shown on this host.
+
+    False on headless / Docker / Colab installs, where "click Browse" is
+    impossible advice and hand-editing the config is the ONLY route. The
+    refusal message reorders itself on this (round-3 review finding 12).
+    Deliberately cheap and dependency-free - it only has to be right enough to
+    choose which sentence to lead with.
+    """
+    if os.name == "nt":
+        return True
+    if sys.platform == "darwin":
+        return True
+    return bool(os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY"))
 
 
 def remember_folder(path: str) -> bool:
@@ -252,6 +332,10 @@ def remember_folder(path: str) -> bool:
         return False
     with _LOCK:
         cfg = _read_config()
+        # NEVER write over a config we could not parse - that would wipe every
+        # folder the user had approved. Refuse and let the caller say so.
+        if cfg["damaged"]:
+            return False
         # Already covered (exact, or a child of something remembered)? Do
         # nothing, so the list stays short instead of growing per subfolder.
         if is_path_under(real, *cfg["folders"]):
@@ -259,12 +343,13 @@ def remember_folder(path: str) -> bool:
         # Drop entries that are now children of the new, broader pick.
         kept = [f for f in cfg["folders"] if not is_path_under(f, real)]
         kept.append(real)
-        cfg["folders"] = kept
+        path = _config_path()
         try:
-            tmp = _config_path() + ".tmp"
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            tmp = path + ".tmp"
             with open(tmp, "w", encoding="utf-8") as f:
-                json.dump(cfg, f, indent=2)
-            os.replace(tmp, _config_path())
+                json.dump({"folders": kept, "allow_any": cfg["allow_any"]}, f, indent=2)
+            os.replace(tmp, path)
         except Exception:
             return False
     return True
@@ -276,9 +361,7 @@ def unc_like(p) -> bool:
     Purely lexical on purpose - it must not touch the filesystem, because the
     whole point is to decide BEFORE anything does.
     """
-    if not p or not isinstance(p, str):
-        return False
-    q = p.strip().strip('"').strip("'").replace("/", "\\")
+    q = _norm_raw(p).replace("/", "\\")
     return q.startswith("\\\\")
 
 
@@ -310,12 +393,16 @@ def _lexically_under_any(child: str, parents) -> bool:
     only to REFUSE early, and to accept ONLY under a UNC share root the user
     themselves approved.
     """
+    child = _norm_raw(child)          # same normalisation as unc_like, or a
+    if not child:                     # quoted path silently fails to match
+        return False
     try:
         c = os.path.normcase(os.path.abspath(child))
     except (OSError, ValueError, TypeError):
         return False
     for p in parents or ():
-        if not p or not isinstance(p, str):
+        p = _norm_raw(p)
+        if not p:
             continue
         try:
             pa = os.path.normcase(os.path.abspath(p)).rstrip("\\/")
@@ -343,11 +430,37 @@ def prescreen(raw) -> bool:
     thing artists do: it is allowed once it sits under a folder the user picked
     in the native dialog. It just cannot be introduced by a request.
     """
-    if allow_any():
+    cfg = _read_config()          # ONE read, not one per key (round-3 #8)
+    if cfg["allow_any"]:
         return True
     if unc_like(raw):
-        return _lexically_under_any(raw, remembered_folders())
+        return _lexically_under_any(raw, cfg["folders"])
     return True
+
+
+def prescreen_folder_field(raw) -> bool:
+    """prescreen() for the Save Image FOLDER FIELD, which is expanded before it
+    is resolved.
+
+    `_resolve_save_folder` does expandvars(expanduser(s)) and THEN realpath, so
+    screening only the raw string checks a different value than the one that
+    actually gets resolved: `%LOGONSERVER%\\C$` or `%HOMESHARE%` is not lexically
+    UNC, sails through prescreen, and becomes UNC after expansion. Low
+    exploitability (the vars name the victim's own domain controller, not the
+    attacker's host) but the invariant the call sites claim was simply not held
+    (round-3 review finding 4).
+
+    Neither expandvars nor expanduser touches the filesystem, so this is still
+    entirely pre-resolve. Keep the normalisation in step with
+    `_resolve_save_folder`'s strip sequence or a new mismatch appears here.
+    """
+    if not prescreen(raw):
+        return False
+    try:
+        expanded = os.path.expandvars(os.path.expanduser(_norm_raw(raw)))
+    except Exception:
+        return False
+    return prescreen(expanded)
 
 
 def folder_allowed(path: str) -> bool:
@@ -357,12 +470,13 @@ def folder_allowed(path: str) -> bool:
     """
     if not path or not isinstance(path, str):
         return False
-    if allow_any():
+    cfg = _read_config()          # ONE read, not four (round-3 #8): a gallery
+    if cfg["allow_any"]:          # of 200 thumbnails was doing ~600 file opens
         return True
     roots = comfy_roots()
     if roots and is_path_under(path, *roots):
         return True
-    folders = remembered_folders()
+    folders = cfg["folders"]
     if not folders:
         return False
     if is_path_under(path, *folders):
@@ -380,15 +494,29 @@ def folder_allowed(path: str) -> bool:
 # The message every refusal shows. One string so the node, the route and the
 # help all say the same thing, and so it names the fix rather than just saying
 # no - a bare "denied" would read as a bug to someone whose workflow just broke.
-DENIED_MESSAGE = (
-    "[Pixaroma] That folder is not approved, so it was not used.\n"
-    "  Folder: {path}\n"
-    "  To approve it: click Browse on the node and pick this folder once - "
-    "choosing it in the system dialog approves it permanently.\n"
-    "  ComfyUI's own input, output and temp folders always work.\n"
-    "  Power users: set \"allow_any\": true in {config}"
-)
-
-
 def denied_message(path: str) -> str:
-    return DENIED_MESSAGE.format(path=path, config=_config_path())
+    """Explain the refusal AND how to resolve it, leading with whichever route
+    is actually available on this host.
+
+    On a headless install (Docker, Colab, a remote box) there is no folder
+    dialog, so "click Browse" is impossible advice and telling someone that
+    first is worse than useless - the config file is their only route
+    (round-3 review finding 12).
+    """
+    browse = (
+        "  To approve it: click Browse on the node and pick this folder once - "
+        "choosing it in the system dialog approves it permanently.\n"
+    )
+    manual = (
+        "  No folder dialog on this machine (headless install), so approve it by "
+        "hand: add the folder to \"folders\", or set \"allow_any\": true, in\n"
+        "  {config}\n"
+    ).format(config=_config_path())
+    steps = (browse + "  Headless install with no dialog? " + manual.strip() + "\n") \
+        if dialog_available() else (manual + browse)
+    return (
+        "[Pixaroma] That folder is not approved, so it was not used.\n"
+        "  Folder: {path}\n".format(path=path)
+        + steps
+        + "  ComfyUI's own input, output and temp folders always work."
+    )

@@ -23,6 +23,7 @@ from ._path_guard import (
     folder_allowed as _pix_folder_allowed,
     prescreen as _pix_prescreen,
     denied_message as _pix_denied_message,
+    rel_is_rooted as _pix_rel_is_rooted,
 )
 from ._resize_helpers import _resize_frame
 
@@ -189,6 +190,12 @@ class PixaromaLoadImagesFolder:
             # Keep every selected file INSIDE the chosen folder. `selected` comes
             # from the (frontend-supplied) hidden state, so a crafted "../../x"
             # must not let the loader open files outside the folder.
+            # An absolute/UNC entry has to go BEFORE realpath: os.path.join drops
+            # `folder` entirely for one, and realpath on a UNC fires SMB and leaks
+            # an NTLM hash before the commonpath check below can refuse it.
+            if _pix_rel_is_rooted(rel):
+                print(f"[PixaromaLoadImagesFolder] not a relative name, skipped: {rel}")
+                continue
             path = os.path.realpath(os.path.join(folder, rel))
             try:
                 if os.path.commonpath([path, real_folder]) != real_folder:
@@ -249,6 +256,9 @@ class PixaromaLoadImagesFolder:
             # Mirror load()'s guard: never stat a file outside the chosen folder
             # (selected is frontend-supplied, so a crafted "../../x" must not reach
             # os.stat). Outside paths hash as a constant instead of a real stat.
+            if _pix_rel_is_rooted(rel):     # before realpath - see load()
+                parts.append(f"{rel}:outside")
+                continue
             p = os.path.realpath(os.path.join(folder, rel))
             try:
                 if os.path.commonpath([p, real_folder]) != real_folder:

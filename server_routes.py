@@ -37,6 +37,8 @@ from .nodes._path_guard import (
     comfy_roots as _pix_comfy_roots,
     remembered_folders as _pix_remembered_folders,
     prescreen as _pix_prescreen,
+    prescreen_folder_field as _pix_prescreen_field,
+    rel_is_rooted as _pix_rel_is_rooted,
 )
 from .nodes._font_catalog import full_catalog as _font_full_catalog
 from .nodes._font_catalog import (
@@ -1680,16 +1682,20 @@ async def api_lif_list(request):
             {"ok": False, "message": _pix_denied_message(folder), "denied": True, "files": []},
             headers=hdrs,
         )
-    if not folder or not os.path.isdir(folder):
-        return web.json_response({"ok": False, "message": "Folder not found.", "files": []}, headers=hdrs)
     # Containment (2026-08-03, ComfyUI-Manager PR #3118). This route is
     # unauthenticated, so without this `?path=C:\&recursive=1` enumerated every
     # image on the host and /thumb then served them back as JPEG bytes.
+    # BEFORE isdir, not after: answering "Folder not found" for an absent path
+    # and "not approved" for a present one is a directory-existence oracle for
+    # the whole disk. next_counter already returns a constant for exactly this
+    # reason; these three routes contradicted it until the round-3 review.
     if not _pix_folder_allowed(folder):
         return web.json_response(
             {"ok": False, "message": _pix_denied_message(folder), "denied": True, "files": []},
             headers=hdrs,
         )
+    if not folder or not os.path.isdir(folder):
+        return web.json_response({"ok": False, "message": "Folder not found.", "files": []}, headers=hdrs)
     real = os.path.realpath(folder)
     try:
         import asyncio
@@ -1718,15 +1724,20 @@ async def api_lif_thumb(request):
     rel = request.query.get("file", "")
     if not _pix_prescreen(folder):      # before isdir - see the list route
         return web.Response(status=403)
-    if not folder or not rel or not os.path.isdir(folder):
-        return web.Response(status=404)
     # The _is_path_under below only proves the file sits inside the folder the
     # CALLER named, which is no containment at all while `folder` is arbitrary
     # (2026-08-03, ComfyUI-Manager PR #3118: this served any image-extension
     # file on the host back as a JPEG). Root the folder first, then keep the
     # existing per-file check so `rel` still cannot climb out of it.
+    # Ordered BEFORE isdir so 403-vs-404 is not an existence oracle (round-3).
     if not _pix_folder_allowed(folder):
         return web.Response(status=403)
+    # `rel` is attacker-controlled too, and os.path.join DISCARDS `folder` when
+    # rel is absolute/UNC - so realpath would fire SMB before the check below.
+    if _pix_rel_is_rooted(rel):
+        return web.Response(status=403)
+    if not folder or not rel or not os.path.isdir(folder):
+        return web.Response(status=404)
     full = os.path.realpath(os.path.join(folder, rel))
     if (
         not _is_path_under(full, folder)
@@ -1788,12 +1799,14 @@ async def api_lif_browse(request):
             return web.json_response(
                 {"ok": False, "message": _pix_denied_message(path), "denied": True, "dirs": []}
             )
-        if not os.path.isdir(path):
-            return web.json_response({"ok": False, "message": "Folder not found.", "dirs": []})
+        # allowed-check BEFORE isdir, so the reply cannot distinguish "absent"
+        # from "present but not yours" for any path on the disk (round-3).
         if not _pix_folder_allowed(path):
             return web.json_response(
                 {"ok": False, "message": _pix_denied_message(path), "denied": True, "dirs": []}
             )
+        if not os.path.isdir(path):
+            return web.json_response({"ok": False, "message": "Folder not found.", "dirs": []})
         real = os.path.realpath(path)
         parent = os.path.dirname(real)
         if parent == real:  # already at a drive / filesystem root
@@ -1960,16 +1973,25 @@ async def api_lif_pick_native(request):
     if not _lif_dialog_available():
         return web.json_response({"ok": False, "unavailable": True})
     start = request.query.get("path", "")
-    # `?path=` is only where the dialog OPENS, so any ordinary local folder is
-    # fine and deliberately not restricted to approved ones - you have to be
-    # able to navigate somewhere new to approve it. But it is still attacker
-    # supplied, and all three platform helpers call os.path.isdir on it (and
-    # Windows hands it to the WinForms dialog), so a UNC value would fire an SMB
-    # connection and leak an NTLM hash before a folder is ever chosen. Same
-    # class as the open_folder fix; MISSED in the first pass and caught by the
-    # round-2 ordering audit. Drop a refused value rather than erroring: the
-    # dialog just opens at its default location.
-    if not _pix_prescreen(start):
+    # ⚠ THE START PATH MUST ALREADY BE APPROVED. Not merely screened.
+    #
+    # The whole trust model rests on "an attacker can make this dialog appear
+    # but cannot choose the folder". That is FALSE if they control where it
+    # opens: `start` becomes $d.SelectedPath (line ~1870) and FolderBrowserDialog
+    # RETURNS SelectedPath when the user clicks OK without navigating. So
+    #   GET /pick_native?path=\\attacker\drop
+    # pops a plausible "Choose a folder of images" box already sitting on the
+    # attacker's share, and one OK click allowlists it permanently - after which
+    # Save Image can write every render there. `?path=C:\Users\<name>` does the
+    # same for the whole home directory.
+    #
+    # Restricting the start to an already-approved folder costs nothing: the
+    # dialog simply opens at its default and the user navigates to the new
+    # folder themselves, which is the flow anyway. Both real callers pass either
+    # "" or a folder that is already approved.
+    # (Round-3 review. The round-2 fix here only screened for UNC, which stopped
+    # the credential leak but not the far worse click-to-approve.)
+    if not (_pix_prescreen(start) and _pix_folder_allowed(start)):
         start = ""
     try:
         import asyncio
@@ -1987,8 +2009,13 @@ async def api_lif_pick_native(request):
             # allowed to call remember_folder. Do not call it from a route that
             # takes the folder from the request body - that would let an
             # attacker approve their own target and make the guard decorative.
-            _pix_remember_folder(path)
-            return web.json_response({"ok": True, "path": path})
+            # Surface whether it actually persisted. If the write fails (read-only
+            # user dir, AV lock, or a damaged config we refuse to clobber) and we
+            # still answer plain ok, the node stores the folder, every Run then
+            # says "click Browse and pick this folder once" - which they just did
+            # - and there is no way out. Round-3 review finding 5.
+            remembered = _pix_remember_folder(path)
+            return web.json_response({"ok": True, "path": path, "remembered": bool(remembered)})
         return web.json_response({"ok": False, "cancelled": True})
     except Exception as e:
         return web.json_response({"ok": False, "message": str(e)})
@@ -2034,9 +2061,11 @@ async def api_save_image_next_counter(request):
         digits = 3
 
     def _scan():
-        # prescreen the RAW string first: _resolve_save_folder calls realpath,
-        # which on Windows already reaches out over SMB for a UNC path.
-        if not _pix_prescreen(folder_raw):
+        # Screen the string that will ACTUALLY be resolved: _resolve_save_folder
+        # expands %VARS% and ~ BEFORE realpath, so a raw-only screen judges a
+        # different value than the one that reaches the filesystem (round-3 #4).
+        # Still entirely pre-resolve - expandvars/expanduser touch nothing.
+        if not _pix_prescreen_field(folder_raw):
             return 1, "", True
         base, _inside = _resolve_save_folder(folder_raw)
         # Containment (2026-08-03). Without this the preview was a directory
@@ -2102,7 +2131,7 @@ async def api_save_image_open_folder(request):
     except Exception:
         data = {}
     folder_raw = str(data.get("folder", "") or "")
-    if not _pix_prescreen(folder_raw):
+    if not _pix_prescreen_field(folder_raw):    # expansion-aware, see round-3 #4
         return web.json_response(
             {"ok": False, "message": _pix_denied_message(folder_raw), "denied": True}
         )
