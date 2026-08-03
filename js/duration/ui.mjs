@@ -31,11 +31,19 @@ let _cssDone = false;
 // reserving the right for the labels. Nodes 2.0 renders the dots in their own
 // block, so it has no band to reclaim and keeps the plain stacked layout.
 export const SLOT_BAND = 40;
-// Room for the longest right-aligned output label plus its dot. MEASURED, not
-// guessed: at LiteGraph's 14px node font "seconds" is 52px and "frames" 43, and
-// the dot sits ~18px outboard. 92 was ~18px too generous and showed up as a
-// visible gap between the gear and the labels.
-export const LABEL_RESERVE = 74;
+// Room for the longest right-aligned output label plus its dot.
+//
+// DERIVED FROM A PIXEL SCAN of the drawn node, not from arithmetic - two
+// guesses (92, then 74) both left a gap the user could see. Scanning the canvas
+// for the first light pixel on each output row put "seconds" (the wider label)
+// at node-x 264 on a 330-wide node, i.e. 66 in from the right edge.
+//
+// The picker's content edge lands at `nodeW - 16 - LABEL_RESERVE`, so
+//     gap = LABEL_RESERVE - 50
+// and it is INDEPENDENT of node width, because both the labels and our content
+// are anchored to the right edge. 58 leaves 8px. Re-derive by re-scanning if the
+// output names or the node font ever change.
+export const LABEL_RESERVE = 58;
 // Classic hands the DOM widget `node.size[1] - widgets_start_y - 2*margin`, so
 // the node has to be that much taller than the content. Measured, not guessed.
 const CLASSIC_CHROME = 22;
