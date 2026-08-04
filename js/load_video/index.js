@@ -1,4 +1,5 @@
 import { app } from "/scripts/app.js";
+import { pixApiUrl } from "../shared/api_url.mjs";
 import { applyAdaptiveCanvasOnly,
   installCanvasZoomPassthrough, installNodeAccent, registerNodeAccent,
 } from "../shared/index.mjs";
@@ -88,7 +89,7 @@ function previewUrlFromWidget(node) {
     type: "input",
     t: String(Date.now()), // cache-bust on a real selection change
   });
-  return `/view?${params.toString()}`;
+  return pixApiUrl(`/view?${params.toString()}`);
 }
 
 function fmtTime(sec) {

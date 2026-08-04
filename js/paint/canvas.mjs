@@ -3,6 +3,7 @@
 // ============================================================
 import { PaintStudio } from "./core.mjs";
 
+import { pixApiUrl } from "../shared/api_url.mjs";
 const proto = PaintStudio.prototype;
 
 // ─── Canvas init ──────────────────────────────────────────
@@ -248,7 +249,7 @@ proto._loadLayers = async function (layersData) {
           res();
         };
         const fileNameOnly = ld.src.split(/[\\/]/).pop();
-        img.src = `/view?filename=${encodeURIComponent(fileNameOnly)}&type=input&subfolder=pixaroma&t=${Date.now()}`;
+        img.src = pixApiUrl(`/view?filename=${encodeURIComponent(fileNameOnly)}&type=input&subfolder=pixaroma&t=${Date.now()}`);
       });
     }
     this.layers.push(ly);

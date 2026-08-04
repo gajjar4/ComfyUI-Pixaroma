@@ -1,4 +1,5 @@
 import { app } from "/scripts/app.js";
+import { pixApiUrl } from "../shared/api_url.mjs";
 import { applyAdaptiveCanvasOnly,
   installCanvasZoomPassthrough, installNodeAccent, registerNodeAccent,
 } from "../shared/index.mjs";
@@ -79,7 +80,7 @@ function previewUrlFromWidget(node) {
   const params = new URLSearchParams({
     filename, subfolder, type: "input", t: String(Date.now()),
   });
-  return `/view?${params.toString()}`;
+  return pixApiUrl(`/view?${params.toString()}`);
 }
 
 // ── frame math ───────────────────────────────────────────────────────────────

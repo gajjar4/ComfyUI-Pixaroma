@@ -13,6 +13,7 @@ import {
   createCanvasToolbar,
 } from "../framework/index.mjs";
 import { ALIGNMENTS, computeAlignedXY, defaultAlignForMeta } from "./alignments.mjs";
+import { pixApiUrl } from "../shared/api_url.mjs";
 import { installGraphUndoGuard } from "../shared/graph_undo_guard.mjs";
 
 export const RATIOS = [
@@ -103,7 +104,7 @@ export class CropEditor {
       sourceURL = upstreamUrl;
     } else if (this._srcPath) {
       const fn = this._srcPath.split(/[\\/]/).pop();
-      sourceURL = `/view?filename=${encodeURIComponent(fn)}&type=input&subfolder=pixaroma&t=${Date.now()}`;
+      sourceURL = pixApiUrl(`/view?filename=${encodeURIComponent(fn)}&type=input&subfolder=pixaroma&t=${Date.now()}`);
     }
 
     if (sourceURL) {

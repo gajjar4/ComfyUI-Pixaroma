@@ -1,4 +1,5 @@
 import { app } from "../../../../scripts/app.js";
+import { pixApiUrl } from "../shared/api_url.mjs";
 // api is used at the top level (pixaroma-composer-preview WebSocket
 // listener) AND inside the execution-events try block further down.
 // Importing it once here keeps both call sites using the same module.
@@ -278,7 +279,7 @@ app.registerExtension({
         let maskUrl = null;
         if (layer.maskSrc) {
           const maskFn = layer.maskSrc.split(/[\\/]/).pop();
-          maskUrl = `/view?filename=${encodeURIComponent(maskFn)}&type=input&subfolder=pixaroma&t=${Date.now()}`;
+          maskUrl = pixApiUrl(`/view?filename=${encodeURIComponent(maskFn)}&type=input&subfolder=pixaroma&t=${Date.now()}`);
         }
         if (layer.isPlaceholder) {
           const url = getUpstreamImageUrlForNode(node, `image_${layer.inputIndex}`);
@@ -288,7 +289,7 @@ app.registerExtension({
           const src = layer.src;
           if (!src || src === "__placeholder__") { loadList.push({ layer, url: null, maskUrl: null }); continue; }
           const fn = src.split(/[\\/]/).pop();
-          const url = `/view?filename=${encodeURIComponent(fn)}&type=input&subfolder=pixaroma&t=${Date.now()}`;
+          const url = pixApiUrl(`/view?filename=${encodeURIComponent(fn)}&type=input&subfolder=pixaroma&t=${Date.now()}`);
           dbg("  regular layer", layer.name, "→ url:", url.substring(0, 80));
           loadList.push({ layer, url, maskUrl });
         }
@@ -497,7 +498,7 @@ app.registerExtension({
         // Cache-bust so the same filename with different content reloads.
         t: Date.now(),
       });
-      const url = `/view?${params.toString()}`;
+      const url = pixApiUrl(`/view?${params.toString()}`);
       // Pull dims from the current project json so the label reads right.
       let dimText = null;
       try {

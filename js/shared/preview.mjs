@@ -4,6 +4,7 @@
 // ╚═══════════════════════════════════════════════════════════════╝
 
 import { createDummyWidget } from "./utils.mjs";
+import { pixApiUrl } from "./api_url.mjs";
 
 /**
  * Creates the DOM elements for a node preview area.
@@ -125,7 +126,7 @@ export function restoreNodePreview(parts, json, node) {
     const rel = meta.composite_path || meta.src_path;
     if (!rel) return;
     const fn = rel.split(/[\\/]/).pop();
-    const url = `/view?filename=${encodeURIComponent(fn)}&type=input&subfolder=pixaroma&t=${Date.now()}`;
+    const url = pixApiUrl(`/view?filename=${encodeURIComponent(fn)}&type=input&subfolder=pixaroma&t=${Date.now()}`);
     const dimText = `${meta.doc_w || "?"}\u00d7${meta.doc_h || "?"}`;
     showNodePreview(parts, url, dimText, node);
   } catch {

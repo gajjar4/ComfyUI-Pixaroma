@@ -5,6 +5,7 @@
 // bunny) so repeat Bunny clicks don't refetch / re-parse.
 // ============================================================
 import { Pixaroma3DEditor, getTHREE, THREE_VENDOR } from "./core.mjs";
+import { pixApiUrl } from "../shared/api_url.mjs";
 import { ThreeDAPI } from "./api.mjs";
 
 let _GLTFLoader = null;
@@ -191,7 +192,7 @@ export function viewURLForStoredPath(path) {
   const parts = path.split("/");
   const fname = parts.pop();
   const subfolder = parts.join("/");
-  return "/view?filename=" + encodeURIComponent(fname)
+  return pixApiUrl("/view?filename=") + encodeURIComponent(fname)
        + "&type=input&subfolder=" + encodeURIComponent(subfolder)
        + "&t=" + Date.now();
 }
@@ -219,7 +220,7 @@ async function uploadOne(projectId, file) {
   const parts = res.path.split("/");
   const fname = parts.pop();
   const subfolder = parts.join("/");
-  const url = "/view?filename=" + encodeURIComponent(fname)
+  const url = pixApiUrl("/view?filename=") + encodeURIComponent(fname)
             + "&type=input&subfolder=" + encodeURIComponent(subfolder)
             + "&t=" + Date.now();
   return { path: res.path, storedName: res.filename, url, origName: file.name };

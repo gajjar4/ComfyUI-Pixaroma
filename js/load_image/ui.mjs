@@ -1,4 +1,5 @@
 import { app } from "/scripts/app.js";
+import { pixApiUrl } from "../shared/api_url.mjs";
 import { BRAND } from "../shared/index.mjs";
 
 let _cssInjected = false;
@@ -741,7 +742,7 @@ function groupValuesByFolder(values) {
 // so the browser caches thumbnails across re-opens.
 function thumbURL(full) {
   const { subfolder, filename } = splitFilenameSubfolder(full);
-  return `/view?filename=${encodeURIComponent(filename)}&type=input&subfolder=${encodeURIComponent(subfolder)}`;
+  return pixApiUrl(`/view?filename=${encodeURIComponent(filename)}&type=input&subfolder=${encodeURIComponent(subfolder)}`);
 }
 
 // Read/write the persisted thumbnail size ("Small" | "Large"). Falls back to

@@ -5,6 +5,7 @@
 // action buttons (Regenerate, Continue), then the preview image filling the
 // remaining height at the bottom.
 import { BRAND } from "../shared/utils.mjs";
+import { pixApiUrl } from "../shared/api_url.mjs";
 import { getState } from "./state.mjs";
 
 const HEADER_H = 130;       // toggle + status + two button rows
@@ -183,7 +184,7 @@ export function frameViewUrl(frame) {
     type: frame.type || "temp",
     t: String(Date.now()),
   });
-  return `/view?${params.toString()}`;
+  return pixApiUrl(`/view?${params.toString()}`);
 }
 
 // Load + show a snapshot frame in the preview. frame = {filename, subfolder, type}.

@@ -12,6 +12,7 @@ import {
 } from "../framework/index.mjs";
 import { installGraphUndoGuard } from "../shared/graph_undo_guard.mjs";
 
+import { pixApiUrl } from "../shared/api_url.mjs";
 export { BRAND };
 const UI = "/pixaroma/assets/icons/ui/";
 // Brush default size (used by the "Reset to default" button in the Brush panel).
@@ -114,7 +115,7 @@ export class InpaintCropEditor {
     if (upstreamUrl) sourceURL = upstreamUrl;
     else if (this._srcPath) {
       const fn = this._srcPath.split(/[\\/]/).pop();
-      sourceURL = `/view?filename=${encodeURIComponent(fn)}&type=input&subfolder=pixaroma&t=${Date.now()}`;
+      sourceURL = pixApiUrl(`/view?filename=${encodeURIComponent(fn)}&type=input&subfolder=pixaroma&t=${Date.now()}`);
     }
 
     if (sourceURL) {
@@ -122,7 +123,7 @@ export class InpaintCropEditor {
         // restore a saved painted mask (best-effort) once the image is sized
         if (this._maskPath) {
           const mfn = this._maskPath.split(/[\\/]/).pop();
-          const murl = `/view?filename=${encodeURIComponent(mfn)}&type=input&subfolder=pixaroma&t=${Date.now()}`;
+          const murl = pixApiUrl(`/view?filename=${encodeURIComponent(mfn)}&type=input&subfolder=pixaroma&t=${Date.now()}`);
           this._loadMaskFromURL(murl);
         }
       });

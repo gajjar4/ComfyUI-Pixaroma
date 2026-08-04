@@ -1,4 +1,5 @@
 import { app } from "/scripts/app.js";
+import { pixApiUrl } from "../shared/api_url.mjs";
 import { installCanvasZoomPassthrough } from "../shared/canvas_zoom.mjs";
 import { api } from "/scripts/api.js";
 import { BRAND } from "../shared/utils.mjs";
@@ -70,7 +71,7 @@ function buildViewUrl(entry) {
     type: entry.type || "temp",
     t: String(Date.now()),  // cache-bust same-name files
   });
-  return `/view?${params.toString()}`;
+  return pixApiUrl(`/view?${params.toString()}`);
 }
 
 function loadFrameImage(url, onLoad) {

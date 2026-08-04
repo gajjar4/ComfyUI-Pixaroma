@@ -13,6 +13,7 @@
 
 import { app } from "/scripts/app.js";
 import { api } from "/scripts/api.js";
+import { pixApiUrl } from "../shared/api_url.mjs";
 import { applyAdaptiveCanvasOnly, canvasBackingScale, installZoomRepaint, isVueNodes } from "../shared/nodes2.mjs";
 import { isGraphLoading } from "../shared/graph_loading.mjs";
 import { registerNodeSettings, globalAccent } from "../shared/node_settings.mjs";
@@ -1455,9 +1456,9 @@ if (!app._pixOpExecPatched) {
         node._pixOpSrcSig = sourceSig(node);
         renderFace(node);
       };
-      img.src = "/view?filename=" + encodeURIComponent(entry.filename) +
+      img.src = pixApiUrl("/view?filename=" + encodeURIComponent(entry.filename) +
         "&type=" + encodeURIComponent(entry.type || "temp") +
-        "&subfolder=" + encodeURIComponent(entry.subfolder || "");
+        "&subfolder=" + encodeURIComponent(entry.subfolder || ""));
     } catch (e) {
       // A preview is never worth breaking the executed handler for - every other
       // node's listener runs off this same event.

@@ -1,4 +1,5 @@
 import { app } from "/scripts/app.js";
+import { pixApiUrl } from "../shared/api_url.mjs";
 import { api } from "/scripts/api.js";
 import {
   readState, restoreFromProperties, resetState, resetAxis as resetAxisCore,
@@ -62,7 +63,7 @@ function buildViewUrl(f) {
     type: f.type || "temp",
     t: String(Date.now()),
   });
-  return `/view?${params.toString()}`;
+  return pixApiUrl(`/view?${params.toString()}`);
 }
 
 function pixConfirmSimple(message, onOpen) {

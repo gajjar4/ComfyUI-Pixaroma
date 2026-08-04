@@ -2,6 +2,8 @@
 // ║  Pixaroma Shared — Constants & Utility Functions             ║
 // ╚═══════════════════════════════════════════════════════════════╝
 
+import { pixApiUrl } from "./api_url.mjs";
+
 export const allow_debug = false;
 
 export const PIXAROMA_LOGO = `data:image/svg+xml;utf8,${encodeURIComponent(`
@@ -136,7 +138,7 @@ export function restorePreview(node, widgetName, app) {
       app.graph.setDirtyCanvas(true, true);
     };
     const fn = meta.composite_path.split(/[\\/]/).pop();
-    img.src = `/view?filename=${encodeURIComponent(fn)}&type=input&subfolder=pixaroma&t=${Date.now()}`;
+    img.src = pixApiUrl(`/view?filename=${encodeURIComponent(fn)}&type=input&subfolder=pixaroma&t=${Date.now()}`);
   } catch (e) {
     console.warn("[Pixaroma] restore failed:", e);
   }

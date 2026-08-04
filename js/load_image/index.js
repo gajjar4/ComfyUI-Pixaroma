@@ -1,4 +1,5 @@
 import { app } from "/scripts/app.js";
+import { pixApiUrl } from "../shared/api_url.mjs";
 import { hideJsonWidget, BRAND, installResizeFloor,
   installCanvasZoomPassthrough, installNodeAccent, registerNodeAccent, accentOf, accentRgba,
 } from "../shared/index.mjs";
@@ -273,7 +274,7 @@ function updateLoadPreview(node) {
     const fn = node._pixLiImageWidget?.value;
     if (fn) {
       const { subfolder, filename } = splitFilenameSubfolder(fn);
-      const src = `/view?filename=${encodeURIComponent(filename)}&type=input&subfolder=${encodeURIComponent(subfolder)}&t=${Date.now()}`;
+      const src = pixApiUrl(`/view?filename=${encodeURIComponent(filename)}&type=input&subfolder=${encodeURIComponent(subfolder)}&t=${Date.now()}`);
       let el = node._pixLiPreviewImgEl;
       if (!el) { el = new Image(); node._pixLiPreviewImgEl = el; }
       el.onload = () => { renderLoadPreviewCanvas(node); node.setDirtyCanvas?.(true, true); };

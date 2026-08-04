@@ -6,6 +6,7 @@
 // + refreshes the counter/preview in place (no rebuild) so input focus is kept.
 
 import { app } from "/scripts/app.js";
+import { pixApiUrl } from "../shared/api_url.mjs";
 import {
   readState, writeState,
   enumerateTargets, lookupWidgetMeta, currentValuePreview, axisDisplayName, axisNote,
@@ -794,7 +795,7 @@ function buildThemeControl(node, state) {
           if (resp.ok) {
             const data = await resp.json().catch(() => ({}));
             if (data.filename) {
-              const url = `/view?filename=${encodeURIComponent(data.filename)}&subfolder=&type=temp&t=${Date.now()}`;
+              const url = pixApiUrl(`/view?filename=${encodeURIComponent(data.filename)}&subfolder=&type=temp&t=${Date.now()}`);
               node._pixXyLastGrid = Object.assign({}, last, { filename: data.filename, url });
               node._pixXyGrid?.setGrid(url);
             }

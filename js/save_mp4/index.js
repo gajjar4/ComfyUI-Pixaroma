@@ -1,4 +1,5 @@
 import { app } from "/scripts/app.js";
+import { pixApiUrl } from "../shared/api_url.mjs";
 import { api } from "/scripts/api.js";
 import { applyAdaptiveCanvasOnly,
   installCanvasZoomPassthrough, installNodeAccent, registerNodeAccent,
@@ -101,7 +102,7 @@ function buildViewUrl(entry) {
     // counter happens to land on the same name.
     t: String(Date.now()),
   });
-  return `/view?${params.toString()}`;
+  return pixApiUrl(`/view?${params.toString()}`);
 }
 
 function fmtTime(sec) {

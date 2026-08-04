@@ -16,6 +16,7 @@
 // without a screen-share permission prompt, so it is not on the table.
 
 import { api } from "/scripts/api.js";
+import { pixApiUrl } from "../shared/api_url.mjs";
 import * as A from "./api.mjs";
 
 // ── colour ──────────────────────────────────────────────────────────────────
@@ -192,7 +193,8 @@ function outputURL(rec) {
     subfolder: rec.subfolder || "",
     type: rec.type || "output",
   });
-  return `/api/view?${p.toString()}`;
+  // pixApiUrl adds the deployment's own /api prefix, so pass the BARE route.
+  return pixApiUrl(`/view?${p.toString()}`);
 }
 
 // ── remembering what a workflow produced ────────────────────────────────────

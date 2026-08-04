@@ -2,6 +2,7 @@
 // Pixaroma 3D Editor — Save/restore, background image mgmt
 // ============================================================
 import { Pixaroma3DEditor, getTHREE, ThreeDAPI } from "./core.mjs";
+import { pixApiUrl } from "../shared/api_url.mjs";
 import { loadTeapotGeometry, getShapeDefaults } from "./shapes.mjs";
 import {
   COMPOSITES, isCompositeType, buildComposite, getCompositeDefaults,
@@ -251,13 +252,13 @@ Pixaroma3DEditor.prototype._restoreScene = function (jsonStr) {
       const parts = d.bgImage.path.replace(/\\/g, "/").split("/");
       const fname = parts.pop();
       const subfolder = parts.join("/") || "pixaroma";
-      const imgSrc =
+      const imgSrc = pixApiUrl(
         "/view?filename=" +
         encodeURIComponent(fname) +
         "&type=input&subfolder=" +
         encodeURIComponent(subfolder) +
         "&t=" +
-        Date.now();
+        Date.now());
       this._showBgImage(imgSrc, false);
     }
     // Start the session with nothing selected — the user picks which

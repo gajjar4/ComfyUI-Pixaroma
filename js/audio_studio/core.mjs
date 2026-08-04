@@ -1,5 +1,6 @@
 // js/audio_studio/core.mjs
 import { app } from "../../../../scripts/app.js";
+import { pixApiUrl } from "../shared/api_url.mjs";
 import { decodeAudio, computeAll, encodeWav, getAudioContext } from "./audio_analysis.mjs";
 import { getUpstreamImageUrl, getInlineSourceUrl, uploadSource, getSysInfo } from "./api.mjs";
 import { createEditorLayout, createButton } from "../framework/index.mjs";
@@ -989,7 +990,7 @@ AudioStudioEditor.prototype._resolveAudioSource = async function () {
           const w = src.widgets?.find((w) => w.name === "audio" || w.name === "audio_file");
           if (w && w.value) {
             const fn = String(w.value).split(/[\\/]/).pop();
-            upstreamUrl = `/view?filename=${encodeURIComponent(fn)}&type=input&subfolder=&t=${Date.now()}`;
+            upstreamUrl = pixApiUrl(`/view?filename=${encodeURIComponent(fn)}&type=input&subfolder=&t=${Date.now()}`);
           }
         }
       }

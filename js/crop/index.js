@@ -2,6 +2,7 @@
 // Pixaroma Image Crop Editor — Entry Point
 // ============================================================
 import { app } from "/scripts/app.js";
+import { pixApiUrl } from "../shared/api_url.mjs";
 import { api } from "/scripts/api.js";
 import { isGraphLoading } from "../shared/graph_loading.mjs";
 import { CropEditor } from "./core.mjs";
@@ -47,7 +48,7 @@ function getUpstreamImageURL(node) {
   if (srcNode.comfyClass === "LoadImage" || srcNode.type === "LoadImage") {
     const imgWidget = (srcNode.widgets || []).find((w) => w.name === "image");
     if (imgWidget && imgWidget.value) {
-      return `/view?filename=${encodeURIComponent(imgWidget.value)}&type=input&t=${Date.now()}`;
+      return pixApiUrl(`/view?filename=${encodeURIComponent(imgWidget.value)}&type=input&t=${Date.now()}`);
     }
   }
 
@@ -102,9 +103,9 @@ function getUpstreamSnapshot(node) {
 // store only the structural parts so workflow JSON stays clean.
 function buildSourceURL(part, withCacheBust) {
   if (!part || !part.filename) return null;
-  const url = `/view?filename=${encodeURIComponent(part.filename)}` +
+  const url = pixApiUrl(`/view?filename=${encodeURIComponent(part.filename)}` +
               `&subfolder=${encodeURIComponent(part.subfolder || "")}` +
-              `&type=${encodeURIComponent(part.type || "temp")}`;
+              `&type=${encodeURIComponent(part.type || "temp")}`);
   return withCacheBust ? `${url}&t=${Date.now()}` : url;
 }
 

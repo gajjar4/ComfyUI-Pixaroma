@@ -5,6 +5,7 @@
 // ╚═══════════════════════════════════════════════════════════════╝
 
 import { app } from "/scripts/app.js";
+import { pixApiUrl } from "../shared/api_url.mjs";
 import { api } from "/scripts/api.js";
 import { isGraphLoading } from "../shared/graph_loading.mjs";
 import { applyAdaptiveCanvasOnly,
@@ -364,7 +365,7 @@ api.addEventListener("executed", (e) => {
       const subfolder = base.subfolder ? `&subfolder=${encodeURIComponent(base.subfolder)}` : "";
       const type = base.type || "temp";
       executedNode._textOverlayBaseImageURL =
-        `/view?filename=${encodeURIComponent(base.filename)}${subfolder}&type=${encodeURIComponent(type)}&t=${Date.now()}`;
+        pixApiUrl(`/view?filename=${encodeURIComponent(base.filename)}${subfolder}&type=${encodeURIComponent(type)}&t=${Date.now()}`);
     }
     // Python resolved the text position on this run (first-run path for
     // generative chains where the JS hook couldn't position pre-submit -

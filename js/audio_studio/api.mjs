@@ -1,6 +1,8 @@
 // js/audio_studio/api.mjs
 "use strict";
 
+import { pixApiUrl } from "../shared/api_url.mjs";
+
 const UPLOAD_ENDPOINT  = "/pixaroma/api/audio_studio/upload";
 const SYSINFO_ENDPOINT = "/pixaroma/api/audio_studio/sysinfo";
 
@@ -79,8 +81,8 @@ export function getUpstreamImageUrl(graph, node) {
     const w = src.widgets?.find(w => w.name === "image");
     if (w && w.value) {
       const fn = String(w.value).split(/[\\/]/).pop();
-      return `/view?filename=${encodeURIComponent(fn)}` +
-             `&type=input&subfolder=&t=${Date.now()}`;
+      return pixApiUrl(`/view?filename=${encodeURIComponent(fn)}` +
+             `&type=input&subfolder=&t=${Date.now()}`);
     }
   }
   if (Array.isArray(src.imgs) && src.imgs.length) {
@@ -106,7 +108,7 @@ export function getInlineSourceUrl(path) {
   const parts = path.split("/");
   const filename = parts.pop();
   const subfolder = ["pixaroma", ...parts].join("/");
-  return `/view?filename=${encodeURIComponent(filename)}` +
+  return pixApiUrl(`/view?filename=${encodeURIComponent(filename)}` +
          `&type=input&subfolder=${encodeURIComponent(subfolder)}` +
-         `&t=${Date.now()}`;
+         `&t=${Date.now()}`);
 }

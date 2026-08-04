@@ -1,3 +1,5 @@
+import { pixApiUrl } from "../shared/api_url.mjs";
+
 // Split "Studio1/cat.png" into {subfolder:"Studio1", filename:"cat.png"}.
 // ComfyUI's input/ folder can hold subfolders; the native image_upload combo
 // values include the path-prefixed names (e.g. "Studio1/cat.png"). The /view
@@ -41,7 +43,7 @@ export function updateNativePreview(node, filename) {
     if (node._pixLiPreviewReqId !== myReq) return;
     console.warn("[PixaromaLoadImage] preview fetch failed for", filename);
   };
-  img.src = `/view?filename=${encodeURIComponent(name)}&type=input&subfolder=${encodeURIComponent(subfolder)}&t=${Date.now()}`;
+  img.src = pixApiUrl(`/view?filename=${encodeURIComponent(name)}&type=input&subfolder=${encodeURIComponent(subfolder)}&t=${Date.now()}`);
 }
 
 // Single source of truth for picking an image (dropdown click, arrow nav,

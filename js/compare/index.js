@@ -1,4 +1,5 @@
 import { app } from "/scripts/app.js";
+import { pixApiUrl } from "../shared/api_url.mjs";
 import { BRAND, registerNodeHelp,
   installCanvasZoomPassthrough, registerNodeAccent, accentOf,
 } from "../shared/index.mjs";
@@ -414,7 +415,7 @@ function cmpRepaint(node) {
 }
 
 function buildCmpUrl(d) {
-  return `/view?filename=${encodeURIComponent(d.filename)}&type=${encodeURIComponent(d.type)}&subfolder=${encodeURIComponent(d.subfolder || "")}&t=${Date.now()}`;
+  return pixApiUrl(`/view?filename=${encodeURIComponent(d.filename)}&type=${encodeURIComponent(d.type)}&subfolder=${encodeURIComponent(d.subfolder || "")}&t=${Date.now()}`);
 }
 
 function loadCmpImage(node, meta, idx) {

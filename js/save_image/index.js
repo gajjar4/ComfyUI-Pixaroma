@@ -7,6 +7,7 @@
 
 import { app } from "/scripts/app.js";
 import { api } from "/scripts/api.js";
+import { pixApiUrl } from "../shared/api_url.mjs";
 import {
   applyAdaptiveCanvasOnly,
   isVueNodes,
@@ -332,7 +333,7 @@ function flashStatus(node, kind, text, ms = 2600) {
 }
 
 function buildViewUrl(f) {
-  return (
+  return pixApiUrl(
     "/view?filename=" + encodeURIComponent(f.filename) +
     "&type=" + encodeURIComponent(f.type || "output") +
     "&subfolder=" + encodeURIComponent(f.subfolder || "")

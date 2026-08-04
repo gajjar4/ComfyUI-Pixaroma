@@ -14,6 +14,7 @@
 // graphToPrompt hook at the bottom (Vue Compat #9).
 
 import { app } from "/scripts/app.js";
+import { pixApiUrl } from "../shared/api_url.mjs";
 import { hideJsonWidget, installResizeFloor, installCanvasZoomPassthrough } from "../shared/index.mjs";
 import { isGraphLoading } from "../shared/graph_loading.mjs";
 import { registerNodeSettings } from "../shared/node_settings.mjs";
@@ -437,7 +438,7 @@ function updatePreview(node) {
     const fn = node._pixLiImageWidget?.value;
     if (fn) {
       const { subfolder, filename } = splitFilenameSubfolder(fn);
-      const src = `/view?filename=${encodeURIComponent(filename)}&type=input&subfolder=${encodeURIComponent(subfolder)}&t=${Date.now()}`;
+      const src = pixApiUrl(`/view?filename=${encodeURIComponent(filename)}&type=input&subfolder=${encodeURIComponent(subfolder)}&t=${Date.now()}`);
       let elImg = node._pixLmPreviewImgEl;
       if (!elImg) { elImg = new Image(); node._pixLmPreviewImgEl = elImg; }
       elImg.onload = () => { renderCards(node); renderPreviewCanvas(node); node.setDirtyCanvas?.(true, true); };

@@ -3,6 +3,7 @@
 // ============================================================
 import { app } from "/scripts/app.js";
 import { api } from "/scripts/api.js";
+import { pixApiUrl } from "../shared/api_url.mjs";
 import { isGraphLoading } from "../shared/graph_loading.mjs";
 import { InpaintCropEditor, INPAINT_PREVIEW_COLORS } from "./core.mjs";
 import { registerNodeAccent } from "../shared/node_settings.mjs";
@@ -106,9 +107,9 @@ function dedupeInpaintProjectId(node) {
 
 function buildSourceURL(part, bust) {
   if (!part || !part.filename) return null;
-  const url = `/view?filename=${encodeURIComponent(part.filename)}` +
+  const url = pixApiUrl(`/view?filename=${encodeURIComponent(part.filename)}` +
     `&subfolder=${encodeURIComponent(part.subfolder || "")}` +
-    `&type=${encodeURIComponent(part.type || "temp")}`;
+    `&type=${encodeURIComponent(part.type || "temp")}`);
   return bust ? `${url}&t=${Date.now()}` : url;
 }
 

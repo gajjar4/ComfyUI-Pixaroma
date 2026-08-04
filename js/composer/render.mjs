@@ -1,5 +1,6 @@
 // Rendering, history/undo, restore — mixed into PixaromaEditor.prototype
 import { PixaromaEditor } from "./core.mjs";
+import { pixApiUrl } from "../shared/api_url.mjs";
 import { applyFx, isNeutral, fxSeed } from "./fx_engine.mjs";
 
 // Clone a layer for history restore. Shallow-copy the layer, but DEEP-copy the
@@ -573,7 +574,7 @@ PixaromaEditor.prototype.attemptRestore = async function () {
         };
         placeholder.src = tempCanvas.toDataURL();
       };
-      img.src = `/view?filename=${encodeURIComponent(fileNameOnly)}&type=input&subfolder=pixaroma&t=${Date.now()}`;
+      img.src = pixApiUrl(`/view?filename=${encodeURIComponent(fileNameOnly)}&type=input&subfolder=pixaroma&t=${Date.now()}`);
     });
   } catch (err) {
     console.error("Pixaroma Restore Error:", err);
@@ -595,7 +596,7 @@ PixaromaEditor.prototype.finishRestore = function (hadError = false) {
   this.layers.forEach((l) => {
     if (l.savedMaskPath_internal) {
       const maskFileName = l.savedMaskPath_internal.split(/[\\/]/).pop();
-      const maskUrl = `/view?filename=${encodeURIComponent(maskFileName)}&type=input&subfolder=pixaroma&t=${Date.now()}`;
+      const maskUrl = pixApiUrl(`/view?filename=${encodeURIComponent(maskFileName)}&type=input&subfolder=pixaroma&t=${Date.now()}`);
       this.prepareLayerMask(l, maskUrl);
     }
   });
