@@ -558,7 +558,7 @@ app.registerExtension({
         // Python node loads the source on every run and applies the panel's
         // current crop_w/h/x/y. This lets the user tweak crop dims after
         // pasting without re-opening the editor.
-        const r1 = await api.fetchApi("/pixaroma/api/crop/upload_src", {
+        const r1 = await api.fetchApi("/api/pixaroma/api/crop/upload_src", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ project_id: projectId, image: dataURL }),

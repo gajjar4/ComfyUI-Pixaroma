@@ -3,8 +3,8 @@
 
 import { pixApiUrl } from "../shared/api_url.mjs";
 
-const UPLOAD_ENDPOINT  = "/pixaroma/api/audio_studio/upload";
-const SYSINFO_ENDPOINT = "/pixaroma/api/audio_studio/sysinfo";
+const UPLOAD_ENDPOINT  = "/api/pixaroma/api/audio_studio/upload";
+const SYSINFO_ENDPOINT = "/api/pixaroma/api/audio_studio/sysinfo";
 
 /**
  * Fetch the user's system RAM stats for the editor's live "this render

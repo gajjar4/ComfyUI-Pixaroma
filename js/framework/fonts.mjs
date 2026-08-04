@@ -5,8 +5,8 @@
 // ║  Math doc: docs/text-overlay-render.md                        ║
 // ╚═══════════════════════════════════════════════════════════════╝
 
-const FONT_LIST_URL = "/pixaroma/api/fonts/list";
-const FONT_BASE_URL = "/pixaroma/assets/fonts/";
+const FONT_LIST_URL = "/api/pixaroma/api/fonts/list";
+const FONT_BASE_URL = "/api/pixaroma/assets/fonts/";
 
 let _catalog = null;
 let _catalogPromise = null;
@@ -78,7 +78,7 @@ function makeVariant(font, w, synthesizedItalic) {
 /** File URL for a variant. Custom fonts come from the drop-in serving route. */
 export function urlForVariant(variant) {
   if (variant.source === "custom") {
-    return `/pixaroma/api/fonts/file/${encodeURIComponent(variant.file)}`;
+    return `/api/pixaroma/api/fonts/file/${encodeURIComponent(variant.file)}`;
   }
   return FONT_BASE_URL + variant.file;
 }

@@ -7,7 +7,7 @@
 //   ComfyUI  -> GET /system_stats  -> system.comfyui_version
 //   Frontend -> window.__COMFYUI_FRONTEND_VERSION__
 //   Node UI  -> LiteGraph.vueNodesMode (live; polled)
-//   Pixaroma -> GET /pixaroma/api/version
+//   Pixaroma -> GET /api/pixaroma/api/version
 //
 // Built with the Nodes 2.0 recipe (CLAUDE.md "ComfyUI Nodes 2.0 Migration"):
 // a DOM widget with a UNIQUE type name + applyAdaptiveCanvasOnly, so the panel
@@ -219,7 +219,7 @@ app.registerExtension({
       // the user to hard-refresh. (This node's own number comes from Python, so
       // without this check a stale browser still shows the new number and hides
       // the problem - the exact trap this catches.)
-      fetch("/pixaroma/api/version")
+      fetch("/api/pixaroma/api/version")
         .then((r) => r.json())
         .then((j) => {
           const pyVer = j?.version || "unknown";

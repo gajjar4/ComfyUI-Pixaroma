@@ -15,7 +15,7 @@ const BIREFNET_PRIORITY = ["birefnet", "birefnet-hr", "birefnet-matting"];
 
 export async function fetchBgRemovalInfo() {
   try {
-    const res = await api.fetchApi("/pixaroma/remove_bg_info", { method: "GET" });
+    const res = await api.fetchApi("/api/pixaroma/remove_bg_info", { method: "GET" });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     return await res.json();
   } catch (e) {

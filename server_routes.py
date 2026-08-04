@@ -424,7 +424,13 @@ async def list_note_icons(request):
             entries.append({
                 "id": stem,
                 "label": _derive_icon_label(stem),
-                "url": f"/pixaroma/assets/icons/note/{name}",
+                # /api prefix so the browser can fetch this on a HOSTED ComfyUI.
+                # A root-relative "/pixaroma/..." resolves against the PAGE origin,
+                # which on a cloud platform is their web app, not ComfyUI - measured
+                # 404 there while every icon worked locally. ComfyUI serves an /api
+                # alias for every non-static route, so this is identical on
+                # localhost. Keep in step with the JS, which uses the same prefix.
+                "url": f"/api/pixaroma/assets/icons/note/{name}",
             })
         entries.sort(key=lambda e: e["label"].lower())
         return web.json_response({"icons": entries})

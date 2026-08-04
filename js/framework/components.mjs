@@ -360,7 +360,7 @@ export function createZoomControls(onZoomIn, onZoomOut, onFit) {
 
 // ── Transform Panel ──────────────────────────────────────────
 export function createTransformPanel(config) {
-  const _ui = "/pixaroma/assets/icons/ui/";
+  const _ui = "/api/pixaroma/assets/icons/ui/";
   const collapsed =
     config.startCollapsed !== undefined ? config.startCollapsed : true;
   const panel = createPanel("Transform Properties", {

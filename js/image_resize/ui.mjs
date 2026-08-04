@@ -34,8 +34,8 @@ export function injectCSS() {
     .pix-ir-foot{display:flex;align-items:center;justify-content:center;gap:6px;flex-wrap:wrap;}
     .pix-ir-snap{display:inline-flex;align-items:center;gap:5px;}
     .pix-ir-snap-icon{display:inline-block;width:12px;height:12px;background-color:#888;flex:none;
-      -webkit-mask:url("/pixaroma/assets/icons/ui/magnet.svg") center/12px 12px no-repeat;
-              mask:url("/pixaroma/assets/icons/ui/magnet.svg") center/12px 12px no-repeat;}
+      -webkit-mask:url("/api/pixaroma/assets/icons/ui/magnet.svg") center/12px 12px no-repeat;
+              mask:url("/api/pixaroma/assets/icons/ui/magnet.svg") center/12px 12px no-repeat;}
     .pix-ir-snap-lbl{font-size:9px;color:#7d7d7d;text-transform:uppercase;letter-spacing:.5px;}
     .pix-ir-schip{background:#1d1d1d;border:1px solid #444;
       border-radius:3px;color:#aaa;font-size:8.5px;padding:3px 5px;

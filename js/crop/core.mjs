@@ -40,7 +40,7 @@ export const SNAPS = [
 export const CropAPI = {
   async saveComposite(projectId, dataURL) {
     const { api } = await import("/scripts/api.js");
-    const res = await api.fetchApi("/pixaroma/api/crop/save", {
+    const res = await api.fetchApi("/api/pixaroma/api/crop/save", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ project_id: projectId, image_merged: dataURL }),

@@ -180,7 +180,7 @@ async function fetchMeta(node) {
   node._pixLvfMetaFor = val;
   try {
     const res = await fetch(
-      `/pixaroma/api/load_video_frame/meta?video=${encodeURIComponent(val)}`
+      `/api/pixaroma/api/load_video_frame/meta?video=${encodeURIComponent(val)}`
     );
     if (node._pixLvfMetaFor !== val) return; // a newer selection won
     if (!res.ok) { node._pixLvfMeta = null; updateBar(node); return; }
@@ -256,7 +256,7 @@ async function uploadVideo(node) {
     fd.append("file", file, file.name);
     try {
       // Reuse Load Video's upload route (saves into input/ root).
-      const res = await fetch("/pixaroma/api/load_video/upload", { method: "POST", body: fd });
+      const res = await fetch("/api/pixaroma/api/load_video/upload", { method: "POST", body: fd });
       if (!res.ok) {
         let msg = `Upload failed (HTTP ${res.status})`;
         try { msg = (await res.json()).error || msg; } catch {}

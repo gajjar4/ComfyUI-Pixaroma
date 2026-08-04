@@ -190,7 +190,7 @@ async function spawnItem(editor, item) {
       const { loadGLBFromURL } = await import("./importer.mjs");
       try {
         const group = await loadGLBFromURL(
-          "/pixaroma/assets/models/bunny.glb",
+          "/api/pixaroma/assets/models/bunny.glb",
         );
         editor._addImportedGroup(group, "bunny", { name: "Bunny" });
       } catch (e) {
@@ -308,7 +308,7 @@ export function openShapePicker(editor) {
       ico.className = "p3d-picker-ico";
       ico.setAttribute("role", "img");
       ico.setAttribute("aria-label", info.label);
-      const iconUrl = `url("/pixaroma/assets/icons/3D/${info.icon}")`;
+      const iconUrl = `url("/api/pixaroma/assets/icons/3D/${info.icon}")`;
       ico.style.webkitMaskImage = iconUrl;
       ico.style.maskImage = iconUrl;
       const lbl = document.createElement("span");

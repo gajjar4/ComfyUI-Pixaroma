@@ -23,7 +23,7 @@ const ACC = "var(--pix-acc, #f66744)";
 // toolbar mounts before the window is ever built, so passing the logo from the
 // window produced `mask: url("undefined")`, which masks the element out
 // entirely - it computes as "a mask is present" while painting nothing.
-const QUESTION_ICON = "/pixaroma/assets/icons/note/question-mark.svg";
+const QUESTION_ICON = "/api/pixaroma/assets/icons/note/question-mark.svg";
 const LOGO_ICON = PIXAROMA_LOGO;
 
 export function injectHelpBrowserCSS() {

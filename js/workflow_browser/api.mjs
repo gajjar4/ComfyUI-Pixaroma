@@ -36,7 +36,7 @@
 
 import { app } from "/scripts/app.js";
 
-const BASE = "/pixaroma/api/workflows";
+const BASE = "/api/pixaroma/api/workflows";
 
 const store = () => app.extensionManager?.workflow;
 

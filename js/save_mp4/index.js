@@ -69,7 +69,7 @@ const PREVIEW_MIN_H = 180;
 // (Vue Compat #8).
 const DEFAULT_H = 420;
 // Shared mask-image icon set (borrowed from AudioReact's transport bar).
-const UI_ICON = "/pixaroma/assets/icons/ui/";
+const UI_ICON = "/api/pixaroma/assets/icons/ui/";
 
 // Vue can tear down a node's DOM widget and rebuild it (e.g. when the
 // user switches workflow tabs and back). The cached node._pixaromaVideo

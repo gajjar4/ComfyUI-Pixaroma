@@ -32,7 +32,7 @@
 
 const CSS_ID = "pixaroma-workflows-css";
 
-const ICON = "/pixaroma/assets/icons/ui/workflow.svg";
+const ICON = "/api/pixaroma/assets/icons/ui/workflow.svg";
 const ACC = "var(--pix-acc, #f66744)";
 
 /** One scalable length. Keeps the original number visible and readable, and

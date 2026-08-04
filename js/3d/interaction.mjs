@@ -663,7 +663,7 @@ Pixaroma3DEditor.prototype._applySnap = function (state) {
         const { loadGLBFromURL, prepareImportedGroup, wrapImportPivot } = mod;
         try {
           const innerGroup = await loadGLBFromURL(
-            "/pixaroma/assets/models/bunny.glb",
+            "/api/pixaroma/assets/models/bunny.glb",
           );
           const idx = this.objects.indexOf(ph);
           if (idx === -1) return;

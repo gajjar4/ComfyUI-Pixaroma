@@ -32,7 +32,7 @@ export async function previewCustom(node, st) {
 
   const req = (async () => {
     try {
-      const res = await fetch("/pixaroma/api/duration/preview", {
+      const res = await fetch("/api/pixaroma/api/duration/preview", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         // no-store: this is a computed answer, and a cached one would go stale

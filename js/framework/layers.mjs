@@ -6,7 +6,7 @@
 import { createPanel, createSliderRow } from "./components.mjs";
 
 /** Base path for layer icon SVGs. */
-const LAYER_ICON_BASE = "/pixaroma/assets/icons/layers/";
+const LAYER_ICON_BASE = "/api/pixaroma/assets/icons/layers/";
 
 function _layerIcon(name, size = 12) {
   const img = document.createElement("img");
@@ -45,7 +45,7 @@ function _layerActionBtn(iconName, title, onClick, cls = "") {
   btn.className = "pxf-layer-action-btn" + (cls ? " " + cls : "");
   btn.title = title;
   // If iconName starts with "/", treat it as an absolute asset path
-  // (e.g. "/pixaroma/assets/icons/3D/drop-on-floor.svg") and render
+  // (e.g. "/api/pixaroma/assets/icons/3D/drop-on-floor.svg") and render
   // that directly. Otherwise prepend the default layers icon base.
   if (iconName.startsWith("/")) {
     const img = document.createElement("img");
@@ -305,7 +305,7 @@ export function createLayersList(config) {
   if (config.onDropToFloor)
     actions.appendChild(
       _layerActionBtn(
-        config.dropToFloorIcon || "/pixaroma/assets/icons/3D/drop-on-floor.svg",
+        config.dropToFloorIcon || "/api/pixaroma/assets/icons/3D/drop-on-floor.svg",
         config.dropToFloorTitle || "Drop to floor",
         config.onDropToFloor,
       ),

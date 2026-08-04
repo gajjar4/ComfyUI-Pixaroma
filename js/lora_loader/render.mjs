@@ -116,8 +116,8 @@ export function injectCSS() {
        on some of them it arrives in colour. This is the same icon as the gear on
        the node selection toolbar and on Dropdown Pixaroma. */
     .pix-ll-gear::before { content:""; display:block; width:14px; height:14px; background:#bbb;
-      -webkit-mask:url("/pixaroma/assets/icons/note/gear.svg") center/contain no-repeat;
-      mask:url("/pixaroma/assets/icons/note/gear.svg") center/contain no-repeat; }
+      -webkit-mask:url("/api/pixaroma/assets/icons/note/gear.svg") center/contain no-repeat;
+      mask:url("/api/pixaroma/assets/icons/note/gear.svg") center/contain no-repeat; }
     .pix-ll-gear:hover { border-color:var(--acc,${BRAND}); }
     .pix-ll-gear:hover::before { background:var(--acc,${BRAND}); }
 

@@ -334,7 +334,7 @@ app.registerExtension({
     installPasteHandler();
     node._pixInpaintPaste = async (dataURL) => {
       try {
-        const r = await api.fetchApi("/pixaroma/api/inpaint/upload_src", {
+        const r = await api.fetchApi("/api/pixaroma/api/inpaint/upload_src", {
           method: "POST", headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ project_id: "inpaint_paste_" + Date.now() + "_" + Math.random().toString(36).slice(2, 9), image: dataURL }),
         });

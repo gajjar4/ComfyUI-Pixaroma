@@ -455,7 +455,7 @@ proto._updateToolOptions = function () {
     this.tool === "eraser" ||
     this.tool === "smudge"
   ) {
-    const UI = "/pixaroma/assets/icons/ui/";
+    const UI = "/api/pixaroma/assets/icons/ui/";
 
     // Helper: create an SVG icon button (white when inactive, white-on-orange when active)
     const mkIconBtn = (svgName, title, active, extraClass) => {

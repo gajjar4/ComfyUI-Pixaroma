@@ -5,7 +5,7 @@ export const PixaromaAPI = {
   // or a legacy quality tier ("normal" / "high"). Backend now maps
   // both to a real model name and returns `modelUsed`.
   async removeBg(b64, model = "auto") {
-    const res = await api.fetchApi("/pixaroma/remove_bg", {
+    const res = await api.fetchApi("/api/pixaroma/remove_bg", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ image: b64, model }),
@@ -18,7 +18,7 @@ export const PixaromaAPI = {
   // quality dropdown and show status + install hints.
   async removeBgInfo() {
     try {
-      const res = await api.fetchApi("/pixaroma/remove_bg_info", { method: "GET" });
+      const res = await api.fetchApi("/api/pixaroma/remove_bg_info", { method: "GET" });
       return await res.json();
     } catch (e) {
       return { rembgInstalled: false, models: [] };
@@ -26,7 +26,7 @@ export const PixaromaAPI = {
   },
 
   async uploadLayer(id, b64) {
-    const res = await api.fetchApi("/pixaroma/api/layer/upload", {
+    const res = await api.fetchApi("/api/pixaroma/api/layer/upload", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ layer_id: id, image: b64 }),
@@ -35,7 +35,7 @@ export const PixaromaAPI = {
   },
 
   async saveProject(projId, finalDataURL) {
-    const res = await api.fetchApi("/pixaroma/api/project/save", {
+    const res = await api.fetchApi("/api/pixaroma/api/project/save", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ project_id: projId, image_merged: finalDataURL }),

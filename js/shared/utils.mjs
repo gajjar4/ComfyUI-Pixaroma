@@ -15,7 +15,7 @@ export const PIXAROMA_LOGO = `data:image/svg+xml;utf8,${encodeURIComponent(`
 `)}`;
 
 export const BRAND = "#f66744";
-const LOGO_URL = "/pixaroma/assets/pixaroma_logo.svg";
+const LOGO_URL = "/api/pixaroma/assets/pixaroma_logo.svg";
 
 export function createDummyWidget(titleText, subtitleText, instructionText) {
   const imgSrc = PIXAROMA_LOGO;

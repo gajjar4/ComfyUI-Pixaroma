@@ -32,10 +32,10 @@ export let THREE = null,
   RenderPass = null,
   OutlinePass = null,
   OutputPass = null;
-// Local vendored three.js (served by server_routes.py @ /pixaroma/vendor/three/)
+// Local vendored three.js (served by server_routes.py @ /api/pixaroma/vendor/three/)
 // keeps the 3D Builder working offline and pins the version so upstream
 // Three.js breaking changes can't silently break saved scenes.
-export const THREE_VENDOR = "/pixaroma/vendor/three";
+export const THREE_VENDOR = "/api/pixaroma/vendor/three";
 export async function loadThree() {
   if (THREE) return;
   // Parallel module loads — serial awaits added round-trip latency
@@ -689,7 +689,7 @@ export class Pixaroma3DEditor {
       pc.insertBefore(bgFileInput, pc.firstChild);
       const uploadBtn = createButton("Upload Background Image", {
         variant: "full",
-        iconSrc: "/pixaroma/assets/icons/ui/upload.svg",
+        iconSrc: "/api/pixaroma/assets/icons/ui/upload.svg",
         onClick: () => bgFileInput.click(),
         title: "Browse for a background image",
       });
@@ -754,7 +754,7 @@ export class Pixaroma3DEditor {
       ico.style.cssText = "width:30px;height:30px;";
       ico.setAttribute("role", "img");
       ico.setAttribute("aria-label", label);
-      const iconUrl = `url("/pixaroma/assets/icons/3D/${iconFile}")`;
+      const iconUrl = `url("/api/pixaroma/assets/icons/3D/${iconFile}")`;
       ico.style.webkitMaskImage = iconUrl;
       ico.style.maskImage = iconUrl;
       const lbl = document.createElement("span");
@@ -991,7 +991,7 @@ export class Pixaroma3DEditor {
       // lets hover tinting to orange drop in via CSS later.
       const iconEl = document.createElement("span");
       iconEl.className = "pxf-tool-btn-icon";
-      const iconUrl = `url("/pixaroma/assets/icons/3D/${t.ico}")`;
+      const iconUrl = `url("/api/pixaroma/assets/icons/3D/${t.ico}")`;
       iconEl.style.cssText =
         `display:block;width:22px;height:22px;margin:0 auto 2px;` +
         `background-color:#ccc;` +
@@ -1041,7 +1041,7 @@ export class Pixaroma3DEditor {
     cam.content.appendChild(perspRow);
     const focusBtn = createButton("Focus Selected (0)", {
       variant: "standard",
-      iconSrc: "/pixaroma/assets/icons/3D/focus.svg",
+      iconSrc: "/api/pixaroma/assets/icons/3D/focus.svg",
       onClick: () => this._camView("focus"),
       title: "Center camera on selected object",
     });
@@ -1387,7 +1387,7 @@ export class Pixaroma3DEditor {
 // or shrinks.
 Pixaroma3DEditor.prototype._buildAlignDistributeBar = function (titlebarCenter) {
   if (!titlebarCenter) return;
-  const AD_ICON_PATH = "/pixaroma/assets/icons/ui/";
+  const AD_ICON_PATH = "/api/pixaroma/assets/icons/ui/";
 
   // Build one icon button. Mask-image approach so the icon color is
   // driven by CSS — matches the other tool/camera buttons and gives

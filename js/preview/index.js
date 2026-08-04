@@ -518,7 +518,7 @@ async function saveToOutput(node) {
     if (!blob) throw new Error("no preview blob");
     const dataURL = await blobToDataURL(blob);
     const { workflow, prompt } = await resolveSaveMeta(node);
-    const resp = await fetch("/pixaroma/api/preview/save", {
+    const resp = await fetch("/api/pixaroma/api/preview/save", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -557,7 +557,7 @@ async function saveToDisk(node) {
     if (!blob) throw new Error("no preview blob");
     const dataURL = await blobToDataURL(blob);
     const { workflow, prompt } = await resolveSaveMeta(node);
-    const resp = await fetch("/pixaroma/api/preview/prepare", {
+    const resp = await fetch("/api/pixaroma/api/preview/prepare", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({

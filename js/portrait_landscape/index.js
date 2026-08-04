@@ -174,8 +174,8 @@ function injectCSS() {
     }
     .pix-pl-gear::before {
       content: ""; display: block; width: 14px; height: 14px; background: #bbb;
-      -webkit-mask: url("/pixaroma/assets/icons/note/gear.svg") center/contain no-repeat;
-      mask: url("/pixaroma/assets/icons/note/gear.svg") center/contain no-repeat;
+      -webkit-mask: url("/api/pixaroma/assets/icons/note/gear.svg") center/contain no-repeat;
+      mask: url("/api/pixaroma/assets/icons/note/gear.svg") center/contain no-repeat;
     }
     .pix-pl-gear:hover::before { background: ${ACC}; }
     /* The size the node will actually send. Sits after the gear, in the space

@@ -290,8 +290,8 @@ function injectCSS() {
     /* A mask, not a text glyph: no font-fallback tofu risk, and it matches the
        Reset on the shared pad panel. */
     .pix-op-reset-ic { width:12px; height:12px; background-color:currentColor;
-      -webkit-mask: url("/pixaroma/assets/icons/ui/reset.svg") center/12px 12px no-repeat;
-              mask: url("/pixaroma/assets/icons/ui/reset.svg") center/12px 12px no-repeat; }
+      -webkit-mask: url("/api/pixaroma/assets/icons/ui/reset.svg") center/12px 12px no-repeat;
+              mask: url("/api/pixaroma/assets/icons/ui/reset.svg") center/12px 12px no-repeat; }
 
     /* The fill-colour swatch. Clickable on the limit row (opens the fill
        picker); a plain readout in the folded summary. */

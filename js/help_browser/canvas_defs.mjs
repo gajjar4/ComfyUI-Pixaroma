@@ -148,7 +148,7 @@ export const CANVAS_FEATURES = [
 {
     key: "canvas:workflows",
     title: "Workflows panel",
-    icon: "/pixaroma/assets/icons/ui/workflow.svg",
+    icon: "/api/pixaroma/assets/icons/ui/workflow.svg",
     tagline: "A panel for finding, opening and organising the workflow files on your own computer, with a picture of each one.",
     keywords: "workflow browser panel organise organize folder subfolder sub-folder rename move delete duplicate cover thumbnail picture favourite favorite star search find open manage tidy tidying duplicates copies junk clean up sort list grid missing nodes red boxes unsaved keyboard shortcut arrow keys pixaroma workflows website site download example text too small tiny bigger larger size zoom font readable collapse expand fold unfold hide show arrow twisty tree nested new folder inside",
     sections: [

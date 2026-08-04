@@ -181,8 +181,8 @@ function injectCSS() {
       position: absolute;
       inset: 0;
       background-color: currentColor;
-      -webkit-mask: url("/pixaroma/assets/icons/ui/swap.svg") center / 12px 12px no-repeat;
-              mask: url("/pixaroma/assets/icons/ui/swap.svg") center / 12px 12px no-repeat;
+      -webkit-mask: url("/api/pixaroma/assets/icons/ui/swap.svg") center / 12px 12px no-repeat;
+              mask: url("/api/pixaroma/assets/icons/ui/swap.svg") center / 12px 12px no-repeat;
       pointer-events: none;
     }
     .pix-res-swap:hover { color: var(--pix-acc,#f66744); border-color: var(--pix-acc,#f66744); }
@@ -234,8 +234,8 @@ function injectCSS() {
       width: 11px;
       height: 11px;
       background-color: #888;
-      -webkit-mask: url("/pixaroma/assets/icons/ui/magnet.svg") center / 11px 11px no-repeat;
-              mask: url("/pixaroma/assets/icons/ui/magnet.svg") center / 11px 11px no-repeat;
+      -webkit-mask: url("/api/pixaroma/assets/icons/ui/magnet.svg") center / 11px 11px no-repeat;
+              mask: url("/api/pixaroma/assets/icons/ui/magnet.svg") center / 11px 11px no-repeat;
       pointer-events: none;
     }
     .pix-res-snap-btns {
@@ -311,8 +311,8 @@ function injectCSS() {
       position: absolute;
       inset: 0;
       background-color: currentColor;
-      -webkit-mask: url("/pixaroma/assets/icons/ui/swap.svg") center / 12px 12px no-repeat;
-              mask: url("/pixaroma/assets/icons/ui/swap.svg") center / 12px 12px no-repeat;
+      -webkit-mask: url("/api/pixaroma/assets/icons/ui/swap.svg") center / 12px 12px no-repeat;
+              mask: url("/api/pixaroma/assets/icons/ui/swap.svg") center / 12px 12px no-repeat;
       pointer-events: none;
     }
     .pix-res-ratio-swap:hover { color: var(--pix-acc,#f66744); border-color: var(--pix-acc,#f66744); }
