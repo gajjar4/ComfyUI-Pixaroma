@@ -4,7 +4,7 @@ import { isVueNodes, applyAdaptiveCanvasOnly } from "../shared/nodes2.mjs";
 import { installResizeFloor } from "../shared/resize_floor.mjs";
 import { installCanvasZoomPassthrough } from "../shared/canvas_zoom.mjs";
 import { registerNodeHelp } from "../shared/help.mjs";
-import { installNodeAccent, registerNodeAccent } from "../shared/node_settings.mjs";
+import { installNodeAccent, registerNodeAccent, nodeSetting } from "../shared/node_settings.mjs";
 
 // ╔══════════════════════════════════════════════════════════════════════╗
 // ║  Run Log Pixaroma — the last 10 run times, on the node                ║
@@ -112,6 +112,122 @@ function fmtTime(ms) {
   if (m < 60) return m + ":" + String(sec).padStart(2, "0");
   return Math.floor(m / 60) + ":" + String(m % 60).padStart(2, "0") + ":" + String(sec).padStart(2, "0");
 }
+
+// ── the optional hardware line ──────────────────────────────────────────────
+// Off by default. Reads ComfyUI's OWN /system_stats, so there is no new backend
+// route, no extra dependency and nothing to install; it is the same endpoint
+// Version Check already uses.
+//
+// ⚠️ READ LIVE, NEVER PERSISTED - this is the whole design and it must stay that
+// way. The text is derived at render time and is never written to
+// node.properties, so (a) it can never dirty a clean workflow on load
+// (Vue Compat #18, the bug class that has bitten four nodes), and (b) it can
+// never travel inside a shared workflow file and tell a stranger what hardware
+// this machine has. The show/hide choice is a per-USER setting rather than
+// per-node for the same reason: it describes the machine, not the workflow.
+// Deliberately NOT included in the .txt Export either - see #13.
+const SETTING_SHOW_HW = "Pixaroma.RunLog.ShowHardware";
+
+let _hwPromise = null;   // one fetch per page, shared by every Run Log node
+
+/** "cuda:0 NVIDIA GeForce RTX 4090 : cudaMallocAsync" -> "RTX 4090".
+ *  Defensive on purpose: only KNOWN decorations are stripped, and anything that
+ *  does not match falls through UNCHANGED. A slightly ugly name beats a mangled
+ *  one, and the string differs per backend (mps / hip / cpu / xpu all differ),
+ *  so this must never assume the NVIDIA shape. */
+function shortGpu(raw) {
+  const orig = String(raw == null ? "" : raw).trim();
+  if (!orig) return "";
+  let s = orig.split(" : ")[0];                        // drop the allocator suffix
+  s = s.replace(/^(?:cuda|hip|xpu|mps|cpu|privateuseone):\d+\s*/i, "");
+  s = s.replace(/^NVIDIA\s+/i, "").replace(/^GeForce\s+/i, "");
+  s = s.trim();
+  return s || orig;
+}
+
+/** Bytes -> a whole number of GB ("24GB"). Empty string when it is not a usable
+ *  number, so a missing field drops its segment instead of printing "NaNGB". */
+function gbLabel(bytes) {
+  const n = Number(bytes);
+  if (!isFinite(n) || n <= 0) return "";
+  return Math.round(n / 1073741824) + "GB";
+}
+
+/** Build "RTX 4090 · 24GB VRAM · 128GB RAM" from a /system_stats payload. */
+function hwLineFrom(stats) {
+  const dev = (stats && Array.isArray(stats.devices) ? stats.devices[0] : null) || {};
+  const sys = (stats && stats.system) || {};
+  const parts = [];
+  const gpu = shortGpu(dev.name);
+  if (gpu) parts.push(gpu);
+  // Only claim "VRAM" for a device that actually has a separate pool. Apple
+  // silicon (mps) shares one pool with the system, so printing "24GB VRAM ·
+  // 24GB RAM" there would be telling the user the same memory twice; a CPU run
+  // has no VRAM at all.
+  const type = String(dev.type || "").toLowerCase();
+  if (type === "cuda" || type === "hip" || type === "xpu") {
+    const v = gbLabel(dev.vram_total);
+    if (v) parts.push(v + " VRAM");
+  }
+  const r = gbLabel(sys.ram_total);
+  if (r) parts.push(r + (type === "mps" ? " unified" : " RAM"));
+  return parts.join(" · ");
+}
+
+/** The line, fetched once per page and cached. Never rejects: on any failure it
+ *  resolves to "" and the row simply stays empty, because a run-time ledger must
+ *  not break over a cosmetic extra. */
+function getHwLine() {
+  if (!_hwPromise) {
+    _hwPromise = Promise.resolve()
+      .then(() => api.fetchApi("/system_stats"))
+      .then((r) => (r && r.ok ? r.json() : null))
+      .then((d) => {
+        const line = hwLineFrom(d);
+        // Only a REAL answer is cached. Caching a failure would disable the
+        // line for the rest of the page over one hiccup (e.g. asking while the
+        // server is still starting), with no way back but a reload.
+        if (!line) _hwPromise = null;
+        return line;
+      })
+      .catch(() => { _hwPromise = null; return ""; });
+  }
+  return _hwPromise;
+}
+
+/** Paint (or clear) one node's hardware line. Safe to call any time; reads the
+ *  setting LIVE so the gear toggle applies with no reload. */
+function renderHw(node, forcedOn) {
+  const box = node && node._pixRlHw;
+  if (!box) return;
+  // `forcedOn` is the value handed to the settings row's change callback. Use it
+  // in preference to re-reading, per the house rule that a setting's onChange
+  // can run BEFORE the store write lands - re-reading there returns the OLD
+  // value and the row appears to do nothing (which is exactly what happened on
+  // the first build of this).
+  const on = forcedOn === undefined ? !!nodeSetting(SETTING_SHOW_HW, false) : !!forcedOn;
+  if (!on) {
+    box.textContent = "";
+    box.removeAttribute("title");
+    box.style.display = "none";
+    return;
+  }
+  box.style.display = "";
+  getHwLine().then((line) => {
+    // The user may have toggled it back off while the fetch was in flight, and
+    // this promise resolves for every node that asked. `on` is this call's own
+    // decision, so a later call always wins.
+    if (!node._pixRlHw || node._pixRlHw !== box) return;
+    if (box.style.display === "none") return;
+    box.textContent = line;
+    // The full text on hover, since a narrow node truncates it.
+    if (line) box.title = line;
+    else box.removeAttribute("title");
+  });
+}
+
+/** Repaint every live node's line (used by the settings toggle). */
+function renderHwAll(forcedOn) { for (const n of _logs) renderHw(n, forcedOn); }
 
 // ── history (per node, on node.properties) ──────────────────────────────────
 // An entry is { ms, label }. v1 (v1.4.54 and earlier) stored a BARE ms number,
@@ -521,6 +637,17 @@ function injectCSS() {
     // dragged taller than the exact fit (spare height falls between the panel
     // and the footer rather than stranding the footer mid-node).
     ".pix-rl-foot{display:flex;align-items:center;justify-content:flex-end;gap:2px;flex:none;margin-top:auto;height:20px;padding:0 2px;}",
+    // The optional hardware line shares the footer ROW with those buttons, so it
+    // costs ZERO height - the strip is 20px either way and none of the sizing
+    // constants in #5 move. margin-right:auto pushes it left of the buttons and
+    // beats the container's justify-content, so the buttons stay in the corner.
+    // min-width:0 is required for the ellipsis: a flex item's default
+    // min-width:auto refuses to shrink below its text and would push the buttons
+    // out of the node instead of truncating. A narrow node therefore clips the
+    // line and widening the node reveals it, which is the agreed behaviour.
+    ".pix-rl-hw{margin-right:auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"
+      + "font-family:'Consolas','DejaVu Sans Mono',ui-monospace,monospace;font-size:10px;color:#57544d;"
+      + "letter-spacing:0.02em;padding-left:3px;cursor:default;user-select:none;}",
     ".pix-rl-fbtn{display:inline-flex;align-items:center;justify-content:center;width:22px;height:18px;border:0;background:transparent;cursor:pointer;border-radius:4px;padding:0;}",
     ".pix-rl-fbtn:hover{background:rgba(255,255,255,0.06);}",
     ".pix-rl-fbtn:disabled{opacity:0.3;cursor:default;}",
@@ -551,11 +678,15 @@ function setupNode(node) {
   cap.appendChild(lbl); cap.appendChild(status);
   const screen = el("div", "pix-rl-screen");
   const foot = el("div", "pix-rl-foot");
+  // Shares the footer row with the buttons, so it adds NO height (see the CSS).
+  // First child + margin-right:auto puts it left, buttons stay in the corner.
+  const hw = el("div", "pix-rl-hw");
+  hw.style.display = "none";
   const exportBtn = iconBtn("download.svg", "Export the times as a .txt file");
   const clearBtn = iconBtn("delete.svg", "Clear the list");
   exportBtn.addEventListener("click", (e) => { e.stopPropagation(); exportTxt(node); });
   clearBtn.addEventListener("click", (e) => { e.stopPropagation(); clearHistory(node); });
-  foot.appendChild(exportBtn); foot.appendChild(clearBtn);
+  foot.appendChild(hw); foot.appendChild(exportBtn); foot.appendChild(clearBtn);
   root.appendChild(cap); root.appendChild(screen); root.appendChild(foot);
 
   node._pixRlRoot = root;
@@ -563,6 +694,8 @@ function setupNode(node) {
   node._pixRlStatus = status;
   node._pixRlExportBtn = exportBtn;
   node._pixRlClearBtn = clearBtn;
+  node._pixRlHw = hw;
+  renderHw(node);
 
   installCanvasZoomPassthrough(root);
   installNodeAccent(node, root);   // the face follows this node's accent colour
@@ -607,6 +740,7 @@ const HELP = {
     { heading: "Label your runs", body: "A list of times tells you that something changed, not what. Double-click any row and type a short note about that run: 'with style lora', 'seed 12345', 'base, no LLM'. Press Enter to save, or click away, which also saves. Escape leaves it as it was. Clearing the text removes the note again.\n\nThe note belongs to that run, so as newer runs push it down the list it travels with its own time, and it disappears with it when it drops off the bottom. Notes are saved in the workflow like the times, and they are included when you export or copy the list." },
     { heading: "This workflow only", body: "The list lives on the node and is saved inside the workflow, so it is only the times for this workflow and it stays with it. Open the workflow again another day and the list is still there. A different workflow keeps its own separate list." },
     { heading: "The two buttons", body: "In the bottom-right corner are two small buttons. The download icon exports the list as a plain .txt file you can save or share. The trash icon clears the list back to 'No runs yet'. The same actions are also on the right-click menu, along with Copy times." },
+    { heading: "Showing your hardware", body: "Times only mean something next to the machine that produced them, which matters if you share a screenshot or compare with someone else. Open the gear on the node and switch on 'Show this PC's hardware' to add a small line in the bottom corner, next to those two buttons: your graphics card, its memory and your system memory, for example 'RTX 4090 · 24GB VRAM · 128GB RAM'.\n\nIt sits on the same row as the buttons, so the node does not change size. If your node is narrow the line is cut off with dots at the end: hover it to read the whole thing, or drag the node wider.\n\nThe line is read fresh from ComfyUI each time and is never saved into your workflow, so sharing a workflow file never tells anyone what is inside your PC. The switch applies to every Run Log node you have, since they would all show the same machine anyway. It is off until you turn it on, and it is not included in the exported .txt file." },
     { heading: "Right-click options", defs: [
       ["Copy times", "Copies the whole list as plain text, with your notes, so you can paste it into notes or a message."],
       ["Export as .txt", "Saves the list as a plain text file (same as the download button)."],
@@ -699,4 +833,18 @@ registerNodeHelp(NODE_NAME, HELP);
 
 // The colour option: a right-click "Run Log settings" entry, the gear in the
 // selection toolbar, and the shared colour panel behind both.
-registerNodeAccent("PixaromaRunLog", { title: "Run Log" });
+registerNodeAccent("PixaromaRunLog", {
+  title: "Run Log",
+  rows: [
+    { kind: "toggle", setting: SETTING_SHOW_HW, defaultValue: false,
+      label: "Show this PC's hardware",
+      hint: "Adds a small line in the bottom corner: graphics card, its memory and system memory. It shares the row with the two buttons, so the node does not change size. Widen the node if the text is cut off. It is read fresh each time and is never saved into your workflow." },
+  ],
+  // ⚠️ onRowChange, NOT onChange - the panel wires the option rows to
+  // `def.onRowChange` and reserves `onChange` for the accent colour, so a row
+  // handler put on `onChange` is simply never called (first build did that and
+  // the toggle appeared dead). The VALUE is passed straight through rather than
+  // re-read, per the onChange-fires-before-the-write rule.
+  // Every Run Log node shows the same machine, so one toggle repaints them all.
+  onRowChange: (n, setting, value) => renderHwAll(value),
+});

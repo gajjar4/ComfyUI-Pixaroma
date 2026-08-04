@@ -88,7 +88,7 @@ export const KEYWORDS = {
   PixaromaCombine: "merge batch accumulate gather join",
   PixaromaXYPlot: "grid compare matrix sweep test chart contact sheet lora strength weight side by side versus vs combination example examples which sampler steps cfg",
   PixaromaRunTimer: "time clock how long duration speed stopwatch",
-  PixaromaRunLog: "history times record log past runs",
+  PixaromaRunLog: "history times record log past runs hardware gpu graphics card vram ram memory specs rtx system benchmark",
   NotifyPixaroma: "sound alert ding beep finished done chime",
   PixaromaVersionCheck: "version diagnostic about update which version",
 
