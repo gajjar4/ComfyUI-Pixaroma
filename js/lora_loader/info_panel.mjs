@@ -5,7 +5,7 @@
 
 import { app } from "/scripts/app.js";
 import { readState, patchLora, accentOf, BRAND } from "./core.mjs";
-import { loraInfo, thumbUrl, civitaiLookup, invalidateInfo, deleteCivitai } from "./api.mjs";
+import { loraInfo, thumbUrl, civitaiLookup, invalidateInfo, deleteCivitai, saveCustomTriggers } from "./api.mjs";
 import { getNodeRect } from "./settings.mjs";
 
 let _panel = null;
@@ -237,6 +237,16 @@ export async function openInfoPanel(node, id, refresh) {
     return out;
   }
 
+  // Custom words belong to the LORA FILE, not to this row: they are kept in one
+  // store in ComfyUI's user dir so they come back for the same LoRA in any row,
+  // node or workflow. The row still holds a copy (that is what chipList and the
+  // ticked `triggers` read), so this writes BOTH - the row for right now, the
+  // store so it survives.
+  function persistCustom(words) {
+    if (!name) return;
+    saveCustomTriggers(name, words);   // fire and forget: the row already has it
+  }
+
   function addCustom(word) {
     const w = (word || "").trim();
     if (!w) return;
@@ -250,6 +260,7 @@ export async function openInfoPanel(node, id, refresh) {
       ? (e.custom || []) : [...(e.custom || []), w];
     const trig = (e.triggers || []).some((x) => x.toLowerCase() === key) ? e.triggers : [...(e.triggers || []), w];
     patchLora(node, id, { custom, triggers: trig }); // added = selected, so it reaches the output
+    persistCustom(custom);
     refresh?.(false);
     renderBody();
     setTimeout(() => panel.querySelector(".pix-ll-addtrig input")?.focus(), 0);
@@ -259,12 +270,40 @@ export async function openInfoPanel(node, id, refresh) {
     const key = (word || "").toLowerCase();
     const e = readState(node).loras.find((x) => x.id === id);
     if (!e) return;
+    const custom = (e.custom || []).filter((x) => x.toLowerCase() !== key);
     patchLora(node, id, {
-      custom: (e.custom || []).filter((x) => x.toLowerCase() !== key),
+      custom,
       triggers: (e.triggers || []).filter((x) => x.toLowerCase() !== key),
     });
+    persistCustom(custom);
     refresh?.(false);
     renderBody();
+  }
+
+  // Bring the stored words for THIS LoRA onto the row when the panel opens.
+  // Also migrates the other way: a row that already carried custom words from
+  // before the store existed (or from a workflow made on another machine) pushes
+  // them INTO the store, so nobody's existing words are lost by this change.
+  function hydrateCustom() {
+    const stored = Array.isArray(info?.custom_triggers) ? info.custom_triggers : [];
+    const e = readState(node).loras.find((x) => x.id === id);
+    if (!e) return;
+    const rowWords = e.custom || [];
+    const seen = new Set();
+    const merged = [];
+    for (const w of [...stored, ...rowWords]) {
+      const k = String(w || "").trim().toLowerCase();
+      if (!k || seen.has(k)) continue;
+      seen.add(k);
+      merged.push(w);
+    }
+    // Only touch state when something actually changed - a no-op write would
+    // dirty a clean workflow every time the panel is opened (Vue Compat #18).
+    const same = merged.length === rowWords.length
+      && merged.every((w, i) => w === rowWords[i]);
+    if (!same) { patchLora(node, id, { custom: merged }); refresh?.(false); }
+    // Push back only when the row is carrying something the store lacks.
+    if (merged.length > stored.length) persistCustom(merged);
   }
 
   function thumb() {
@@ -479,7 +518,7 @@ export async function openInfoPanel(node, id, refresh) {
   place(panel, node);
   const first = await loraInfo(name);
   if (!panel.isConnected) return;
-  if (first.ok && first.info) info = first.info;
+  if (first.ok && first.info) { info = first.info; hydrateCustom(); }
   renderBody();
   place(panel, node);
 

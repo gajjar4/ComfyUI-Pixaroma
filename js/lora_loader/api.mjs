@@ -148,6 +148,27 @@ export async function setCivitaiAccount(patch) {
 
 // Delete the saved Civitai sidecar (<base>.civitai.info) next to the LoRA, so its
 // info reverts to the file's own words. Caller should invalidateInfo(name) after.
+// Persist the user's own trigger words FOR THIS LORA FILE (one store in ComfyUI's
+// user dir, keyed by LoRA name). They used to live only on the row, so switching
+// the row's LoRA and back lost them and another node never saw them.
+// Sending an EMPTY array removes the LoRA's entry.
+export async function saveCustomTriggers(name, words) {
+  try {
+    const r = await fetch(pixApiUrl("/pixaroma/api/lora/custom_triggers"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name, words }),
+    });
+    const j = await r.json();
+    // The panel reads custom words out of the cached info, so a stale cache would
+    // undo the save on the next open.
+    if (j?.ok) invalidateInfo(name);
+    return j;
+  } catch {
+    return { ok: false, message: "Could not reach the server." };
+  }
+}
+
 export async function deleteCivitai(name) {
   try {
     const r = await fetch(pixApiUrl("/pixaroma/api/lora/civitai_delete"), {

@@ -57,6 +57,8 @@ from .nodes._lora_helpers import (
     civitai_hosts as _civitai_hosts,
     read_civitai_account as _civitai_read_account,
     write_civitai_account as _civitai_write_account,
+    get_custom_triggers as _lora_get_custom,
+    set_custom_triggers as _lora_set_custom,
 )
 from .nodes.node_krea_lora_convert import (
     inspect_lora as _krea_lora_inspect,
@@ -2380,6 +2382,12 @@ async def api_lora_info(request):
         info = await loop.run_in_executor(None, _lora_build_info, path)
     except Exception as exc:
         return web.json_response({"ok": False, "message": "Could not read: {}".format(exc)})
+    # The user's own words ride along with the file's and Civitai's, so the panel
+    # gets all three sources in one request and can show them the moment it opens.
+    try:
+        info["custom_triggers"] = _lora_get_custom(_lora_custom_file(), name)
+    except Exception:
+        info["custom_triggers"] = []
     return web.json_response({"ok": True, "info": info})
 
 
@@ -2589,6 +2597,60 @@ async def api_lora_civitai(request):
         return web.json_response({"ok": True, "found": False, "reason": "notfound"})
     await loop.run_in_executor(None, _lora_save_sidecar, path, data)
     return web.json_response({"ok": True, "found": True, "info": parsed})
+
+
+def _lora_custom_file():
+    """Where the user's own trigger words live: <ComfyUI user dir>/pixaroma/lora_triggers.json.
+
+    ONE file for every LoRA, in the same folder as the Civitai account (and for the
+    same reasons): outside this plugin's git working tree, so it survives an update
+    or a Manager reinstall. Deliberately NOT a sidecar beside each .safetensors -
+    that would write into the models folder, which is often a read-only or network
+    drive, and risks colliding with a user's own <base>.json."""
+    base = None
+    try:
+        base = folder_paths.get_user_directory()
+    except Exception:
+        base = None
+    if not base:
+        base = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "user")
+    d = os.path.join(base, "pixaroma")
+    try:
+        os.makedirs(d, exist_ok=True)
+    except Exception:
+        pass
+    return os.path.join(d, "lora_triggers.json")
+
+
+@PromptServer.instance.routes.post("/pixaroma/api/lora/custom_triggers")
+async def api_lora_custom_triggers(request):
+    """Save the user's own trigger words for one LoRA. POST {name, words}.
+
+    The name is a STORE KEY, never a filesystem path - it is normalised by
+    custom_trigger_key and used as a dict key, so it cannot reach the disk. We
+    still resolve it against the loras dirs first so the store only ever gains
+    entries for LoRAs that actually exist (a typo'd or hostile name is refused
+    rather than silently accumulating). Always 200."""
+    try:
+        data = await request.json()
+    except Exception:
+        data = {}
+    data = data or {}
+    name = data.get("name", "") or request.query.get("name", "")
+    words = data.get("words", [])
+    path = _resolve_lora_path(name)
+    roots = _lora_dirs()
+    if not path or not roots or not _is_path_under(path, *roots):
+        return web.json_response({"ok": False, "message": "LoRA not found."})
+    import asyncio
+    loop = asyncio.get_event_loop()
+    try:
+        stored = await loop.run_in_executor(
+            None, _lora_set_custom, _lora_custom_file(), name, words
+        )
+    except Exception as exc:
+        return web.json_response({"ok": False, "message": "Could not save: {}".format(exc)})
+    return web.json_response({"ok": True, "words": stored})
 
 
 @PromptServer.instance.routes.post("/pixaroma/api/lora/civitai_delete")

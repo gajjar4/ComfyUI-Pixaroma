@@ -555,6 +555,137 @@ def write_civitai_account(path, account):
         return False
 
 
+# ── The user's own trigger words, stored PER LORA ────────────────────────────
+#
+# Reported 2026-08-04: "my own trigger word is not saved into the LoRA when I
+# reload the lora". It was saved, but onto the ROW in that workflow - so
+# switching the row to another LoRA and back lost it, and the same LoRA in
+# another node or workflow never had it. The other two sources of trigger words
+# (the .safetensors' own metadata, and the cached Civitai words) DO belong to the
+# file, so the third one being per-row was the odd one out and read as a bug.
+#
+# Stored in ONE file in ComfyUI's user dir, not as a sidecar per LoRA: nothing is
+# written into the models folder, which may sit on a read-only or network drive,
+# and there is no chance of colliding with a user's own <base>.json.
+#
+# Like the civitai account helpers, these take an EXPLICIT path so they stay
+# folder_paths-free and unit-testable; the route decides where.
+_MAX_CUSTOM_WORDS = 64      # per LoRA - matches normLora's cap in core.mjs
+_MAX_CUSTOM_LEN = 200       # a trigger phrase, not an essay
+_MAX_CUSTOM_LORAS = 5000    # whole-store sanity cap
+
+
+def custom_trigger_key(name):
+    """Normalize a LoRA name into a store key. Separators are folded to `/` so a
+    store copied between Windows and Linux still matches. Returns "" for junk."""
+    if not isinstance(name, str):
+        return ""
+    return name.strip().replace("\\", "/").strip("/")
+
+
+def sanitize_custom_words(words):
+    """A clean, de-duped, capped list of trigger words. Never raises.
+
+    De-dupe is case-insensitive but keeps the FIRST spelling the user typed, so
+    their capitalisation survives."""
+    out, seen = [], set()
+    if not isinstance(words, (list, tuple)):
+        return out
+    for w in words:
+        if not isinstance(w, str):
+            continue
+        s = w.strip()[:_MAX_CUSTOM_LEN].strip()
+        if not s:
+            continue
+        k = s.lower()
+        if k in seen:
+            continue
+        seen.add(k)
+        out.append(s)
+        if len(out) >= _MAX_CUSTOM_WORDS:
+            break
+    return out
+
+
+def read_custom_triggers(path):
+    """The whole store as {key: [words]}. Never raises - a missing or damaged
+    file must read as "no custom words", never break the panel."""
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            obj = json.load(f)
+    except Exception:
+        return {}
+    if not isinstance(obj, dict):
+        return {}
+    out = {}
+    for name, words in obj.items():
+        key = custom_trigger_key(name)
+        if not key:
+            continue
+        clean = sanitize_custom_words(words)
+        if clean:
+            out[key] = clean
+        if len(out) >= _MAX_CUSTOM_LORAS:
+            break
+    return out
+
+
+def write_custom_triggers(path, store):
+    """Write the whole store. Returns True on success, never raises.
+
+    Written to a temp file and os.replace'd: this one file holds EVERY LoRA's
+    words, so a crash or a full disk part-way through a plain write would take
+    all of them, not just the one being edited."""
+    data = {}
+    if isinstance(store, dict):
+        for name, words in store.items():
+            key = custom_trigger_key(name)
+            if not key:
+                continue
+            clean = sanitize_custom_words(words)
+            if clean:
+                data[key] = clean
+            if len(data) >= _MAX_CUSTOM_LORAS:
+                break
+    tmp = str(path) + ".tmp"
+    try:
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+        os.replace(tmp, path)
+        return True
+    except Exception:
+        try:
+            os.remove(tmp)
+        except Exception:
+            pass
+        return False
+
+
+def get_custom_triggers(path, name):
+    """One LoRA's stored words (possibly empty). Never raises."""
+    key = custom_trigger_key(name)
+    if not key:
+        return []
+    return read_custom_triggers(path).get(key, [])
+
+
+def set_custom_triggers(path, name, words):
+    """Replace one LoRA's words. An EMPTY list removes its entry entirely, so the
+    store does not accumulate dead keys as users clear words. Returns the list
+    actually stored. Never raises."""
+    key = custom_trigger_key(name)
+    if not key:
+        return []
+    store = read_custom_triggers(path)
+    clean = sanitize_custom_words(words)
+    if clean:
+        store[key] = clean
+    else:
+        store.pop(key, None)
+    write_custom_triggers(path, store)
+    return clean
+
+
 def save_sidecar_cache(lora_path, civitai_obj):
     """Cache a raw Civitai response next to the LoRA as <base>.civitai.info so future
     reads are instant and offline. Returns True on success. Never raises."""

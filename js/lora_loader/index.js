@@ -300,8 +300,19 @@ registerNodeHelp(CLASS, {
         "Click the i on a row to see the LoRA's info and its trigger words, read straight from the file - " +
         "no internet needed. Tap the words you want; the switched-on picks come out of the triggers output " +
         "as plain text you can wire into your prompt. If a LoRA has no words in its file, you can type your " +
-        "own in the box at the bottom of the panel (it's saved on that LoRA), or use the optional Civitai " +
+        "own in the box at the bottom of the panel, or use the optional Civitai " +
         "button to look them up online (only when you click it) and save them for next time.",
+    },
+    {
+      heading: "Your own trigger words are remembered",
+      body:
+        "A word you type is kept for that LoRA, not just for the row you typed it on. Use the same LoRA " +
+        "in another row, another node or another workflow and your words are waiting in its panel. " +
+        "Swap a row to a different LoRA and back, and they come back too.\n\n" +
+        "They are stored on this computer, alongside your other Pixaroma settings, so they survive an " +
+        "update and nothing is written into your models folder. Tap a word to send it to the triggers " +
+        "output, the same as any other word: being remembered means it is offered again, not that it is " +
+        "switched on for you. The small x on a word forgets it for that LoRA everywhere.",
     },
     {
       heading: "Comparing LoRAs side by side",
