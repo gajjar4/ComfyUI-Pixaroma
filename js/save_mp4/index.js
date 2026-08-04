@@ -152,6 +152,42 @@ function applyVideoEntry(node, entry) {
   return true;
 }
 
+// Which entry in a node's ui payload is our clip?
+//
+// Prefer our own `pixaroma_videos` key, then fall back to the standard `images`
+// list, which carries the SAME entry (node_save_mp4.py deliberately emits both).
+// The fallback is what makes the preview survive a HOST that relays only the ui
+// keys it recognises and drops custom ones: there the file saves perfectly well
+// and the player just stays black, because the browser is never told the
+// filename. Reported on a cloud platform, 2026-08-04. Do not "simplify" this
+// back to reading only our own key.
+function pickVideoEntry(output) {
+  const own = output?.pixaroma_videos;
+  if (own?.length) return own[0];
+  const imgs = output?.images;
+  if (!imgs?.length) return null;
+  return (
+    imgs.find(
+      (e) => /^video\//.test(e?.format || "") || /\.mp4$/i.test(e?.filename || ""),
+    ) || null
+  );
+}
+
+// Persist the rendered clip so the preview survives a workflow-tab switch /
+// collapse-expand (Vue tears down any node._xxx field; node.properties is
+// serialized and restored - Preview Image Pattern #4), then show it.
+// Idempotent, so it is safe for both delivery paths below to call it.
+function commitVideoEntry(node, entry) {
+  if (!node || !entry?.filename) return;
+  node.properties = node.properties || {};
+  node.properties.pixMp4Video = {
+    filename: entry.filename,
+    subfolder: entry.subfolder || "",
+    type: entry.type || "output",
+  };
+  applyVideoEntry(node, entry);
+}
+
 // Restore the preview after a Vue rebuild (workflow-tab switch). The last
 // rendered clip is persisted on node.properties (a runtime node._xxx field is
 // torn down by the tab switch; node.properties is serialized + restored —
@@ -458,31 +494,39 @@ app.registerExtension({
       });
       return r;
     };
+
+    // Delivery path 1 of 2: ComfyUI's STANDARD per-node result hook, called
+    // with this node's ui payload. This is the path VideoHelperSuite uses, and
+    // it is the one that survives a host whose frontend hands results to nodes
+    // itself instead of re-broadcasting the raw "executed" socket event. Kept
+    // ALONGSIDE the global listener below rather than replacing it, because a
+    // given host may deliver through either; commitVideoEntry is idempotent, so
+    // being called twice just re-applies the same clip.
+    const onExecutedProto = nodeType.prototype.onExecuted;
+    nodeType.prototype.onExecuted = function (output) {
+      const r = onExecutedProto?.apply(this, arguments);
+      const entry = pickVideoEntry(output);
+      if (entry) commitVideoEntry(this, entry);
+      return r;
+    };
   },
 });
 
+// Delivery path 2 of 2: the raw execution event. This is what shipped
+// originally and is what fires on a normal local install.
 api.addEventListener("executed", ({ detail }) => {
-  const entries = detail?.output?.pixaroma_videos;
-  if (!entries || !entries.length) return;
-  let node = app.graph.getNodeById(detail.node);
-  if (!node && typeof detail.node === "string") {
+  let node = app.graph.getNodeById(detail?.node);
+  if (!node && typeof detail?.node === "string") {
     node = app.graph.getNodeById(parseInt(detail.node, 10));
   }
-  if (!node) return;
-  const entry = entries[0];
-  // Persist the rendered clip so the preview survives a workflow-tab switch /
-  // collapse-expand: Vue tears down the node + any node._xxx field, but
-  // node.properties is serialized and restored (Preview Image Pattern #4).
-  // Store just what buildViewUrl needs.
-  node.properties = node.properties || {};
-  node.properties.pixMp4Video = {
-    filename: entry.filename,
-    subfolder: entry.subfolder || "",
-    type: entry.type || "output",
-  };
+  // Resolve the node BEFORE picking an entry, and require it to be ours: the
+  // `images` fallback inside pickVideoEntry would otherwise happily match a
+  // clip reported by somebody else's node.
+  if (!node || node.comfyClass !== "PixaromaSaveMp4") return;
+  const entry = pickVideoEntry(detail?.output);
   // Show it now (its own loadedmetadata / timeupdate events drive the bar from
-  // here). applyVideoEntry sets the Download basename + kicks the re-fit.
-  applyVideoEntry(node, entry);
+  // here). commitVideoEntry sets the Download basename + kicks the re-fit.
+  if (entry) commitVideoEntry(node, entry);
 });
 
 // The colour option: a right-click "Save Mp4 settings" entry, the gear in the
