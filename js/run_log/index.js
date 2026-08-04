@@ -648,6 +648,16 @@ function injectCSS() {
     ".pix-rl-hw{margin-right:auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"
       + "font-family:'Consolas','DejaVu Sans Mono',ui-monospace,monospace;font-size:10px;color:#57544d;"
       + "letter-spacing:0.02em;padding-left:3px;cursor:default;user-select:none;}",
+    // The breathing room between the text and the first button goes on the
+    // BUTTON, not on the text. Measured, not reasoned: `padding-right` on the
+    // text looks right while the line fits but does NOTHING once it truncates
+    // (the clip happens at the padding box, so the ellipsis still lands hard
+    // against the icon - 2px, verified at a 200px-wide node). The container's
+    // flex `gap:2px` is likewise too tight for text-next-to-a-button, though it
+    // is fine between the two icons. A margin on the sibling sits outside the
+    // text box entirely, so the gap holds in BOTH the fitting and the truncated
+    // case. margin-right:auto on the text still does the pushing.
+    ".pix-rl-hw + .pix-rl-fbtn{margin-left:8px;}",
     ".pix-rl-fbtn{display:inline-flex;align-items:center;justify-content:center;width:22px;height:18px;border:0;background:transparent;cursor:pointer;border-radius:4px;padding:0;}",
     ".pix-rl-fbtn:hover{background:rgba(255,255,255,0.06);}",
     ".pix-rl-fbtn:disabled{opacity:0.3;cursor:default;}",
