@@ -683,6 +683,16 @@ function injectCSS() {
     // Scoped to our own node so it cannot affect any other pack's widgets, and
     // a no-op in Classic, which has no .lg-node.
     ".lg-node:has(.pix-rl-root) .lg-node-widget > *:has(> .pix-rl-root){grid-column:1 / -1;}",
+    // ...and give back the LEFT inset that spanning column 1 just took away.
+    // Core styles the widget row `padding: 0 12px 0 0` - right only - because
+    // normally column 1 IS the input-dot column and that is what insets the
+    // content from the left edge. We hide that column (no inputs) and span
+    // across it, so the body ended up flush against the node's left edge while
+    // the right kept its 12px: measured leftGap 0 / rightGap 12, which reads as
+    // the panel being shoved into the corner. 12px matches core's own right
+    // padding exactly, so the two sides are symmetric (Classic is already
+    // symmetric on its own, and has no .lg-node, so this cannot touch it).
+    ".lg-node:has(.pix-rl-root) .lg-node-widget{padding-left:12px;}",
   ].join("\n");
   (document.head || document.documentElement).appendChild(s);
 }
