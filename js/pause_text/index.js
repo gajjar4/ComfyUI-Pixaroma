@@ -458,14 +458,21 @@ function collectGates(out) {
 const _origGraphToPrompt = app.graphToPrompt.bind(app);
 app.graphToPrompt = async function (...args) {
   const result = await _origGraphToPrompt(...args);
-  const out = result?.output;
-  if (out) {
-    for (const g of collectGates(out)) {
-      g.entry.inputs = g.entry.inputs || {};
-      g.entry.inputs[HIDDEN_INPUT] = JSON.stringify({
-        mode: g.mode, text: g.editedText,
-      });
+  // FAIL OPEN - see the note in pause_image: a throw here rejects ComfyUI's
+  // own graphToPrompt and breaks Run for the whole workflow. Never wrap the
+  // `await _origGraphToPrompt` above; a failure in CORE must propagate.
+  try {
+    const out = result?.output;
+    if (out) {
+      for (const g of collectGates(out)) {
+        g.entry.inputs = g.entry.inputs || {};
+        g.entry.inputs[HIDDEN_INPUT] = JSON.stringify({
+          mode: g.mode, text: g.editedText,
+        });
+      }
     }
+  } catch (e) {
+    console.error("[Pixaroma] Pause Text prompt injection failed; prompt sent unchanged", e);
   }
   return result;
 };

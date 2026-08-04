@@ -405,12 +405,21 @@ function collectGates(out) {
 const _origGraphToPrompt = app.graphToPrompt.bind(app);
 app.graphToPrompt = async function (...args) {
   const result = await _origGraphToPrompt(...args);
-  const out = result?.output;
-  if (out) {
-    for (const g of collectGates(out)) {
-      g.entry.inputs = g.entry.inputs || {};
-      g.entry.inputs[HIDDEN_INPUT] = JSON.stringify({ mode: g.mode });
+  // FAIL OPEN. If this injection throws, ComfyUI's graphToPrompt promise
+  // rejects and the Run button stops working for the WHOLE workflow, other
+  // packs' nodes included. Sending the prompt unmodified is far better: at
+  // worst this node falls back to its Python defaults. Never wrap the
+  // `await _origGraphToPrompt` above - a failure in CORE must propagate.
+  try {
+    const out = result?.output;
+    if (out) {
+      for (const g of collectGates(out)) {
+        g.entry.inputs = g.entry.inputs || {};
+        g.entry.inputs[HIDDEN_INPUT] = JSON.stringify({ mode: g.mode });
+      }
     }
+  } catch (e) {
+    console.error("[Pixaroma] Pause Image prompt injection failed; prompt sent unchanged", e);
   }
   return result;
 };

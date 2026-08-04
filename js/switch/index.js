@@ -333,16 +333,23 @@ function switchActiveIndex(index, id) {
 const _origGraphToPrompt = app.graphToPrompt.bind(app);
 app.graphToPrompt = async function (...args) {
   const result = await _origGraphToPrompt(...args);
-  const out = result?.output;
-  if (out) {
-    let index = null;
-    for (const id in out) {
-      const entry = out[id];
-      if (!entry || entry.class_type !== "PixaromaSwitch") continue;
-      if (!index) index = buildSwitchNodeIndex();
-      entry.inputs = entry.inputs || {};
-      entry.inputs[HIDDEN_INPUT_NAME] = String(switchActiveIndex(index, id) ?? 1);
+  // FAIL OPEN - see the note in pause_image: a throw here rejects ComfyUI's
+  // own graphToPrompt and breaks Run for the whole workflow. Never wrap the
+  // `await _origGraphToPrompt` above; a failure in CORE must propagate.
+  try {
+    const out = result?.output;
+    if (out) {
+      let index = null;
+      for (const id in out) {
+        const entry = out[id];
+        if (!entry || entry.class_type !== "PixaromaSwitch") continue;
+        if (!index) index = buildSwitchNodeIndex();
+        entry.inputs = entry.inputs || {};
+        entry.inputs[HIDDEN_INPUT_NAME] = String(switchActiveIndex(index, id) ?? 1);
+      }
     }
+  } catch (e) {
+    console.error("[Pixaroma] Switch prompt injection failed; prompt sent unchanged", e);
   }
   return result;
 };

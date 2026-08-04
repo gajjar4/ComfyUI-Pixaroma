@@ -569,21 +569,28 @@ function findPixaromaNode(index, promptId) {
 const _origGraphToPrompt = app.graphToPrompt.bind(app);
 app.graphToPrompt = async function (...args) {
   const result = await _origGraphToPrompt(...args);
-  const out = result?.output;
-  if (out) {
-    let index = null;
-    for (const id in out) {
-      const entry = out[id];
-      if (!entry || entry.class_type !== "PixaromaPortraitLandscape") continue;
-      if (!index) index = buildPixaromaNodeIndex();
-      const node = findPixaromaNode(index, id);
-      // JSON now that there is a size step as well as an orientation. Python's
-      // parse_state still accepts the bare legacy string, so a workflow saved
-      // before this existed keeps working until it is re-saved.
-      const st = node ? readState(node) : { ...DEFAULT_STATE };
-      entry.inputs = entry.inputs || {};
-      entry.inputs[HIDDEN_INPUT_NAME] = JSON.stringify(st);
+  // FAIL OPEN - see the note in pause_image: a throw here rejects ComfyUI's
+  // own graphToPrompt and breaks Run for the whole workflow. Never wrap the
+  // `await _origGraphToPrompt` above; a failure in CORE must propagate.
+  try {
+    const out = result?.output;
+    if (out) {
+      let index = null;
+      for (const id in out) {
+        const entry = out[id];
+        if (!entry || entry.class_type !== "PixaromaPortraitLandscape") continue;
+        if (!index) index = buildPixaromaNodeIndex();
+        const node = findPixaromaNode(index, id);
+        // JSON now that there is a size step as well as an orientation. Python's
+        // parse_state still accepts the bare legacy string, so a workflow saved
+        // before this existed keeps working until it is re-saved.
+        const st = node ? readState(node) : { ...DEFAULT_STATE };
+        entry.inputs = entry.inputs || {};
+        entry.inputs[HIDDEN_INPUT_NAME] = JSON.stringify(st);
+      }
     }
+  } catch (e) {
+    console.error("[Pixaroma] Portrait Landscape prompt injection failed; prompt sent unchanged", e);
   }
   return result;
 };

@@ -910,34 +910,41 @@ api.addEventListener("executed", ({ detail }) => {
 const _origG2P = app.graphToPrompt.bind(app);
 app.graphToPrompt = async function (...args) {
   const result = await _origG2P(...args);
-  const out = result?.output;
-  if (out) {
-    let index = null;
-    const buildIndex = () => {
-      const m = new Map();
-      const visit = (g) => {
-        if (!g) return;
-        for (const n of (g._nodes || g.nodes || [])) {
-          if (!n) continue;
-          if (n.comfyClass === "PixaromaImageResize" || n.type === "PixaromaImageResize")
-            m.set(String(n.id), n);
-          const inner = n.subgraph || n.graph || n._graph;
-          if (inner && inner !== g) visit(inner);
-        }
+  // FAIL OPEN - see the note in pause_image: a throw here rejects ComfyUI's
+  // own graphToPrompt and breaks Run for the whole workflow. Never wrap the
+  // `await _origG2P` above; a failure in CORE must propagate.
+  try {
+    const out = result?.output;
+    if (out) {
+      let index = null;
+      const buildIndex = () => {
+        const m = new Map();
+        const visit = (g) => {
+          if (!g) return;
+          for (const n of (g._nodes || g.nodes || [])) {
+            if (!n) continue;
+            if (n.comfyClass === "PixaromaImageResize" || n.type === "PixaromaImageResize")
+              m.set(String(n.id), n);
+            const inner = n.subgraph || n.graph || n._graph;
+            if (inner && inner !== g) visit(inner);
+          }
+        };
+        visit(app.graph);
+        return m;
       };
-      visit(app.graph);
-      return m;
-    };
-    for (const id in out) {
-      if (out[id]?.class_type !== "PixaromaImageResize") continue;
-      if (!index) index = buildIndex();
-      const sId = String(id);
-      let node = index.get(sId);
-      if (!node && sId.includes(":")) node = index.get(sId.slice(sId.lastIndexOf(":") + 1));
-      const state = node?.properties?.[STATE_PROP] || JSON.stringify(DEFAULT_STATE);
-      out[id].inputs = out[id].inputs || {};
-      out[id].inputs[HIDDEN_INPUT] = state;
+      for (const id in out) {
+        if (out[id]?.class_type !== "PixaromaImageResize") continue;
+        if (!index) index = buildIndex();
+        const sId = String(id);
+        let node = index.get(sId);
+        if (!node && sId.includes(":")) node = index.get(sId.slice(sId.lastIndexOf(":") + 1));
+        const state = node?.properties?.[STATE_PROP] || JSON.stringify(DEFAULT_STATE);
+        out[id].inputs = out[id].inputs || {};
+        out[id].inputs[HIDDEN_INPUT] = state;
+      }
     }
+  } catch (e) {
+    console.error("[Pixaroma] Image Resize prompt injection failed; prompt sent unchanged", e);
   }
   return result;
 };
