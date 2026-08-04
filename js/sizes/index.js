@@ -12,9 +12,10 @@ import { isVueNodes } from "../shared/nodes2.mjs";
 import { isGraphLoading } from "../shared/graph_loading.mjs";
 import { registerNodeHelp } from "../shared/help.mjs";
 import { registerNodeSettings } from "../shared/node_settings.mjs";
+import { pixAsset } from "../shared/api_url.mjs";
 import {
   BRAND, STATE_PROP, HIDDEN_INPUT, MAX_SIZES,
-  readState, writeState, fmtRow, accentOf, DEFAULT_STATE,
+  readState, writeState, fmtRow, accentOf, DEFAULT_STATE, isStarredPair,
 } from "./core.mjs";
 import { openSizesPanel, closeSizesPanelFor } from "./settings.mjs";
 
@@ -87,11 +88,21 @@ function injectCSS() {
     .pix-sz-list::-webkit-scrollbar { width:6px; }
     .pix-sz-list::-webkit-scrollbar-thumb { background:#555; border-radius:3px; }
     .pix-sz-list::-webkit-scrollbar-track { background:transparent; }
-    .pix-sz-row { box-sizing:border-box; height:${ROW_H}px; display:flex; align-items:center;
+    .pix-sz-row { box-sizing:border-box; position:relative; height:${ROW_H}px; display:flex; align-items:center;
       justify-content:center; padding:0 8px; font-size:12px; color:#cfcfcf; cursor:pointer;
       font-variant-numeric:tabular-nums; user-select:none; }
     .pix-sz-row:hover { background:rgba(255,255,255,0.05); }
     .pix-sz-row.active { background:rgba(255,255,255,0.06); color:var(--acc,${BRAND}); font-weight:600; }
+    /* Recommended marker. ABSOLUTE on purpose: the row centres its text, so an
+       in-flow star would shove the numbers off-centre on starred rows only and
+       the column would no longer line up. Out of flow it cannot shift anything,
+       and the row is a FIXED ${ROW_H}px so it cannot affect the height maths
+       either. Filled star SVG as a mask, never a ★ glyph or an emoji
+       (convention #28) - those differ per OS. */
+    .pix-sz-star { position:absolute; right:7px; top:50%; margin-top:-5.5px;
+      width:11px; height:11px; pointer-events:none; background:var(--acc,${BRAND});
+      -webkit-mask:url("${pixAsset("icons/ui/star.svg")}") center/contain no-repeat;
+      mask:url("${pixAsset("icons/ui/star.svg")}") center/contain no-repeat; }
     .pix-sz-hint { margin-top:${GAP}px; text-align:center; color:#6f6f6f; font-size:11px;
       white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
       display:flex; align-items:center; justify-content:center; gap:5px; }
@@ -171,6 +182,13 @@ function render(node) {
     row.className = "pix-sz-row" + (i === st.selected ? " active" : "");
     row.dataset.idx = String(i);
     row.textContent = fmtRow(st.sizes[i], st);
+    // textContent FIRST (it wipes children), then the star on top.
+    if (isStarredPair(st, st.sizes[i])) {
+      const star = document.createElement("span");
+      star.className = "pix-sz-star";
+      star.title = "Recommended";
+      row.appendChild(star);
+    }
     list.appendChild(row);
   }
 
@@ -429,6 +447,16 @@ registerNodeHelp(CLASS, {
         "width and height to a multiple of 8, 16, 32, or 64 so the numbers stay friendly for the VAE. Snapping is off by default.",
     },
     {
+      heading: "Marking the recommended sizes",
+      body:
+        "Click the star beside a size in settings and it gets a star on the node too. Handy when a list holds every " +
+        "size a workflow accepts but only some of them suit the model you are running: star those, and you can see " +
+        "at a glance which to pick.\n\n" +
+        "A star is a reminder only - it changes nothing about what the node sends out, and you can still choose any " +
+        "size in the list. Stars follow the size itself, so reordering the list, flipping between portrait and " +
+        "landscape, or removing a size and adding it back all keep them.",
+    },
+    {
       heading: "The buttons on the node",
       defs: [
         ["The fold arrow", "Collapses the list down to just the chosen size, or opens it again."],
@@ -437,6 +465,7 @@ registerNodeHelp(CLASS, {
         ["A size in the list", "Click any one to make it the size this node sends out."],
         ["Add, in settings", "Type a width and height, then add it to your list."],
         ["The drag handles, in settings", "Drag a size up or down to reorder the list."],
+        ["The star, in settings", "Marks a size as recommended. It then shows a star on the node. Click again to unmark."],
         ["Snap, in settings", "Rounds every size to a multiple of 8, 16, 32 or 64."],
         ["Add common sizes, in settings", "Adds a set of popular square sizes from 512 up to 2048 in one click."],
       ],

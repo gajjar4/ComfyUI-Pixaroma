@@ -66,7 +66,7 @@ export const KEYWORDS = {
 
   // ── Values ──
   PixaromaResolution: "size width height ratio dimensions aspect",
-  PixaromaSizes: "preset list dimensions size resolution",
+  PixaromaSizes: "preset list dimensions size resolution star starred recommended favourite favorite mark best supported",
   PixaromaSliders: "slider knob dashboard remote control panel",
   PixaromaSeed: "random fixed number sampler noise",
   PixaromaNumber: "int float value amount",

@@ -7,9 +7,11 @@ import { app } from "/scripts/app.js";
 import { isVueNodes } from "../shared/nodes2.mjs";
 import { openPixaromaColorPickerPopup, BUTTON_PALETTE } from "../shared/color_picker.mjs";
 import { GLOBAL_ACCENT_SETTING, repaintAllAccents } from "../shared/node_settings.mjs";
+import { pixAsset } from "../shared/api_url.mjs";
 import {
   readState, writeState, addSize, removeSize, reorderSize, addCommonSizes,
-  accentOf, sanitizePair, BRAND, ACCENT_SETTING, SNAP_OPTIONS, MAX_SIZES,
+  accentOf, sanitizePair, isStarredPair, toggleStarAt,
+  BRAND, ACCENT_SETTING, SNAP_OPTIONS, MAX_SIZES,
 } from "./core.mjs";
 
 let _panel = null;
@@ -67,6 +69,18 @@ function injectCSS() {
     .pix-szp-row .v { flex:1; text-align:center; font-variant-numeric:tabular-nums; }
     .pix-szp-row .del { color:#888; cursor:pointer; flex:0 0 auto; font-size:13px; line-height:1; }
     .pix-szp-row .del:hover { color:#e0604a; }
+    /* Recommended toggle. The glyph is the bundled FILLED star SVG used as a
+       mask (convention #28): an OS-drawn ★ is a different shape and baseline on
+       every platform, and an emoji star arrives in colour on some of them. Off
+       and on are the same filled shape in two colours - an outline-vs-filled
+       pair would need a second asset for no extra clarity. */
+    .pix-szp-row .star { flex:0 0 auto; width:15px; height:15px; cursor:pointer;
+      background:#5a5a5a;
+      -webkit-mask:url("${pixAsset("icons/ui/star.svg")}") center/contain no-repeat;
+      mask:url("${pixAsset("icons/ui/star.svg")}") center/contain no-repeat; }
+    .pix-szp-row .star:hover { background:#8a8a8a; }
+    .pix-szp-row .star.on { background:var(--acc,${BRAND}); }
+    .pix-szp-row .star.on:hover { background:var(--acc,${BRAND}); opacity:.8; }
 
     .pix-szp-field { display:flex; flex-direction:column; gap:5px; }
     .pix-szp-lab { font-size:12px; color:#9a9a9a; }
@@ -284,6 +298,18 @@ export function openSizesPanel(node, onChange) {
 
       const v = el("span", "v", `${pair[0]} × ${pair[1]}`);
 
+      const starOn = isStarredPair(st, pair);
+      const star = el("span", "star" + (starOn ? " on" : ""));
+      star.title = starOn
+        ? "Recommended - click to unmark"
+        : "Mark as recommended (shows a star on the node)";
+      star.addEventListener("click", (e) => {
+        e.stopPropagation();
+        // Cosmetic only: never touches the selection or the output, so there is
+        // no `structural: true` here and the node does not need refitting.
+        if (toggleStarAt(node, i)) { fire({ structural: false }); buildBody(); }
+      });
+
       const del = el("span", "del", "✕");
       del.title = st.sizes.length > 1 ? "Remove this size" : "Keep at least one size";
       del.addEventListener("click", (e) => {
@@ -311,7 +337,7 @@ export function openSizesPanel(node, onChange) {
         dragFrom = -1;
       });
 
-      row.append(grip, v, del);
+      row.append(grip, v, star, del);
       list.appendChild(row);
     });
     body.appendChild(list);

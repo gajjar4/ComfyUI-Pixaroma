@@ -30,6 +30,8 @@ export const DEFAULT_STATE = {
   snap: 0,                 // 0 = off; else 8 / 16 / 32 / 64
   accent: null,            // per-node override; null = follow the global default
   collapsed: false,        // folded down to show only the selected size
+  // Sizes marked "recommended", stored as pairKey STRINGS (see starredKeys).
+  starred: [],
   w: 1024,
   h: 1024,
 };
@@ -66,6 +68,44 @@ export function sanitizePair(w, h) {
 export function pairKey(w, h) {
   const a = Math.round(Number(w) || 0), b = Math.round(Number(h) || 0);
   return `${Math.min(a, b)}x${Math.max(a, b)}`;
+}
+
+// ── Recommended ("starred") sizes ────────────────────────────────────────────
+//
+// Stored as pairKey STRINGS, never row indices. Rows are drag-reorderable and
+// deletable, so an index list would silently drift and star the WRONG size the
+// first time the user reordered - the same class of bug as Switch's per-row
+// labels. pairKey is already the canonical unordered identity, so a star also
+// survives an orientation flip (1024x1536 and 1536x1024 are one size).
+//
+// Deliberately NOT pruned when a size is deleted: a key with no matching row is
+// inert (every reader iterates `sizes` and asks "is this one starred", never the
+// other way round), so deleting a size and adding it back keeps its star. Same
+// reasoning as Switch's label map. The cap is the only hygiene applied.
+export function starredKeys(state) {
+  const raw = Array.isArray(state?.starred) ? state.starred : [];
+  return raw.filter((k) => typeof k === "string").slice(0, MAX_SIZES);
+}
+
+// Is this [w, h] pair marked recommended?
+export function isStarredPair(state, pair) {
+  if (!pair) return false;
+  return starredKeys(state).includes(pairKey(pair[0], pair[1]));
+}
+
+// Flip the star on the size at `index`. Returns true when something changed.
+export function toggleStarAt(node, index) {
+  const st = readState(node);
+  const pair = st.sizes?.[index];
+  if (!pair) return false;
+  const key = pairKey(pair[0], pair[1]);
+  const list = starredKeys(st);
+  const at = list.indexOf(key);
+  if (at >= 0) list.splice(at, 1);
+  else list.push(key);
+  st.starred = list;
+  writeState(node, st);
+  return true;
 }
 
 // Index of an existing size matching w×h (unordered, sanitized), else -1.
@@ -113,6 +153,9 @@ export function readState(node) {
       if (st.orientation !== "landscape") st.orientation = "portrait";
       if (!SNAP_OPTIONS.includes(st.snap)) st.snap = 0;
       st.collapsed = !!st.collapsed;
+      // Absent on every workflow saved before stars existed - reads as "none
+      // starred", so old files load unchanged with no migration.
+      st.starred = starredKeys(st);
       return st;
     } catch { /* fall through to default */ }
   }
@@ -130,6 +173,7 @@ export function writeState(node, state) {
   if (st.orientation !== "landscape") st.orientation = "portrait";
   if (!SNAP_OPTIONS.includes(st.snap)) st.snap = 0;
   st.collapsed = !!st.collapsed;
+  st.starred = starredKeys(st);
   const [w, h] = finalWH(st);
   st.w = w; st.h = h;
   node.properties[STATE_PROP] = JSON.stringify(st);
