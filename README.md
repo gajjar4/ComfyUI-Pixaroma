@@ -354,7 +354,10 @@ Master the Pixaroma suite with our video guides and workflow deep-dives:
 
 ## 🛠 Changelog
 
-### **August 4, 2026 · v1.4.85**
+### **August 4, 2026 · v1.4.85–v1.4.86**
+- **Run Log can show your PC's hardware.** Open the gear on the node and switch on "Show this PC's hardware" to add a small line in the bottom corner: your graphics card, its memory and your system memory, like `RTX 4090 · 24GB VRAM · 128GB RAM`. Times mean a lot more next to the machine that produced them, which helps when you share a screenshot or compare with someone else. It sits on the same row as the two buttons so the node does not change size, and if your node is narrow the line is shortened with dots, so hover it or drag the node wider. It is read fresh each time and is never saved into your workflow, so sharing a workflow never tells anyone what is inside your PC. Off until you turn it on.
+- **Run Log now fills the node properly in the new node style.** Its panel was narrower than the node, so everything sat pushed to the left with an empty strip down the right, and the body was pressed flat against the left edge. Both fixed, and it now matches the classic look.
+- **A problem with one node's settings can no longer stop the Run button.** Several nodes pass their settings along when you press Run. If one of those hit an unexpected value it could stop the whole workflow from starting, including nodes from other creators. Now it quietly carries on with that node's normal defaults instead.
 - **Pixaroma is back in the ComfyUI Manager list.** If you install or update through Manager, you can find it by searching there again. The star count and the last-updated date may take a few more days to reappear while their scoreboard rebuilds itself.
 - **Two folder checks now happen in a safer order.** AudioReact and Save Image already made sure a folder was allowed, but they looked it up on your drive first and checked afterwards. They now check first. On Windows, simply looking up a network address can make your PC try to sign in to it, so the order matters. Nothing changes in normal use: your own folders, the Browse button and the default output folder all behave exactly as before.
 
