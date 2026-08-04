@@ -245,6 +245,10 @@ function renderRows(node) {
 
 // Build the Nodes 2.0 row widgets for a Switch node and wire the refresh hook
 // core.mjs calls after every slot / state change.
+//
+// Idempotent: syncRowWidgets only adds the rows that are missing, so calling
+// this on an already-built node (a renderer flip back and forth) is a no-op
+// beyond a re-render.
 export function buildSwitchVueList(node) {
   injectCSS();
   const refresh = () => {
@@ -254,4 +258,38 @@ export function buildSwitchVueList(node) {
   node._pixSwRefresh = refresh;
   refresh();
   return { render: refresh };
+}
+
+// Undo buildSwitchVueList: drop every row widget and the `widget` markers, so
+// the node goes back to the plain legacy shape (dots in the top-left column,
+// rows painted on the canvas by render.mjs).
+//
+// Needed because the renderer can change UNDER an existing node
+// (shared/renderer_switch.mjs). Without this, flipping 2.0 -> legacy left the
+// DOM rows in the body with the canvas rows painted over the top of them.
+//
+// Mirrors the surplus-row path in syncRowWidgets (splice out of node.widgets +
+// w.onRemove(), which is what detaches the element), so there is one way to
+// retire a row widget, not two.
+export function teardownSwitchVueList(node) {
+  const rows = node._pixSwRows || [];
+  for (const w of rows) {
+    const i = node.widgets ? node.widgets.indexOf(w) : -1;
+    if (i >= 0) node.widgets.splice(i, 1);
+    try { w.onRemove?.(); } catch { /* element already detached */ }
+  }
+  node._pixSwRows = [];
+  node._pixSwRefresh = null;
+
+  // Drop the marker so NodeSlots.vue puts the dots back in the top column, and
+  // so legacy never sees a `widget` field it would hide its painted dots for.
+  let changed = false;
+  for (const slot of node.inputs || []) {
+    if (!slot) continue;
+    if (slot.widget) { delete slot.widget; changed = true; }
+    if (slot._widget) delete slot._widget;
+  }
+  // Same shallowReactive caveat as syncRowWidgets: a field written INSIDE a
+  // slot is invisible to Vue until the array identity changes.
+  if (changed && node.inputs) node.inputs = node.inputs.slice();
 }

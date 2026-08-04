@@ -38,6 +38,11 @@ export { injectLabelCSS } from "./label_css.mjs";
 
 export { isVueNodes, applyAdaptiveCanvasOnly, canvasBackingScale, installZoomRepaint } from "./nodes2.mjs";
 
+// Fires when the user flips the Nodes 2.0 setting WITHOUT reloading. Any node
+// that builds a different UI per renderer MUST rebuild on this, or it is left
+// showing the other renderer's UI (empty body one way, doubled the other).
+export { onRendererChange } from "./renderer_switch.mjs";
+
 export { installResizeFloor, measureRootContent } from "./resize_floor.mjs";
 
 export { installCanvasZoomPassthrough } from "./canvas_zoom.mjs";

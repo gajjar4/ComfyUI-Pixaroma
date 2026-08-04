@@ -49,6 +49,34 @@ function outputDisplayLabel() {
   return isVueNodes() ? "out" : "​";
 }
 
+// Re-apply the per-renderer labels (every input AND the chain output) to an
+// existing node, diff-gated so an unchanged label is never rewritten.
+//
+// Exported for the renderer-switch handler in index.js: these labels belong to
+// the RENDERER (a zero-width space while we canvas-paint our own, "input N" /
+// "out" when Vue draws them), so flipping the renderer under a live node has to
+// re-apply them or the node keeps the other renderer's captions.
+export function refreshRendererLabels(node) {
+  const inputs = node.inputs || [];
+  for (let i = 0; i < inputs.length; i++) {
+    const lbl = slotDisplayLabel(i + 1);
+    if (inputs[i].label !== lbl) inputs[i].label = lbl;
+  }
+  const out = node.outputs?.[0];
+  if (out) {
+    const olbl = outputDisplayLabel();
+    if (out.label !== olbl) out.label = olbl;
+  }
+}
+
+// The height the LEGACY canvas layout needs for the current row count, with the
+// same floor a fresh drop gets. Exported for the renderer-switch handler only:
+// Vue leaves its own layout height behind, and normalizeSlots resizes only when
+// the row COUNT changes, so nothing else would put it right.
+export function legacyBodyHeight(node) {
+  return Math.max(computeNodeHeight(node.inputs?.length || 1), MIN_BODY_H);
+}
+
 export function defaultState() {
   return {
     version: STATE_VERSION,

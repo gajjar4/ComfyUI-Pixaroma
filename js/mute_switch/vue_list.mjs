@@ -172,17 +172,25 @@ function syncRowWidgets(node) {
 // refresh target (node._pixMsRefresh). Returns { render }.
 export function buildMuteSwitchVueList(node) {
   injectCSS();
-  const modebar = document.createElement("div");
-  modebar.className = "pix-ms-modebar";
+  // IDEMPOTENT: the renderer can be flipped back and forth on a live node
+  // (shared/renderer_switch.mjs), and unlike the rows - which syncRowWidgets
+  // only tops up - the mode bar is built here. Without this guard a second flip
+  // would stack another mode bar onto the body, and a third a fourth.
+  let modebar = node._pixMsBar?.element;
+  if (!modebar) {
+    modebar = document.createElement("div");
+    modebar.className = "pix-ms-modebar";
 
-  installNodeAccent(node, modebar);   // the face follows this node's accent colour
-  const barWidget = node.addDOMWidget("pixaroma_mute_switch_bar", "pixaroma_mute_switch_bar", modebar, {
-    serialize: false,
-    getMinHeight: () => MODEBAR_H,
-  });
-  barWidget.serialize = false;
-  applyAdaptiveCanvasOnly(barWidget);
-  barWidget.computeLayoutSize = undefined;
+    installNodeAccent(node, modebar);   // the face follows this node's accent colour
+    const barWidget = node.addDOMWidget("pixaroma_mute_switch_bar", "pixaroma_mute_switch_bar", modebar, {
+      serialize: false,
+      getMinHeight: () => MODEBAR_H,
+    });
+    barWidget.serialize = false;
+    applyAdaptiveCanvasOnly(barWidget);
+    barWidget.computeLayoutSize = undefined;
+    node._pixMsBar = barWidget;
+  }
 
   function render() {
     syncRowWidgets(node);
@@ -305,4 +313,35 @@ export function buildMuteSwitchVueList(node) {
   node._pixMsRefresh = render;
   render();
   return { render };
+}
+
+// Undo buildMuteSwitchVueList: drop the mode bar, every row widget and the
+// `widget` markers, so the node goes back to the plain legacy shape (dots in
+// the top-left column, everything painted by render.mjs).
+//
+// Needed because the renderer can change UNDER an existing node
+// (shared/renderer_switch.mjs). Without it, flipping 2.0 -> legacy leaves the
+// DOM body in place with the canvas rows painted over the top of it.
+export function teardownMuteSwitchVueList(node) {
+  const widgets = [...(node._pixMsRows || [])];
+  if (node._pixMsBar) widgets.push(node._pixMsBar);
+  for (const w of widgets) {
+    const i = node.widgets ? node.widgets.indexOf(w) : -1;
+    if (i >= 0) node.widgets.splice(i, 1);
+    try { w.onRemove?.(); } catch { /* element already detached */ }
+  }
+  node._pixMsRows = [];
+  node._pixMsBar = null;
+  node._pixMsRefresh = null;
+
+  // Drop the marker so NodeSlots.vue puts the dots back in the top column, and
+  // so legacy never sees a `widget` field it would hide its painted dots for.
+  let changed = false;
+  for (const slot of node.inputs || []) {
+    if (!slot) continue;
+    if (slot.widget) { delete slot.widget; changed = true; }
+    if (slot._widget) delete slot._widget;
+  }
+  // shallowReactive tracks the ARRAY, not fields inside a slot.
+  if (changed && node.inputs) node.inputs = node.inputs.slice();
 }

@@ -3,12 +3,14 @@ import { api } from "/scripts/api.js";
 import {
   setupNode, restoreFromProperties,
   handleConnect, handleDisconnect, setActiveRow,
+  refreshSlotLabels, legacyBodyHeight,
   STATE_PROP,
 } from "./core.mjs";
 import { drawSwitchRows, hitToggle, hitLabel, labelScreenRect } from "./render.mjs";
 import { openLabelEditor, cancelEditorForNode } from "./editor.mjs";
-import { buildSwitchVueList } from "./vue_list.mjs";
+import { buildSwitchVueList, teardownSwitchVueList } from "./vue_list.mjs";
 import { isVueNodes } from "../shared/nodes2.mjs";
+import { onRendererChange } from "../shared/renderer_switch.mjs";
 import { registerNodeAccent } from "../shared/node_settings.mjs";
 
 // Switch Pixaroma - dynamic N-to-1 switch with per-row toggles.
@@ -45,6 +47,49 @@ if (app && app.loadGraphData && !app._pixSwLoadWrapped) {
   };
 }
 
+// Rebuild one node's UI for the renderer it is NOW in, after the user flipped
+// the Nodes 2.0 setting with the page still open.
+//
+// Deliberately NOT on any load path - it is driven only by the renderer-change
+// signal, i.e. a deliberate user action. It does write serialized state
+// (`inputs[].label`, and `node.size` going back to legacy), which flags the
+// workflow modified; that is the same accepted cost as opening a workflow
+// across renderers, and the alternative is a visibly broken node.
+function applyRenderer(node, vue) {
+  try {
+    if (vue) {
+      // Remember the height the user had in legacy. Vue is about to impose its
+      // own layout height, and without this a round trip (2.0 and back) would
+      // silently shrink a node the user had made taller to the bare minimum.
+      // Runtime-only field, deliberately never serialized.
+      node._pixSwLegacyH = node.size?.[1];
+      // Vue derives the body height from the widgets, so let it size itself.
+      buildSwitchVueList(node);
+    } else {
+      teardownSwitchVueList(node);
+      // Vue's layout height stays behind otherwise: normalizeSlots resizes only
+      // when the ROW COUNT changes, so nothing else would put this right.
+      // Prefer the height this node HAD in legacy; fall back to the computed
+      // one for a node that was created in 2.0 and has never been legacy.
+      // Never accept a stashed height below the row count's minimum (rows would
+      // spill out of the frame if a row was added while in 2.0).
+      const min = legacyBodyHeight(node);
+      const h = Math.max(min, node._pixSwLegacyH || 0);
+      // setSize (not `size[1] = h`) because a raw index write is silently
+      // reverted when the layout was last committed under the other renderer -
+      // which is precisely the situation here.
+      if (node.setSize) node.setSize([node.size[0], h]);
+      else node.size[1] = h;
+    }
+    // Dot labels belong to the renderer: "​" in legacy (we paint our own), a
+    // stable "input N" in 2.0. Diff-gated inside refreshSlotLabels.
+    refreshSlotLabels(node);
+    node.setDirtyCanvas?.(true, true);
+  } catch (err) {
+    console.warn("[Pixaroma] Switch renderer rebuild failed", err);
+  }
+}
+
 app.registerExtension({
   name: "Pixaroma.Switch",
 
@@ -60,6 +105,11 @@ app.registerExtension({
       // itself as node._pixSwRefresh, which core.mjs calls on every slot/state
       // change. Legacy paints the rows on the canvas instead (onDrawForeground).
       if (isVueNodes()) buildSwitchVueList(this);
+      // The renderer can be switched WITHOUT a page reload, and the choice
+      // above was made once. Rebuild this node's UI when that happens, or it is
+      // left empty (legacy -> 2.0) or doubled (2.0 -> legacy). See
+      // shared/renderer_switch.mjs for why it is a poll and why it is our bug.
+      this._pixSwRendererOff = onRendererChange((vue) => applyRenderer(this, vue));
       // Defer restore so node.properties is populated from workflow JSON
       // before we read it (Vue Compat #8).
       queueMicrotask(() => restoreFromProperties(this));
@@ -95,6 +145,10 @@ app.registerExtension({
     const _origRemoved = nodeType.prototype.onRemoved;
     nodeType.prototype.onRemoved = function () {
       cancelEditorForNode(this);
+      // Stop listening for renderer flips, or a deleted node keeps a live
+      // handler (and the shared timer never stops).
+      this._pixSwRendererOff?.();
+      this._pixSwRendererOff = null;
       if (this._pixSwRestoreTimer) {
         clearTimeout(this._pixSwRestoreTimer);
         this._pixSwRestoreTimer = null;

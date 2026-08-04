@@ -246,6 +246,17 @@ function computeNodeHeight(slotCount) {
   return TOP_PAD + slotCount * ROW_H + BOT_PAD;
 }
 
+// The height the LEGACY canvas layout needs for the current row count, with the
+// same comfortable floor a fresh drop gets.
+//
+// Exported for the renderer-switch handler only (index.js). When the user flips
+// Nodes 2.0 off, the node is still carrying the height Vue's layout gave it,
+// and normalizeSlots deliberately resizes ONLY when the row COUNT changes (so a
+// plain load keeps its saved height), so nothing else would put it right.
+export function legacyBodyHeight(node) {
+  return Math.max(computeNodeHeight(node.inputs?.length || 1), MIN_BODY_H);
+}
+
 // Called on fresh node creation (nodeCreated in index.js).
 // Strips the 32 auto-created Python INPUT_TYPES slots, then calls
 // normalizeSlots to bring the node to the correct starting state.

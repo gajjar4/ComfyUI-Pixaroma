@@ -6,15 +6,44 @@ import {
   handleConnect, handleDisconnect,
   togglePillRow, setSelectMode, setMuteMode,
   setAllRowsEnabled, restoreAllOnRemove,
-  computeNodeHeight,
+  computeNodeHeight, refreshRendererLabels, legacyBodyHeight,
 } from "./core.mjs";
 import {
   drawMuteSwitch, hideTooltip,
   hitSelectModePill, hitMutePill, hitRowPill, hitLabel, labelScreenRect,
 } from "./render.mjs";
 import { openLabelEditor, cancelEditorForNode } from "./editor.mjs";
-import { buildMuteSwitchVueList } from "./vue_list.mjs";
+import { buildMuteSwitchVueList, teardownMuteSwitchVueList } from "./vue_list.mjs";
 import { registerNodeAccent } from "../shared/node_settings.mjs";
+import { onRendererChange } from "../shared/renderer_switch.mjs";
+
+// Rebuild one node's UI for the renderer it is NOW in, after the user flipped
+// the Nodes 2.0 setting with the page still open. Same shape (and same
+// reasoning) as applyRenderer in js/switch/index.js - see
+// shared/renderer_switch.mjs for why this is needed at all.
+function applyRenderer(node, vue) {
+  try {
+    if (vue) {
+      // Remember the legacy height so a round trip does not shrink a node the
+      // user had made taller. Runtime-only, never serialized.
+      node._pixMsLegacyH = node.size?.[1];
+      buildMuteSwitchVueList(node);
+    } else {
+      teardownMuteSwitchVueList(node);
+      // Never below the row count's minimum: a row may have been added while
+      // in 2.0, and the stashed height would then cut the bottom row off.
+      const h = Math.max(legacyBodyHeight(node), node._pixMsLegacyH || 0);
+      // setSize, not `size[1] = h`: a raw index write is silently reverted when
+      // the layout was last committed under the other renderer.
+      if (node.setSize) node.setSize([node.size[0], h]);
+      else node.size[1] = h;
+    }
+    refreshRendererLabels(node);
+    node.setDirtyCanvas?.(true, true);
+  } catch (err) {
+    console.warn("[Pixaroma] Mute Switch renderer rebuild failed", err);
+  }
+}
 
 // Mute Switch Pixaroma - dynamic N-row mute control. See:
 //   js/switch/index.js     for the structural reference
@@ -66,6 +95,10 @@ app.registerExtension({
       // itself as node._pixMsRefresh, which core.mjs calls on every state/slot
       // change. Legacy paints the body on the canvas instead (onDrawForeground).
       if (isVueNodes()) buildMuteSwitchVueList(this);
+      // The renderer can be switched WITHOUT a page reload, and the choice
+      // above was made once. Rebuild when that happens, or the node is left
+      // empty (legacy -> 2.0) or doubled (2.0 -> legacy).
+      this._pixMsRendererOff = onRendererChange((vue) => applyRenderer(this, vue));
       queueMicrotask(() => restoreFromProperties(this));
     };
 
@@ -252,6 +285,10 @@ app.registerExtension({
       if (this._pixMsHover) hideTooltip();
       restoreAllOnRemove(this);
       cancelEditorForNode(this);
+      // Stop listening for renderer flips, or a deleted node keeps a live
+      // handler (and the shared timer never stops).
+      this._pixMsRendererOff?.();
+      this._pixMsRendererOff = null;
       if (this._pixMsRestoreTimer) {
         clearTimeout(this._pixMsRestoreTimer);
         this._pixMsRestoreTimer = null;
