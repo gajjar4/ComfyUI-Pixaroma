@@ -74,8 +74,12 @@ function injectCSS() {
        every platform, and an emoji star arrives in colour on some of them. Off
        and on are the same filled shape in two colours - an outline-vs-filled
        pair would need a second asset for no extra clarity. */
+    /* margin-right pushes the star INWARD, away from the delete ✕ (which stays
+       pinned to the right edge). They were one 8px gap apart, so a slightly-off
+       click on the star hit ✕ and removed the size - a destructive neighbour
+       deserves more room than a normal one. */
     .pix-szp-row .star { flex:0 0 auto; width:15px; height:15px; cursor:pointer;
-      background:#5a5a5a;
+      margin-right:16px; background:#5a5a5a;
       -webkit-mask:url("${pixAsset("icons/ui/star.svg")}") center/contain no-repeat;
       mask:url("${pixAsset("icons/ui/star.svg")}") center/contain no-repeat; }
     .pix-szp-row .star:hover { background:#8a8a8a; }
