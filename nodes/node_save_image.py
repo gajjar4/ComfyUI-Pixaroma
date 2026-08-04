@@ -22,7 +22,7 @@ from PIL import Image
 
 from ._path_guard import (
     folder_allowed as _pix_folder_allowed,
-    prescreen as _pix_prescreen,
+    prescreen_folder_field as _pix_prescreen_field,
     denied_message as _pix_denied_message,
 )
 from ._save_helpers import (
@@ -293,7 +293,14 @@ class PixaromaSaveImage:
         # prescreen first (raw string, no filesystem touch) because
         # _resolve_save_folder calls realpath, which reaches out over SMB for a
         # UNC path before we would otherwise get a look at it.
-        if not _pix_prescreen(folder_raw):
+        # It must be the _FIELD variant (2026-08-04, follow-up review on
+        # PR #3118): _resolve_save_folder expandvars() the string before it
+        # resolves, so plain prescreen() screens a DIFFERENT value than the one
+        # that gets realpath'd - `%HOMESHARE%` is not lexically UNC, sails
+        # through, and only becomes UNC after expansion. The two routes in
+        # server_routes.py already used the field variant; this node was the
+        # one site still on the plain one.
+        if not _pix_prescreen_field(folder_raw):
             raise ValueError(_pix_denied_message(str(folder_raw)))
         folder_abs, inside_output = _resolve_save_folder(folder_raw)
         if not _pix_folder_allowed(folder_abs):

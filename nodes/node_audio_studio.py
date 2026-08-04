@@ -31,7 +31,7 @@ from ._audio_react_engine import (
     params_from_dict,
     validate_params,
 )
-from ._path_guard import is_path_under
+from ._path_guard import safe_join
 
 
 PIXAROMA_INPUT_ROOT = Path(folder_paths.get_input_directory()) / "pixaroma"
@@ -51,10 +51,18 @@ def _resolve_inline(rel_path, what: str) -> str:
 
     Containment is the realpath check, not string inspection: rejecting '..'
     by hand misses symlinks and the absolute-path case above.
+
+    ORDERING (2026-08-04, follow-up review on the same PR): the first pass
+    kept its own join+realpath, which refused the read correctly but only AFTER
+    resolving. On Windows that is already the attack for a UNC rel_path -
+    realpath opens SMB and hands over an NTLM hash during the resolve itself.
+    safe_join() runs the lexical rel_is_rooted() screen FIRST, so a UNC value is
+    refused without ever being touched. Never hand-roll the join again; the
+    resolve is the thing that has to be prevented, not just the read.
     """
     root = str(PIXAROMA_INPUT_ROOT)
-    candidate = os.path.realpath(os.path.join(root, str(rel_path or "")))
-    if not is_path_under(candidate, root):
+    candidate = safe_join(root, rel_path)
+    if candidate is None:
         raise ValueError(
             f"[Pixaroma] AudioReact -- refusing to read {what} from outside the "
             f"plugin's input folder. Re-open the editor and re-pick the {what}."
