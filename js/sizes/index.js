@@ -78,10 +78,24 @@ function injectCSS() {
       transition:background .08s, border-color .08s, color .08s; }
     .pix-sz-pill:hover { border-color:var(--acc,${BRAND}); color:#ddd; }
     .pix-sz-pill.on { background:var(--acc,${BRAND}); border-color:var(--acc,${BRAND}); color:#fff; }
+    /* The bundled gear SVG as a mask, NOT the ⚙ emoji (convention #28): an emoji
+       is drawn by the OS, so it is a different shape and baseline on Windows,
+       Mac and Linux and arrives in colour on some of them. This way it matches
+       the gear on the node selection toolbar exactly. */
     .pix-sz-gear { flex:0 0 auto; width:30px; display:flex; align-items:center; justify-content:center;
       background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.14); border-radius:5px;
-      color:#bbb; font-size:14px; cursor:pointer; user-select:none; line-height:1; }
-    .pix-sz-gear:hover { border-color:var(--acc,${BRAND}); color:#fff; }
+      cursor:pointer; user-select:none; line-height:0; }
+    .pix-sz-gear::before { content:""; display:block; width:14px; height:14px; background:#bbb;
+      -webkit-mask:url("${pixAsset("icons/note/gear.svg")}") center/contain no-repeat;
+      mask:url("${pixAsset("icons/note/gear.svg")}") center/contain no-repeat; }
+    .pix-sz-gear:hover { border-color:var(--acc,${BRAND}); }
+    .pix-sz-gear:hover::before { background:#fff; }
+    /* The one-line hint points AT that button, so it uses the same glyph - an
+       emoji beside a masked SVG gear reads as two different icons. */
+    .pix-sz-hint-gear { display:inline-block; width:11px; height:11px; vertical-align:-1px;
+      background:#6f6f6f;
+      -webkit-mask:url("${pixAsset("icons/note/gear.svg")}") center/contain no-repeat;
+      mask:url("${pixAsset("icons/note/gear.svg")}") center/contain no-repeat; }
     .pix-sz-list { overflow:visible;
       background:rgba(0,0,0,0.28); border:1px solid #333; border-radius:6px; }
     .pix-sz-list.scroll { max-height:${MAX_VISIBLE * ROW_H + 2}px; overflow-x:hidden; overflow-y:auto; }
@@ -166,8 +180,7 @@ function render(node) {
     pills.appendChild(p);
   }
   const gear = document.createElement("div");
-  gear.className = "pix-sz-gear";
-  gear.textContent = "⚙";
+  gear.className = "pix-sz-gear"; // glyph comes from the ::before SVG mask
   gear.title = "Sizes settings — add, remove, reorder, snap";
   head.append(chevron, pills, gear);
 
