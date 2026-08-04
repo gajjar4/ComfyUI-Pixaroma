@@ -91,8 +91,8 @@ export function injectCSS() {
   }
   .pix-dd-gear::before{
     content:""; display:block; width:100%; height:100%; background:#aaa;
-    -webkit-mask:url("/api/pixaroma/assets/icons/note/gear.svg") center/contain no-repeat;
-    mask:url("/api/pixaroma/assets/icons/note/gear.svg") center/contain no-repeat;
+    -webkit-mask:url("/pixaroma/assets/icons/note/gear.svg") center/contain no-repeat;
+    mask:url("/pixaroma/assets/icons/note/gear.svg") center/contain no-repeat;
   }
   .pix-dd-gear:hover::before{ background:${ACC}; }
 

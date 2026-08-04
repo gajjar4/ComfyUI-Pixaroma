@@ -2,7 +2,7 @@
 //
 // UX mirrors Load Image Pixaroma's input flow (upload button, file combo,
 // drag-drop) but renders a read-only text area instead of an image preview.
-// The extracted text is fetched live via /api/pixaroma/api/prompt_reader/extract
+// The extracted text is fetched live via /pixaroma/api/prompt_reader/extract
 // on every file change so the user sees the result before running.
 //
 // Persistence: filename + extracted text are stored on
@@ -86,8 +86,8 @@ function injectCSS() {
     .pix-pr-upload-btn .ico {
       width: 14px; height: 14px;
       background-color: currentColor;
-      -webkit-mask: url("/api/pixaroma/assets/icons/ui/upload.svg") center/14px 14px no-repeat;
-              mask: url("/api/pixaroma/assets/icons/ui/upload.svg") center/14px 14px no-repeat;
+      -webkit-mask: url("/pixaroma/assets/icons/ui/upload.svg") center/14px 14px no-repeat;
+              mask: url("/pixaroma/assets/icons/ui/upload.svg") center/14px 14px no-repeat;
     }
     /* File row: [◀] [ dropdown ] [▶] - mirrors Load Image Pixaroma. */
     .pix-pr-filerow {
@@ -408,7 +408,7 @@ function pickAndUpload(node) {
 
 async function extractPrompt(filename) {
   if (!filename) return { found: false, message: "No image selected." };
-  const url = `/api/pixaroma/api/prompt_reader/extract?filename=${encodeURIComponent(filename)}`;
+  const url = `/pixaroma/api/prompt_reader/extract?filename=${encodeURIComponent(filename)}`;
   try {
     const resp = await fetch(url);
     if (!resp.ok) return { found: false, message: `Server error (${resp.status})` };

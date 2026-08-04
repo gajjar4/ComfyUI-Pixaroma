@@ -63,7 +63,7 @@ export function createEditorLayout(config) {
   title.className = "pxf-title";
   const logo = document.createElement("img");
   logo.className = "pxf-title-logo";
-  logo.src = "/api/pixaroma/assets/pixaroma_logo.svg";
+  logo.src = "/pixaroma/assets/pixaroma_logo.svg";
   title.appendChild(logo);
   title.append(` ${editorName} `);
   const brandSpan = document.createElement("span");

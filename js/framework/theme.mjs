@@ -7,7 +7,7 @@
 export const BRAND = "#f66744";
 
 /** Base path for UI icon SVGs served by the Pixaroma backend. */
-export const UI_ICON = "/api/pixaroma/assets/icons/ui/";
+export const UI_ICON = "/pixaroma/assets/icons/ui/";
 
 /**
  * Creates an <img> element pointing to a UI icon SVG.
@@ -17,7 +17,7 @@ export const UI_ICON = "/api/pixaroma/assets/icons/ui/";
  */
 export function _uiIcon(name, size = 14) {
   const img = document.createElement("img");
-  img.src = "/api/pixaroma/assets/icons/ui/" + name;
+  img.src = "/pixaroma/assets/icons/ui/" + name;
   img.style.cssText = `width:${size}px;height:${size}px;pointer-events:none;`;
   img.draggable = false;
   return img;

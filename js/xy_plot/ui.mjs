@@ -761,7 +761,7 @@ function buildToggle(label, on, onToggle) {
 const THEMES = [["dark", "Dark"], ["light", "Light"], ["mono", "Mono"]];
 
 // Grid color-theme picker. Switching re-skins the CURRENT grid instantly (the
-// cells are cached server-side) via /api/pixaroma/api/xy_plot/restyle; if no grid
+// cells are cached server-side) via /pixaroma/api/xy_plot/restyle; if no grid
 // exists yet it just stores the choice for the next run.
 function buildThemeControl(node, state) {
   const wrap = el("div", "pix-xy-themewrap");
@@ -786,7 +786,7 @@ function buildThemeControl(node, state) {
         // not overwrite node._pixXyLastGrid (which Save/Copy/Open act on).
         const rtok = (node._pixXyRestyleReq = (node._pixXyRestyleReq || 0) + 1);
         try {
-          const resp = await fetch("/api/pixaroma/api/xy_plot/restyle", {
+          const resp = await fetch("/pixaroma/api/xy_plot/restyle", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ session_id: last.sessionId, theme: val }),

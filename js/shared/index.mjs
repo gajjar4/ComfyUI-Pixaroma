@@ -52,7 +52,7 @@ export { attachLineNumbers } from "./line_numbers.mjs";
 
 // Build every API/asset URL through this. A root-relative "/view?..." works on
 // localhost and returns 401 on a hosted ComfyUI. See api_url.mjs.
-export { pixApiUrl } from "./api_url.mjs";
+export { pixApiUrl, PIX_ASSETS } from "./api_url.mjs";
 
 export { onNodeDefsRefresh, runRefreshHandlers, installRefreshHook } from "./refresh.mjs";
 

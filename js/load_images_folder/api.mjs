@@ -4,7 +4,7 @@
 export async function listFolder(folder, recursive) {
   try {
     const url =
-      `/api/pixaroma/api/load_images_folder/list?path=${encodeURIComponent(folder)}` +
+      `/pixaroma/api/load_images_folder/list?path=${encodeURIComponent(folder)}` +
       `&recursive=${recursive ? 1 : 0}`;
     // no-store: the gallery now re-lists on every open, and a heuristically
     // cached copy of this JSON would defeat exactly that (same hardening as the
@@ -20,7 +20,7 @@ export async function listFolder(folder, recursive) {
 // mtime is folded in as a cache key so an edited file refreshes.
 export function thumbURL(folder, rel, mtime) {
   return (
-    `/api/pixaroma/api/load_images_folder/thumb?path=${encodeURIComponent(folder)}` +
+    `/pixaroma/api/load_images_folder/thumb?path=${encodeURIComponent(folder)}` +
     `&file=${encodeURIComponent(rel)}&mt=${Math.floor(mtime || 0)}`
   );
 }
@@ -29,7 +29,7 @@ export function thumbURL(folder, rel, mtime) {
 // Returns {ok, path, parent, dirs:[{name, path, images}], message?}.
 export async function browseFolder(path) {
   try {
-    const url = `/api/pixaroma/api/load_images_folder/browse?path=${encodeURIComponent(path || "")}`;
+    const url = `/pixaroma/api/load_images_folder/browse?path=${encodeURIComponent(path || "")}`;
     const r = await fetch(url);
     return await r.json();
   } catch (e) {
@@ -42,7 +42,7 @@ export async function browseFolder(path) {
 // / remote) so the caller can fall back to the in-app browser.
 export async function pickNativeFolder(startPath) {
   try {
-    const url = `/api/pixaroma/api/load_images_folder/pick_native?path=${encodeURIComponent(startPath || "")}`;
+    const url = `/pixaroma/api/load_images_folder/pick_native?path=${encodeURIComponent(startPath || "")}`;
     const r = await fetch(url);
     return await r.json();
   } catch (e) {

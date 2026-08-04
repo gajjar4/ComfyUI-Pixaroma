@@ -474,7 +474,7 @@ function updateReadout(node) {
 // ── sound ────────────────────────────────────────────────────────────────────
 async function playSound(filename, volume01) {
   if (typeof filename !== "string" || !filename) return;
-  const url = `/api/pixaroma/assets/sounds/${encodeURIComponent(filename)}`;
+  const url = `/pixaroma/assets/sounds/${encodeURIComponent(filename)}`;
   const audio = new Audio(url);
   const v = Number(volume01);
   audio.volume = Number.isFinite(v) ? Math.max(0, Math.min(1, v)) : 0.8;

@@ -4,8 +4,8 @@
 // widget with a Convert button + a live detection readout.
 //
 // Flow:
-//   pick a LoRA  -> GET  /api/pixaroma/api/krea_lora/inspect  -> readout + autofill name
-//   Convert      -> POST /api/pixaroma/api/krea_lora/convert   -> result + refresh combos
+//   pick a LoRA  -> GET  /pixaroma/api/krea_lora/inspect  -> readout + autofill name
+//   Convert      -> POST /pixaroma/api/krea_lora/convert   -> result + refresh combos
 //   Run          -> node's ui payload (pixaroma_krea_convert) -> same readout
 //
 // Built with the Nodes 2.0 recipe (unique DOM-widget type + applyAdaptiveCanvasOnly)
@@ -133,7 +133,7 @@ async function doInspect(node) {
   // overwrite the readout after a newer pick (or after the node is removed).
   const reqId = (node._klcReqId = (node._klcReqId || 0) + 1);
   try {
-    const r = await fetch(`/api/pixaroma/api/krea_lora/inspect?lora_name=${encodeURIComponent(lora)}`);
+    const r = await fetch(`/pixaroma/api/krea_lora/inspect?lora_name=${encodeURIComponent(lora)}`);
     const info = await r.json();
     if (node._klcReqId !== reqId || !node.graph) return;
     node._klcLastInfo = info;
@@ -170,7 +170,7 @@ async function doConvert(node) {
   btn.disabled = true;
   btn.textContent = "Converting…";
   try {
-    const r = await fetch("/api/pixaroma/api/krea_lora/convert", {
+    const r = await fetch("/pixaroma/api/krea_lora/convert", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ lora_name: lora, output_name: out, overwrite }),

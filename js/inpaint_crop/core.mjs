@@ -14,7 +14,7 @@ import { installGraphUndoGuard } from "../shared/graph_undo_guard.mjs";
 
 import { pixApiUrl } from "../shared/api_url.mjs";
 export { BRAND };
-const UI = "/api/pixaroma/assets/icons/ui/";
+const UI = "/pixaroma/assets/icons/ui/";
 // Brush default size (used by the "Reset to default" button in the Brush panel).
 const DEFAULT_BRUSH_SIZE = 80;   // px diameter
 
@@ -26,7 +26,7 @@ export const INPAINT_PREVIEW_COLORS = {
 export const InpaintAPI = {
   async uploadSrc(projectId, dataURL) {
     const { api } = await import("/scripts/api.js");
-    const res = await api.fetchApi("/api/pixaroma/api/inpaint/upload_src", {
+    const res = await api.fetchApi("/pixaroma/api/inpaint/upload_src", {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ project_id: projectId, image: dataURL }),
     });
@@ -34,7 +34,7 @@ export const InpaintAPI = {
   },
   async saveMask(projectId, dataURL) {
     const { api } = await import("/scripts/api.js");
-    const res = await api.fetchApi("/api/pixaroma/api/inpaint/save_mask", {
+    const res = await api.fetchApi("/pixaroma/api/inpaint/save_mask", {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ project_id: projectId, mask: dataURL }),
     });

@@ -227,6 +227,20 @@ async def serve_pixaroma_vendor(request):
     return web.FileResponse(file_path, headers=headers)
 
 
+# Assets are served at TWO urls that hit the SAME handler, so the containment
+# checks below are written once and cannot drift apart.
+#
+#   /pixaroma/assets/...       the original, still used by older workflows
+#   /pixaroma/api/assets/...   what the frontend asks for now
+#
+# WHY the second one exists (measured on a cloud platform, 2026-08-04): their
+# gateway forwards anything under "/pixaroma/api/" to ComfyUI, and blocks
+# "/pixaroma/assets/" at the edge before it ever arrives. Proven by asking for a
+# path that does not exist under each: under /pixaroma/api/ you get ComfyUI's own
+# empty 404, under /pixaroma/assets/ you get their web server's HTML 404. Same
+# file, same auth token, different answer. So every icon, sound and font 404'd
+# there while our API routes worked fine.
+@PromptServer.instance.routes.get("/pixaroma/api/assets/{filename}")
 @PromptServer.instance.routes.get("/pixaroma/assets/{filename}")
 async def serve_pixaroma_asset(request):
     filename = request.match_info["filename"]
@@ -242,6 +256,7 @@ async def serve_pixaroma_asset(request):
     return web.FileResponse(file_path)
 
 
+@PromptServer.instance.routes.get("/pixaroma/api/assets/{subdir}/{filename}")
 @PromptServer.instance.routes.get("/pixaroma/assets/{subdir}/{filename}")
 async def serve_pixaroma_asset_sub(request):
     subdir = request.match_info["subdir"]
@@ -257,6 +272,7 @@ async def serve_pixaroma_asset_sub(request):
     return web.FileResponse(file_path)
 
 
+@PromptServer.instance.routes.get("/pixaroma/api/assets/{subdir}/{subdir2}/{filename}")
 @PromptServer.instance.routes.get("/pixaroma/assets/{subdir}/{subdir2}/{filename}")
 async def serve_pixaroma_asset_sub2(request):
     subdir = request.match_info["subdir"]
@@ -424,13 +440,12 @@ async def list_note_icons(request):
             entries.append({
                 "id": stem,
                 "label": _derive_icon_label(stem),
-                # /api prefix so the browser can fetch this on a HOSTED ComfyUI.
-                # A root-relative "/pixaroma/..." resolves against the PAGE origin,
-                # which on a cloud platform is their web app, not ComfyUI - measured
-                # 404 there while every icon worked locally. ComfyUI serves an /api
-                # alias for every non-static route, so this is identical on
-                # localhost. Keep in step with the JS, which uses the same prefix.
-                "url": f"/api/pixaroma/assets/icons/note/{name}",
+                # The /pixaroma/api/ form: a hosted ComfyUI's gateway forwards
+                # that prefix and blocks /pixaroma/assets/ at the edge. This
+                # value is handed straight to the browser, so it must be the
+                # reachable one. The frontend still runs it through pixApiUrl()
+                # to pick up any auth token the host requires.
+                "url": f"/pixaroma/api/assets/icons/note/{name}",
             })
         entries.sort(key=lambda e: e["label"].lower())
         return web.json_response({"icons": entries})

@@ -128,7 +128,7 @@ async function saveToOutput(node) {
   try {
     const image_b64 = await snapshotDataURL(node);
     const { workflow, prompt } = await resolveSaveMeta(node);
-    const resp = await fetch("/api/pixaroma/api/preview/save", {
+    const resp = await fetch("/pixaroma/api/preview/save", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ image_b64, filename_prefix: SAVE_PREFIX, workflow, prompt }),
@@ -148,7 +148,7 @@ async function saveToDisk(node) {
   try {
     const image_b64 = await snapshotDataURL(node);
     const { workflow, prompt } = await resolveSaveMeta(node);
-    const resp = await fetch("/api/pixaroma/api/preview/prepare", {
+    const resp = await fetch("/pixaroma/api/preview/prepare", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ image_b64, filename_prefix: SAVE_PREFIX, workflow, prompt }),

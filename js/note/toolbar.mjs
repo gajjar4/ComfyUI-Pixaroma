@@ -174,7 +174,7 @@ NoteEditor.prototype._buildToolbar = function () {
   // (execCommand leaves those alone), and demotes the current block
   // (heading) back to a paragraph. List items are left alone — removing a
   // bullet/numbered wrapper requires toggling the list button itself.
-  const clearFmtLabel = `<img class="pix-note-tbtn-icon" src="/api/pixaroma/assets/icons/ui/clear-format.svg" draggable="false">`;
+  const clearFmtLabel = `<img class="pix-note-tbtn-icon" src="/pixaroma/assets/icons/ui/clear-format.svg" draggable="false">`;
   g1.appendChild(makeBtn(clearFmtLabel, "Clear all formatting on selection", "pix-note-tbtn-accent", () => {
     const sel = window.getSelection();
     if (sel?.rangeCount > 0) {
@@ -966,7 +966,7 @@ NoteEditor.prototype._buildToolbar = function () {
   };
   g5.appendChild(sepBtn);
 
-  const gridIcon = `<img class="pix-note-tbtn-icon" src="/api/pixaroma/assets/icons/ui/grid.svg" draggable="false">`;
+  const gridIcon = `<img class="pix-note-tbtn-icon" src="/pixaroma/assets/icons/ui/grid.svg" draggable="false">`;
   const gridBtn = makeBtn(gridIcon, "Insert grid (table)", "", () => {});
   gridBtn.onclick = (e) => {
     e.preventDefault();
@@ -1024,7 +1024,7 @@ NoteEditor.prototype._buildToolbar = function () {
   // Page / Read More / no icon), label, URL, and an optional size
   // hint. Folder bundling is GONE — there's a dedicated "Insert
   // folder hint" entry next to this one for that.
-  const bdIcon = `<img class="pix-note-tbtn-icon" src="/api/pixaroma/assets/icons/ui/button-design.svg" draggable="false">`;
+  const bdIcon = `<img class="pix-note-tbtn-icon" src="/pixaroma/assets/icons/ui/button-design.svg" draggable="false">`;
   const bdBtn = makeBtn(bdIcon, "Insert button (Download / View Page / Read More / plain)", "", () => {});
   bdBtn.onclick = (e) => {
     e.preventDefault();
@@ -1034,7 +1034,7 @@ NoteEditor.prototype._buildToolbar = function () {
 
   // Standalone folder-hint inserter. Each instance carries its own
   // colour so it doesn't track the toolbar Ln picker.
-  const fhIcon = `<img class="pix-note-tbtn-icon" src="/api/pixaroma/assets/icons/ui/folder.svg" draggable="false">`;
+  const fhIcon = `<img class="pix-note-tbtn-icon" src="/pixaroma/assets/icons/ui/folder.svg" draggable="false">`;
   const fhBtn = makeBtn(fhIcon, 'Insert folder hint ("Place in: ComfyUI/...")', "", () => {});
   fhBtn.onclick = (e) => {
     e.preventDefault();
@@ -1042,7 +1042,7 @@ NoteEditor.prototype._buildToolbar = function () {
   };
   g6.appendChild(fhBtn);
 
-  const ytIcon = `<img class="pix-note-tbtn-icon" src="/api/pixaroma/assets/icons/ui/youtube.svg" draggable="false">`;
+  const ytIcon = `<img class="pix-note-tbtn-icon" src="/pixaroma/assets/icons/ui/youtube.svg" draggable="false">`;
   const ytBtn = makeBtn(ytIcon, "Insert YouTube link", "", () => {});
   ytBtn.onclick = (e) => {
     e.preventDefault();
@@ -1050,7 +1050,7 @@ NoteEditor.prototype._buildToolbar = function () {
   };
   g6.appendChild(ytBtn);
 
-  const dcIcon = `<img class="pix-note-tbtn-icon" src="/api/pixaroma/assets/icons/ui/discord.svg" draggable="false">`;
+  const dcIcon = `<img class="pix-note-tbtn-icon" src="/pixaroma/assets/icons/ui/discord.svg" draggable="false">`;
   const dcBtn = makeBtn(dcIcon, "Insert Discord link", "", () => {});
   dcBtn.onclick = (e) => {
     e.preventDefault();
@@ -1066,8 +1066,8 @@ NoteEditor.prototype._buildToolbar = function () {
   const spacer = el("div", "pix-note-tspacer");
   tb.appendChild(spacer);
   const gURight = el("div", "pix-note-tgroup");
-  const undoLabel = `<img class="pix-note-tbtn-icon" src="/api/pixaroma/assets/icons/ui/undo.svg" draggable="false">`;
-  const redoLabel = `<img class="pix-note-tbtn-icon" src="/api/pixaroma/assets/icons/ui/redo.svg" draggable="false">`;
+  const undoLabel = `<img class="pix-note-tbtn-icon" src="/pixaroma/assets/icons/ui/undo.svg" draggable="false">`;
+  const redoLabel = `<img class="pix-note-tbtn-icon" src="/pixaroma/assets/icons/ui/redo.svg" draggable="false">`;
   gURight.appendChild(makeBtn(undoLabel, "Undo (Ctrl+Z)", "pix-note-tbtn-accent", () => {
     this.doUndo?.();
   }));

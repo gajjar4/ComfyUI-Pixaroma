@@ -42,7 +42,7 @@ const PREVIEW_MIN_H = 170;
 // Fresh-node default height (controls + a comfortable starting preview). Saved
 // workflows keep their own size — configure() runs after onNodeCreated.
 const DEFAULT_H = 540;
-const UI_ICON = "/api/pixaroma/assets/icons/ui/";
+const UI_ICON = "/pixaroma/assets/icons/ui/";
 
 function showToast(msg) {
   const t = document.createElement("div");
@@ -189,7 +189,7 @@ async function uploadVideo(node) {
     const fd = new FormData();
     fd.append("file", file, file.name);
     try {
-      const res = await fetch("/api/pixaroma/api/load_video/upload", {
+      const res = await fetch("/pixaroma/api/load_video/upload", {
         method: "POST",
         body: fd,
       });

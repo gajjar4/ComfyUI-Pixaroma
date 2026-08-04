@@ -104,9 +104,9 @@ export function createTextEditorPanel({ mount, onChange, onReset, onAlignCanvas,
   // the caption + the separate "Position on canvas" row below make the
   // distinction clear.
   const ALIGN_ICON = {
-    left:   "/api/pixaroma/assets/icons/ui/align-left.svg",
-    center: "/api/pixaroma/assets/icons/ui/align-center-h.svg",
-    right:  "/api/pixaroma/assets/icons/ui/align-right.svg",
+    left:   "/pixaroma/assets/icons/ui/align-left.svg",
+    center: "/pixaroma/assets/icons/ui/align-center-h.svg",
+    right:  "/pixaroma/assets/icons/ui/align-right.svg",
   };
   // Text direction: Horizontal | Vertical. Vertical stacks each character
   // top-to-bottom; line breaks become columns (left to right). Sits above the
@@ -202,12 +202,12 @@ export function createTextEditorPanel({ mount, onChange, onReset, onAlignCanvas,
   // trio (top / middle / bottom).
   if (typeof onAlignCanvas === "function") {
     const POS_ICON = {
-      left:    "/api/pixaroma/assets/icons/ui/align-left.svg",
-      centerH: "/api/pixaroma/assets/icons/ui/align-center-h.svg",
-      right:   "/api/pixaroma/assets/icons/ui/align-right.svg",
-      top:     "/api/pixaroma/assets/icons/ui/align-top.svg",
-      centerV: "/api/pixaroma/assets/icons/ui/align-center-v.svg",
-      bottom:  "/api/pixaroma/assets/icons/ui/align-bottom.svg",
+      left:    "/pixaroma/assets/icons/ui/align-left.svg",
+      centerH: "/pixaroma/assets/icons/ui/align-center-h.svg",
+      right:   "/pixaroma/assets/icons/ui/align-right.svg",
+      top:     "/pixaroma/assets/icons/ui/align-top.svg",
+      centerV: "/pixaroma/assets/icons/ui/align-center-v.svg",
+      bottom:  "/pixaroma/assets/icons/ui/align-bottom.svg",
     };
     const POS_TITLE = {
       left: "Move text to left edge", centerH: "Center text horizontally", right: "Move text to right edge",

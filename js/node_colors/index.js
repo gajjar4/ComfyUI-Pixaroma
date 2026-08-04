@@ -1177,7 +1177,7 @@ function openNodeColorsPalette(targets, node, groups = [], pixGroups = []) {
   linkBtn = document.createElement("button"); linkBtn.type = "button"; linkBtn.title = "Link Title & Body (Body = darker tint of Title)";
   linkBtn.style.cssText = "flex:0 0 auto;width:30px;align-self:stretch;display:flex;align-items:center;justify-content:center;border-radius:6px;cursor:pointer;padding:0;";
   linkIco = document.createElement("span");
-  linkIco.style.cssText = "width:16px;height:16px;-webkit-mask:url(/api/pixaroma/assets/icons/ui/link.svg) center/contain no-repeat;mask:url(/api/pixaroma/assets/icons/ui/link.svg) center/contain no-repeat;transform:rotate(45deg);";
+  linkIco.style.cssText = "width:16px;height:16px;-webkit-mask:url(/pixaroma/assets/icons/ui/link.svg) center/contain no-repeat;mask:url(/pixaroma/assets/icons/ui/link.svg) center/contain no-repeat;transform:rotate(45deg);";
   linkBtn.appendChild(linkIco);
   linkBtn.addEventListener("click", () => {
     linked = !linked;
@@ -1467,7 +1467,7 @@ function openPixGroupPalette(g) {
   linkBtn = document.createElement("button"); linkBtn.type = "button"; linkBtn.title = "Link Title & Body color (Body follows Title)";
   linkBtn.style.cssText = "flex:0 0 auto;width:30px;align-self:stretch;display:flex;align-items:center;justify-content:center;border-radius:6px;cursor:pointer;padding:0;";
   linkIco = document.createElement("span");
-  linkIco.style.cssText = "width:16px;height:16px;-webkit-mask:url(/api/pixaroma/assets/icons/ui/link.svg) center/contain no-repeat;mask:url(/api/pixaroma/assets/icons/ui/link.svg) center/contain no-repeat;transform:rotate(45deg);";
+  linkIco.style.cssText = "width:16px;height:16px;-webkit-mask:url(/pixaroma/assets/icons/ui/link.svg) center/contain no-repeat;mask:url(/pixaroma/assets/icons/ui/link.svg) center/contain no-repeat;transform:rotate(45deg);";
   linkBtn.appendChild(linkIco);
   linkBtn.addEventListener("click", () => {
     linked = !linked;

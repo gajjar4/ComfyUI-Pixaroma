@@ -25,7 +25,7 @@ export function attachEditButton(wrap, onClick) {
   btn.className = "pix-note-editbtn";
   btn.type = "button";
   const icon = document.createElement("img");
-  icon.src = "/api/pixaroma/assets/icons/layers/edit.svg";
+  icon.src = "/pixaroma/assets/icons/layers/edit.svg";
   icon.draggable = false;
   icon.className = "pix-note-editbtn-icon";
   btn.appendChild(icon);
@@ -143,7 +143,7 @@ function injectCopyButtons(bodyEl) {
     btn.title = "Copy code";
     btn.contentEditable = "false";
     const icon = document.createElement("img");
-    icon.src = "/api/pixaroma/assets/icons/ui/copy.svg";
+    icon.src = "/pixaroma/assets/icons/ui/copy.svg";
     icon.draggable = false;
     btn.appendChild(icon);
     pre.appendChild(btn);

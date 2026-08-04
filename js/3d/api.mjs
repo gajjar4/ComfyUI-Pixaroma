@@ -3,7 +3,7 @@ import { api } from "/scripts/api.js";
 
 export class ThreeDAPI {
   static async saveRender(projectId, dataURL) {
-    const res = await api.fetchApi("/api/pixaroma/api/3d/save", {
+    const res = await api.fetchApi("/pixaroma/api/3d/save", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ project_id: projectId, image_merged: dataURL }),
@@ -12,7 +12,7 @@ export class ThreeDAPI {
   }
 
   static async uploadBgImage(projectId, dataURL) {
-    const res = await api.fetchApi("/api/pixaroma/api/3d/bg_upload", {
+    const res = await api.fetchApi("/pixaroma/api/3d/bg_upload", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ project_id: projectId, image: dataURL }),
@@ -26,7 +26,7 @@ export class ThreeDAPI {
   // where `path` is the `pixaroma/...` subfolder-relative URL suitable
   // for /view?type=input&subfolder=...&filename=...
   static async uploadModel(projectId, filename, dataURL) {
-    const res = await api.fetchApi("/api/pixaroma/api/3d/model_upload", {
+    const res = await api.fetchApi("/pixaroma/api/3d/model_upload", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({

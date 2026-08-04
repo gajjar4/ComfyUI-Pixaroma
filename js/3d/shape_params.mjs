@@ -75,7 +75,7 @@ Pixaroma3DEditor.prototype._rebuildShapePanel = function () {
     head.style.cssText =
       "display:flex;align-items:center;gap:6px;margin-bottom:6px;";
     const icon = document.createElement("img");
-    icon.src = `/api/pixaroma/assets/icons/3D/${composite.icon}`;
+    icon.src = `/pixaroma/assets/icons/3D/${composite.icon}`;
     icon.style.cssText = "width:16px;height:16px;filter:invert(90%);";
     const name = document.createElement("span");
     name.textContent = composite.label;
@@ -241,7 +241,7 @@ Pixaroma3DEditor.prototype._rebuildShapePanel = function () {
   head.style.cssText =
     "display:flex;align-items:center;gap:6px;margin-bottom:6px;";
   const icon = document.createElement("img");
-  icon.src = `/api/pixaroma/assets/icons/3D/${shape.icon}`;
+  icon.src = `/pixaroma/assets/icons/3D/${shape.icon}`;
   icon.style.cssText = "width:16px;height:16px;filter:invert(90%);";
   const name = document.createElement("span");
   name.textContent = shape.label;

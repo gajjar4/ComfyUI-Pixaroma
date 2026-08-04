@@ -44,8 +44,8 @@ const SET_CMD = "Pixaroma.ShowSettings";
 const HELP_ICON = "pix-help-toolbar-icon";
 const SET_ICON = "pix-settings-toolbar-icon";
 const CSS_ID = "pix-help-toolbar-css";
-const QUESTION_ICON = "/api/pixaroma/assets/icons/note/question-mark.svg";
-const GEAR_ICON = "/api/pixaroma/assets/icons/note/gear.svg";
+const QUESTION_ICON = "/pixaroma/assets/icons/note/question-mark.svg";
+const GEAR_ICON = "/pixaroma/assets/icons/note/gear.svg";
 
 // command.icon renders as the class on an <i>, so we draw the orange circle +
 // glyph purely in CSS: a filled BRAND circle with the bundled svg as a white

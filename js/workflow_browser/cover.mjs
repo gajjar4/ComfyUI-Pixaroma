@@ -169,7 +169,7 @@ export function coverFor(entry, meta) {
   if (hand && hand.kind === "file" && hand.file) {
     // The version in the query is what lets the picture be cached hard and
     // still update the instant it is replaced - the filename never changes.
-    return { kind: "image", url: `/api/pixaroma/api/workflows/cover/${encodeURIComponent(hand.file)}?v=${hand.v || 1}` };
+    return { kind: "image", url: `/pixaroma/api/workflows/cover/${encodeURIComponent(hand.file)}?v=${hand.v || 1}` };
   }
   // A cover saved by the first version was embedded here as base64. The server
   // moves those out to files when the sidecar is read, but a panel still

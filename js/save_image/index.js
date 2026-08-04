@@ -301,7 +301,7 @@ function toggleFold(node) {
 // it just pops the OS picker and returns a path).
 async function pickNativeFolder(startPath) {
   try {
-    const url = `/api/pixaroma/api/load_images_folder/pick_native?path=${encodeURIComponent(startPath || "")}`;
+    const url = `/pixaroma/api/load_images_folder/pick_native?path=${encodeURIComponent(startPath || "")}`;
     const r = await fetch(url);
     return await r.json();
   } catch (e) {
@@ -344,7 +344,7 @@ function buildViewUrl(f) {
 // external files go through the token route; anything else has no preview.
 function entrySrc(f) {
   if (f && f.type && f.filename) return buildViewUrl(f);
-  if (f && f.token) return "/api/pixaroma/api/save_image/file?t=" + encodeURIComponent(f.token);
+  if (f && f.token) return "/pixaroma/api/save_image/file?t=" + encodeURIComponent(f.token);
   return null;
 }
 function entriesToFrames(list) {
@@ -561,7 +561,7 @@ function scheduleCounterFetch(node, folderRaw, nameWithExt, digits) {
   node._pixSiCntTimer = setTimeout(async () => {
     try {
       const r = await fetch(
-        "/api/pixaroma/api/save_image/next_counter?folder=" + encodeURIComponent(folderRaw) +
+        "/pixaroma/api/save_image/next_counter?folder=" + encodeURIComponent(folderRaw) +
         "&name=" + encodeURIComponent(nameWithExt) +
         "&digits=" + encodeURIComponent(digits)
       );
@@ -886,7 +886,7 @@ function wireEvents(node, ui) {
 
   ui.btnFolder.addEventListener("click", async () => {
     try {
-      const r = await fetch("/api/pixaroma/api/save_image/open_folder", {
+      const r = await fetch("/pixaroma/api/save_image/open_folder", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ folder: readState(node).folder || "" }),

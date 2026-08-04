@@ -22,7 +22,7 @@ import {
 
 const PAL = ["#e0894b", "#5aa9e6", "#8e7bd6", "#5fbf8f", "#d76b98", "#c9a24b", "#6fb3b8"];
 const MAX_IMPORT_BYTES = 8 * 1024 * 1024;
-const ICON_BASE = "/api/pixaroma/assets/icons/ui/";
+const ICON_BASE = "/pixaroma/assets/icons/ui/";
 // Dragging a category row carries its SIDE in the MIME TYPE, because the type list is
 // the only thing readable during dragover (getData is blocked until the drop). That is
 // what lets a Text row refuse a List row on sight instead of accepting the drop and

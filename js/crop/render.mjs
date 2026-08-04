@@ -40,7 +40,7 @@ proto._loadImageFromURL = function (url, onDone) {
 proto._uploadSourceImage = async function (dataURL) {
   try {
     const { api } = await import("/scripts/api.js");
-    const res = await api.fetchApi("/api/pixaroma/api/crop/upload_src", {
+    const res = await api.fetchApi("/pixaroma/api/crop/upload_src", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ project_id: this.projectId, image: dataURL }),

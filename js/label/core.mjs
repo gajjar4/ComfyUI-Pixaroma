@@ -193,7 +193,7 @@ export class LabelEditor {
     const header = el("div", "pix-lbl-header");
     const titleSpan = el("span", "pix-lbl-title");
     const logo = document.createElement("img");
-    logo.src = "/api/pixaroma/assets/pixaroma_logo.svg";
+    logo.src = "/pixaroma/assets/pixaroma_logo.svg";
     logo.className = "pix-lbl-title-logo";
     titleSpan.appendChild(logo);
     titleSpan.append(" Label Editor ");

@@ -549,12 +549,12 @@ function exportTxt(node) {
 }
 
 // A subtle footer icon button (grey mask icon → brand orange on hover). Reuses the
-// shared UI SVGs served at /api/pixaroma/assets/icons/ui/.
+// shared UI SVGs served at /pixaroma/assets/icons/ui/.
 function iconBtn(iconFile, title) {
   const b = el("button", "pix-rl-fbtn");
   b.type = "button"; b.title = title;
   const ico = el("span", "pix-rl-ico");
-  const url = "url(/api/pixaroma/assets/icons/ui/" + iconFile + ")";
+  const url = "url(/pixaroma/assets/icons/ui/" + iconFile + ")";
   ico.style.webkitMaskImage = url; ico.style.maskImage = url;
   b.appendChild(ico);
   return b;

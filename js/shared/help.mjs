@@ -41,7 +41,7 @@
 import { app } from "/scripts/app.js";
 
 const CSS_ID = "pix-help-css";
-const QUESTION_ICON = "/api/pixaroma/assets/icons/note/question.svg";
+const QUESTION_ICON = "/pixaroma/assets/icons/note/question.svg";
 const BRAND = "#f66744";
 
 // ── Per-node help registry ───────────────────────────────────

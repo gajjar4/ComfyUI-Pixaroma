@@ -2,9 +2,8 @@
 // ║  Build a URL that works on a HOSTED ComfyUI, not just on localhost.  ║
 // ╚══════════════════════════════════════════════════════════════════════╝
 //
-// NEVER write a root-relative API URL again. Core routes go through pixApiUrl();
-// OUR OWN routes and assets are written with a literal /api prefix (see the note
-// at the bottom of this file for why those two differ).
+// NEVER write a root-relative API URL (`/view?...`, `fetch("/pixaroma/api/x")`)
+// again. Route it through here.
 //
 // WHY (measured on a cloud platform, 2026-08-04). Save Mp4's in-node player was
 // black there and its play button did nothing, while VideoHelperSuite's preview
@@ -38,8 +37,7 @@ import { api } from "/scripts/api.js";
 
 /**
  * Absolute-safe URL for a ComfyUI or Pixaroma route.
- * @param {string} route a BARE route, e.g. "/view?filename=x.png&type=output".
- *        Never pass one that already starts with /api - this adds that itself.
+ * @param {string} route e.g. "/view?filename=x.png&type=output" or "/pixaroma/api/version"
  * @returns {string} the same route, prefixed for this deployment
  */
 export function pixApiUrl(route) {
@@ -51,18 +49,7 @@ export function pixApiUrl(route) {
   return route; // degrade to the old behaviour rather than produce nothing
 }
 
-// ── Why our OWN urls are written "/api/pixaroma/..." literally, not via here ──
-//
-// 96 of them sit inside CSS `url(...)` rules in injected stylesheets. A CSS rule
-// cannot call a function, and `${...}` interpolation only works when the
-// surrounding string happens to be a template literal - which varies per file,
-// and where it is NOT one you get a syntax-valid stylesheet containing the
-// literal text "${PIX_ASSETS}", i.e. a silent breakage. A uniform textual prefix
-// is correct in every string type with zero syntax risk, which is what 233 call
-// sites needed.
-//
-// It is equivalent in practice: `api_base` is empty on every deployment our pack
-// can run on at all, because we import "/scripts/app.js" from the root in 151
-// places - so if a deployment used a non-empty base, none of our JS would load
-// and there would be nothing to fix. Should that ever change, this helper is the
-// one place to teach about the base, plus a sweep of the literal prefixes.
+// Prefix for ASSET urls used inside injected CSS (`url(${PIX_ASSETS}/icons/x.svg)`).
+// Computed once at module load: the deployment's base cannot change afterwards,
+// and a CSS template literal cannot call a function per rule.
+export const PIX_ASSETS = pixApiUrl("/pixaroma/assets");

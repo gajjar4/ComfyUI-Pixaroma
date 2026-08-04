@@ -428,7 +428,7 @@ function makeButtonModal(editor, onSubmit, initialValues) {
     if (opt.svg) {
       const ico = document.createElement("span");
       ico.className = "ico";
-      const url = `url(/api/pixaroma/assets/icons/ui/${opt.svg})`;
+      const url = `url(/pixaroma/assets/icons/ui/${opt.svg})`;
       ico.style.webkitMaskImage = url;
       ico.style.maskImage = url;
       b.appendChild(ico);

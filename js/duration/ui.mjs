@@ -128,8 +128,8 @@ export function injectCSS() {
   }
   .pix-dur-gear::before{
     content:""; display:block; width:14px; height:14px; background:#bbb;
-    -webkit-mask:url("/api/pixaroma/assets/icons/note/gear.svg") center/contain no-repeat;
-    mask:url("/api/pixaroma/assets/icons/note/gear.svg") center/contain no-repeat;
+    -webkit-mask:url("/pixaroma/assets/icons/note/gear.svg") center/contain no-repeat;
+    mask:url("/pixaroma/assets/icons/note/gear.svg") center/contain no-repeat;
   }
   .pix-dur-gear:hover::before{ background:${ACC}; }
 

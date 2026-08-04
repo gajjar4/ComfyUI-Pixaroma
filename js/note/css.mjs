@@ -182,32 +182,32 @@ export function injectCSS() {
 .pix-note-body a.pix-note-dl::before,
 .pix-note-editarea a.pix-note-dl::before,
 .pix-note-prevwrap a.pix-note-dl::before {
-  -webkit-mask-image: url(/api/pixaroma/assets/icons/ui/download-model.svg);
-          mask-image: url(/api/pixaroma/assets/icons/ui/download-model.svg);
+  -webkit-mask-image: url(/pixaroma/assets/icons/ui/download-model.svg);
+          mask-image: url(/pixaroma/assets/icons/ui/download-model.svg);
 }
 .pix-note-body a.pix-note-yt::before,
 .pix-note-editarea a.pix-note-yt::before,
 .pix-note-prevwrap a.pix-note-yt::before {
-  -webkit-mask-image: url(/api/pixaroma/assets/icons/ui/youtube.svg);
-          mask-image: url(/api/pixaroma/assets/icons/ui/youtube.svg);
+  -webkit-mask-image: url(/pixaroma/assets/icons/ui/youtube.svg);
+          mask-image: url(/pixaroma/assets/icons/ui/youtube.svg);
 }
 .pix-note-body a.pix-note-discord::before,
 .pix-note-editarea a.pix-note-discord::before,
 .pix-note-prevwrap a.pix-note-discord::before {
-  -webkit-mask-image: url(/api/pixaroma/assets/icons/ui/discord.svg);
-          mask-image: url(/api/pixaroma/assets/icons/ui/discord.svg);
+  -webkit-mask-image: url(/pixaroma/assets/icons/ui/discord.svg);
+          mask-image: url(/pixaroma/assets/icons/ui/discord.svg);
 }
 .pix-note-body a.pix-note-vp::before,
 .pix-note-editarea a.pix-note-vp::before,
 .pix-note-prevwrap a.pix-note-vp::before {
-  -webkit-mask-image: url(/api/pixaroma/assets/icons/ui/view-model-page.svg);
-          mask-image: url(/api/pixaroma/assets/icons/ui/view-model-page.svg);
+  -webkit-mask-image: url(/pixaroma/assets/icons/ui/view-model-page.svg);
+          mask-image: url(/pixaroma/assets/icons/ui/view-model-page.svg);
 }
 .pix-note-body a.pix-note-rm::before,
 .pix-note-editarea a.pix-note-rm::before,
 .pix-note-prevwrap a.pix-note-rm::before {
-  -webkit-mask-image: url(/api/pixaroma/assets/icons/ui/read-more.svg);
-          mask-image: url(/api/pixaroma/assets/icons/ui/read-more.svg);
+  -webkit-mask-image: url(/pixaroma/assets/icons/ui/read-more.svg);
+          mask-image: url(/pixaroma/assets/icons/ui/read-more.svg);
 }
 
 /* ── Button Design block wrapper + decorations ──────────────
@@ -267,8 +267,8 @@ export function injectCSS() {
   display: inline-block;
   width: 12px; height: 12px;
   background-color: currentColor;
-  -webkit-mask: url(/api/pixaroma/assets/icons/ui/folder.svg) no-repeat center / contain;
-          mask: url(/api/pixaroma/assets/icons/ui/folder.svg) no-repeat center / contain;
+  -webkit-mask: url(/pixaroma/assets/icons/ui/folder.svg) no-repeat center / contain;
+          mask: url(/pixaroma/assets/icons/ui/folder.svg) no-repeat center / contain;
   vertical-align: -2px;
   margin-right: 6px;
   opacity: 0.85;
@@ -725,64 +725,64 @@ export function injectCSS() {
 .pix-note-tbtn-maskicon-multi::after  { background-color: var(--pix-note-tbtn-tint, currentColor); }
 
 .pix-note-icon-text-color::before {
-  -webkit-mask-image: url(/api/pixaroma/assets/icons/ui/text-color-outline.svg);
-          mask-image: url(/api/pixaroma/assets/icons/ui/text-color-outline.svg);
+  -webkit-mask-image: url(/pixaroma/assets/icons/ui/text-color-outline.svg);
+          mask-image: url(/pixaroma/assets/icons/ui/text-color-outline.svg);
 }
 .pix-note-icon-text-color::after {
-  -webkit-mask-image: url(/api/pixaroma/assets/icons/ui/text-color-drop.svg);
-          mask-image: url(/api/pixaroma/assets/icons/ui/text-color-drop.svg);
+  -webkit-mask-image: url(/pixaroma/assets/icons/ui/text-color-drop.svg);
+          mask-image: url(/pixaroma/assets/icons/ui/text-color-drop.svg);
 }
 .pix-note-icon-highlight-color::before {
-  -webkit-mask-image: url(/api/pixaroma/assets/icons/ui/highlight-color-outline.svg);
-          mask-image: url(/api/pixaroma/assets/icons/ui/highlight-color-outline.svg);
+  -webkit-mask-image: url(/pixaroma/assets/icons/ui/highlight-color-outline.svg);
+          mask-image: url(/pixaroma/assets/icons/ui/highlight-color-outline.svg);
 }
 .pix-note-icon-highlight-color::after {
-  -webkit-mask-image: url(/api/pixaroma/assets/icons/ui/highlight-color-drop.svg);
-          mask-image: url(/api/pixaroma/assets/icons/ui/highlight-color-drop.svg);
+  -webkit-mask-image: url(/pixaroma/assets/icons/ui/highlight-color-drop.svg);
+          mask-image: url(/pixaroma/assets/icons/ui/highlight-color-drop.svg);
 }
 .pix-note-icon-bg-color::before {
-  -webkit-mask-image: url(/api/pixaroma/assets/icons/ui/bg-color-outline.svg);
-          mask-image: url(/api/pixaroma/assets/icons/ui/bg-color-outline.svg);
+  -webkit-mask-image: url(/pixaroma/assets/icons/ui/bg-color-outline.svg);
+          mask-image: url(/pixaroma/assets/icons/ui/bg-color-outline.svg);
 }
 .pix-note-icon-bg-color::after {
-  -webkit-mask-image: url(/api/pixaroma/assets/icons/ui/bg-color-drop.svg);
-          mask-image: url(/api/pixaroma/assets/icons/ui/bg-color-drop.svg);
+  -webkit-mask-image: url(/pixaroma/assets/icons/ui/bg-color-drop.svg);
+          mask-image: url(/pixaroma/assets/icons/ui/bg-color-drop.svg);
 }
 .pix-note-icon-button-color::before {
-  -webkit-mask-image: url(/api/pixaroma/assets/icons/ui/button-color-outline.svg);
-          mask-image: url(/api/pixaroma/assets/icons/ui/button-color-outline.svg);
+  -webkit-mask-image: url(/pixaroma/assets/icons/ui/button-color-outline.svg);
+          mask-image: url(/pixaroma/assets/icons/ui/button-color-outline.svg);
 }
 .pix-note-icon-button-color::after {
-  -webkit-mask-image: url(/api/pixaroma/assets/icons/ui/button-color-drop.svg);
-          mask-image: url(/api/pixaroma/assets/icons/ui/button-color-drop.svg);
+  -webkit-mask-image: url(/pixaroma/assets/icons/ui/button-color-drop.svg);
+          mask-image: url(/pixaroma/assets/icons/ui/button-color-drop.svg);
 }
 .pix-note-icon-line-color::before {
-  -webkit-mask-image: url(/api/pixaroma/assets/icons/ui/line-color-outline.svg);
-          mask-image: url(/api/pixaroma/assets/icons/ui/line-color-outline.svg);
+  -webkit-mask-image: url(/pixaroma/assets/icons/ui/line-color-outline.svg);
+          mask-image: url(/pixaroma/assets/icons/ui/line-color-outline.svg);
 }
 .pix-note-icon-line-color::after {
-  -webkit-mask-image: url(/api/pixaroma/assets/icons/ui/line-color-drop.svg);
-          mask-image: url(/api/pixaroma/assets/icons/ui/line-color-drop.svg);
+  -webkit-mask-image: url(/pixaroma/assets/icons/ui/line-color-drop.svg);
+          mask-image: url(/pixaroma/assets/icons/ui/line-color-drop.svg);
 }
 .pix-note-icon-separator {
-  -webkit-mask-image: url(/api/pixaroma/assets/icons/ui/separator.svg);
-          mask-image: url(/api/pixaroma/assets/icons/ui/separator.svg);
+  -webkit-mask-image: url(/pixaroma/assets/icons/ui/separator.svg);
+          mask-image: url(/pixaroma/assets/icons/ui/separator.svg);
 }
 .pix-note-icon-code {
-  -webkit-mask-image: url(/api/pixaroma/assets/icons/ui/code.svg);
-          mask-image: url(/api/pixaroma/assets/icons/ui/code.svg);
+  -webkit-mask-image: url(/pixaroma/assets/icons/ui/code.svg);
+          mask-image: url(/pixaroma/assets/icons/ui/code.svg);
 }
 .pix-note-icon-list-dot {
-  -webkit-mask-image: url(/api/pixaroma/assets/icons/ui/list-dot.svg);
-          mask-image: url(/api/pixaroma/assets/icons/ui/list-dot.svg);
+  -webkit-mask-image: url(/pixaroma/assets/icons/ui/list-dot.svg);
+          mask-image: url(/pixaroma/assets/icons/ui/list-dot.svg);
 }
 .pix-note-icon-list-number {
-  -webkit-mask-image: url(/api/pixaroma/assets/icons/ui/list-number.svg);
-          mask-image: url(/api/pixaroma/assets/icons/ui/list-number.svg);
+  -webkit-mask-image: url(/pixaroma/assets/icons/ui/list-number.svg);
+          mask-image: url(/pixaroma/assets/icons/ui/list-number.svg);
 }
 .pix-note-icon-link {
-  -webkit-mask-image: url(/api/pixaroma/assets/icons/ui/link.svg);
-          mask-image: url(/api/pixaroma/assets/icons/ui/link.svg);
+  -webkit-mask-image: url(/pixaroma/assets/icons/ui/link.svg);
+          mask-image: url(/pixaroma/assets/icons/ui/link.svg);
 }
 .pix-note-tbtn.italic { font-style: italic; font-family: Georgia, serif; }
 .pix-note-tbtn.under { text-decoration: underline; }
@@ -1212,8 +1212,8 @@ hr.pix-note-hr-thick {
    Single-layer (no outline+drop split) — uses the existing
    .pix-note-tbtn-maskicon class for currentColor tinting. */
 .pix-note-icon-icon-insert {
-  -webkit-mask-image: url(/api/pixaroma/assets/icons/ui/icon-insert.svg);
-          mask-image: url(/api/pixaroma/assets/icons/ui/icon-insert.svg);
+  -webkit-mask-image: url(/pixaroma/assets/icons/ui/icon-insert.svg);
+          mask-image: url(/pixaroma/assets/icons/ui/icon-insert.svg);
 }
 
 /* ── Insert-link dialog inputs ───────────────────────────── */
@@ -1398,8 +1398,8 @@ hr.pix-note-hr-thick {
   display: inline-block;
   width: 16px; height: 16px;
   background-color: #bbb;
-  -webkit-mask: url(/api/pixaroma/assets/icons/ui/folder.svg) no-repeat center / contain;
-          mask: url(/api/pixaroma/assets/icons/ui/folder.svg) no-repeat center / contain;
+  -webkit-mask: url(/pixaroma/assets/icons/ui/folder.svg) no-repeat center / contain;
+          mask: url(/pixaroma/assets/icons/ui/folder.svg) no-repeat center / contain;
   flex-shrink: 0;
 }
 

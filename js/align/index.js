@@ -51,7 +51,7 @@ const state = {
   groupResize: null,    // { ref, x0, y0, cornerX0, cornerY0, cursorX, cursorY } or null (native group BR-resize)
 };
 
-const ICON_URL = "/api/pixaroma/assets/icons/ui/align-center-v.svg";
+const ICON_URL = "/pixaroma/assets/icons/ui/align-center-v.svg";
 
 function toggleEnabled() {
   const s = app.ui?.settings;

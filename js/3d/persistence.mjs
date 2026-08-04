@@ -448,7 +448,7 @@ Pixaroma3DEditor.prototype._addObjFromData = function (od) {
       if (this._closed) return;
       const { loadGLBFromURL, prepareImportedGroup, wrapImportPivot } = mod;
       try {
-        const innerGroup = await loadGLBFromURL("/api/pixaroma/assets/models/bunny.glb");
+        const innerGroup = await loadGLBFromURL("/pixaroma/assets/models/bunny.glb");
         // Replace placeholder in-place so the layer panel entry and
         // object ordering don't shuffle.
         const idx = this.objects.indexOf(placeholder);

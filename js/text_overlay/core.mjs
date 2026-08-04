@@ -12,7 +12,7 @@ import { renderTextLayer, measureTextDims } from "../framework/text_render.mjs";
 import { getFontCatalog, resolveFontVariant, loadFontForLayer } from "../framework/fonts.mjs";
 import { installGraphUndoGuard } from "../shared/graph_undo_guard.mjs";
 
-const UI_ICON = "/api/pixaroma/assets/icons/ui/";
+const UI_ICON = "/pixaroma/assets/icons/ui/";
 
 const HELP_HTML = `
   <div><strong>Editing</strong><br/>
