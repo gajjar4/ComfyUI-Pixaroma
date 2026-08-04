@@ -346,20 +346,11 @@ export class PixaromaEditor {
     return !!(this.overlay && this.overlay.isConnected);
   }
 
-  // Vue Compat #6: neuter the Ctrl+Z escape. ComfyUI's change-tracker undo runs
-  // via requestAnimationFrame and reaches the graph through app.loadGraphData ->
-  // app.graph.configure; preventDefault on the keydown does NOT stop it. While
-  // the editor is open we no-op both so Ctrl+Z can only drive the editor's own
-  // undo, never tear down the workflow underneath. The patches SELF-HEAL: if
-  // they are ever called while our overlay is gone (tab closed mid-edit, etc),
-  // they restore the originals and pass through - otherwise loadGraphData would
-  // stay disabled forever and brick the whole UI until a page refresh.
+  // Vue Compat #6: stop Ctrl+Z escaping to the graph while the editor is open.
+  // HOW it does that lives in js/shared/graph_undo_guard.mjs and nowhere else -
+  // do not restate it here, that is how these comments went stale. Idempotent:
+  // a re-open just re-registers via a fresh token.
   _installGraphPatches() {
-    // Delegate to the shared, refcount-safe, self-healing guard. It also covers
-    // graph.undo/redo + the Comfy.Undo/Redo command (which this editor's old
-    // bespoke version did not), and unifies the patch with the other editors so
-    // they can never fight over app.loadGraphData. Idempotent: a re-open just
-    // re-registers via a fresh token.
     if (!this._undoGuardOff)
       this._undoGuardOff = installGraphUndoGuard(() => this._overlayAlive());
   }

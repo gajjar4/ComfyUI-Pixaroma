@@ -217,19 +217,10 @@ export class AudioStudioEditor {
   open() {
     injectAudioStudioCSS();
 
-    // Vue-compat (CLAUDE.md Pattern #6): neuter Ctrl+Z escape paths while
-    // editor is open. Patches restored in forceClose() - AND they self-heal
-    // (Vue Compat #2): if the overlay is torn down without forceClose running
-    // (e.g. closing the workflow tab while the editor is open), the patches
-    // would otherwise stay installed forever and the user could no longer open
-    // or create ANY workflow until a page refresh. Each wrapper checks whether
-    // our overlay is still in the DOM; if it's gone, it restores the originals
-    // and passes the call through. Ctrl+Z while the editor is genuinely open
-    // is still blocked.
-    // Shared, refcount-safe, self-healing guard. Also covers graph.undo/redo +
-    // the Comfy.Undo/Redo command (the old inline version only did
-    // loadGraphData/configure, so the command-store undo path could still
-    // escape), and refcounts so two editors closing FIFO can't brick the UI.
+    // Vue Compat #6: stop Ctrl+Z escaping to the graph while the editor is open.
+    // Released in forceClose(), and it self-heals if the overlay is torn down
+    // without forceClose running (Vue Compat #2). HOW it works lives in
+    // js/shared/graph_undo_guard.mjs and nowhere else - do not restate it here.
     this._undoGuardOff = installGraphUndoGuard(() => this._overlayAlive());
 
     // Build the standard Pixaroma editor shell. This gives us:
@@ -758,15 +749,15 @@ export class AudioStudioEditor {
     });
   }
 
-  // Is this editor's overlay still in the document? Used by the self-healing
-  // loadGraphData/configure patches to detect a teardown that bypassed
+  // Is this editor's overlay still in the document? This is the isAlive the
+  // shared graph-undo guard polls to detect a teardown that bypassed
   // forceClose (Vue Compat #2).
   _overlayAlive() {
     return !!(this.overlay && this.overlay.isConnected);
   }
 
-  // Restore the graph patches we installed in open(). Idempotent + safe to
-  // call from BOTH forceClose AND the self-heal path.
+  // Release the graph-undo guard taken in open(). Idempotent + safe to call
+  // from BOTH forceClose AND the guard's own self-heal path.
   _restoreGraphPatches() {
     if (this._undoGuardOff) { this._undoGuardOff(); this._undoGuardOff = null; }
   }

@@ -164,8 +164,8 @@ export class NoteEditor {
     // Don't use installFocusTrap here — its mouseup refocus pulls focus
     // away from the contenteditable on any button click (breaking typing)
     // and wipes the text selection on drag-select that ends outside the
-    // panel. Ctrl+Z escape is handled by the capture listeners + graph
-    // undo neutering below.
+    // panel. Ctrl+Z escape is handled by the capture listeners + the shared
+    // graph-undo guard below.
     // Intercept Ctrl/Cmd+Z/Y explicitly — if the event escapes to ComfyUI's
     // shortcut handlers the graph's undo runs, which removes the node that
     // owns this editor. We run the contenteditable's native undo/redo
@@ -449,11 +449,10 @@ export class NoteEditor {
     window.addEventListener("dragover", this._dragOverBlock, true);
     document.addEventListener("dragover", this._dragOverBlock, true);
     // Block ComfyUI's Ctrl+Z from tearing down the workflow under the open
-    // editor (Vue Compat #6) via the shared, refcount-safe, self-healing guard.
-    // Same coverage as before — loadGraphData / configure / graph.undo/redo +
-    // the Comfy.Undo/Redo command-store path — but the refcount fixes the prior
-    // two-editor FIFO brick. The onRemoved net + MutationObserver below stay as
-    // extra teardown safety nets.
+    // editor (Vue Compat #6). HOW it works lives in
+    // js/shared/graph_undo_guard.mjs and nowhere else - do not restate it here,
+    // that is how these comments went stale. The onRemoved net + MutationObserver
+    // below stay as extra teardown safety nets.
     this._undoGuardOff = installGraphUndoGuard(() => this._overlayAlive());
     // Node-resurrection safety net: if Ctrl+Z still slips through and the
     // node is removed from the graph while the editor is open, LiteGraph's
@@ -533,16 +532,15 @@ export class NoteEditor {
     });
   }
 
-  // Is this editor's overlay element still in the document? Used by the
-  // self-healing loadGraphData/configure patches to detect a teardown that
+  // Is this editor's overlay element still in the document? This is the
+  // isAlive the shared graph-undo guard polls to detect a teardown that
   // bypassed _cleanup (Vue Compat #2).
   _overlayAlive() {
     return !!(this._el && this._el.isConnected);
   }
 
-  // Restore the graph functions we neutered in open(). Idempotent + safe to
-  // call from BOTH _cleanup AND the self-heal path inside the patched
-  // loadGraphData/configure (so the editor can't permanently brick the UI).
+  // Release the graph-undo guard taken in open(). Idempotent + safe to call
+  // from BOTH _cleanup AND the guard's own self-heal path.
   _restoreGraphPatches() {
     if (this._undoGuardOff) { this._undoGuardOff(); this._undoGuardOff = null; }
   }
@@ -584,8 +582,8 @@ export class NoteEditor {
       document.removeEventListener("dragover", this._dragOverBlock, true);
       this._dragOverBlock = null;
     }
-    // Command-exec patch is restored by _restoreGraphPatches() (called above),
-    // which also covers the self-heal path.
+    // The graph-undo guard is released by _restoreGraphPatches() (called
+    // above), which also covers the self-heal path.
     if (this.node && this._origOnRemoved !== undefined) {
       this.node.onRemoved = this._origOnRemoved;
       this._origOnRemoved = undefined;

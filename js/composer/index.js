@@ -60,9 +60,8 @@ function isEditorOpen(node) {
   if (!node._pixaromaEditor) return false;
   const overlay = node._pixaromaEditor.overlay;
   if (!overlay || !overlay.isConnected) {
-    // Editor was removed from DOM without close handler — clean up. Restore the
-    // Ctrl+Z graph-undo neutering (Vue Compat #6) so loadGraphData isn't left
-    // disabled, then drop the stale reference.
+    // Editor was removed from DOM without close handler — clean up. Release the
+    // Ctrl+Z graph-undo guard (Vue Compat #6), then drop the stale reference.
     dbg("editor overlay gone — clearing stale reference");
     try { node._pixaromaEditor._restoreGraphPatches?.(); } catch {}
     try { node._pixaromaEditor._cleanupKeys?.(); } catch {}
@@ -661,9 +660,9 @@ app.registerExtension({
         origRemoved?.call(node);
         clearInterval(pollInterval);
         // If the node is deleted while its editor is open, tear the editor
-        // down properly: restore the Ctrl+Z graph-undo neutering (Vue Compat
-        // #6) and detach window listeners, or loadGraphData stays a no-op and
-        // the listeners leak.
+        // down properly: release the Ctrl+Z graph-undo guard (Vue Compat #6)
+        // and detach window listeners, or the guard stays held and the
+        // listeners leak.
         try {
           const ed = node._pixaromaEditor;
           if (ed) {

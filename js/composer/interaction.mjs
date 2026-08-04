@@ -303,7 +303,7 @@ PixaromaEditor.prototype.attachEvents = function () {
       window.removeEventListener("mouseup", this._composerMouseUp);
     if (this._composerBlur)
       window.removeEventListener("blur", this._composerBlur);
-    // Restore the Ctrl+Z graph-undo neutering installed at open (Vue Compat #6).
+    // Release the Ctrl+Z graph-undo guard taken at open (Vue Compat #6).
     this._restoreGraphPatches?.();
   };
 

@@ -50,13 +50,10 @@ export class TextOverlayEditor {
 
   async open() {
     // Vue Compat #6: block Ctrl+Z from escaping the editor and reverting or
-    // deleting the node (changeTracker.undo -> loadGraphData/configure, AND the
-    // Vue command-store Undo/Redo path). Use the SHARED graph-undo guard
-    // (js/shared/graph_undo_guard.mjs): refcount-safe, self-healing (restores if
-    // the overlay is torn down without our close() running - Vue Compat #2), and
-    // it covers the FULL set (loadGraphData, graph.configure, graph.undo,
-    // graph.redo, AND the Comfy.Undo/Redo command dispatch - which the old
-    // hand-rolled patch here missed). Uninstalled on every teardown path via
+    // deleting the node. Use the SHARED graph-undo guard
+    // (js/shared/graph_undo_guard.mjs) - refcount-safe and self-healing. HOW it
+    // works lives in that file and nowhere else; do not restate it here, that is
+    // how these comments went stale. Uninstalled on every teardown path via
     // close() + layout.onCleanup (set after mount below).
     this._undoGuardOff = installGraphUndoGuard(() => this._overlayAlive());
 
