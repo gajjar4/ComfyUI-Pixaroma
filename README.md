@@ -354,6 +354,10 @@ Master the Pixaroma suite with our video guides and workflow deep-dives:
 
 ## 🛠 Changelog
 
+### **August 4, 2026 · v1.4.85**
+- **Pixaroma is back in the ComfyUI Manager list.** If you install or update through Manager, you can find it by searching there again. The star count and the last-updated date may take a few more days to reappear while their scoreboard rebuilds itself.
+- **Two folder checks now happen in a safer order.** AudioReact and Save Image already made sure a folder was allowed, but they looked it up on your drive first and checked afterwards. They now check first. On Windows, simply looking up a network address can make your PC try to sign in to it, so the order matters. Nothing changes in normal use: your own folders, the Browse button and the default output folder all behave exactly as before.
+
 ### **August 3, 2026 · v1.4.82–v1.4.84**
 - **Portrait Landscape can round your sizes to a step.** Models are usually fussy about sizes, wanting them in steps of 8, 16, 32 or 64. A small button at the top of the node steps through Off, 8, 16, 32 and 64, and both numbers are rounded to the nearest one before they go out.
 - **Each node keeps its own step**, so one workflow can hold several set up differently. The gear beside the button opens the same choice as a row of buttons, along with the node's colour.
