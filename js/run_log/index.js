@@ -671,6 +671,18 @@ function injectCSS() {
     // Hide any native widget-input dot column beside our DOM widget in Nodes 2.0
     // (the node has no inputs, so there is nothing to plug in).
     ".lg-node:has(.pix-rl-root) .lg-node-widget > *:first-child:empty{display:none;}",
+    // ...and then make our cell span the WHOLE row. Nodes 2.0 lays widgets out
+    // on a 3-column subgrid (`min-content minmax(80px,min-content)
+    // minmax(125px,1fr)`) and gives a DOM widget `col-span-2`. With the dot
+    // column hidden above, that span lands on columns 1-2 and leaves column 3
+    // (125px) as DEAD SPACE on the right: measured on a 300px node, the widget
+    // was 245.3px and everything - caption, list, footer buttons - sat shoved
+    // left with a gap the Classic renderer does not have. `1 / -1` takes it to
+    // 288px (the remaining 12px is the row's own right padding), which puts the
+    // footer buttons 14px from the node edge, matching Classic.
+    // Scoped to our own node so it cannot affect any other pack's widgets, and
+    // a no-op in Classic, which has no .lg-node.
+    ".lg-node:has(.pix-rl-root) .lg-node-widget > *:has(> .pix-rl-root){grid-column:1 / -1;}",
   ].join("\n");
   (document.head || document.documentElement).appendChild(s);
 }
