@@ -415,6 +415,10 @@ const HELP = {
         ],
       },
       {
+        heading: "Using your own fonts",
+        body: "Text layers can use your own fonts. Put your `.ttf` or `.otf` files in `ComfyUI/models/fonts`, then click the `↻` button at the top of the font list to pick them up without restarting. They appear under `Custom`. The full details are on the Add your own fonts page.",
+      },
+      {
         heading: "Outputs",
         defs: [
           ["image", "The fully composited image."],
@@ -1567,6 +1571,10 @@ const HELP = {
         ],
       },
       {
+        heading: "Using your own fonts",
+        body: "Put your `.ttf` or `.otf` files in `ComfyUI/models/fonts`, then click the `↻` button at the top of the font list to pick them up without restarting. They appear under `Custom`. The full details are on the Add your own fonts page.",
+      },
+      {
         heading: "Outputs",
         defs: [
           ["image", "The input image with your text drawn on top."],
@@ -1594,6 +1602,10 @@ const HELP = {
           ["image", "Image or batch to stamp the watermark onto."],
           ["text", "Optional wire from any STRING source. When connected it replaces the panel text (the box greys out)."],
         ],
+      },
+      {
+        heading: "Using your own fonts",
+        body: "Put your `.ttf` or `.otf` files in `ComfyUI/models/fonts`, then click the `↻` button at the top of the font list to pick them up without restarting. They appear under `Custom`. Handy for stamping a signature or brand font. The full details are on the Add your own fonts page.",
       },
       {
         heading: "Outputs",

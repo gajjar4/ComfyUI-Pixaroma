@@ -61,8 +61,8 @@ export const KEYWORDS = {
   // ── Notes and overlay ──
   PixaromaNote: "comment sticky documentation annotate",
   PixaromaLabel: "caption title heading name explain",
-  PixaromaTextOverlay: "caption title font subtitle words on image",
-  PixaromaTextWatermark: "signature logo copyright brand stamp",
+  PixaromaTextOverlay: "caption title font subtitle words on image ttf otf typeface custom font own font install font fonts folder",
+  PixaromaTextWatermark: "signature logo copyright brand stamp font ttf otf typeface custom font own font install font fonts folder",
 
   // ── Values ──
   PixaromaResolution: "size width height ratio dimensions aspect",
@@ -98,6 +98,6 @@ export const KEYWORDS = {
     + "civitai.red unrestricted thumbnail preview blocked hidden",
   Pixaroma3D: "mesh glb obj camera light render scene 3d",
   PixaromaPaint: "brush draw sketch layers erase paint",
-  PixaromaImageComposition: "collage blend layers grade montage composite",
+  PixaromaImageComposition: "collage blend layers grade montage composite text layer font ttf otf custom font",
   PixaromaAudioStudio: "music sound video beat visualizer audio reactive",
 };

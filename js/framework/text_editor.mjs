@@ -639,6 +639,26 @@ function openFontPopup(anchorEl, catalog, currentId, onPick, onCatalog) {
   list.className = "pix-to-popup-list";
   popup.appendChild(list);
 
+  // ── footer hint: where a custom font has to go ──
+  // Users kept asking where the fonts folder is: the refresh button's tooltip
+  // said it, but a tooltip on a "↻" glyph is too easy to miss. The answer now
+  // lives in the picker itself, which is where the question gets asked.
+  // Path is the DEFAULT drop-in dir; a redirect via extra_model_paths.yaml is
+  // covered in the Help browser's "Add your own fonts" guide (the list route
+  // returns a bare array, so the real resolved dir is not available here).
+  // Label and path are separate blocks so the path never wraps mid-word and the
+  // whole thing stays two lines: a wrapped sentence took four, and this popup
+  // is only 200px wide with a 340px cap it has to share with the list.
+  const hint = document.createElement("div");
+  hint.className = "pix-to-popup-hint";
+  hint.title = "Put .ttf or .otf files in ComfyUI/models/fonts, then press ↻ to load them without restarting ComfyUI.";
+  const hintLabel = document.createElement("div");
+  hintLabel.textContent = "Your own fonts, then press ↻";
+  const hintPath = document.createElement("code");
+  hintPath.textContent = "ComfyUI/models/fonts";
+  hint.append(hintLabel, hintPath);
+  popup.appendChild(hint);
+
   // Lazy preview: load a row's own font only when it scrolls into view.
   let io = null;
   const buildList = (cat, query) => {
@@ -1129,6 +1149,23 @@ function injectCSS() {
     .pix-to-popup-item:hover { background: #2a2a2a; }
     .pix-to-popup-item.active { color: var(--pix-acc,#f66744); font-weight: 600; }
     .pix-to-popup-sep { height: 1px; background: #333; margin: 4px 0; }
+    /* Footer hint naming the drop-in fonts folder. flex-shrink:0 like the search
+       row, so the scrollable list gives up the space instead of the hint. */
+    .pix-to-popup-hint {
+      padding: 6px 8px;
+      border-top: 1px solid #333;
+      background: #1d1d1d;
+      color: #888;
+      font: 11px ui-sans-serif, system-ui, sans-serif;
+      line-height: 1.4;
+      flex-shrink: 0;
+    }
+    .pix-to-popup-hint code {
+      display: block;
+      color: #bbb;
+      font: 11px ui-monospace, "Consolas", monospace;
+      word-break: break-all;
+    }
 
     /* Watermark: Pixels / %-width size-unit toggle (2-segment) */
     .pix-to-sizemode { display: grid; grid-template-columns: 1fr 1fr; gap: 3px; }
