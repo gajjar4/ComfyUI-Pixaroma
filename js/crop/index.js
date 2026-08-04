@@ -103,10 +103,14 @@ function getUpstreamSnapshot(node) {
 // store only the structural parts so workflow JSON stays clean.
 function buildSourceURL(part, withCacheBust) {
   if (!part || !part.filename) return null;
-  const url = pixApiUrl(`/view?filename=${encodeURIComponent(part.filename)}` +
+  // The cache-buster is part of the ROUTE handed to pixApiUrl, never appended to
+  // its RESULT: a hosted ComfyUI adds its auth token to the finished url, so
+  // concatenating afterwards writes our param on the far side of that token
+  // (see js/shared/api_url.mjs). Locally the two produce the identical string.
+  return pixApiUrl(`/view?filename=${encodeURIComponent(part.filename)}` +
               `&subfolder=${encodeURIComponent(part.subfolder || "")}` +
-              `&type=${encodeURIComponent(part.type || "temp")}`);
-  return withCacheBust ? `${url}&t=${Date.now()}` : url;
+              `&type=${encodeURIComponent(part.type || "temp")}` +
+              (withCacheBust ? `&t=${Date.now()}` : ""));
 }
 
 // Give a duplicated node its own on-disk scratch space. The crop_json carries a
@@ -558,7 +562,7 @@ app.registerExtension({
         // Python node loads the source on every run and applies the panel's
         // current crop_w/h/x/y. This lets the user tweak crop dims after
         // pasting without re-opening the editor.
-        const r1 = await api.fetchApi("/pixaroma/api/crop/upload_src", {
+        const r1 = await api.fetchApi(pixApiUrl("/pixaroma/api/crop/upload_src"), {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ project_id: projectId, image: dataURL }),

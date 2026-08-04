@@ -4,6 +4,7 @@
 // object's geoParams, rebuilds geometry on change.
 // ============================================================
 import { Pixaroma3DEditor, getTHREE } from "./core.mjs";
+import { pixAsset } from "../shared/api_url.mjs";
 import { SHAPES, buildGeometry } from "./shapes.mjs";
 import { isCompositeType, COMPOSITES, buildComposite, getCompositeDefaults } from "./composites.mjs";
 
@@ -75,7 +76,7 @@ Pixaroma3DEditor.prototype._rebuildShapePanel = function () {
     head.style.cssText =
       "display:flex;align-items:center;gap:6px;margin-bottom:6px;";
     const icon = document.createElement("img");
-    icon.src = `/pixaroma/assets/icons/3D/${composite.icon}`;
+    icon.src = pixAsset(`icons/3D/${composite.icon}`);
     icon.style.cssText = "width:16px;height:16px;filter:invert(90%);";
     const name = document.createElement("span");
     name.textContent = composite.label;
@@ -241,7 +242,7 @@ Pixaroma3DEditor.prototype._rebuildShapePanel = function () {
   head.style.cssText =
     "display:flex;align-items:center;gap:6px;margin-bottom:6px;";
   const icon = document.createElement("img");
-  icon.src = `/pixaroma/assets/icons/3D/${shape.icon}`;
+  icon.src = pixAsset(`icons/3D/${shape.icon}`);
   icon.style.cssText = "width:16px;height:16px;filter:invert(90%);";
   const name = document.createElement("span");
   name.textContent = shape.label;

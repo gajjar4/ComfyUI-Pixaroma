@@ -1,6 +1,6 @@
 // js/audio_studio/core.mjs
 import { app } from "../../../../scripts/app.js";
-import { pixApiUrl } from "../shared/api_url.mjs";
+import { pixApiUrl, pixAsset } from "../shared/api_url.mjs";
 import { decodeAudio, computeAll, encodeWav, getAudioContext } from "./audio_analysis.mjs";
 import { getUpstreamImageUrl, getInlineSourceUrl, uploadSource, getSysInfo } from "./api.mjs";
 import { createEditorLayout, createButton } from "../framework/index.mjs";
@@ -439,7 +439,7 @@ export class AudioStudioEditor {
     imgCell.className = "pix-as-source-cell";
     const imgBtn = createButton("Upload Image", {
       variant: "standard",
-      iconSrc: UI_ICON + "image.svg",
+      iconSrc: pixAsset(UI_ICON + "image.svg"),
       title: "Upload an image (auto-disconnects upstream IMAGE wire)",
       onClick: () => this._pickInlineImage(),
     });
@@ -458,7 +458,7 @@ export class AudioStudioEditor {
     audCell.className = "pix-as-source-cell";
     const audBtn = createButton("Upload Audio", {
       variant: "standard",
-      iconSrc: UI_ICON + "audio.svg",
+      iconSrc: pixAsset(UI_ICON + "audio.svg"),
       title: "Upload audio (auto-disconnects upstream AUDIO wire). MP3 / OGG / etc. converted to WAV.",
       onClick: () => this._pickInlineAudio(),
     });

@@ -14,6 +14,7 @@
 
 import { SHAPES, loadTeapotGeometry } from "./shapes.mjs";
 import { COMPOSITES } from "./composites.mjs";
+import { pixAsset } from "../shared/api_url.mjs";
 
 // ─── Category layout (5 columns per row) ────────────────────
 // One flat list per section. Order inside each section is the
@@ -190,7 +191,7 @@ async function spawnItem(editor, item) {
       const { loadGLBFromURL } = await import("./importer.mjs");
       try {
         const group = await loadGLBFromURL(
-          "/pixaroma/assets/models/bunny.glb",
+          pixAsset("models/bunny.glb"),
         );
         editor._addImportedGroup(group, "bunny", { name: "Bunny" });
       } catch (e) {
@@ -308,7 +309,7 @@ export function openShapePicker(editor) {
       ico.className = "p3d-picker-ico";
       ico.setAttribute("role", "img");
       ico.setAttribute("aria-label", info.label);
-      const iconUrl = `url("/pixaroma/assets/icons/3D/${info.icon}")`;
+      const iconUrl = `url("${pixAsset(`icons/3D/${info.icon}`)}")`;
       ico.style.webkitMaskImage = iconUrl;
       ico.style.maskImage = iconUrl;
       const lbl = document.createElement("span");

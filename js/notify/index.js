@@ -31,6 +31,7 @@ import {
   fmtDur,
 } from "./history.mjs";
 import { registerNodeAccent } from "../shared/node_settings.mjs";
+import { pixAsset } from "../shared/api_url.mjs";
 
 const NODE_NAME = "NotifyPixaroma";
 const ID_PROP = "pixNotifyId";
@@ -474,7 +475,7 @@ function updateReadout(node) {
 // ── sound ────────────────────────────────────────────────────────────────────
 async function playSound(filename, volume01) {
   if (typeof filename !== "string" || !filename) return;
-  const url = `/pixaroma/assets/sounds/${encodeURIComponent(filename)}`;
+  const url = pixAsset(`sounds/${encodeURIComponent(filename)}`);
   const audio = new Audio(url);
   const v = Number(volume01);
   audio.volume = Number.isFinite(v) ? Math.max(0, Math.min(1, v)) : 0.8;

@@ -6,6 +6,7 @@
 // renderers (the Nodes 2.0 canvas-blur rule doesn't apply to <img>).
 
 import { app } from "/scripts/app.js";
+import { pixApiUrl } from "../shared/api_url.mjs";
 import { readState } from "./core.mjs";
 
 function el(tag, cls, txt) {
@@ -88,7 +89,7 @@ async function fetchFullResBlob(node) {
     try { const gp = await app.graphToPrompt(); prompt = gp?.output || null; workflow = gp?.workflow || null; } catch (_e) {}
   }
   try {
-    const resp = await fetch("/pixaroma/api/xy_plot/render_full", {
+    const resp = await fetch(pixApiUrl("/pixaroma/api/xy_plot/render_full"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -172,7 +173,7 @@ async function doSaveOutput(node) {
   }
   const wantCells = state.saveCells === true;
   try {
-    const resp = await fetch("/pixaroma/api/xy_plot/save", {
+    const resp = await fetch(pixApiUrl("/pixaroma/api/xy_plot/save"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({

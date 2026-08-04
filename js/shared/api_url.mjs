@@ -49,7 +49,42 @@ export function pixApiUrl(route) {
   return route; // degrade to the old behaviour rather than produce nothing
 }
 
-// Prefix for ASSET urls used inside injected CSS (`url(${PIX_ASSETS}/icons/x.svg)`).
-// Computed once at module load: the deployment's base cannot change afterwards,
-// and a CSS template literal cannot call a function per rule.
-export const PIX_ASSETS = pixApiUrl("/pixaroma/assets");
+/**
+ * Absolute-safe URL for one of OUR bundled assets (icons, fonts, sounds, models).
+ *
+ * @param {string} tail path BELOW assets, e.g. "icons/ui/play.svg". No leading /.
+ * @returns {string} a complete, token-bearing url
+ *
+ * Two things this exists to get right, BOTH of which were shipped wrong once:
+ *
+ * 1. THE FILENAME GOES IN THE QUERY STRING, and the PATH stays extensionless.
+ *    A hosted ComfyUI's gateway routes by FILE EXTENSION, not by path: a url
+ *    whose PATH ends .svg / .png / .ttf / .mp3 is answered by their own static
+ *    file server and never reaches ComfyUI, wherever it sits in the path. Moving
+ *    assets to a different path does NOT help - that was tried and measured.
+ *    Extensions they forward: .json, .glb, .mjs, and none at all. Putting the
+ *    name in the query keeps the path extensionless, which IS forwarded
+ *    (verified: "/pixaroma/api/version?name=icons/ui/play.svg" answers 200).
+ *    server_routes.py serves this at /pixaroma/api/asset and still serves the
+ *    original /pixaroma/assets/... paths for anything that references them.
+ *
+ * 2. NEVER PRE-BUILD A BASE. The host appends its auth token as a QUERY STRING
+ *    (?Rh-Comfy-Auth=...), so a "base" that is wrapped and then concatenated puts
+ *    the token in the MIDDLE of the url and the request dies:
+ *
+ *        const B = pixApiUrl("/pixaroma/api/assets/icons/ui/");   // WRONG
+ *        B + "play.svg"   ->  ".../icons/ui/?Rh-Comfy-Auth=xxxplay.svg"
+ *
+ *    That is what broke the 3D editor's three.js import. Always hand the COMPLETE
+ *    tail to this function:  pixAsset("icons/ui/" + name).
+ *
+ * In CSS, call it inside the template literal:
+ *     `-webkit-mask: url(${pixAsset("icons/ui/play.svg")}) center/contain;`
+ * and note the argument must be a TEMPLATE literal too if it contains ${...} -
+ * "${x}" inside double quotes is literal text, not interpolation, and fails
+ * silently with no syntax error anywhere.
+ */
+export function pixAsset(tail) {
+  const rel = String(tail).replace(/^\/+/, "");
+  return pixApiUrl("/pixaroma/api/asset?path=" + encodeURIComponent(rel));
+}

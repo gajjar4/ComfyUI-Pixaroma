@@ -786,7 +786,7 @@ function buildThemeControl(node, state) {
         // not overwrite node._pixXyLastGrid (which Save/Copy/Open act on).
         const rtok = (node._pixXyRestyleReq = (node._pixXyRestyleReq || 0) + 1);
         try {
-          const resp = await fetch("/pixaroma/api/xy_plot/restyle", {
+          const resp = await fetch(pixApiUrl("/pixaroma/api/xy_plot/restyle"), {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ session_id: last.sessionId, theme: val }),

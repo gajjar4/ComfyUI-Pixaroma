@@ -1,5 +1,5 @@
 import { app } from "/scripts/app.js";
-import { pixApiUrl } from "../shared/api_url.mjs";
+import { pixApiUrl, pixAsset } from "../shared/api_url.mjs";
 import { api } from "/scripts/api.js";
 import { applyAdaptiveCanvasOnly,
   installCanvasZoomPassthrough, installNodeAccent, registerNodeAccent,
@@ -69,7 +69,7 @@ const PREVIEW_MIN_H = 180;
 // (Vue Compat #8).
 const DEFAULT_H = 420;
 // Shared mask-image icon set (borrowed from AudioReact's transport bar).
-const UI_ICON = "/pixaroma/assets/icons/ui/";
+const UI_ICON = "icons/ui/";
 
 // Vue can tear down a node's DOM widget and rebuild it (e.g. when the
 // user switches workflow tabs and back). The cached node._pixaromaVideo
@@ -125,7 +125,7 @@ function refreshBar(node) {
   const playing = hasSrc && !v.paused && !v.ended;
   node._pixMp4PlayIco?.style.setProperty(
     "--ico",
-    `url(${UI_ICON}${playing ? "pause" : "play"}.svg)`
+    `url(${pixAsset(UI_ICON + (playing ? "pause" : "play") + ".svg")})`
   );
   const dur = isFinite(v.duration) ? v.duration : 0;
   const cur = isFinite(v.currentTime) ? v.currentTime : 0;
@@ -304,7 +304,7 @@ app.registerExtension({
       playBtn.title = "Play / Pause";
       const playIco = document.createElement("span");
       playIco.className = "pix-mp4-ico";
-      playIco.style.setProperty("--ico", `url(${UI_ICON}play.svg)`);
+      playIco.style.setProperty("--ico", `url(${pixAsset(UI_ICON + "play.svg")})`);
       playBtn.appendChild(playIco);
       bar.appendChild(playBtn);
 
@@ -328,7 +328,7 @@ app.registerExtension({
       dlBtn.title = "Download .mp4";
       const dlIco = document.createElement("span");
       dlIco.className = "pix-mp4-ico";
-      dlIco.style.setProperty("--ico", `url(${UI_ICON}download.svg)`);
+      dlIco.style.setProperty("--ico", `url(${pixAsset(UI_ICON + "download.svg")})`);
       dlBtn.appendChild(dlIco);
       bar.appendChild(dlBtn);
 
@@ -337,7 +337,7 @@ app.registerExtension({
       fsBtn.title = "Fullscreen";
       const fsIco = document.createElement("span");
       fsIco.className = "pix-mp4-ico";
-      fsIco.style.setProperty("--ico", `url(${UI_ICON}fit.svg)`);
+      fsIco.style.setProperty("--ico", `url(${pixAsset(UI_ICON + "fit.svg")})`);
       fsBtn.appendChild(fsIco);
       bar.appendChild(fsBtn);
 

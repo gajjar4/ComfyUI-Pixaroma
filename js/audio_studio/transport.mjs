@@ -2,6 +2,7 @@
 // Mixin: transport bar UI (G1) + Web Audio playback (G2).
 import { AudioStudioEditor } from "./core.mjs";
 import { getAudioContext } from "./audio_analysis.mjs";
+import { pixAsset } from "../shared/api_url.mjs";
 
 function injectTransportCSS() {
   if (document.getElementById("pix-as-transport-css")) return;
@@ -45,8 +46,8 @@ function injectTransportCSS() {
     .pix-as-stop-btn .pix-as-stop-icon {
       width: 11px; height: 11px;
       background-color: #f66744;
-      -webkit-mask: url(/pixaroma/assets/icons/ui/stop.svg) center/contain no-repeat;
-              mask: url(/pixaroma/assets/icons/ui/stop.svg) center/contain no-repeat;
+      -webkit-mask: url(${pixAsset("icons/ui/stop.svg")}) center/contain no-repeat;
+              mask: url(${pixAsset("icons/ui/stop.svg")}) center/contain no-repeat;
       pointer-events: none;
     }
 
@@ -68,8 +69,8 @@ function injectTransportCSS() {
     .pix-as-loop-btn .pix-as-loop-icon {
       width: 13px; height: 13px;
       background-color: #666;
-      -webkit-mask: url(/pixaroma/assets/icons/ui/loop.svg) center/contain no-repeat;
-              mask: url(/pixaroma/assets/icons/ui/loop.svg) center/contain no-repeat;
+      -webkit-mask: url(${pixAsset("icons/ui/loop.svg")}) center/contain no-repeat;
+              mask: url(${pixAsset("icons/ui/loop.svg")}) center/contain no-repeat;
       pointer-events: none;
       transition: background-color 0.1s;
     }
@@ -162,7 +163,7 @@ AudioStudioEditor.prototype._buildTransport = function () {
   playBtn.title = "Play / Pause (Space)";
   const playIcon = document.createElement("span");
   playIcon.className = "pix-as-play-icon";
-  playIcon.style.setProperty("--pix-as-icon-url", "url(/pixaroma/assets/icons/ui/play.svg)");
+  playIcon.style.setProperty("--pix-as-icon-url", `url(${pixAsset("icons/ui/play.svg")})`);
   playBtn.appendChild(playIcon);
   playBtn.addEventListener("click", () => this._togglePlay());
   t.appendChild(playBtn);
@@ -250,7 +251,7 @@ AudioStudioEditor.prototype._buildTransport = function () {
   stepBack.className = "pix-as-frame-step";
   stepBack.title = "Frame back (Left arrow; Shift+Left = 1s)";
   const stepBackIcon = document.createElement("img");
-  stepBackIcon.src = "/pixaroma/assets/icons/ui/play.svg";
+  stepBackIcon.src = pixAsset("icons/ui/play.svg");
   stepBackIcon.style.transform = "rotate(180deg)";
   stepBack.appendChild(stepBackIcon);
   stepBack.addEventListener("click", () => this._stepFrame(-1));
@@ -260,7 +261,7 @@ AudioStudioEditor.prototype._buildTransport = function () {
   stepFwd.className = "pix-as-frame-step";
   stepFwd.title = "Frame forward (Right arrow; Shift+Right = 1s)";
   const stepFwdIcon = document.createElement("img");
-  stepFwdIcon.src = "/pixaroma/assets/icons/ui/play.svg";
+  stepFwdIcon.src = pixAsset("icons/ui/play.svg");
   stepFwd.appendChild(stepFwdIcon);
   stepFwd.addEventListener("click", () => this._stepFrame(1));
   t.appendChild(stepFwd);
@@ -353,8 +354,8 @@ AudioStudioEditor.prototype._setPlayIcon = function (kind /* "play" | "pause" */
   this._playIcon.style.setProperty(
     "--pix-as-icon-url",
     kind === "pause"
-      ? "url(/pixaroma/assets/icons/ui/pause.svg)"
-      : "url(/pixaroma/assets/icons/ui/play.svg)",
+      ? `url(${pixAsset("icons/ui/pause.svg")})`
+      : `url(${pixAsset("icons/ui/play.svg")})`,
   );
 };
 

@@ -10,6 +10,7 @@
 // reload and Vue tab switching (CLAUDE.md Vue Compat #9, Preview Pattern #4).
 
 import { app } from "/scripts/app.js";
+import { pixApiUrl, pixAsset } from "../shared/api_url.mjs";
 import { BRAND, applyAdaptiveCanvasOnly,
   installCanvasZoomPassthrough, installNodeAccent, registerNodeAccent,
 } from "../shared/index.mjs";
@@ -86,8 +87,8 @@ function injectCSS() {
     .pix-pr-upload-btn .ico {
       width: 14px; height: 14px;
       background-color: currentColor;
-      -webkit-mask: url("/pixaroma/assets/icons/ui/upload.svg") center/14px 14px no-repeat;
-              mask: url("/pixaroma/assets/icons/ui/upload.svg") center/14px 14px no-repeat;
+      -webkit-mask: url("${pixAsset("icons/ui/upload.svg")}") center/14px 14px no-repeat;
+              mask: url("${pixAsset("icons/ui/upload.svg")}") center/14px 14px no-repeat;
     }
     /* File row: [◀] [ dropdown ] [▶] - mirrors Load Image Pixaroma. */
     .pix-pr-filerow {
@@ -356,7 +357,7 @@ async function uploadImage(node, file, hintName = null) {
   } else {
     form.append("image", file);
   }
-  const resp = await fetch("/upload/image", { method: "POST", body: form });
+  const resp = await fetch(pixApiUrl("/upload/image"), { method: "POST", body: form });
   if (!resp.ok) {
     const t = await resp.text().catch(() => "");
     throw new Error(`Upload failed (${resp.status}): ${t || resp.statusText}`);
@@ -408,7 +409,7 @@ function pickAndUpload(node) {
 
 async function extractPrompt(filename) {
   if (!filename) return { found: false, message: "No image selected." };
-  const url = `/pixaroma/api/prompt_reader/extract?filename=${encodeURIComponent(filename)}`;
+  const url = pixApiUrl(`/pixaroma/api/prompt_reader/extract?filename=${encodeURIComponent(filename)}`);
   try {
     const resp = await fetch(url);
     if (!resp.ok) return { found: false, message: `Server error (${resp.status})` };

@@ -11,8 +11,9 @@ import { resetStateInPlace } from "./defaults.mjs";
 import { renderTextLayer, measureTextDims } from "../framework/text_render.mjs";
 import { getFontCatalog, resolveFontVariant, loadFontForLayer } from "../framework/fonts.mjs";
 import { installGraphUndoGuard } from "../shared/graph_undo_guard.mjs";
+import { pixAsset } from "../shared/api_url.mjs";
 
-const UI_ICON = "/pixaroma/assets/icons/ui/";
+const UI_ICON = "icons/ui/";
 
 const HELP_HTML = `
   <div><strong>Editing</strong><br/>
@@ -357,7 +358,7 @@ export class TextOverlayEditor {
       btn.title = a.title;
       btn.style.cssText = "background:#2a2a2a; border:1px solid #333; border-radius:4px; padding:5px 8px; cursor:pointer; display:flex; align-items:center; justify-content:center;";
       const img = document.createElement("img");
-      img.src = UI_ICON + a.icon;
+      img.src = pixAsset(UI_ICON + a.icon);
       img.style.cssText = "width:14px; height:14px; filter:invert(0.8);";
       btn.appendChild(img);
       btn.addEventListener("mouseenter", () => { btn.style.borderColor = "#f66744"; img.style.filter = "invert(1)"; });

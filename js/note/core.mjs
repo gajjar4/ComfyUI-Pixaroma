@@ -5,6 +5,7 @@ import { sanitize } from "./sanitize.mjs";
 import { buildCodeViewDOM } from "./codeview.mjs";
 import { renderContent } from "./render.mjs";
 import { installGraphUndoGuard } from "../shared/graph_undo_guard.mjs";
+import { pixAsset } from "../shared/api_url.mjs";
 
 export class NoteEditor {
   constructor(node) {
@@ -731,7 +732,7 @@ export class NoteEditor {
     const header = el("div", "pix-note-header");
     const titleSpan = el("div", "pix-note-title");
     const logo = document.createElement("img");
-    logo.src = "/pixaroma/assets/pixaroma_logo.svg";
+    logo.src = pixAsset("pixaroma_logo.svg");
     logo.className = "pix-note-title-logo";
     titleSpan.appendChild(logo);
     titleSpan.append(" Note Editor ");
@@ -918,7 +919,7 @@ export class NoteEditor {
             <b><i>I</i></b><span>Italic (Ctrl+I)</span>
             <b><u>U</u></b><span>Underline (Ctrl+U)</span>
             <b><s>S</s></b><span>Strikethrough</span>
-            <b><img class="pix-note-tbtn-icon" src="/pixaroma/assets/icons/ui/clear-format.svg">Broom</b><span>Clear all formatting on selection; demotes headings to paragraph; unwraps code / lists</span>
+            <b><img class="pix-note-tbtn-icon" src="${pixAsset("icons/ui/clear-format.svg")}">Broom</b><span>Clear all formatting on selection; demotes headings to paragraph; unwraps code / lists</span>
           </div>
         </div>
         <div class="pix-note-help-section">
@@ -948,17 +949,17 @@ export class NoteEditor {
             <b><span class="pix-note-tbtn-maskicon pix-note-icon-link"></span>Link</b><span>http, https, or mailto URLs only. Opens in new tab.</span>
             <b><span class="pix-note-tbtn-maskicon pix-note-icon-code"></span>Code</b><span>Code block (&lt;pre&gt;&lt;code&gt;). Multi-line via the themed dialog</span>
             <b><span class="pix-note-tbtn-maskicon pix-note-icon-separator"></span>Separator</b><span>Centred modal: pick colour and variant (solid / dashed / dotted / double / thick), click Insert. Each separator carries its own colour.</span>
-            <b><img class="pix-note-tbtn-icon" src="/pixaroma/assets/icons/ui/grid.svg">Grid</b><span>Centred modal: pick border and header colours, columns (2 to 4), rows (1 to 10), header on/off, click Insert. Each grid carries its own border and header colours. Tab navigates cells.</span>
+            <b><img class="pix-note-tbtn-icon" src="${pixAsset("icons/ui/grid.svg")}">Grid</b><span>Centred modal: pick border and header colours, columns (2 to 4), rows (1 to 10), header on/off, click Insert. Each grid carries its own border and header colours. Tab navigates cells.</span>
             <b><span class="pix-note-tbtn-maskicon pix-note-icon-icon-insert"></span>Icon</b><span>Centred modal: SVG from assets/icons/note/, with its own colour and size pills (S / M / L / XL). Single-click selects, double-click inserts. Sticky pick within the editor session. Default: model-v1, orange, M.</span>
           </div>
         </div>
         <div class="pix-note-help-section">
           <h4>Pixaroma Blocks</h4>
           <div class="pix-note-help-grid">
-            <b><img class="pix-note-tbtn-icon" src="/pixaroma/assets/icons/ui/button-design.svg">Button</b><span>Centred modal: pick colour, button type (Download / View Page / Read More / No icon), label, URL, optional size hint. Each button carries its own colour. On the canvas, clicking the button opens its URL in a new tab.</span>
-            <b><img class="pix-note-tbtn-icon" src="/pixaroma/assets/icons/ui/folder.svg">Folder hint</b><span>Standalone "Place in: ComfyUI/&lt;path&gt;" line. Centred modal: pick colour and folder path. Use it under a Button to tell the reader where to save the downloaded file. Purely informational; nothing happens on click.</span>
-            <b><img class="pix-note-tbtn-icon" src="/pixaroma/assets/icons/ui/youtube.svg">YouTube</b><span>Centred modal with preset Pixaroma YouTube link (override freely). Brand red colour locked.</span>
-            <b><img class="pix-note-tbtn-icon" src="/pixaroma/assets/icons/ui/discord.svg">Discord</b><span>Centred modal with preset Pixaroma Discord link (override freely). Brand blurple locked.</span>
+            <b><img class="pix-note-tbtn-icon" src="${pixAsset("icons/ui/button-design.svg")}">Button</b><span>Centred modal: pick colour, button type (Download / View Page / Read More / No icon), label, URL, optional size hint. Each button carries its own colour. On the canvas, clicking the button opens its URL in a new tab.</span>
+            <b><img class="pix-note-tbtn-icon" src="${pixAsset("icons/ui/folder.svg")}">Folder hint</b><span>Standalone "Place in: ComfyUI/&lt;path&gt;" line. Centred modal: pick colour and folder path. Use it under a Button to tell the reader where to save the downloaded file. Purely informational; nothing happens on click.</span>
+            <b><img class="pix-note-tbtn-icon" src="${pixAsset("icons/ui/youtube.svg")}">YouTube</b><span>Centred modal with preset Pixaroma YouTube link (override freely). Brand red colour locked.</span>
+            <b><img class="pix-note-tbtn-icon" src="${pixAsset("icons/ui/discord.svg")}">Discord</b><span>Centred modal with preset Pixaroma Discord link (override freely). Brand blurple locked.</span>
           </div>
         </div>
         <div class="pix-note-help-section">
@@ -981,8 +982,8 @@ export class NoteEditor {
           <h4>Keyboard</h4>
           <div class="pix-note-help-grid">
             <b>Ctrl+B / I / U</b><span>Bold / Italic / Underline</span>
-            <b><img class="pix-note-tbtn-icon" src="/pixaroma/assets/icons/ui/undo.svg">Ctrl+Z</b><span>Undo</span>
-            <b><img class="pix-note-tbtn-icon" src="/pixaroma/assets/icons/ui/redo.svg">Ctrl+Y / Ctrl+Shift+Z</b><span>Redo</span>
+            <b><img class="pix-note-tbtn-icon" src="${pixAsset("icons/ui/undo.svg")}">Ctrl+Z</b><span>Undo</span>
+            <b><img class="pix-note-tbtn-icon" src="${pixAsset("icons/ui/redo.svg")}">Ctrl+Y / Ctrl+Shift+Z</b><span>Redo</span>
             <b>Ctrl+S</b><span>Save</span>
             <b>Tab / Shift+Tab</b><span>Move between grid cells (when inside one)</span>
             <b>Esc</b><span>Close editor (prompts if unsaved)</span>
@@ -1355,7 +1356,7 @@ NoteEditor.prototype._installPencil = function (main, editArea) {
   pencil.contentEditable = "false";
   pencil.setAttribute("aria-label", "Edit block");
   const icon = document.createElement("img");
-  icon.src = "/pixaroma/assets/icons/layers/edit.svg";
+  icon.src = pixAsset("icons/layers/edit.svg");
   icon.draggable = false;
   pencil.appendChild(icon);
   main.appendChild(pencil);

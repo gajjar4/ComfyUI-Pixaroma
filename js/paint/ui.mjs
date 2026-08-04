@@ -14,6 +14,7 @@ import {
   createLayerItem,
   createDivider,
 } from "./core.mjs";
+import { pixAsset } from "../shared/api_url.mjs";
 
 const proto = PaintStudio.prototype;
 
@@ -455,7 +456,7 @@ proto._updateToolOptions = function () {
     this.tool === "eraser" ||
     this.tool === "smudge"
   ) {
-    const UI = "/pixaroma/assets/icons/ui/";
+    const UI = "icons/ui/";
 
     // Helper: create an SVG icon button (white when inactive, white-on-orange when active)
     const mkIconBtn = (svgName, title, active, extraClass) => {
@@ -464,7 +465,7 @@ proto._updateToolOptions = function () {
       btn.title = title;
       btn.style.cssText += "padding:3px;user-select:none;";
       const img = document.createElement("img");
-      img.src = UI + svgName;
+      img.src = pixAsset(UI + svgName);
       img.style.cssText = "width:100%;height:100%;filter:invert(1);";
       btn.appendChild(img);
       return btn;

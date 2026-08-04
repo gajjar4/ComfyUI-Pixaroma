@@ -20,6 +20,7 @@ import {
   registerNodeHelp,
 } from "../shared/index.mjs";
 import { installNodeAccent, registerNodeAccent } from "../shared/node_settings.mjs";
+import { pixApiUrl } from "../shared/api_url.mjs";
 
 const NODE = "KreaLoraConvertPixaroma";
 const MIN_W = 300;
@@ -133,7 +134,7 @@ async function doInspect(node) {
   // overwrite the readout after a newer pick (or after the node is removed).
   const reqId = (node._klcReqId = (node._klcReqId || 0) + 1);
   try {
-    const r = await fetch(`/pixaroma/api/krea_lora/inspect?lora_name=${encodeURIComponent(lora)}`);
+    const r = await fetch(pixApiUrl(`/pixaroma/api/krea_lora/inspect?lora_name=${encodeURIComponent(lora)}`));
     const info = await r.json();
     if (node._klcReqId !== reqId || !node.graph) return;
     node._klcLastInfo = info;
@@ -170,7 +171,7 @@ async function doConvert(node) {
   btn.disabled = true;
   btn.textContent = "Converting…";
   try {
-    const r = await fetch("/pixaroma/api/krea_lora/convert", {
+    const r = await fetch(pixApiUrl("/pixaroma/api/krea_lora/convert"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ lora_name: lora, output_name: out, overwrite }),

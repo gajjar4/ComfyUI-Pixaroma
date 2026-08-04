@@ -2,6 +2,7 @@
 // Pixaroma 3D Editor — Core class, constructor, UI building
 // ============================================================
 import { ThreeDAPI } from "./api.mjs";
+import { pixApiUrl, pixAsset } from "../shared/api_url.mjs";
 import { installGraphUndoGuard } from "../shared/graph_undo_guard.mjs";
 import { openShapePicker } from "./picker.mjs";
 import {
@@ -35,6 +36,18 @@ export let THREE = null,
 // Local vendored three.js (served by server_routes.py @ /pixaroma/vendor/three/)
 // keeps the 3D Builder working offline and pins the version so upstream
 // Three.js breaking changes can't silently break saved scenes.
+//
+// Deliberately a BARE base: it is wrapped at each use (`pixApiUrl(THREE_VENDOR +
+// "/three.mjs")`), never pre-wrapped, because the host appends its auth token as
+// a query string and a pre-wrapped base would bury the token mid-url.
+//
+// KNOWN LIMIT on a token-gated host: only the ENTRY url can carry a token. The
+// vendored addons import three by RELATIVE specifier ("../../../three.mjs"), and
+// a relative specifier resolves against the importer's PATH and inherits no query
+// string - so those sub-imports arrive token-less and are refused. The 3D Builder
+// therefore cannot load its three.js on such a host no matter how this line is
+// written. Fixing it means changing how the vendored tree is served (a bundled
+// single file, or a token-free route for /pixaroma/vendor), not changing this.
 export const THREE_VENDOR = "/pixaroma/vendor/three";
 export async function loadThree() {
   if (THREE) return;
@@ -42,13 +55,13 @@ export async function loadThree() {
   // that showed as a gray flash when the editor first opened.
   const [threeMod, orbitMod, transformMod, composerMod, renderMod, outlineMod, outputMod] =
     await Promise.all([
-      import(THREE_VENDOR + "/three.mjs"),
-      import(THREE_VENDOR + "/examples/jsm/controls/OrbitControls.mjs"),
-      import(THREE_VENDOR + "/examples/jsm/controls/TransformControls.mjs"),
-      import(THREE_VENDOR + "/examples/jsm/postprocessing/EffectComposer.mjs"),
-      import(THREE_VENDOR + "/examples/jsm/postprocessing/RenderPass.mjs"),
-      import(THREE_VENDOR + "/examples/jsm/postprocessing/OutlinePass.mjs"),
-      import(THREE_VENDOR + "/examples/jsm/postprocessing/OutputPass.mjs"),
+      import(pixApiUrl(THREE_VENDOR + "/three.mjs")),
+      import(pixApiUrl(THREE_VENDOR + "/examples/jsm/controls/OrbitControls.mjs")),
+      import(pixApiUrl(THREE_VENDOR + "/examples/jsm/controls/TransformControls.mjs")),
+      import(pixApiUrl(THREE_VENDOR + "/examples/jsm/postprocessing/EffectComposer.mjs")),
+      import(pixApiUrl(THREE_VENDOR + "/examples/jsm/postprocessing/RenderPass.mjs")),
+      import(pixApiUrl(THREE_VENDOR + "/examples/jsm/postprocessing/OutlinePass.mjs")),
+      import(pixApiUrl(THREE_VENDOR + "/examples/jsm/postprocessing/OutputPass.mjs")),
     ]);
   THREE = threeMod;
   OrbitControls = orbitMod.OrbitControls;
@@ -689,7 +702,7 @@ export class Pixaroma3DEditor {
       pc.insertBefore(bgFileInput, pc.firstChild);
       const uploadBtn = createButton("Upload Background Image", {
         variant: "full",
-        iconSrc: "/pixaroma/assets/icons/ui/upload.svg",
+        iconSrc: pixAsset("icons/ui/upload.svg"),
         onClick: () => bgFileInput.click(),
         title: "Browse for a background image",
       });
@@ -754,7 +767,7 @@ export class Pixaroma3DEditor {
       ico.style.cssText = "width:30px;height:30px;";
       ico.setAttribute("role", "img");
       ico.setAttribute("aria-label", label);
-      const iconUrl = `url("/pixaroma/assets/icons/3D/${iconFile}")`;
+      const iconUrl = `url("${pixAsset(`icons/3D/${iconFile}`)}")`;
       ico.style.webkitMaskImage = iconUrl;
       ico.style.maskImage = iconUrl;
       const lbl = document.createElement("span");
@@ -991,7 +1004,7 @@ export class Pixaroma3DEditor {
       // lets hover tinting to orange drop in via CSS later.
       const iconEl = document.createElement("span");
       iconEl.className = "pxf-tool-btn-icon";
-      const iconUrl = `url("/pixaroma/assets/icons/3D/${t.ico}")`;
+      const iconUrl = `url("${pixAsset(`icons/3D/${t.ico}`)}")`;
       iconEl.style.cssText =
         `display:block;width:22px;height:22px;margin:0 auto 2px;` +
         `background-color:#ccc;` +
@@ -1041,7 +1054,7 @@ export class Pixaroma3DEditor {
     cam.content.appendChild(perspRow);
     const focusBtn = createButton("Focus Selected (0)", {
       variant: "standard",
-      iconSrc: "/pixaroma/assets/icons/3D/focus.svg",
+      iconSrc: pixAsset("icons/3D/focus.svg"),
       onClick: () => this._camView("focus"),
       title: "Center camera on selected object",
     });
@@ -1387,7 +1400,7 @@ export class Pixaroma3DEditor {
 // or shrinks.
 Pixaroma3DEditor.prototype._buildAlignDistributeBar = function (titlebarCenter) {
   if (!titlebarCenter) return;
-  const AD_ICON_PATH = "/pixaroma/assets/icons/ui/";
+  const AD_ICON_PATH = "icons/ui/";
 
   // Build one icon button. Mask-image approach so the icon color is
   // driven by CSS — matches the other tool/camera buttons and gives
@@ -1398,7 +1411,7 @@ Pixaroma3DEditor.prototype._buildAlignDistributeBar = function (titlebarCenter) 
     b.title = title;
     const ico = document.createElement("span");
     ico.className = "p3d-ad-ico";
-    const url = `url("${AD_ICON_PATH}${iconFile}")`;
+    const url = `url("${pixAsset(AD_ICON_PATH + iconFile)}")`;
     ico.style.cssText =
       `display:block;width:18px;height:18px;` +
       `background-color:#ccc;` +

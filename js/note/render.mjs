@@ -1,5 +1,6 @@
 import { injectCSS } from "./css.mjs";
 import { sanitize } from "./sanitize.mjs";
+import { pixAsset } from "../shared/api_url.mjs";
 
 const PLACEHOLDER_TEXT = "Add your workflow notes here\u2026";
 
@@ -25,7 +26,7 @@ export function attachEditButton(wrap, onClick) {
   btn.className = "pix-note-editbtn";
   btn.type = "button";
   const icon = document.createElement("img");
-  icon.src = "/pixaroma/assets/icons/layers/edit.svg";
+  icon.src = pixAsset("icons/layers/edit.svg");
   icon.draggable = false;
   icon.className = "pix-note-editbtn-icon";
   btn.appendChild(icon);
@@ -143,7 +144,7 @@ function injectCopyButtons(bodyEl) {
     btn.title = "Copy code";
     btn.contentEditable = "false";
     const icon = document.createElement("img");
-    icon.src = "/pixaroma/assets/icons/ui/copy.svg";
+    icon.src = pixAsset("icons/ui/copy.svg");
     icon.draggable = false;
     btn.appendChild(icon);
     pre.appendChild(btn);

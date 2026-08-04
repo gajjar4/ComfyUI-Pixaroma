@@ -1,4 +1,17 @@
 // Pixaroma 3D — API helpers
+//
+// NOTE: do NOT wrap these routes in pixApiUrl(). `api.fetchApi` already calls
+// `api.apiURL()` on the route it is given, and apiURL is NOT idempotent when
+// ComfyUI is served under a sub-path:
+//
+//   apiURL(e) = e.startsWith("/api") ? api_base + e : api_base + "/api" + e
+//
+// With api_base "" (localhost) a double wrap is a silent no-op, which is why it
+// tests clean. With api_base "/comfy" (a reverse proxy serving ComfyUI at
+// https://host/comfy/) the second pass no longer sees a leading "/api" and
+// prefixes again:  /comfy/api/comfy/api/pixaroma/api/3d/save  -> 404.
+// pixApiUrl is for URLs we hand to fetch/import/img.src OURSELVES, not for
+// routes passed to fetchApi.
 import { api } from "/scripts/api.js";
 
 export class ThreeDAPI {

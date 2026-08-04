@@ -227,8 +227,40 @@ async def serve_pixaroma_vendor(request):
     return web.FileResponse(file_path, headers=headers)
 
 
-# Assets are served at TWO urls that hit the SAME handler, so the containment
-# checks below are written once and cannot drift apart.
+# ── the asset route a HOSTED ComfyUI can actually reach ─────────────────────
+#
+# THE PROBLEM (measured on a cloud platform, 2026-08-04): their edge routes by
+# FILE EXTENSION, not by path. Anything whose URL PATH ends .svg / .png / .ttf /
+# .mp3 is answered by their own static file server and never reaches ComfyUI,
+# wherever it sits in the path. Extensions they do forward: .json, .glb, .mjs,
+# and no extension at all. So every icon, font and sound 404'd there while our
+# JSON routes worked perfectly.
+#
+# THE FIX: put the filename in the QUERY STRING and leave the PATH extensionless.
+# Verified against their gateway: "/pixaroma/api/version?name=icons/ui/play.svg"
+# is forwarded and answers 200, so they inspect the path only.
+#
+# Containment mirrors the vendor route exactly: reject "..", allow only a safe
+# charset, then realpath and require the result to still sit under the assets
+# directory. See .claude/patterns/path-containment.md - a check against an
+# attacker-supplied root guards nothing, so the root here is our own constant.
+@PromptServer.instance.routes.get("/pixaroma/api/asset")
+async def serve_pixaroma_asset_q(request):
+    rel = request.query.get("path", "")
+    if not rel or ".." in rel.split("/") or not _VENDOR_PATH_RE.match(rel):
+        return web.Response(status=400)
+    file_path = os.path.realpath(os.path.join(PIXAROMA_ASSETS_DIR, rel))
+    if not file_path.startswith(PIXAROMA_ASSETS_DIR + os.sep):
+        return web.Response(status=403)
+    if not os.path.isfile(file_path):
+        return web.Response(status=404)
+    return web.FileResponse(file_path)
+
+
+# The ORIGINAL path-based asset urls. Still served (older saved workflows and any
+# third-party reference keep working); the query form above is what the frontend
+# asks for now. Two urls, ONE handler, so the containment checks below are
+# written once and cannot drift apart.
 #
 #   /pixaroma/assets/...       the original, still used by older workflows
 #   /pixaroma/api/assets/...   what the frontend asks for now
@@ -445,7 +477,12 @@ async def list_note_icons(request):
                 # value is handed straight to the browser, so it must be the
                 # reachable one. The frontend still runs it through pixApiUrl()
                 # to pick up any auth token the host requires.
-                "url": f"/pixaroma/api/assets/icons/note/{name}",
+                # The TAIL only. The frontend hands this to pixAsset(), which
+                # builds the extensionless /pixaroma/api/asset?path=... url a
+                # hosted ComfyUI's gateway will actually forward, and adds any
+                # auth token that host requires. Do NOT put a full path here:
+                # a url ending .svg is intercepted by their static file server.
+                "url": f"icons/note/{name}",
             })
         entries.sort(key=lambda e: e["label"].lower())
         return web.json_response({"icons": entries})

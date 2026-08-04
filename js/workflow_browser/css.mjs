@@ -30,9 +30,11 @@
 // because the right-click menu and the toast are position:fixed children of
 // <body> and would not inherit it from the panel.
 
+import { pixAsset } from "../shared/api_url.mjs";
+
 const CSS_ID = "pixaroma-workflows-css";
 
-const ICON = "/pixaroma/assets/icons/ui/workflow.svg";
+const ICON = pixAsset("icons/ui/workflow.svg");
 const ACC = "var(--pix-acc, #f66744)";
 
 /** One scalable length. Keeps the original number visible and readable, and

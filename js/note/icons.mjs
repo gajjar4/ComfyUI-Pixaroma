@@ -7,6 +7,7 @@
 // circular-dep analysis documented in core.mjs::open().
 import { NoteEditor } from "./core.mjs";
 import { createPixaromaColorPicker } from "../shared/color_picker.mjs";
+import { pixApiUrl, pixAsset } from "../shared/api_url.mjs";
 
 // Picker display order — categorised by purpose, since alphabetical
 // label order leaves related icons scattered across the grid. Entries
@@ -85,7 +86,7 @@ export async function ensureIcons(force = false) {
   if (!force && _iconsPromise) return _iconsPromise;
   const p = (async () => {
     try {
-      const r = await fetch("/pixaroma/api/note/icons/list", { cache: "no-store" });
+      const r = await fetch(pixApiUrl("/pixaroma/api/note/icons/list"), { cache: "no-store" });
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
       const j = await r.json();
       _iconsCache = Array.isArray(j?.icons) ? j.icons : [];
@@ -115,9 +116,13 @@ export async function ensureIcons(force = false) {
 export function buildIconCSS(icons) {
   return (icons || []).map((ic) => {
     const sel = `.pix-note-ic[data-ic="${CSS.escape(ic.id)}"]`;
+    // ic.url is the TAIL below assets ("icons/note/x.svg"); pixAsset turns it
+    // into the extensionless, token-bearing url a hosted ComfyUI will forward.
+    // Tolerate an old backend that still sends a full "/pixaroma/assets/..." path.
+    const url = pixAsset(String(ic.url || "").replace(/^\/?(pixaroma\/)?(api\/)?assets\//, ""));
     return `${sel}{` +
-      `-webkit-mask-image:url(${ic.url});` +
-      `mask-image:url(${ic.url});}`;
+      `-webkit-mask-image:url(${url});` +
+      `mask-image:url(${url});}`;
   }).join("\n");
 }
 

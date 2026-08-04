@@ -1,5 +1,5 @@
 import { app } from "/scripts/app.js";
-import { pixApiUrl } from "../shared/api_url.mjs";
+import { pixApiUrl, pixAsset } from "../shared/api_url.mjs";
 import { BRAND } from "../shared/index.mjs";
 
 let _cssInjected = false;
@@ -58,8 +58,8 @@ export function injectCSS() {
     .pix-li-upload-btn .ico {
       width: 14px; height: 14px;
       background-color: currentColor;
-      -webkit-mask: url("/pixaroma/assets/icons/ui/upload.svg") center/14px 14px no-repeat;
-              mask: url("/pixaroma/assets/icons/ui/upload.svg") center/14px 14px no-repeat;
+      -webkit-mask: url("${pixAsset("icons/ui/upload.svg")}") center/14px 14px no-repeat;
+              mask: url("${pixAsset("icons/ui/upload.svg")}") center/14px 14px no-repeat;
     }
     .pix-li-hint {
       font-size: 9px;
@@ -300,8 +300,8 @@ export function injectCSS() {
       position: absolute;
       inset: 0;
       background-color: currentColor;
-      -webkit-mask: url("/pixaroma/assets/icons/ui/swap.svg") center/14px 14px no-repeat;
-              mask: url("/pixaroma/assets/icons/ui/swap.svg") center/14px 14px no-repeat;
+      -webkit-mask: url("${pixAsset("icons/ui/swap.svg")}") center/14px 14px no-repeat;
+              mask: url("${pixAsset("icons/ui/swap.svg")}") center/14px 14px no-repeat;
       pointer-events: none;
     }
     .pix-li-custom-ratio-swap:hover { color: var(--pix-acc,#f66744); border-color: var(--pix-acc,#f66744); }
@@ -415,8 +415,8 @@ export function injectCSS() {
       position: absolute;
       inset: 0;
       background-color: currentColor;
-      -webkit-mask: url("/pixaroma/assets/icons/ui/swap.svg") center/12px 12px no-repeat;
-              mask: url("/pixaroma/assets/icons/ui/swap.svg") center/12px 12px no-repeat;
+      -webkit-mask: url("${pixAsset("icons/ui/swap.svg")}") center/12px 12px no-repeat;
+              mask: url("${pixAsset("icons/ui/swap.svg")}") center/12px 12px no-repeat;
       pointer-events: none;
     }
     .pix-li-swap:hover { color: var(--pix-acc,#f66744); border-color: var(--pix-acc,#f66744); }
@@ -497,8 +497,8 @@ export function injectCSS() {
     .pix-li-foot { display:flex; align-items:center; justify-content:center; gap:6px; flex-wrap:wrap; }
     .pix-li-snap2 { display:inline-flex; align-items:center; gap:5px; }
     .pix-li-snap-icon { display:inline-block; width:12px; height:12px; background-color:#888; flex:none;
-      -webkit-mask:url("/pixaroma/assets/icons/ui/magnet.svg") center/12px 12px no-repeat;
-              mask:url("/pixaroma/assets/icons/ui/magnet.svg") center/12px 12px no-repeat; }
+      -webkit-mask:url("${pixAsset("icons/ui/magnet.svg")}") center/12px 12px no-repeat;
+              mask:url("${pixAsset("icons/ui/magnet.svg")}") center/12px 12px no-repeat; }
     .pix-li-snap-lbl { font-size:9px; color:#7d7d7d; text-transform:uppercase; letter-spacing:.5px; }
     .pix-li-schip { background:#1d1d1d; border:1px solid #444; border-radius:3px; color:#aaa;
       font-size:8.5px; padding:3px 5px; min-width:16px; text-align:center; cursor:pointer; user-select:none; }

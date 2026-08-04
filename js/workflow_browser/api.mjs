@@ -35,7 +35,11 @@
 //   2. NEVER call save()/saveAs() except from an explicit user action.
 
 import { app } from "/scripts/app.js";
+import { pixApiUrl } from "../shared/api_url.mjs";
 
+// Left BARE on purpose: this prefix is concatenated onto, and a hosted ComfyUI
+// appends its auth token as a QUERY STRING - so a wrapped prefix would put the
+// token in the middle of the url. The WHOLE url is wrapped at the fetch instead.
 const BASE = "/pixaroma/api/workflows";
 
 const store = () => app.extensionManager?.workflow;
@@ -45,13 +49,13 @@ const store = () => app.extensionManager?.workflow;
 async function getJSON(url) {
   // no-store on our side too: this list must match the disk, and a heuristically
   // cached copy would quietly show workflows that have been renamed or deleted.
-  const r = await fetch(url, { cache: "no-store" });
+  const r = await fetch(pixApiUrl(url), { cache: "no-store" });
   if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
   return r.json();
 }
 
 async function postJSON(url, body) {
-  const r = await fetch(url, {
+  const r = await fetch(pixApiUrl(url), {
     method: "POST",
     cache: "no-store",
     headers: { "Content-Type": "application/json" },
@@ -146,7 +150,11 @@ export async function openWorkflow(rel) {
  *  not drop it there. */
 export async function exists(rel) {
   try {
-    const r = await fetch(`/api/userdata/${encodeURIComponent(toStorePath(rel))}`,
+    // Core's own route, and it needs wrapping just as much as ours: a bare
+    // /api/... resolves against the PAGE origin, which on a hosted ComfyUI is
+    // not the API. apiURL leaves an address that already starts with /api
+    // alone apart from the deployment prefix, so this is unchanged locally.
+    const r = await fetch(pixApiUrl(`/api/userdata/${encodeURIComponent(toStorePath(rel))}`),
                           { method: "HEAD", cache: "no-store" });
     return r.ok;
   } catch {
@@ -229,10 +237,11 @@ export async function saveCurrentAs(newRel, { overwrite = false } = {}) {
  */
 export async function duplicate(rel, newRel) {
   const enc = (p) => encodeURIComponent(toStorePath(p));
-  const r = await fetch(`/api/userdata/${enc(rel)}`, { cache: "no-store" });
+  // Wrapped for the same reason as in exists() above.
+  const r = await fetch(pixApiUrl(`/api/userdata/${enc(rel)}`), { cache: "no-store" });
   if (!r.ok) throw new Error("Could not read that workflow.");
   const body = await r.text();
-  const w = await fetch(`/api/userdata/${enc(newRel)}?overwrite=false`, {
+  const w = await fetch(pixApiUrl(`/api/userdata/${enc(newRel)}?overwrite=false`), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body,

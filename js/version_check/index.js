@@ -17,6 +17,7 @@ import { app } from "/scripts/app.js";
 import { BRAND, applyAdaptiveCanvasOnly,
   installCanvasZoomPassthrough, installNodeAccent, registerNodeAccent,
 } from "../shared/index.mjs";
+import { pixApiUrl } from "../shared/api_url.mjs";
 // Namespace import (NOT a named import) so a STALE cached shared module that
 // predates PIXAROMA_JS_VERSION yields `undefined` instead of a hard module link
 // error — `undefined` IS the stale-cache signal we want to surface, not crash on.
@@ -203,7 +204,11 @@ app.registerExtension({
       rFront.value.textContent = window.__COMFYUI_FRONTEND_VERSION__ || "unknown";
 
       // --- ComfyUI backend version ---
-      fetch("/system_stats")
+      // Core's own route, so it needs the same prefixing as ours: on a hosted
+      // ComfyUI the page origin is the platform's web app, not the API, and a
+      // bare "/system_stats" answers 401 -> this row silently reads "unknown".
+      // (Run Log asks for the very same route via api.fetchApi.)
+      fetch(pixApiUrl("/system_stats"))
         .then((r) => r.json())
         .then((s) => {
           rComfy.value.textContent = s?.system?.comfyui_version || "unknown";
@@ -219,7 +224,7 @@ app.registerExtension({
       // the user to hard-refresh. (This node's own number comes from Python, so
       // without this check a stale browser still shows the new number and hides
       // the problem - the exact trap this catches.)
-      fetch("/pixaroma/api/version")
+      fetch(pixApiUrl("/pixaroma/api/version"))
         .then((r) => r.json())
         .then((j) => {
           const pyVer = j?.version || "unknown";

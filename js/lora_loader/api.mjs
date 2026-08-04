@@ -3,6 +3,8 @@
 // re-opening the info panel is instant. The Civitai call is never cached here (it
 // caches server-side as a sidecar file, so a second call is instant and offline).
 
+import { pixApiUrl } from "../shared/api_url.mjs";
+
 let _listCache = null;
 let _listPromise = null;
 const _infoCache = new Map();
@@ -15,7 +17,7 @@ export async function listLoras(force = false) {
     try {
       // no-store: the route sends no cache headers, and a heuristically-cached
       // copy of this list is exactly the "renamed file never appears" bug.
-      const r = await fetch("/pixaroma/api/lora/list", { cache: "no-store" });
+      const r = await fetch(pixApiUrl("/pixaroma/api/lora/list"), { cache: "no-store" });
       const j = await r.json();
       // j.error = the SERVER's folder scan failed (not an empty folder). Treat it
       // like a network failure: keep whatever list we had. Trusting it as a real
@@ -44,7 +46,7 @@ export async function loraInfo(name, force = false) {
   if (!force && _infoPromise.has(name)) return _infoPromise.get(name);
   const p = (async () => {
     try {
-      const r = await fetch("/pixaroma/api/lora/info?name=" + encodeURIComponent(name));
+      const r = await fetch(pixApiUrl("/pixaroma/api/lora/info?name=" + encodeURIComponent(name)));
       const j = await r.json();
       // Cache SUCCESS only. A server-reported failure ({ok:false}) used to be
       // cached like a hit, so a LoRA that was briefly unresolvable (still copying,
@@ -98,13 +100,13 @@ export function cachedLoras() {
 // thumb route sends max-age=3600 and the URL otherwise never changes, so a
 // preview replaced by a Civitai fetch kept showing the OLD image up to an hour.
 export function thumbUrl(name, bust) {
-  return "/pixaroma/api/lora/thumb?name=" + encodeURIComponent(name) +
-    (bust ? "&t=" + bust : "");
+  return pixApiUrl("/pixaroma/api/lora/thumb?name=" + encodeURIComponent(name) +
+    (bust ? "&t=" + bust : ""));
 }
 
 export async function civitaiLookup(name) {
   try {
-    const r = await fetch("/pixaroma/api/lora/civitai?name=" + encodeURIComponent(name));
+    const r = await fetch(pixApiUrl("/pixaroma/api/lora/civitai?name=" + encodeURIComponent(name)));
     return await r.json();
   } catch {
     return { ok: false, reason: "offline", message: "Could not reach Civitai." };
@@ -121,7 +123,7 @@ export async function civitaiLookup(name) {
 
 export async function getCivitaiAccount() {
   try {
-    const r = await fetch("/pixaroma/api/civitai/account", { cache: "no-store" });
+    const r = await fetch(pixApiUrl("/pixaroma/api/civitai/account"), { cache: "no-store" });
     return await r.json();
   } catch {
     return { ok: false, message: "Could not reach the server." };
@@ -133,7 +135,7 @@ export async function getCivitaiAccount() {
  *  from what the server kept rather than from what it hoped it sent. */
 export async function setCivitaiAccount(patch) {
   try {
-    const r = await fetch("/pixaroma/api/civitai/account", {
+    const r = await fetch(pixApiUrl("/pixaroma/api/civitai/account"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(patch || {}),
@@ -148,7 +150,7 @@ export async function setCivitaiAccount(patch) {
 // info reverts to the file's own words. Caller should invalidateInfo(name) after.
 export async function deleteCivitai(name) {
   try {
-    const r = await fetch("/pixaroma/api/lora/civitai_delete", {
+    const r = await fetch(pixApiUrl("/pixaroma/api/lora/civitai_delete"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name }),

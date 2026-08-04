@@ -1,5 +1,11 @@
 import { api } from "/scripts/api.js";
 
+// NOTE: pass fetchApi the BARE route - do NOT wrap it in pixApiUrl().
+// fetchApi already ends with `this.apiURL(route)`, so wrapping applies the
+// prefix TWICE. It looks fine on localhost (api_base is "" and apiURL's
+// `startsWith("/api")` guard makes the second pass a no-op) but on a hosted
+// ComfyUI served under a sub-path it yields /base/api/base/api/... -> 404.
+// pixApiUrl is for RAW fetch()/src= urls only.
 export const PaintAPI = {
   async saveComposite(projectId, dataURL) {
     const res = await api.fetchApi("/pixaroma/api/paint/save", {

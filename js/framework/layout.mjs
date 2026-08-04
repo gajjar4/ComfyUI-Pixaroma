@@ -4,7 +4,8 @@
 // ╚═══════════════════════════════════════════════════════════════╝
 
 import { installFocusTrap } from "../shared/utils.mjs";
-import { injectFrameworkStyles, _uiIcon, UI_ICON } from "./theme.mjs";
+import { pixAsset } from "../shared/api_url.mjs";
+import { injectFrameworkStyles, _uiIcon } from "./theme.mjs";
 import { createButton } from "./components.mjs";
 
 /**
@@ -63,7 +64,7 @@ export function createEditorLayout(config) {
   title.className = "pxf-title";
   const logo = document.createElement("img");
   logo.className = "pxf-title-logo";
-  logo.src = "/pixaroma/assets/pixaroma_logo.svg";
+  logo.src = pixAsset("pixaroma_logo.svg");
   title.appendChild(logo);
   title.append(` ${editorName} `);
   const brandSpan = document.createElement("span");
@@ -90,7 +91,7 @@ export function createEditorLayout(config) {
     const zoomOut = createButton("", {
       variant: "sm",
       title: "Zoom out",
-      iconSrc: UI_ICON + "minus.svg",
+      iconSrc: pixAsset("icons/ui/minus.svg"),
       onClick: () => {
         if (onZoomOut) onZoomOut();
       },
@@ -108,7 +109,7 @@ export function createEditorLayout(config) {
     const zoomIn = createButton("", {
       variant: "sm",
       title: "Zoom in",
-      iconSrc: UI_ICON + "plus.svg",
+      iconSrc: pixAsset("icons/ui/plus.svg"),
       onClick: () => {
         if (onZoomIn) onZoomIn();
       },
@@ -130,13 +131,13 @@ export function createEditorLayout(config) {
   if (showUndoRedo) {
     undoBtn = createButton("Undo", {
       variant: "accent",
-      iconSrc: UI_ICON + "undo.svg",
+      iconSrc: pixAsset("icons/ui/undo.svg"),
       title: "Undo (Ctrl+Z)",
       onClick: onUndo,
     });
     redoBtn = createButton("Redo", {
       variant: "accent",
-      iconSrc: UI_ICON + "redo.svg",
+      iconSrc: pixAsset("icons/ui/redo.svg"),
       title: "Redo (Ctrl+Shift+Z)",
       onClick: onRedo,
     });
@@ -230,7 +231,7 @@ export function createEditorLayout(config) {
 
   const helpBtn = createButton("Help", {
     variant: "standard",
-    iconSrc: UI_ICON + "help.svg",
+    iconSrc: pixAsset("icons/ui/help.svg"),
     onClick: () => toggleHelp(),
   });
   helpBtn.style.width = "100%";
@@ -240,13 +241,13 @@ export function createEditorLayout(config) {
 
   const saveBtn = createButton("Save", {
     variant: "accent",
-    iconSrc: UI_ICON + "save.svg",
+    iconSrc: pixAsset("icons/ui/save.svg"),
     onClick: onSave,
   });
   saveBtn.style.flex = "1";
   const closeBtn = createButton("Save to Disk", {
     variant: "standard",
-    iconSrc: UI_ICON + "download.svg",
+    iconSrc: pixAsset("icons/ui/download.svg"),
     title: "Save image to disk",
     onClick: () => {
       if (layout.onSaveToDisk) layout.onSaveToDisk();

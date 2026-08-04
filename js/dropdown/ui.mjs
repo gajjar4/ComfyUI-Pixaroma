@@ -19,6 +19,7 @@
 // other node in the pack doing this. Every trap it documents applies here.
 
 import { app } from "/scripts/app.js";
+import { pixAsset } from "../shared/api_url.mjs";
 import { isVueNodes, applyAdaptiveCanvasOnly } from "../shared/nodes2.mjs";
 import { installCanvasZoomPassthrough } from "../shared/canvas_zoom.mjs";
 import { placeZoomedPopup } from "../shared/popup_zoom.mjs";
@@ -91,8 +92,8 @@ export function injectCSS() {
   }
   .pix-dd-gear::before{
     content:""; display:block; width:100%; height:100%; background:#aaa;
-    -webkit-mask:url("/pixaroma/assets/icons/note/gear.svg") center/contain no-repeat;
-    mask:url("/pixaroma/assets/icons/note/gear.svg") center/contain no-repeat;
+    -webkit-mask:url("${pixAsset("icons/note/gear.svg")}") center/contain no-repeat;
+    mask:url("${pixAsset("icons/note/gear.svg")}") center/contain no-repeat;
   }
   .pix-dd-gear:hover::before{ background:${ACC}; }
 

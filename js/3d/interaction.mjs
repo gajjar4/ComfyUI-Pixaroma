@@ -2,6 +2,7 @@
 // Pixaroma 3D Editor — Tools, camera, keyboard, click, undo
 // ============================================================
 import { Pixaroma3DEditor, getTHREE } from "./core.mjs";
+import { pixAsset } from "../shared/api_url.mjs";
 import { isCompositeType, buildComposite } from "./composites.mjs";
 import { openShapePicker } from "./picker.mjs";
 // Static import of the SYNCHRONOUS importer helper so the composite
@@ -663,7 +664,7 @@ Pixaroma3DEditor.prototype._applySnap = function (state) {
         const { loadGLBFromURL, prepareImportedGroup, wrapImportPivot } = mod;
         try {
           const innerGroup = await loadGLBFromURL(
-            "/pixaroma/assets/models/bunny.glb",
+            pixAsset("models/bunny.glb"),
           );
           const idx = this.objects.indexOf(ph);
           if (idx === -1) return;

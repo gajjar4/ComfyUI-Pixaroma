@@ -12,9 +12,9 @@ import {
 } from "../framework/index.mjs";
 import { installGraphUndoGuard } from "../shared/graph_undo_guard.mjs";
 
-import { pixApiUrl } from "../shared/api_url.mjs";
+import { pixApiUrl, pixAsset } from "../shared/api_url.mjs";
 export { BRAND };
-const UI = "/pixaroma/assets/icons/ui/";
+const UI = "icons/ui/";
 // Brush default size (used by the "Reset to default" button in the Brush panel).
 const DEFAULT_BRUSH_SIZE = 80;   // px diameter
 
@@ -26,7 +26,7 @@ export const INPAINT_PREVIEW_COLORS = {
 export const InpaintAPI = {
   async uploadSrc(projectId, dataURL) {
     const { api } = await import("/scripts/api.js");
-    const res = await api.fetchApi("/pixaroma/api/inpaint/upload_src", {
+    const res = await api.fetchApi(pixApiUrl("/pixaroma/api/inpaint/upload_src"), {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ project_id: projectId, image: dataURL }),
     });
@@ -34,7 +34,7 @@ export const InpaintAPI = {
   },
   async saveMask(projectId, dataURL) {
     const { api } = await import("/scripts/api.js");
-    const res = await api.fetchApi("/pixaroma/api/inpaint/save_mask", {
+    const res = await api.fetchApi(pixApiUrl("/pixaroma/api/inpaint/save_mask"), {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ project_id: projectId, mask: dataURL }),
     });
@@ -222,8 +222,8 @@ export class InpaintCropEditor {
     const row = document.createElement("div");
     row.style.cssText = "display:flex;gap:6px;margin-top:8px;";
     row.append(
-      createButton("Invert", { variant: "standard", iconSrc: UI + "swap.svg", onClick: () => this._invertMask() }),
-      createButton("Clear", { variant: "standard", iconSrc: UI + "delete.svg", onClick: () => this._clearMask() }),
+      createButton("Invert", { variant: "standard", iconSrc: pixAsset(UI + "swap.svg"), onClick: () => this._invertMask() }),
+      createButton("Clear", { variant: "standard", iconSrc: pixAsset(UI + "delete.svg"), onClick: () => this._clearMask() }),
     );
     for (const b of row.children) b.style.flex = "1";
     secTools.content.appendChild(row);
@@ -268,7 +268,7 @@ export class InpaintCropEditor {
 
     // View
     const secView = createPanel("Mask overlay");
-    this._visBtn = createButton("Toggle mask (H)", { variant: "full", iconSrc: UI + "eraser.svg", onClick: () => this._toggleMaskVisible() });
+    this._visBtn = createButton("Toggle mask (H)", { variant: "full", iconSrc: pixAsset(UI + "eraser.svg"), onClick: () => this._toggleMaskVisible() });
     this.el.opacitySlider = createSliderRow("Opacity", 10, 100, Math.round(this.maskOpacity * 100), () => {
       this.maskOpacity = (parseInt(this.el.opacitySlider.numInput.value) || 50) / 100;
       this._draw();
@@ -335,7 +335,7 @@ export class InpaintCropEditor {
 
     // Reset all settings to default
     const resetAll = createButton("Reset all to default", {
-      variant: "standard", iconSrc: UI + "reset.svg", onClick: () => this._resetAll(),
+      variant: "standard", iconSrc: pixAsset(UI + "reset.svg"), onClick: () => this._resetAll(),
     });
     resetAll.style.marginTop = "10px";
     sidebar.appendChild(resetAll);
@@ -352,7 +352,7 @@ export class InpaintCropEditor {
       }
       fileInput.value = "";
     });
-    const loadBtn = createButton("Load Image", { variant: "full", iconSrc: UI + "image.svg", onClick: () => fileInput.click() });
+    const loadBtn = createButton("Load Image", { variant: "full", iconSrc: pixAsset(UI + "image.svg"), onClick: () => fileInput.click() });
     loadBtn.style.marginTop = "10px";
     sidebar.append(loadBtn, fileInput);
   }

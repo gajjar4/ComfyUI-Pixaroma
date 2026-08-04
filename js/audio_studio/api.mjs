@@ -19,7 +19,7 @@ const SYSINFO_ENDPOINT = "/pixaroma/api/audio_studio/sysinfo";
  */
 export async function getSysInfo() {
   try {
-    const res = await fetch(SYSINFO_ENDPOINT);
+    const res = await fetch(pixApiUrl(SYSINFO_ENDPOINT));
     if (!res.ok) return { total_gb: null, available_gb: null, cap_gb: null };
     return res.json();
   } catch {
@@ -41,7 +41,7 @@ export async function uploadSource(nodeId, kind, blob, filename) {
   fd.append("node_id", String(nodeId));
   fd.append("kind", kind);
   fd.append("file", blob, filename);
-  const res = await fetch(UPLOAD_ENDPOINT, { method: "POST", body: fd });
+  const res = await fetch(pixApiUrl(UPLOAD_ENDPOINT), { method: "POST", body: fd });
   if (!res.ok) {
     let msg = `upload failed: HTTP ${res.status}`;
     try { msg = (await res.json()).error || msg; } catch {}

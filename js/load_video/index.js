@@ -1,5 +1,5 @@
 import { app } from "/scripts/app.js";
-import { pixApiUrl } from "../shared/api_url.mjs";
+import { pixApiUrl, pixAsset } from "../shared/api_url.mjs";
 import { applyAdaptiveCanvasOnly,
   installCanvasZoomPassthrough, installNodeAccent, registerNodeAccent,
 } from "../shared/index.mjs";
@@ -42,7 +42,7 @@ const PREVIEW_MIN_H = 170;
 // Fresh-node default height (controls + a comfortable starting preview). Saved
 // workflows keep their own size — configure() runs after onNodeCreated.
 const DEFAULT_H = 540;
-const UI_ICON = "/pixaroma/assets/icons/ui/";
+const UI_ICON = "icons/ui/";
 
 function showToast(msg) {
   const t = document.createElement("div");
@@ -109,7 +109,7 @@ function refreshBar(node) {
   const playing = hasSrc && !v.paused && !v.ended;
   node._pixLvPlayIco?.style.setProperty(
     "--ico",
-    `url(${UI_ICON}${playing ? "pause" : "play"}.svg)`
+    `url(${pixAsset(UI_ICON + (playing ? "pause" : "play") + ".svg")})`
   );
   const dur = isFinite(v.duration) ? v.duration : 0;
   const cur = isFinite(v.currentTime) ? v.currentTime : 0;
@@ -189,7 +189,7 @@ async function uploadVideo(node) {
     const fd = new FormData();
     fd.append("file", file, file.name);
     try {
-      const res = await fetch("/pixaroma/api/load_video/upload", {
+      const res = await fetch(pixApiUrl("/pixaroma/api/load_video/upload"), {
         method: "POST",
         body: fd,
       });
@@ -288,7 +288,7 @@ app.registerExtension({
       playBtn.title = "Play / Pause";
       const playIco = document.createElement("span");
       playIco.className = "pix-lv-ico";
-      playIco.style.setProperty("--ico", `url(${UI_ICON}play.svg)`);
+      playIco.style.setProperty("--ico", `url(${pixAsset(UI_ICON + "play.svg")})`);
       playBtn.appendChild(playIco);
       bar.appendChild(playBtn);
 
@@ -312,7 +312,7 @@ app.registerExtension({
       dlBtn.title = "Download this video";
       const dlIco = document.createElement("span");
       dlIco.className = "pix-lv-ico";
-      dlIco.style.setProperty("--ico", `url(${UI_ICON}download.svg)`);
+      dlIco.style.setProperty("--ico", `url(${pixAsset(UI_ICON + "download.svg")})`);
       dlBtn.appendChild(dlIco);
       bar.appendChild(dlBtn);
 
@@ -321,7 +321,7 @@ app.registerExtension({
       fsBtn.title = "Fullscreen";
       const fsIco = document.createElement("span");
       fsIco.className = "pix-lv-ico";
-      fsIco.style.setProperty("--ico", `url(${UI_ICON}fit.svg)`);
+      fsIco.style.setProperty("--ico", `url(${pixAsset(UI_ICON + "fit.svg")})`);
       fsBtn.appendChild(fsIco);
       bar.appendChild(fsBtn);
 

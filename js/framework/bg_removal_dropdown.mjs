@@ -15,6 +15,14 @@ const BIREFNET_PRIORITY = ["birefnet", "birefnet-hr", "birefnet-matting"];
 
 export async function fetchBgRemovalInfo() {
   try {
+    // DO NOT wrap this route in pixApiUrl(). `api.fetchApi` ALREADY calls
+    // `this.apiURL(route)` internally, so wrapping applies the prefix TWICE.
+    // It looks harmless locally because api_base is "" there and apiURL has a
+    // `startsWith("/api")` guard that makes the second pass a no-op. On a
+    // ComfyUI served under a sub-path (api_base = "/abc/comfy" - the exact
+    // hosted case pixApiUrl exists for) the guard does not fire and you get
+    // "/abc/comfy/api/abc/comfy/api/pixaroma/remove_bg_info" -> 404.
+    // pixApiUrl is for a BARE `fetch()`, never for `api.fetchApi`.
     const res = await api.fetchApi("/pixaroma/remove_bg_info", { method: "GET" });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     return await res.json();

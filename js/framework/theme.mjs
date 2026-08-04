@@ -3,11 +3,21 @@
 // ║  Brand colors, CSS custom properties, and shared stylesheet  ║
 // ╚═══════════════════════════════════════════════════════════════╝
 
+import { pixAsset } from "../shared/api_url.mjs";
+
 /** Brand accent color hex — re-exported for editor-specific use. */
 export const BRAND = "#f66744";
 
-/** Base path for UI icon SVGs served by the Pixaroma backend. */
-export const UI_ICON = "/pixaroma/assets/icons/ui/";
+/**
+ * Asset TAIL for UI icon SVGs - NOT a usable url on its own.
+ *
+ * It is deliberately a bare tail so callers build the url as
+ * `pixAsset(UI_ICON + "save.svg")`. Do NOT turn this into a pre-built base
+ * (`pixAsset("icons/ui/")`): a hosted ComfyUI appends its auth token as a
+ * query string, so a wrapped base that is then concatenated puts the token in
+ * the MIDDLE of the url and the request dies. See js/shared/api_url.mjs.
+ */
+export const UI_ICON = "icons/ui/";
 
 /**
  * Creates an <img> element pointing to a UI icon SVG.
@@ -17,7 +27,7 @@ export const UI_ICON = "/pixaroma/assets/icons/ui/";
  */
 export function _uiIcon(name, size = 14) {
   const img = document.createElement("img");
-  img.src = "/pixaroma/assets/icons/ui/" + name;
+  img.src = pixAsset("icons/ui/" + name);
   img.style.cssText = `width:${size}px;height:${size}px;pointer-events:none;`;
   img.draggable = false;
   return img;

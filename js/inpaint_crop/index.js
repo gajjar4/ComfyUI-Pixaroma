@@ -107,10 +107,14 @@ function dedupeInpaintProjectId(node) {
 
 function buildSourceURL(part, bust) {
   if (!part || !part.filename) return null;
-  const url = pixApiUrl(`/view?filename=${encodeURIComponent(part.filename)}` +
+  // The cache-buster is part of the ROUTE handed to pixApiUrl, never appended to
+  // its RESULT: a hosted ComfyUI adds its auth token to the finished url, so
+  // concatenating afterwards writes our param on the far side of that token
+  // (see js/shared/api_url.mjs). Locally the two produce the identical string.
+  return pixApiUrl(`/view?filename=${encodeURIComponent(part.filename)}` +
     `&subfolder=${encodeURIComponent(part.subfolder || "")}` +
-    `&type=${encodeURIComponent(part.type || "temp")}`);
-  return bust ? `${url}&t=${Date.now()}` : url;
+    `&type=${encodeURIComponent(part.type || "temp")}` +
+    (bust ? `&t=${Date.now()}` : ""));
 }
 
 // A LoadImage combo value can be "name.png", "sub/name.png", or carry an
@@ -334,7 +338,7 @@ app.registerExtension({
     installPasteHandler();
     node._pixInpaintPaste = async (dataURL) => {
       try {
-        const r = await api.fetchApi("/pixaroma/api/inpaint/upload_src", {
+        const r = await api.fetchApi(pixApiUrl("/pixaroma/api/inpaint/upload_src"), {
           method: "POST", headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ project_id: "inpaint_paste_" + Date.now() + "_" + Math.random().toString(36).slice(2, 9), image: dataURL }),
         });

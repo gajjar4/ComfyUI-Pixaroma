@@ -8,6 +8,7 @@
 
 import { app } from "/scripts/app.js";
 import { installGraphUndoGuard } from "../shared/graph_undo_guard.mjs";
+import { pixAsset } from "../shared/api_url.mjs";
 import { BRAND } from "../shared/utils.mjs";
 import {
   getLibrary, reloadLibrary, isSameAsStored, commitLibrary, flushLibrary, exportLibraryJSON, parseImport, applyImport,
@@ -22,7 +23,7 @@ import {
 
 const PAL = ["#e0894b", "#5aa9e6", "#8e7bd6", "#5fbf8f", "#d76b98", "#c9a24b", "#6fb3b8"];
 const MAX_IMPORT_BYTES = 8 * 1024 * 1024;
-const ICON_BASE = "/pixaroma/assets/icons/ui/";
+const ICON_BASE = "icons/ui/";
 // Dragging a category row carries its SIDE in the MIME TYPE, because the type list is
 // the only thing readable during dragover (getData is blocked until the drop). That is
 // what lets a Text row refuse a List row on sight instead of accepting the drop and
@@ -690,7 +691,7 @@ function makeCard(tag) {
   }
   paintKind();
   del.className = "pix-prled-ic del";
-  del.innerHTML = `<span class="pix-prled-svg" style="-webkit-mask-image:url(${ICON_BASE}delete.svg);mask-image:url(${ICON_BASE}delete.svg)"></span>`;
+  del.innerHTML = `<span class="pix-prled-svg" style="-webkit-mask-image:url(${pixAsset(ICON_BASE + "delete.svg")});mask-image:url(${pixAsset(ICON_BASE + "delete.svg")})"></span>`;
   // Asks first, and shows the tag's own text in the question so you can see whether it
   // is the one you meant. There is no undo behind it.
   del.addEventListener("click", () => {
@@ -1696,7 +1697,7 @@ export function openLibraryEditor(node, opts) {
     `<div class="ttl"><span class="cr">☲</span> Tag library</div>` +
     `<div class="pix-prled-srch"><span class="i">🔍</span><input placeholder="search tags and text"></div>` +
     `<span class="priv">private to you · survives plugin updates</span>` +
-    `<span class="help" title="How the tag library works"><span class="pix-prled-svg" style="-webkit-mask-image:url(${ICON_BASE}help.svg);mask-image:url(${ICON_BASE}help.svg)"></span></span>` +
+    `<span class="help" title="How the tag library works"><span class="pix-prled-svg" style="-webkit-mask-image:url(${pixAsset(ICON_BASE + "help.svg")});mask-image:url(${pixAsset(ICON_BASE + "help.svg")})"></span></span>` +
     `<span class="x" title="Close">✕</span></div>` +
     `<div class="pix-prled-main"><div class="pix-prled-side"></div>` +
     `<div class="pix-prled-grip" title="Drag to resize the category list. Double-click to reset."></div>` +

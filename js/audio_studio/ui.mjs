@@ -3,6 +3,7 @@
 // Audio / Output. Adds methods to AudioStudioEditor.prototype.
 import { AudioStudioEditor, computeEngineWH } from "./core.mjs";
 import { createPanel, UI_ICON } from "../framework/index.mjs";
+import { pixAsset } from "../shared/api_url.mjs";
 
 const ASPECT_OPTIONS = [
   "Original",
@@ -297,7 +298,7 @@ AudioStudioEditor.prototype._attachSectionAction = function (panelEl, action) {
   btn.title = action.title || "";
   const icon = document.createElement("span");
   icon.className = "pix-as-section-action-icon";
-  icon.style.setProperty("--pix-as-icon-url", `url(${UI_ICON}${action.icon})`);
+  icon.style.setProperty("--pix-as-icon-url", `url(${pixAsset(UI_ICON + action.icon)})`);
   btn.appendChild(icon);
   btn.addEventListener("click", (e) => {
     e.stopPropagation();
@@ -683,7 +684,7 @@ AudioStudioEditor.prototype._addDirectionToggle = function (panel) {
     b.title = title;
     const ic = document.createElement("span");
     ic.className = "pix-as-dir-icon";
-    ic.style.setProperty("--pix-as-icon-url", `url(${UI_ICON}${iconFile})`);
+    ic.style.setProperty("--pix-as-icon-url", `url(${pixAsset(UI_ICON + iconFile)})`);
     b.appendChild(ic);
     b.dataset.value = String(val);
     b.addEventListener("click", () => {

@@ -1,4 +1,5 @@
 import { app } from "/scripts/app.js";
+import { pixApiUrl } from "../shared/api_url.mjs";
 import { installCanvasZoomPassthrough } from "../shared/canvas_zoom.mjs";
 import { installNodeAccent, registerNodeAccent } from "../shared/node_settings.mjs";
 import { api } from "/scripts/api.js";
@@ -128,7 +129,7 @@ async function saveToOutput(node) {
   try {
     const image_b64 = await snapshotDataURL(node);
     const { workflow, prompt } = await resolveSaveMeta(node);
-    const resp = await fetch("/pixaroma/api/preview/save", {
+    const resp = await fetch(pixApiUrl("/pixaroma/api/preview/save"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ image_b64, filename_prefix: SAVE_PREFIX, workflow, prompt }),
@@ -148,7 +149,7 @@ async function saveToDisk(node) {
   try {
     const image_b64 = await snapshotDataURL(node);
     const { workflow, prompt } = await resolveSaveMeta(node);
-    const resp = await fetch("/pixaroma/api/preview/prepare", {
+    const resp = await fetch(pixApiUrl("/pixaroma/api/preview/prepare"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ image_b64, filename_prefix: SAVE_PREFIX, workflow, prompt }),

@@ -12,6 +12,7 @@
 // `live: false` = rebuild debounced 60 ms (heavy shapes).
 
 import { THREE_VENDOR } from "./core.mjs";
+import { pixApiUrl } from "../shared/api_url.mjs";
 
 // ─── Lazy-loaded Teapot geometry ──────────────────────────────
 // TeapotGeometry lives in three/examples and weighs ~20KB. We fetch
@@ -20,8 +21,10 @@ import { THREE_VENDOR } from "./core.mjs";
 let _TeapotGeometry = null;
 export async function loadTeapotGeometry() {
   if (_TeapotGeometry) return _TeapotGeometry;
+  // pixApiUrl on the COMPLETE tail — must match core.mjs::loadThree, or this
+  // addon's own `import "../../../three.mjs"` pulls a SECOND three.js instance.
   const mod = await import(
-    THREE_VENDOR + "/examples/jsm/geometries/TeapotGeometry.mjs"
+    pixApiUrl(THREE_VENDOR + "/examples/jsm/geometries/TeapotGeometry.mjs")
   );
   _TeapotGeometry = mod.TeapotGeometry;
   return _TeapotGeometry;

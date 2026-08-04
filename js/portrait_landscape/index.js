@@ -3,6 +3,7 @@ import { applyAdaptiveCanvasOnly, isVueNodes, installResizeFloor,
   installCanvasZoomPassthrough,
 } from "../shared/index.mjs";
 import { installNodeAccent, registerNodeSettings, ACC } from "../shared/node_settings.mjs";
+import { pixAsset } from "../shared/api_url.mjs";
 import {
   STATE_PROP, HIDDEN_INPUT_NAME, MULTIPLES, DEFAULT_STATE,
   readState, writeState, nextMultiple, multipleLabel, previewSize,
@@ -174,8 +175,8 @@ function injectCSS() {
     }
     .pix-pl-gear::before {
       content: ""; display: block; width: 14px; height: 14px; background: #bbb;
-      -webkit-mask: url("/pixaroma/assets/icons/note/gear.svg") center/contain no-repeat;
-      mask: url("/pixaroma/assets/icons/note/gear.svg") center/contain no-repeat;
+      -webkit-mask: url("${pixAsset("icons/note/gear.svg")}") center/contain no-repeat;
+      mask: url("${pixAsset("icons/note/gear.svg")}") center/contain no-repeat;
     }
     .pix-pl-gear:hover::before { background: ${ACC}; }
     /* The size the node will actually send. Sits after the gear, in the space

@@ -1,6 +1,7 @@
 import { app } from "/scripts/app.js";
 import { BRAND } from "../shared/index.mjs";
 import { isVueNodes } from "../shared/nodes2.mjs";
+import { pixAsset } from "../shared/api_url.mjs";
 
 // =============================================================================
 // Align Pixaroma - toggleable snap & alignment guides for the node canvas.
@@ -51,7 +52,7 @@ const state = {
   groupResize: null,    // { ref, x0, y0, cornerX0, cornerY0, cursorX, cursorY } or null (native group BR-resize)
 };
 
-const ICON_URL = "/pixaroma/assets/icons/ui/align-center-v.svg";
+const ICON_URL = "icons/ui/align-center-v.svg";
 
 function toggleEnabled() {
   const s = app.ui?.settings;
@@ -74,8 +75,8 @@ function injectToolbarCSS() {
       width: 18px;
       height: 18px;
       background-color: currentColor;
-      mask-image: url(${ICON_URL});
-      -webkit-mask-image: url(${ICON_URL});
+      mask-image: url(${pixAsset(ICON_URL)});
+      -webkit-mask-image: url(${pixAsset(ICON_URL)});
       mask-size: contain;
       -webkit-mask-size: contain;
       mask-repeat: no-repeat;

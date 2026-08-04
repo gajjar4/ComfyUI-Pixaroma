@@ -11,6 +11,7 @@ import {
   hslToRgb,
 } from "./engine.mjs";
 import { installGraphUndoGuard } from "../shared/graph_undo_guard.mjs";
+import { pixAsset } from "../shared/api_url.mjs";
 import { PaintAPI } from "./api.mjs";
 import {
   createEditorLayout,
@@ -444,7 +445,7 @@ export class PaintStudio {
     const toolbox = document.createElement("div");
     toolbox.style.cssText =
       "display:grid;grid-template-columns:repeat(4,1fr);gap:4px;";
-    const UI_ICON = "/pixaroma/assets/icons/ui/";
+    const UI_ICON = "icons/ui/";
     const TOOLS = [
       {
         id: "transform",
@@ -499,7 +500,7 @@ export class PaintStudio {
       const btn = document.createElement("div");
       btn.className = "pxf-tool-btn" + (this.tool === t.id ? " active" : "");
       btn.title = t.tip;
-      btn.innerHTML = `<span class="pxf-tool-btn-icon"><img src="${UI_ICON}${t.icon}" style="width:18px;height:18px;pointer-events:none;filter:brightness(0) invert(1);"></span><span class="pxf-tool-btn-label">${t.label}</span>`;
+      btn.innerHTML = `<span class="pxf-tool-btn-icon"><img src="${pixAsset(UI_ICON + t.icon)}" style="width:18px;height:18px;pointer-events:none;filter:brightness(0) invert(1);"></span><span class="pxf-tool-btn-label">${t.label}</span>`;
       btn.addEventListener("click", () => this._setTool(t.id));
       this.el[`toolBtn_${t.id}`] = btn;
       toolbox.appendChild(btn);
@@ -559,7 +560,7 @@ export class PaintStudio {
     const resetColorBtn = document.createElement("button");
     resetColorBtn.className = "ppx-swap-btn";
     resetColorBtn.title = "Reset to Black/White (D)";
-    resetColorBtn.innerHTML = `<img src="/pixaroma/assets/icons/ui/reset.svg" style="width:14px;height:14px;filter:brightness(0) invert(1);vertical-align:middle;margin-right:2px;"><span style="vertical-align:middle;font-size:11px;">Reset to BW</span>`;
+    resetColorBtn.innerHTML = `<img src="${pixAsset("icons/ui/reset.svg")}" style="width:14px;height:14px;filter:brightness(0) invert(1);vertical-align:middle;margin-right:2px;"><span style="vertical-align:middle;font-size:11px;">Reset to BW</span>`;
     resetColorBtn.addEventListener("click", () => {
       this.fgColor = "#000000";
       this.bgColor2 = "#ffffff";

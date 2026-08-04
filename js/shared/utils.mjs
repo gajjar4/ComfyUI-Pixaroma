@@ -2,7 +2,7 @@
 // ║  Pixaroma Shared — Constants & Utility Functions             ║
 // ╚═══════════════════════════════════════════════════════════════╝
 
-import { pixApiUrl } from "./api_url.mjs";
+import { pixApiUrl, pixAsset } from "./api_url.mjs";
 
 export const allow_debug = false;
 
@@ -15,7 +15,7 @@ export const PIXAROMA_LOGO = `data:image/svg+xml;utf8,${encodeURIComponent(`
 `)}`;
 
 export const BRAND = "#f66744";
-const LOGO_URL = "/pixaroma/assets/pixaroma_logo.svg";
+const LOGO_URL = "pixaroma_logo.svg";
 
 export function createDummyWidget(titleText, subtitleText, instructionText) {
   const imgSrc = PIXAROMA_LOGO;
@@ -175,7 +175,7 @@ export function getLogo(cb) {
     _logoCbs.forEach((fn) => fn(null));
     _logoCbs = [];
   };
-  img.src = LOGO_URL;
+  img.src = pixAsset(LOGO_URL);
 }
 
 export function createPlaceholder(name, buttonLabel, node, app) {

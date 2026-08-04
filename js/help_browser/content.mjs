@@ -277,8 +277,19 @@ export function renderArticle(main, entry, onNav, ctx) {
   const h = el("h2", "pixhb-arth");
   // A help def may name an icon, so a page about a toolbar button can show the
   // button rather than only describing it. Ours, not user input, but validated
-  // to a plain asset path anyway since it goes into a style property.
-  if (typeof help.icon === "string" && /^\/[\w\-./]+$/.test(help.icon)) {
+  // anyway since it goes into a style property.
+  //
+  // The address now comes from pixAsset(), so on a hosted ComfyUI it carries
+  // that deployment's prefix and can carry its auth token as a QUERY STRING.
+  // The old test demanded a plain /path of word characters, which passed
+  // locally (api_base is empty there) and rejected both hosted shapes - so the
+  // icon silently vanished on exactly the deployments the url change is for.
+  // What has to hold is that nothing can break OUT of the url(...) below, so
+  // reject the characters that could and accept the rest of the address.
+  const iconOK = typeof help.icon === "string"
+    && !/[\s"'()\\;{}<>]/.test(help.icon)
+    && (help.icon.startsWith("/") || /^https?:\/\//.test(help.icon));
+  if (iconOK) {
     const ic = el("span", "pixhb-articon");
     ic.style.webkitMaskImage = `url(${help.icon})`;
     ic.style.maskImage = `url(${help.icon})`;

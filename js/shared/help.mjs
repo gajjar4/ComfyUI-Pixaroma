@@ -39,9 +39,10 @@
 // app.loadGraphData once, the first time a panel is opened).
 
 import { app } from "/scripts/app.js";
+import { pixAsset } from "./api_url.mjs";
 
 const CSS_ID = "pix-help-css";
-const QUESTION_ICON = "/pixaroma/assets/icons/note/question.svg";
+const QUESTION_ICON = "icons/note/question.svg";
 const BRAND = "#f66744";
 
 // ── Per-node help registry ───────────────────────────────────
@@ -70,8 +71,8 @@ const CSS = `
 .pix-help-btn {
   width: 16px; height: 16px; flex: none; padding: 0; border: none;
   background-color: rgba(255,255,255,0.5);
-  -webkit-mask: url("${QUESTION_ICON}") center / contain no-repeat;
-  mask: url("${QUESTION_ICON}") center / contain no-repeat;
+  -webkit-mask: url("${pixAsset(QUESTION_ICON)}") center / contain no-repeat;
+  mask: url("${pixAsset(QUESTION_ICON)}") center / contain no-repeat;
   cursor: pointer; align-self: center;
   transition: background-color 0.12s;
 }
@@ -99,8 +100,8 @@ const CSS = `
 }
 .pix-help-h-icon {
   width: 18px; height: 18px; flex: none; background-color: ${BRAND};
-  -webkit-mask: url("${QUESTION_ICON}") center / contain no-repeat;
-  mask: url("${QUESTION_ICON}") center / contain no-repeat;
+  -webkit-mask: url("${pixAsset(QUESTION_ICON)}") center / contain no-repeat;
+  mask: url("${pixAsset(QUESTION_ICON)}") center / contain no-repeat;
 }
 .pix-help-h-title { flex: 1; font-size: 15px; font-weight: 600; color: #fff; line-height: 1.2; }
 .pix-help-close {

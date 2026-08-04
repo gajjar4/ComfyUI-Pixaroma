@@ -4,13 +4,14 @@
 // ╚═══════════════════════════════════════════════════════════════╝
 
 import { createPanel, createSliderRow } from "./components.mjs";
+import { pixAsset } from "../shared/api_url.mjs";
 
 /** Base path for layer icon SVGs. */
-const LAYER_ICON_BASE = "/pixaroma/assets/icons/layers/";
+const LAYER_ICON_BASE = "icons/layers/";
 
 function _layerIcon(name, size = 12) {
   const img = document.createElement("img");
-  img.src = LAYER_ICON_BASE + name + ".svg";
+  img.src = pixAsset(LAYER_ICON_BASE + name + ".svg");
   img.width = size;
   img.height = size;
   img.draggable = false;
@@ -24,7 +25,7 @@ function _layerIcon(name, size = 12) {
  */
 function _layerIconColored(name, color, size = 12) {
   const span = document.createElement("span");
-  const url = LAYER_ICON_BASE + name + ".svg";
+  const url = pixAsset(LAYER_ICON_BASE + name + ".svg");
   span.style.display = "inline-block";
   span.style.width = size + "px";
   span.style.height = size + "px";
@@ -44,9 +45,12 @@ function _layerActionBtn(iconName, title, onClick, cls = "") {
   const btn = document.createElement("button");
   btn.className = "pxf-layer-action-btn" + (cls ? " " + cls : "");
   btn.title = title;
-  // If iconName starts with "/", treat it as an absolute asset path
-  // (e.g. "/pixaroma/assets/icons/3D/drop-on-floor.svg") and render
-  // that directly. Otherwise prepend the default layers icon base.
+  // If iconName starts with "/", treat it as an already-built asset URL
+  // (i.e. the output of pixAsset(), e.g. pixAsset("icons/3D/drop-on-floor.svg"))
+  // and render it directly. Otherwise it is a bare icon NAME and we prepend the
+  // default layers icon base, routing it through pixAsset ourselves.
+  // Never hand this a raw "/pixaroma/assets/..." string - that path is blocked
+  // at the edge on a hosted ComfyUI. See js/shared/api_url.mjs.
   if (iconName.startsWith("/")) {
     const img = document.createElement("img");
     img.src = iconName;
@@ -305,7 +309,7 @@ export function createLayersList(config) {
   if (config.onDropToFloor)
     actions.appendChild(
       _layerActionBtn(
-        config.dropToFloorIcon || "/pixaroma/assets/icons/3D/drop-on-floor.svg",
+        config.dropToFloorIcon || pixAsset("icons/3D/drop-on-floor.svg"),
         config.dropToFloorTitle || "Drop to floor",
         config.onDropToFloor,
       ),

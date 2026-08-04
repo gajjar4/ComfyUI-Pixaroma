@@ -504,7 +504,7 @@ async function saveShownToOutput(node) {
     if (!blob) { cmpToast("Run the workflow first"); return; }
     const image_b64 = await blobToDataURL(blob);
     const { workflow, output } = await app.graphToPrompt();
-    const resp = await fetch("/pixaroma/api/preview/save", {
+    const resp = await fetch(pixApiUrl("/pixaroma/api/preview/save"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ image_b64, filename_prefix: "Compare", workflow, prompt: output }),
@@ -529,7 +529,7 @@ async function saveShownToDisk(node) {
     if (!blob) { cmpToast("Run the workflow first"); return; }
     const image_b64 = await blobToDataURL(blob);
     const { workflow, output } = await app.graphToPrompt();
-    const resp = await fetch("/pixaroma/api/preview/prepare", {
+    const resp = await fetch(pixApiUrl("/pixaroma/api/preview/prepare"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ image_b64, filename_prefix: "Compare", workflow, prompt: output }),

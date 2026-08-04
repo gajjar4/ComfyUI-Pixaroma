@@ -3,6 +3,7 @@ import {
   createPixaromaColorPicker,
   openPixaromaCompactColorPickerPopup,
 } from "../shared/color_picker.mjs";
+import { pixAsset } from "../shared/api_url.mjs";
 
 // Icon → pill class (must match css.mjs / sanitize.mjs allowlist).
 const ICON_TO_CLASS = {
@@ -428,7 +429,7 @@ function makeButtonModal(editor, onSubmit, initialValues) {
     if (opt.svg) {
       const ico = document.createElement("span");
       ico.className = "ico";
-      const url = `url(/pixaroma/assets/icons/ui/${opt.svg})`;
+      const url = `url(${pixAsset(`icons/ui/${opt.svg}`)})`;
       ico.style.webkitMaskImage = url;
       ico.style.maskImage = url;
       b.appendChild(ico);

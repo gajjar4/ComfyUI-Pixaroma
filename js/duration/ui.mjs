@@ -5,6 +5,7 @@
 // readout that always states what will be SENT, because snapping to the model's
 // pattern changes the length and that must never be hidden.
 
+import { pixAsset } from "../shared/api_url.mjs";
 import { applyAdaptiveCanvasOnly, isVueNodes } from "../shared/nodes2.mjs";
 import { installCanvasZoomPassthrough } from "../shared/canvas_zoom.mjs";
 import { installNodeAccent, ACC } from "../shared/node_settings.mjs";
@@ -128,8 +129,8 @@ export function injectCSS() {
   }
   .pix-dur-gear::before{
     content:""; display:block; width:14px; height:14px; background:#bbb;
-    -webkit-mask:url("/pixaroma/assets/icons/note/gear.svg") center/contain no-repeat;
-    mask:url("/pixaroma/assets/icons/note/gear.svg") center/contain no-repeat;
+    -webkit-mask:url("${pixAsset("icons/note/gear.svg")}") center/contain no-repeat;
+    mask:url("${pixAsset("icons/note/gear.svg")}") center/contain no-repeat;
   }
   .pix-dur-gear:hover::before{ background:${ACC}; }
 

@@ -3,6 +3,8 @@
 // ║  Reusable UI building blocks (buttons, panels, sliders, etc) ║
 // ╚═══════════════════════════════════════════════════════════════╝
 
+import { pixAsset } from "../shared/api_url.mjs";
+
 // ── Button ───────────────────────────────────────────────────
 export function createButton(text, opts = {}) {
   const btn = document.createElement("button");
@@ -360,7 +362,7 @@ export function createZoomControls(onZoomIn, onZoomOut, onFit) {
 
 // ── Transform Panel ──────────────────────────────────────────
 export function createTransformPanel(config) {
-  const _ui = "/pixaroma/assets/icons/ui/";
+  const _ui = "icons/ui/";
   const collapsed =
     config.startCollapsed !== undefined ? config.startCollapsed : true;
   const panel = createPanel("Transform Properties", {
@@ -370,37 +372,37 @@ export function createTransformPanel(config) {
 
   const fitW = createButton("Fit W", {
     variant: "sm",
-    iconSrc: _ui + "fit-width.svg",
+    iconSrc: pixAsset(_ui + "fit-width.svg"),
     onClick: config.onFitWidth,
     title: "Fit to canvas width",
   });
   const fitH = createButton("Fit H", {
     variant: "sm",
-    iconSrc: _ui + "fit-height.svg",
+    iconSrc: pixAsset(_ui + "fit-height.svg"),
     onClick: config.onFitHeight,
     title: "Fit to canvas height",
   });
   const flipH = createButton("Flip H", {
     variant: "sm",
-    iconSrc: _ui + "flip-horizontal.svg",
+    iconSrc: pixAsset(_ui + "flip-horizontal.svg"),
     onClick: config.onFlipH,
     title: "Flip horizontally",
   });
   const flipV = createButton("Flip V", {
     variant: "sm",
-    iconSrc: _ui + "flip-vertical.svg",
+    iconSrc: pixAsset(_ui + "flip-vertical.svg"),
     onClick: config.onFlipV,
     title: "Flip vertically",
   });
   const rotCCW = createButton("-90°", {
     variant: "sm",
-    iconSrc: _ui + "rotate-ccw.svg",
+    iconSrc: pixAsset(_ui + "rotate-ccw.svg"),
     onClick: config.onRotateCCW,
     title: "Rotate -90°",
   });
   const rotCW = createButton("+90°", {
     variant: "sm",
-    iconSrc: _ui + "rotate-cw.svg",
+    iconSrc: pixAsset(_ui + "rotate-cw.svg"),
     onClick: config.onRotateCW,
     title: "Rotate +90°",
   });

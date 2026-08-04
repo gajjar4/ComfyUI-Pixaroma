@@ -5,6 +5,7 @@ import { installResizeFloor } from "../shared/resize_floor.mjs";
 import { installCanvasZoomPassthrough } from "../shared/canvas_zoom.mjs";
 import { registerNodeHelp } from "../shared/help.mjs";
 import { installNodeAccent, registerNodeAccent, nodeSetting } from "../shared/node_settings.mjs";
+import { pixAsset } from "../shared/api_url.mjs";
 
 // ╔══════════════════════════════════════════════════════════════════════╗
 // ║  Run Log Pixaroma — the last 10 run times, on the node                ║
@@ -549,12 +550,13 @@ function exportTxt(node) {
 }
 
 // A subtle footer icon button (grey mask icon → brand orange on hover). Reuses the
-// shared UI SVGs served at /pixaroma/assets/icons/ui/.
+// shared UI SVGs, asked for through pixAsset (i.e. /pixaroma/api/assets/icons/ui/ —
+// a hosted ComfyUI's gateway blocks the older /pixaroma/assets/ form at its edge).
 function iconBtn(iconFile, title) {
   const b = el("button", "pix-rl-fbtn");
   b.type = "button"; b.title = title;
   const ico = el("span", "pix-rl-ico");
-  const url = "url(/pixaroma/assets/icons/ui/" + iconFile + ")";
+  const url = "url(" + pixAsset("icons/ui/" + iconFile) + ")";
   ico.style.webkitMaskImage = url; ico.style.maskImage = url;
   b.appendChild(ico);
   return b;

@@ -5,6 +5,7 @@
 
 import { createButton, createPanel, _dangerIcon } from "./components.mjs";
 import { UI_ICON } from "./theme.mjs";
+import { pixAsset } from "../shared/api_url.mjs";
 
 // ── Canvas Settings (document size/ratio) ────────────────────
 
@@ -90,7 +91,7 @@ export function createCanvasSettings(config) {
 
   const swapBtn = createButton("", {
     variant: "icon",
-    iconSrc: UI_ICON + "swap.svg",
+    iconSrc: pixAsset(UI_ICON + "swap.svg"),
     onClick: () => _swap(),
     title: "Swap width and height",
   });
@@ -348,7 +349,7 @@ export function createCanvasToolbar(config) {
 
   const addBtn = createButton(addImageLabel, {
     variant: "full",
-    iconSrc: UI_ICON + "upload.svg",
+    iconSrc: pixAsset(UI_ICON + "upload.svg"),
     onClick: () => fileInput.click(),
     title: "Browse for an image file",
   });

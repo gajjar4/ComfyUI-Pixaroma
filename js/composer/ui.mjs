@@ -20,6 +20,7 @@ import {
 // right sidebar fails to build and the editor won't open.
 import { PixaromaAPI } from "./api.mjs";
 import { fetchBgRemovalInfo, buildBgRemovalDropdown } from "../framework/bg_removal_dropdown.mjs";
+import { pixAsset } from "../shared/api_url.mjs";
 import { PRESETS, NEUTRAL } from "./fx_engine.mjs";
 
 // Legacy values that predate the multi-model dropdown — remapped to
@@ -506,7 +507,7 @@ export class PixaromaUI {
       const img = new Image();
       img.onload = () => this.refreshLayersPanel();
       img.onerror = () => {};
-      img.src = "/pixaroma/assets/icons/layers/fx.svg";
+      img.src = pixAsset("icons/layers/fx.svg");
       this._fxThumbImg = img;
     }
     return this._fxThumbImg;
@@ -1202,7 +1203,7 @@ export class PixaromaUI {
     if (this._canvasToolbar) this._canvasToolbar.setupDropZone(core.workspace);
 
     // Align bar (in titlebar center) -- using SVG icons
-    const _ai = "/pixaroma/assets/icons/ui/";
+    const _ai = "icons/ui/";
     const alignBar = document.createElement("div");
     alignBar.style.cssText = "display:flex;align-items:center;gap:4px;";
     const alignBtns = [
@@ -1235,7 +1236,7 @@ export class PixaromaUI {
       }
       const btn = createButton("", {
         variant: "sm",
-        iconSrc: _ai + cfg.icon,
+        iconSrc: pixAsset(_ai + cfg.icon),
         title: cfg.title,
       });
       btn.id = cfg.id;

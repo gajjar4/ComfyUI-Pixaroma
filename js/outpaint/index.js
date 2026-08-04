@@ -13,7 +13,7 @@
 
 import { app } from "/scripts/app.js";
 import { api } from "/scripts/api.js";
-import { pixApiUrl } from "../shared/api_url.mjs";
+import { pixApiUrl, pixAsset } from "../shared/api_url.mjs";
 import { applyAdaptiveCanvasOnly, canvasBackingScale, installZoomRepaint, isVueNodes } from "../shared/nodes2.mjs";
 import { isGraphLoading } from "../shared/graph_loading.mjs";
 import { registerNodeSettings, globalAccent } from "../shared/node_settings.mjs";
@@ -290,8 +290,8 @@ function injectCSS() {
     /* A mask, not a text glyph: no font-fallback tofu risk, and it matches the
        Reset on the shared pad panel. */
     .pix-op-reset-ic { width:12px; height:12px; background-color:currentColor;
-      -webkit-mask: url("/pixaroma/assets/icons/ui/reset.svg") center/12px 12px no-repeat;
-              mask: url("/pixaroma/assets/icons/ui/reset.svg") center/12px 12px no-repeat; }
+      -webkit-mask: url("${pixAsset("icons/ui/reset.svg")}") center/12px 12px no-repeat;
+              mask: url("${pixAsset("icons/ui/reset.svg")}") center/12px 12px no-repeat; }
 
     /* The fill-colour swatch. Clickable on the limit row (opens the fill
        picker); a plain readout in the folded summary. */

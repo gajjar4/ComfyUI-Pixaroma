@@ -9,6 +9,8 @@
 // Only the custom path goes over the wire, so an ordinary recipe node never
 // makes a request at all.
 
+import { pixApiUrl } from "../shared/api_url.mjs";
+
 const CACHE = new Map();        // key -> {ok, frames, actual}
 const INFLIGHT = new Map();     // key -> Promise
 const MAX_CACHE = 200;
@@ -32,7 +34,7 @@ export async function previewCustom(node, st) {
 
   const req = (async () => {
     try {
-      const res = await fetch("/pixaroma/api/duration/preview", {
+      const res = await fetch(pixApiUrl("/pixaroma/api/duration/preview"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         // no-store: this is a computed answer, and a cached one would go stale

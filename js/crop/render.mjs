@@ -2,6 +2,7 @@
 // Pixaroma Image Crop Editor — Render (canvas rendering, aspect ratio, save)
 // ============================================================
 import { CropEditor, BRAND, RATIOS, SNAPS, CropAPI } from "./core.mjs";
+import { pixApiUrl } from "../shared/api_url.mjs";
 
 const proto = CropEditor.prototype;
 
@@ -40,7 +41,7 @@ proto._loadImageFromURL = function (url, onDone) {
 proto._uploadSourceImage = async function (dataURL) {
   try {
     const { api } = await import("/scripts/api.js");
-    const res = await api.fetchApi("/pixaroma/api/crop/upload_src", {
+    const res = await api.fetchApi(pixApiUrl("/pixaroma/api/crop/upload_src"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ project_id: this.projectId, image: dataURL }),

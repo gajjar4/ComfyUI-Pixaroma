@@ -2,7 +2,7 @@
 // Pixaroma 3D Editor — Save/restore, background image mgmt
 // ============================================================
 import { Pixaroma3DEditor, getTHREE, ThreeDAPI } from "./core.mjs";
-import { pixApiUrl } from "../shared/api_url.mjs";
+import { pixApiUrl, pixAsset } from "../shared/api_url.mjs";
 import { loadTeapotGeometry, getShapeDefaults } from "./shapes.mjs";
 import {
   COMPOSITES, isCompositeType, buildComposite, getCompositeDefaults,
@@ -448,7 +448,7 @@ Pixaroma3DEditor.prototype._addObjFromData = function (od) {
       if (this._closed) return;
       const { loadGLBFromURL, prepareImportedGroup, wrapImportPivot } = mod;
       try {
-        const innerGroup = await loadGLBFromURL("/pixaroma/assets/models/bunny.glb");
+        const innerGroup = await loadGLBFromURL(pixAsset("models/bunny.glb"));
         // Replace placeholder in-place so the layer panel entry and
         // object ordering don't shuffle.
         const idx = this.objects.indexOf(placeholder);

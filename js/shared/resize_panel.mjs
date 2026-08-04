@@ -4,6 +4,7 @@
 // js/load_image/resize_modes.mjs.
 import { openPixaromaColorPickerModal } from "./color_picker.mjs";
 import { BRAND } from "./utils.mjs";
+import { pixAsset } from "./api_url.mjs";
 
 // The per-mode panels use `pix-li-*` class names. Load Image injects these in
 // its own ui.mjs; any OTHER node reusing buildModePanel must call
@@ -146,8 +147,8 @@ export function injectResizePanelCSS() {
       position: absolute;
       inset: 0;
       background-color: currentColor;
-      -webkit-mask: url("/pixaroma/assets/icons/ui/swap.svg") center/14px 14px no-repeat;
-              mask: url("/pixaroma/assets/icons/ui/swap.svg") center/14px 14px no-repeat;
+      -webkit-mask: url("${pixAsset("icons/ui/swap.svg")}") center/14px 14px no-repeat;
+              mask: url("${pixAsset("icons/ui/swap.svg")}") center/14px 14px no-repeat;
       pointer-events: none;
     }
     .pix-li-custom-ratio-swap:hover { color: ${BRAND}; border-color: ${BRAND}; }
@@ -242,8 +243,8 @@ export function injectResizePanelCSS() {
       position: absolute;
       inset: 0;
       background-color: currentColor;
-      -webkit-mask: url("/pixaroma/assets/icons/ui/swap.svg") center/12px 12px no-repeat;
-              mask: url("/pixaroma/assets/icons/ui/swap.svg") center/12px 12px no-repeat;
+      -webkit-mask: url("${pixAsset("icons/ui/swap.svg")}") center/12px 12px no-repeat;
+              mask: url("${pixAsset("icons/ui/swap.svg")}") center/12px 12px no-repeat;
       pointer-events: none;
     }
     .pix-li-swap:hover { color: ${BRAND}; border-color: ${BRAND}; }
@@ -329,8 +330,8 @@ export function injectResizePanelCSS() {
     .pix-li-pad-reset:hover { border-color: ${BRAND}; color: ${BRAND}; }
     .pix-li-pad-reset-ic {
       width: 11px; height: 11px; flex: none; background-color: currentColor;
-      -webkit-mask: url("/pixaroma/assets/icons/ui/reset.svg") center/11px 11px no-repeat;
-              mask: url("/pixaroma/assets/icons/ui/reset.svg") center/11px 11px no-repeat;
+      -webkit-mask: url("${pixAsset("icons/ui/reset.svg")}") center/11px 11px no-repeat;
+              mask: url("${pixAsset("icons/ui/reset.svg")}") center/11px 11px no-repeat;
     }
     .pix-li-pad-colorcell {
       grid-column: 3; grid-row: 3;

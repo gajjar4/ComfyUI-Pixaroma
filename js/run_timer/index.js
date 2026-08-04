@@ -9,6 +9,7 @@ import {
 } from "../shared/node_settings.mjs";
 import { registerNodeHelp } from "../shared/help.mjs";
 import { createPixaromaColorPicker } from "../shared/color_picker.mjs";
+import { pixApiUrl, pixAsset } from "../shared/api_url.mjs";
 import { openRunHistory, closeRunHistoryFor, refreshRunHistory } from "./history.mjs";
 
 // ╔══════════════════════════════════════════════════════════════════════╗
@@ -108,7 +109,7 @@ let _soundsPromise = null;
 // promise: maybeChime relies on that fast path for a very quick first run.
 function fetchSounds(force = false) {
   if (_soundsPromise && !force) return _soundsPromise;
-  _soundsPromise = fetch("/pixaroma/api/sounds", { cache: "no-store" })
+  _soundsPromise = fetch(pixApiUrl("/pixaroma/api/sounds"), { cache: "no-store" })
     .then((r) => r.json())
     .then((j) => (Array.isArray(j && j.sounds) ? j.sounds : []))
     .catch(() => _soundsCache || []);
@@ -120,7 +121,7 @@ function defaultSound() {
 }
 async function playSound(filename, volume01) {
   if (typeof filename !== "string" || !filename) return;
-  const url = `/pixaroma/assets/sounds/${encodeURIComponent(filename)}`;
+  const url = pixAsset(`sounds/${encodeURIComponent(filename)}`);
   const audio = new Audio(url);
   const v = Number(volume01);
   audio.volume = Number.isFinite(v) ? Math.max(0, Math.min(1, v)) : 0.7;

@@ -16,6 +16,7 @@
 
 import { getFontCatalog, loadFontForLayer, refreshFontCatalog } from "./fonts.mjs";
 import { openPixaromaColorPickerModal } from "../shared/color_picker.mjs";
+import { pixAsset } from "../shared/api_url.mjs";
 
 const BRAND = "#f66744";
 
@@ -104,9 +105,9 @@ export function createTextEditorPanel({ mount, onChange, onReset, onAlignCanvas,
   // the caption + the separate "Position on canvas" row below make the
   // distinction clear.
   const ALIGN_ICON = {
-    left:   "/pixaroma/assets/icons/ui/align-left.svg",
-    center: "/pixaroma/assets/icons/ui/align-center-h.svg",
-    right:  "/pixaroma/assets/icons/ui/align-right.svg",
+    left:   pixAsset("icons/ui/align-left.svg"),
+    center: pixAsset("icons/ui/align-center-h.svg"),
+    right:  pixAsset("icons/ui/align-right.svg"),
   };
   // Text direction: Horizontal | Vertical. Vertical stacks each character
   // top-to-bottom; line breaks become columns (left to right). Sits above the
@@ -202,12 +203,12 @@ export function createTextEditorPanel({ mount, onChange, onReset, onAlignCanvas,
   // trio (top / middle / bottom).
   if (typeof onAlignCanvas === "function") {
     const POS_ICON = {
-      left:    "/pixaroma/assets/icons/ui/align-left.svg",
-      centerH: "/pixaroma/assets/icons/ui/align-center-h.svg",
-      right:   "/pixaroma/assets/icons/ui/align-right.svg",
-      top:     "/pixaroma/assets/icons/ui/align-top.svg",
-      centerV: "/pixaroma/assets/icons/ui/align-center-v.svg",
-      bottom:  "/pixaroma/assets/icons/ui/align-bottom.svg",
+      left:    pixAsset("icons/ui/align-left.svg"),
+      centerH: pixAsset("icons/ui/align-center-h.svg"),
+      right:   pixAsset("icons/ui/align-right.svg"),
+      top:     pixAsset("icons/ui/align-top.svg"),
+      centerV: pixAsset("icons/ui/align-center-v.svg"),
+      bottom:  pixAsset("icons/ui/align-bottom.svg"),
     };
     const POS_TITLE = {
       left: "Move text to left edge", centerH: "Center text horizontally", right: "Move text to right edge",

@@ -16,21 +16,25 @@ const _assetCache = new Map(); // url → cached Group
 
 async function getGLTFLoader() {
   if (_GLTFLoader) return _GLTFLoader;
-  const mod = await import(THREE_VENDOR + "/examples/jsm/loaders/GLTFLoader.mjs");
+  // pixApiUrl on the COMPLETE tail, exactly as core.mjs::loadThree does. Both
+  // must agree: every addon here does `import "../../../three.mjs"`, so a bare
+  // URL here would resolve to /pixaroma/vendor/three/three.mjs while core loaded
+  // /api/pixaroma/vendor/three/three.mjs — a SECOND three.js instance.
+  const mod = await import(pixApiUrl(THREE_VENDOR + "/examples/jsm/loaders/GLTFLoader.mjs"));
   _GLTFLoader = mod.GLTFLoader;
   return _GLTFLoader;
 }
 
 async function getOBJLoader() {
   if (_OBJLoader) return _OBJLoader;
-  const mod = await import(THREE_VENDOR + "/examples/jsm/loaders/OBJLoader.mjs");
+  const mod = await import(pixApiUrl(THREE_VENDOR + "/examples/jsm/loaders/OBJLoader.mjs"));
   _OBJLoader = mod.OBJLoader;
   return _OBJLoader;
 }
 
 async function getMTLLoader() {
   if (_MTLLoader) return _MTLLoader;
-  const mod = await import(THREE_VENDOR + "/examples/jsm/loaders/MTLLoader.mjs");
+  const mod = await import(pixApiUrl(THREE_VENDOR + "/examples/jsm/loaders/MTLLoader.mjs"));
   _MTLLoader = mod.MTLLoader;
   return _MTLLoader;
 }
@@ -38,7 +42,7 @@ async function getMTLLoader() {
 async function getMergeVertices() {
   if (_mergeVertices) return _mergeVertices;
   const mod = await import(
-    THREE_VENDOR + "/examples/jsm/utils/BufferGeometryUtils.mjs"
+    pixApiUrl(THREE_VENDOR + "/examples/jsm/utils/BufferGeometryUtils.mjs")
   );
   _mergeVertices = mod.mergeVertices;
   return _mergeVertices;
@@ -192,9 +196,9 @@ export function viewURLForStoredPath(path) {
   const parts = path.split("/");
   const fname = parts.pop();
   const subfolder = parts.join("/");
-  return pixApiUrl("/view?filename=") + encodeURIComponent(fname)
+  return pixApiUrl("/view?filename=" + encodeURIComponent(fname)
        + "&type=input&subfolder=" + encodeURIComponent(subfolder)
-       + "&t=" + Date.now();
+       + "&t=" + Date.now());
 }
 
 // Read a File as a base64 data URL (used by the upload pipeline).
@@ -220,9 +224,9 @@ async function uploadOne(projectId, file) {
   const parts = res.path.split("/");
   const fname = parts.pop();
   const subfolder = parts.join("/");
-  const url = pixApiUrl("/view?filename=") + encodeURIComponent(fname)
+  const url = pixApiUrl("/view?filename=" + encodeURIComponent(fname)
             + "&type=input&subfolder=" + encodeURIComponent(subfolder)
-            + "&t=" + Date.now();
+            + "&t=" + Date.now());
   return { path: res.path, storedName: res.filename, url, origName: file.name };
 }
 

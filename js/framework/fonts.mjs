@@ -5,8 +5,10 @@
 // ║  Math doc: docs/text-overlay-render.md                        ║
 // ╚═══════════════════════════════════════════════════════════════╝
 
+import { pixApiUrl, pixAsset } from "../shared/api_url.mjs";
+
 const FONT_LIST_URL = "/pixaroma/api/fonts/list";
-const FONT_BASE_URL = "/pixaroma/assets/fonts/";
+const FONT_BASE_URL = "fonts/";
 
 let _catalog = null;
 let _catalogPromise = null;
@@ -19,7 +21,7 @@ export async function getFontCatalog() {
   if (_catalog) return _catalog;
   if (_catalogPromise) return _catalogPromise;
   _catalogPromise = (async () => {
-    const resp = await fetch(FONT_LIST_URL, { cache: "no-store" });
+    const resp = await fetch(pixApiUrl(FONT_LIST_URL), { cache: "no-store" });
     if (!resp.ok) throw new Error(`fonts/list HTTP ${resp.status}`);
     _catalog = await resp.json();
     return _catalog;
@@ -33,7 +35,7 @@ export async function refreshFontCatalog() {
   // Assign the in-flight fetch to _catalogPromise so a concurrent
   // getFontCatalog() awaits THIS refresh instead of launching a second fetch.
   _catalogPromise = (async () => {
-    const resp = await fetch(FONT_LIST_URL + "?refresh=1", { cache: "no-store" });
+    const resp = await fetch(pixApiUrl(FONT_LIST_URL + "?refresh=1"), { cache: "no-store" });
     if (!resp.ok) throw new Error(`fonts/list refresh HTTP ${resp.status}`);
     _catalog = await resp.json();
     return _catalog;
@@ -78,9 +80,9 @@ function makeVariant(font, w, synthesizedItalic) {
 /** File URL for a variant. Custom fonts come from the drop-in serving route. */
 export function urlForVariant(variant) {
   if (variant.source === "custom") {
-    return `/pixaroma/api/fonts/file/${encodeURIComponent(variant.file)}`;
+    return pixApiUrl(`/pixaroma/api/fonts/file/${encodeURIComponent(variant.file)}`);
   }
-  return FONT_BASE_URL + variant.file;
+  return pixAsset(FONT_BASE_URL + variant.file);
 }
 
 /** Load the underlying TTF file via FontFace API. Idempotent.
