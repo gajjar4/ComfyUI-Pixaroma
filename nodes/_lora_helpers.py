@@ -648,7 +648,14 @@ def write_custom_triggers(path, store):
                 data[key] = clean
             if len(data) >= _MAX_CUSTOM_LORAS:
                 break
-    tmp = str(path) + ".tmp"
+    # pid AND thread id, for the same measured reason as write_custom_preview
+    # below: the route hands this to run_in_executor, so two saves land on two
+    # pool threads sharing one pid and, with a fixed name, one temp file. Here it
+    # matters MORE - interleaved writes publish damaged JSON, read_custom_triggers
+    # swallows that as {}, and the next save rewrites the store from the empty
+    # read, taking EVERY LoRA's words with it. Fixing only the sibling would have
+    # left the worse half of an identical bug in the same module.
+    tmp = "%s.%d.%d.tmp" % (path, os.getpid(), threading.get_ident())
     try:
         with open(tmp, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)

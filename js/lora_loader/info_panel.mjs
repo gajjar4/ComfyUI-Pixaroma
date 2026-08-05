@@ -519,17 +519,26 @@ export async function openInfoPanel(node, id, refresh) {
    * bullseye is not handled twice.
    */
   function wirePanelDrop(p) {
+    // The cursor must promise exactly what the drop will do. Gating the two on
+    // DIFFERENT conditions showed a "copy" cursor on a row with no LoRA and then
+    // did nothing at all when released - a silent no-op is worse than a refusal.
+    const takes = () => thumbsOn() && !!name;
     p.addEventListener("dragover", (ev) => {
       ev.preventDefault();               // "a drop is allowed here", i.e. not the canvas
-      if (ev.dataTransfer) ev.dataTransfer.dropEffect = thumbsOn() ? "copy" : "none";
+      if (ev.dataTransfer) ev.dataTransfer.dropEffect = takes() ? "copy" : "none";
     });
     p.addEventListener("drop", (ev) => {
       ev.preventDefault();
       ev.stopPropagation();
-      if (!thumbsOn() || !name) return;   // swallowed, deliberately: no picture slot on offer
+      if (!takes()) return;               // swallowed, deliberately: no picture slot on offer
       const f = ev.dataTransfer?.files && ev.dataTransfer.files[0];
-      if (f) applyPicture(f);
-      else showMsg("Drop the picture onto the small box at the top left.");
+      if (f) { applyPicture(f); return; }
+      // Not a file. Say where the picture goes - but NOT when the release landed
+      // in the add-a-word field: showMsg re-renders, and renderBody builds that
+      // input fresh, so a half-typed word would be thrown away for a stray drag.
+      if (!ev.target.closest?.(".pix-ll-addtrig")) {
+        showMsg("Drop the picture onto the small box at the top left.");
+      }
     });
   }
 
@@ -802,11 +811,25 @@ export async function openInfoPanel(node, id, refresh) {
   const first = await loraInfo(name);
   if (!panel.isConnected) return;
   // `first.stale` means something changed this LoRA while the request was out -
-  // the user set or removed a picture during a slow first load. Painting it would
-  // undo what they just did (measured: the picture and its remove ✕ vanished, and
-  // the panel could not get them back). reloadInfo() has already put the truth in
-  // `info`, so the only right move is to drop this answer.
-  if (first.ok && first.info && !first.stale) { info = first.info; hydrateCustom(); }
+  // the user set a picture or typed a trigger word during a slow first load.
+  // Painting it would undo what they just did (measured: the picture and its
+  // remove ✕ vanished, and the panel could not get them back).
+  //
+  // But DROPPING it is not enough either, and the first cut of this got that
+  // wrong: the stale reply also carries the title, the base model, the rank and
+  // the file's own trigger words, none of which the invalidation touched, and
+  // hydrateCustom() has NO other call site. Measured: typing a word during a slow
+  // load left the panel showing the raw filename, no metadata and 1 chip instead
+  // of 20, with the user's stored words never reaching the row. So ASK AGAIN
+  // rather than give up - once, forced, no loop.
+  if (first.ok && first.info && !first.stale) {
+    info = first.info;
+    hydrateCustom();
+  } else if (first.stale) {
+    const again = await loraInfo(name, true);
+    if (!panel.isConnected) return;
+    if (again.ok && again.info) { info = again.info; hydrateCustom(); }
+  }
   renderBody();
   place(panel, node);
 

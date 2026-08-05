@@ -54,7 +54,16 @@ export async function loraInfo(name, force = false) {
   // so they share one response instead of racing to overwrite the cache.
   if (!force && _infoPromise.has(name)) return _infoPromise.get(name);
   const gen = genOf(name);
-  const p = (async () => {
+  // Declared BEFORE the initializer that closes over it. The `finally` below
+  // reads `p`, so with `const p = (async () => {...})()` a synchronous throw
+  // inside the try (an unpaired surrogate reaching encodeURIComponent, say)
+  // would hit the temporal dead zone, the finally would throw a ReferenceError
+  // instead of clearing the slot, and every later call for that LoRA would be
+  // handed the same rejected promise forever. `undefined` here is harmless: the
+  // ownership test then only matches a genuinely empty slot, where delete is a
+  // no-op.
+  let p;
+  p = (async () => {
     try {
       const r = await fetch(pixApiUrl("/pixaroma/api/lora/info?name=" + encodeURIComponent(name)),
                             { cache: "no-store" });
