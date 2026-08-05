@@ -81,12 +81,21 @@ export function injectCSS() {
     background:rgba(0,0,0,0.25); border-radius:4px; padding:5px 8px; font-size:11px;
     color:#aaa; line-height:1.5; display:flex; align-items:center; gap:7px;
   }
-  .${ROOT} .out .play{
-    flex:none; width:0; height:0; border-style:solid; border-width:5px 0 5px 8px;
-    border-color:transparent transparent transparent ${ACC}; cursor:pointer;
+  /* A REAL hit area. The bare triangle was ~8x10px, which is findable by eye
+     and not by mouse - the first thing reported about this node. The glyph
+     inside stays small; the button around it is 26x22. */
+  .${ROOT} .out .playbtn{
+    flex:none; width:26px; height:22px; margin:-3px 0 -3px -3px;
+    display:flex; align-items:center; justify-content:center; cursor:pointer;
+    border-radius:4px;
   }
-  .${ROOT} .out .stop{
-    flex:none; width:9px; height:9px; background:${ACC}; cursor:pointer; border-radius:1px;
+  .${ROOT} .out .playbtn:hover{ background:rgba(255,255,255,0.08); }
+  .${ROOT} .out .playbtn .play{
+    width:0; height:0; border-style:solid; border-width:6px 0 6px 10px;
+    border-color:transparent transparent transparent ${ACC};
+  }
+  .${ROOT} .out .playbtn .stop{
+    width:10px; height:10px; background:${ACC}; border-radius:1px;
   }
   .${ROOT} .out .tx{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .${ROOT} .out .warn{ color:#f2b134; }
@@ -170,14 +179,60 @@ async function openPicker(node, anchor, onPick) {
   placeZoomedPopup(pop, anchor, { baseFontPx: 12, minWidthPx: 160 });
 }
 
+/** The `seconds` input slot, whatever index it sits at. */
+function secondsSlot(node) {
+  return node?.inputs?.find((i) => i && i.name === "seconds") || null;
+}
+
+/** Is the seconds dot actually connected right now? */
+function durationWired(node) {
+  const s = secondsSlot(node);
+  return !!(s && s.link != null);
+}
+
+/**
+ * The length the upstream node says it will send, WITHOUT running anything.
+ *
+ * A node that knows its own numeric output publishes it as `_pixLiveSeconds`
+ * (Duration Pixaroma does). That is what lets the selection resize the instant
+ * you draw the wire instead of only after a run.
+ *
+ * The guards are the ones [[reference_upstream_preview_is_not_output]] earned:
+ * check the WIRE not a cache, refuse a MUTED (2) or BYPASSED (4) upstream
+ * because a bypassed node passes its own input through and never produces this
+ * value, and read the DIRECT upstream only.
+ */
+function upstreamSeconds(node) {
+  const slot = secondsSlot(node);
+  if (!slot || slot.link == null) return null;
+  const graph = node.graph;
+  if (!graph) return null;
+  let link = graph.links?.[slot.link];
+  if (!link && typeof graph.links?.get === "function") link = graph.links.get(slot.link);
+  if (!link) return null;
+  const src = graph.getNodeById?.(link.origin_id);
+  if (!src || src.mode === 2 || src.mode === 4) return null;
+  const v = src._pixLiveSeconds;
+  return Number.isFinite(v) && v > 0 ? v : null;
+}
+
 /** The length of the window the face should DRAW, in seconds. */
 function windowSeconds(node, st, duration) {
-  // Only Python sees a wired duration, so before the first run there is nothing
-  // truthful to draw but the fallback. `_pixLaRun` is runtime-only on purpose:
-  // writing a run result to node.properties would flag a clean workflow
-  // modified on every execution (Vue Compat #18).
-  const wired = node?._pixLaRun?.wired ? node._pixLaRun.length : null;
-  if (wired != null && wired > 0) return wired;
+  // Read the LINK, not the last run: the wire is true the moment it is drawn,
+  // whereas _pixLaRun only exists after an execution. (_pixLaRun stays
+  // runtime-only on purpose - writing a run result to node.properties would
+  // flag a clean workflow modified on every execution, Vue Compat #18.)
+  if (durationWired(node)) {
+    // Live upstream value first: it is current, where the run cache can belong
+    // to a wire that has since been moved.
+    const live = upstreamSeconds(node);
+    if (live != null) return live;
+    const ran = node?._pixLaRun?.wired ? node._pixLaRun.length : null;
+    if (ran != null && ran > 0) return ran;
+    // Wired to something that cannot tell us in advance: the typed length is a
+    // better stand-in than the whole file, and the readout says it is a guess.
+    return st.length > 0 ? st.length : Math.max(0, duration - st.start);
+  }
   if (st.whenUnwired === "length" && st.length > 0) return st.length;
   return Math.max(0, duration - st.start);
 }
@@ -244,6 +299,8 @@ export function buildFace(node, openPanel) {
   wavebox.className = "wavebox";
   const wave = document.createElement("canvas");
   wave.className = "wave";
+  wave.title = "Drag either orange edge to trim, drag the middle to slide the "
+    + "selection, or click anywhere to jump there";
   const times = document.createElement("div");
   times.className = "times";
   const tA = document.createElement("span");
@@ -292,17 +349,20 @@ export function buildFace(node, openPanel) {
 
   const out = document.createElement("div");
   out.className = "out";
+  const playBtn = document.createElement("span");
+  playBtn.className = "playbtn";
+  playBtn.title = "Play the selected part";
   const play = document.createElement("span");
   play.className = "play";
-  play.title = "Play the selected part";
+  playBtn.appendChild(play);
   const tx = document.createElement("span");
   tx.className = "tx";
-  out.append(play, tx);
-  play.addEventListener("click", () => togglePlay(node));
+  out.append(playBtn, tx);
+  playBtn.addEventListener("click", () => togglePlay(node));
 
   root.append(fileRow, wavebox, num, out);
 
-  node._pixLaEls = { root, nm, wave, tA, tSel, tB, inp, tx, play };
+  node._pixLaEls = { root, nm, wave, tA, tSel, tB, inp, tx, play, playBtn };
   node._pixLaDur = 0;
   attachDrag(node, wave);
   attachSettings(node, file, openPanel);
@@ -343,43 +403,132 @@ function attachSettings(node, el, openPanel) {
   });
 }
 
-/** Drag anywhere on the waveform to move the window's start. */
+// How close to an edge counts as grabbing its handle, in CSS pixels. Generous
+// on purpose: the first version had no handles at all and the window jumped so
+// its CENTRE landed under the cursor, which reads as the drag lagging behind.
+const HANDLE_PX = 8;
+const MIN_WINDOW_S = 0.1;
+
+/** Which part of the selection is under this x? */
+function zoneAt(node, wave, clientX) {
+  const dur = node._pixLaDur || 0;
+  const r = wave.getBoundingClientRect();
+  if (!r.width || dur <= 0) return { zone: null, r, dur };
+  const st = readState(node);
+  const len = windowSeconds(node, st, dur);
+  const x0 = (st.start / dur) * r.width;
+  const x1 = (Math.min(dur, st.start + len) / dur) * r.width;
+  const x = clientX - r.left;
+  let zone;
+  if (Math.abs(x - x0) <= HANDLE_PX) zone = "start";
+  else if (!durationWired(node) && Math.abs(x - x1) <= HANDLE_PX) zone = "end";
+  else if (x > x0 && x < x1) zone = "move";
+  else zone = "jump";
+  return { zone, r, dur, st, len, x };
+}
+
+/**
+ * Drag the edges to trim, drag the middle to slide, click outside to jump.
+ *
+ * The END edge only moves when the duration input is UNWIRED - with a wire the
+ * length belongs to whatever is upstream, and letting the mouse fight it would
+ * silently disagree with the number actually used at run time.
+ */
 function attachDrag(node, wave) {
+  // Cursor feedback, so the handles are discoverable without a tooltip.
+  wave.addEventListener("pointermove", (e) => {
+    if (node._pixLaDragging) return;
+    const { zone } = zoneAt(node, wave, e.clientX);
+    wave.style.cursor = !zone ? "default"
+      : (zone === "start" || zone === "end") ? "ew-resize"
+      : zone === "move" ? "grab" : "pointer";
+  });
+
   wave.addEventListener("pointerdown", (e) => {
-    const dur = node._pixLaDur || 0;
-    if (dur <= 0) return;
+    const info = zoneAt(node, wave, e.clientX);
+    if (!info.zone) return;
     e.stopPropagation();
     e.preventDefault();
     try { wave.setPointerCapture(e.pointerId); } catch (_x) { /* mouse only */ }
+    node._pixLaDragging = true;
+    wave.style.cursor = info.zone === "move" ? "grabbing" : "ew-resize";
 
-    const apply = (ev) => {
-      const r = wave.getBoundingClientRect();
-      if (!r.width) return;
-      const frac = Math.max(0, Math.min(1, (ev.clientX - r.left) / r.width));
-      const st = readState(node);
-      const len = windowSeconds(node, st, dur);
-      // Grab the MIDDLE of the window, which is what the cursor is pointing at.
-      const start = Math.max(0, Math.min(dur, frac * dur - len / 2));
-      writeState(node, { start: Math.round(start * 100) / 100 });
-      renderFace(node);
+    const { dur } = info;
+    const st0 = readState(node);
+    const len0 = windowSeconds(node, st0, dur);
+    const end0 = Math.min(dur, st0.start + len0);
+    const rect = () => wave.getBoundingClientRect();
+    const secAt = (cx) => {
+      const r = rect();
+      return r.width ? Math.max(0, Math.min(dur, ((cx - r.left) / r.width) * dur)) : 0;
     };
-    apply(e);
+    // Where inside the window the grab happened, so the window follows the
+    // cursor from THAT point instead of snapping its centre to it.
+    const grabOffset = secAt(e.clientX) - st0.start;
+    let zone = info.zone;
+    if (zone === "jump") {                 // a click outside starts a move drag
+      const start = Math.max(0, Math.min(Math.max(0, dur - len0), secAt(e.clientX) - len0 / 2));
+      writeState(node, { start: round2(start) });
+      zone = "move";
+    }
+    const jumpOffset = zone === "move" && info.zone === "jump"
+      ? secAt(e.clientX) - readState(node).start : grabOffset;
+
+    const apply = (cx) => {
+      const t = secAt(cx);
+      if (zone === "start") {
+        if (durationWired(node)) {
+          // Length is fixed by the wire, so the left edge SLIDES the window.
+          writeState(node, { start: round2(Math.max(0, Math.min(Math.max(0, dur - len0), t))) });
+        } else {
+          const start = Math.max(0, Math.min(end0 - MIN_WINDOW_S, t));
+          writeState(node, { start: round2(start), length: round2(end0 - start),
+                             whenUnwired: "length" });
+        }
+      } else if (zone === "end") {
+        const cur = readState(node);
+        const len = Math.max(MIN_WINDOW_S, Math.min(dur - cur.start, t - cur.start));
+        writeState(node, { length: round2(len), whenUnwired: "length" });
+      } else {
+        const start = Math.max(0, Math.min(Math.max(0, dur - len0), t - jumpOffset));
+        writeState(node, { start: round2(start) });
+      }
+      // IN PLACE, never renderFace: that re-runs the decode promise and repaints
+      // twice per pointermove, which is what made the drag feel like it was
+      // catching up afterwards (Duration pattern #12, same lesson).
+      liveUpdate(node);
+    };
+    apply(e.clientX);
 
     const move = (mv) => {
       // Convention #20: a lost release must not leave the window following the
       // cursor forever. Synthetic events never reproduce it; real mice do.
-      if (!(mv.buttons & 1)) { end(); return; }
-      apply(mv);
+      if (!(mv.buttons & 1)) { finish(); return; }
+      apply(mv.clientX);
     };
-    const end = () => {
+    const finish = () => {
+      if (!node._pixLaDragging) return;         // idempotent: the guard can also call it
+      node._pixLaDragging = false;
+      wave.style.cursor = "default";
       wave.removeEventListener("pointermove", move);
       try { wave.releasePointerCapture(e.pointerId); } catch (_x) { /* fine */ }
     };
     wave.addEventListener("pointermove", move);
-    wave.addEventListener("pointerup", end, { once: true });
-    wave.addEventListener("pointercancel", end, { once: true });
-    wave.addEventListener("lostpointercapture", end, { once: true });
+    wave.addEventListener("pointerup", finish, { once: true });
+    wave.addEventListener("pointercancel", finish, { once: true });
+    wave.addEventListener("lostpointercapture", finish, { once: true });
   });
+}
+
+function round2(v) { return Math.round(v * 100) / 100; }
+
+/** The cheap per-frame update: the two numbers plus a repaint. No decoding. */
+function liveUpdate(node) {
+  const els = node._pixLaEls;
+  if (!els) return;
+  const st = readState(node);
+  els.inp.value = st.start.toFixed(2);
+  repaintWave(node);
 }
 
 function togglePlay(node) {
@@ -392,22 +541,42 @@ function togglePlay(node) {
   const len = windowSeconds(node, st, node._pixLaDur || 0);
   el.currentTime = st.start;
   const stopAt = st.start + (len > 0 ? len : Infinity);
-  const watch = () => { if (el.currentTime >= stopAt) stopPlay(node); };
-  el.addEventListener("timeupdate", watch);
   el.addEventListener("ended", () => stopPlay(node));
   el.play().catch(() => stopPlay(node));
   els.play.className = "stop";
-  els.play.title = "Stop";
+  els.playBtn.title = "Stop";
+
+  // A rAF playhead rather than the `timeupdate` event: timeupdate fires about
+  // four times a second, which draws a visibly stepping line. This also does
+  // the stop-at-the-end check, so the window boundary is honoured smoothly.
+  const tick = () => {
+    if (node._pixLaAudio !== el) return;                 // stopped or replaced
+    if (el.currentTime >= stopAt) { stopPlay(node); return; }
+    node._pixLaPlayAt = el.currentTime;
+    repaintWave(node);
+    node._pixLaPlayRaf = requestAnimationFrame(tick);
+  };
+  node._pixLaPlayRaf = requestAnimationFrame(tick);
 }
 
 export function stopPlay(node) {
-  const el = node?._pixLaAudio;
+  if (!node) return;
+  const el = node._pixLaAudio;
   if (el) {
     try { el.pause(); el.src = ""; } catch (_e) { /* already torn down */ }
   }
   node._pixLaAudio = null;
-  const els = node?._pixLaEls;
-  if (els) { els.play.className = "play"; els.play.title = "Play the selected part"; }
+  if (node._pixLaPlayRaf) {
+    try { cancelAnimationFrame(node._pixLaPlayRaf); } catch (_e) { /* ignore */ }
+    node._pixLaPlayRaf = null;
+  }
+  node._pixLaPlayAt = null;
+  const els = node._pixLaEls;
+  if (els) {
+    els.play.className = "play";
+    els.playBtn.title = "Play the selected part";
+    repaintWave(node);                                   // clear the playhead
+  }
 }
 
 /** Draw everything from what we already know. No fetching, no decoding. */
@@ -427,8 +596,10 @@ function paint(node, peaks, dur, error) {
     : null;
   // Pass the CSS size: canvasBackingScale caps the backing buffer against it,
   // and calling it bare lets a zoomed-in node allocate a needlessly huge canvas.
+  const playAt = (node._pixLaPlayAt != null && dur > 0)
+    ? Math.max(0, Math.min(1, node._pixLaPlayAt / dur)) : null;
   drawWave(els.wave, peaks, sel, accentOf(node),
-    canvasBackingScale(els.wave.clientWidth, els.wave.clientHeight));
+    canvasBackingScale(els.wave.clientWidth, els.wave.clientHeight), playAt);
   els.tA.textContent = dur > 0 ? "0:00" : "";
   els.tB.textContent = dur > 0 ? fmtTime(dur) : "";
   els.tSel.textContent = dur > 0 && len > 0
@@ -442,9 +613,15 @@ function paint(node, peaks, dur, error) {
   // where, when Upload was sitting right there unread.
   else if (!st.file) text = "click Upload, or choose a file above";
   else {
-    const run = node._pixLaRun;
-    const src = run?.wired ? "length from the wire" : (st.whenUnwired === "length"
-      ? "length from settings" : "whole file from here");
+    // Name where the length came from. A number you did not work out yourself
+    // should say so, and say when it is only a guess.
+    let src;
+    if (durationWired(node)) {
+      src = upstreamSeconds(node) != null ? "length from the wire"
+        : (node._pixLaRun?.wired ? "length from the last run" : "length not known until you run");
+    } else {
+      src = st.whenUnwired === "length" ? "length from settings" : "whole file from here";
+    }
     text = `taking ${len.toFixed(2)}s · ${src}`;
     if (dur > 0 && st.start + len > dur + 0.01) {
       text = `${len.toFixed(2)}s wanted, file ends first · `

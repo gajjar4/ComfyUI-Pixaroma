@@ -97,7 +97,7 @@ export function forgetPeaks(name) {
  * Paint the waveform with the selected window highlighted.
  * `sel` is { from, to } as fractions of the whole file, or null for none.
  */
-export function drawWave(canvas, peaks, sel, accent, backing = 1) {
+export function drawWave(canvas, peaks, sel, accent, backing = 1, playAt = null) {
   if (!canvas) return;
   const cssW = canvas.clientWidth || 1;
   const cssH = canvas.clientHeight || 1;
@@ -140,10 +140,24 @@ export function drawWave(canvas, peaks, sel, accent, backing = 1) {
     ctx.fillRect(x + bw * 0.15, mid - bh / 2, Math.max(0.7, bw * 0.7), bh);
   }
 
+  // The edge handles. Deliberately drawn WIDER than a hairline and with a grip
+  // bar, because they are drag targets: a 2px line is findable by eye but not
+  // by mouse, which is exactly what made the first version feel broken.
   if (sel && xTo > xFrom) {
     ctx.fillStyle = accent;
-    ctx.fillRect(Math.max(0, xFrom - 1), 0, 2, cssH);
-    ctx.fillRect(Math.min(cssW - 2, xTo - 1), 0, 2, cssH);
+    for (const x of [xFrom, xTo]) {
+      const gx = Math.max(0, Math.min(cssW - 3, x - 1.5));
+      ctx.fillRect(gx, 0, 3, cssH);
+      // a fatter grip in the middle third, so the handle reads as grabbable
+      ctx.fillRect(Math.max(0, Math.min(cssW - 5, x - 2.5)), cssH * 0.34, 5, cssH * 0.32);
+    }
+  }
+
+  // The playhead, only while something is actually playing.
+  if (playAt != null && playAt >= 0 && playAt <= 1) {
+    const px = playAt * cssW;
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(Math.max(0, Math.min(cssW - 2, px - 1)), 0, 2, cssH);
   }
 }
 

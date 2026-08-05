@@ -334,10 +334,32 @@ function writeReadout(readout, seconds, frames, actual, note) {
   if (dim.textContent) readout.appendChild(dim);
 }
 
+/**
+ * Publish the length this node will really send, for any node downstream that
+ * wants to show it BEFORE a run (Load Audio sizes its selection from this).
+ *
+ * A plain runtime field, defined non-enumerable so no serializer can pick it up
+ * and dirty a saved workflow (Vue Compat #18). It is a courtesy, not a
+ * contract: a reader must cope with it being absent, because it only exists
+ * once this node has painted at least once.
+ */
+function publishSeconds(node, actual) {
+  if (!node || !Number.isFinite(actual)) return;
+  try {
+    if (!Object.prototype.hasOwnProperty.call(node, "_pixLiveSeconds")) {
+      Object.defineProperty(node, "_pixLiveSeconds",
+        { value: actual, writable: true, enumerable: false, configurable: true });
+    } else {
+      node._pixLiveSeconds = actual;
+    }
+  } catch (_e) { /* a frozen node is not worth failing a paint over */ }
+}
+
 export function paintReadout(node, st, readout) {
   const local = computeLocal(st || readState(node));
   const state = st || readState(node);
   if (!local.custom) {
+    publishSeconds(node, local.actual);
     writeReadout(readout, state.seconds, local.frames, local.actual);
     return;
   }
@@ -354,6 +376,7 @@ export function paintReadout(node, st, readout) {
       readout.textContent = `${fmt(state.seconds)} s → formula does not work, using ${res?.frames ?? local.frames} frames`;
       return;
     }
+    publishSeconds(node, res.actual);
     writeReadout(readout, state.seconds, res.frames, res.actual);
   });
 }

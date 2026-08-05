@@ -84,10 +84,11 @@ class PixaromaLoadAudio:
         "waveform so you can see where the loud parts are, and you drag a window across it to "
         "pick your moment: no counting seconds in your head, no cutting the file up in another "
         "program first.\n\n"
-        "Wire the seconds output of Duration Pixaroma into the duration input and the window is "
+        "Wire the seconds output of Duration Pixaroma into the seconds input and the window is "
         "exactly as long as the video you are about to make, so the picture and the sound cannot "
-        "drift apart. Leave that input empty and you get the whole file, or a length you set in "
-        "the node's settings.\n\n"
+        "drift apart. The selection resizes the moment you connect it, before you run anything. "
+        "Leave that input empty and you get the whole file, or a length you set in the node's "
+        "settings.\n\n"
         "If your window runs off the end of the file, the node either fills the rest with silence "
         "or loops back to the start, whichever you chose in the settings, and it tells you it did.\n\n"
         "Works with any model. Find it by searching for audio, sound, music, song, wav, mp3, or trim."
@@ -100,7 +101,10 @@ class PixaromaLoadAudio:
         return {
             "required": {},
             "optional": {
-                "duration": ("FLOAT", {
+                # Named to MATCH Duration Pixaroma's output, so the wire reads
+                # seconds -> seconds. A name that only makes sense in isolation
+                # ("duration") leaves you guessing which output to drag.
+                "seconds": ("FLOAT", {
                     "forceInput": True,
                     "tooltip": "How many seconds to take, normally wired from the seconds output "
                                "of Duration Pixaroma. Leave it unconnected to use the whole file "
@@ -120,7 +124,7 @@ class PixaromaLoadAudio:
     CATEGORY = "👑 Pixaroma/🎵 Audio"
 
     @classmethod
-    def IS_CHANGED(cls, duration=None, **kwargs):
+    def IS_CHANGED(cls, seconds=None, **kwargs):
         """Re-run when the FILE ITSELF changes.
 
         The state blob is a real input, so the filename, start point and length
@@ -139,7 +143,7 @@ class PixaromaLoadAudio:
         except OSError:
             return ""
 
-    def run(self, duration=None, **kwargs):
+    def run(self, seconds=None, **kwargs):
         st = _state(kwargs.get(HIDDEN_INPUT, "{}"))
         name = st.get("file", "")
         path = _resolve(name)
@@ -156,10 +160,10 @@ class PixaromaLoadAudio:
 
         # The wired duration wins; otherwise fall back to what the settings say.
         # 0 means "everything from the start point to the end of the file".
-        if duration is None:
+        if seconds is None:
             want = 0.0 if st.get("whenUnwired", "whole") == "whole" else st.get("length", 0.0)
         else:
-            want = duration
+            want = seconds
 
         plan = plan_window(waveform.shape[-1], sample_rate, st.get("start", 0.0), want)
         when_short = "loop" if st.get("whenShort") == "loop" else "silence"
@@ -184,7 +188,7 @@ class PixaromaLoadAudio:
                 "filled": round(rep["fill_s"], 3),
                 "short": rep["short"],
                 "mode": when_short,
-                "wired": duration is not None,
+                "wired": seconds is not None,
             }]},
             "result": ({"waveform": out, "sample_rate": sample_rate},),
         }

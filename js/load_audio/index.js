@@ -25,6 +25,47 @@ const DEFAULT_H = 250;
 
 registerNodeHelp(CLASS, LOAD_AUDIO_HELP);
 
+// ── follow the upstream length ─────────────────────────────────────────────
+// Nothing notifies us when the node feeding `seconds` changes its number, and
+// there is no connection hook that fires for "the upstream recalculated". One
+// shared 400ms poll, running ONLY while a Load Audio node is on the canvas, and
+// repainting only when a value actually differs from last time - so an idle
+// graph costs one link lookup per node per tick and no paint at all.
+let _watch = 0;
+const _lastSeen = new WeakMap();
+
+function watchUpstream() {
+  if (_watch) return;
+  _watch = setInterval(() => {
+    const nodes = (app.graph?._nodes || app.graph?.nodes || [])
+      .filter((n) => n.comfyClass === CLASS);
+    if (!nodes.length) { clearInterval(_watch); _watch = 0; return; }
+    for (const n of nodes) {
+      // The LINK id is part of the key: dragging the wire to a different source
+      // must count as a change even when the two happen to agree on a number
+      // (the rewire trap from patterns, reference_upstream_preview_is_not_output).
+      const slot = n.inputs?.find((i) => i && i.name === "seconds");
+      const key = `${slot?.link ?? "none"}|${upstreamLength(n)}`;
+      if (_lastSeen.get(n) === key) continue;
+      _lastSeen.set(n, key);
+      renderFace(n);
+    }
+  }, 400);
+}
+
+/** The upstream's published length, or null. Mirrors ui.mjs's own reader. */
+function upstreamLength(node) {
+  const slot = node.inputs?.find((i) => i && i.name === "seconds");
+  if (!slot || slot.link == null || !node.graph) return null;
+  const g = node.graph;
+  let link = g.links?.[slot.link];
+  if (!link && typeof g.links?.get === "function") link = g.links.get(slot.link);
+  const src = link ? g.getNodeById?.(link.origin_id) : null;
+  if (!src || src.mode === 2 || src.mode === 4) return null;
+  const v = src._pixLiveSeconds;
+  return Number.isFinite(v) ? v : null;
+}
+
 registerNodeSettings(CLASS, {
   title: "Load Audio",
   ownMenuItem: false,
@@ -86,6 +127,7 @@ app.registerExtension({
       this.size[1] = DEFAULT_H;
 
       queueMicrotask(() => renderFace(this));
+      watchUpstream();
     };
 
     const _configure = nodeType.prototype.onConfigure;
@@ -95,6 +137,7 @@ app.registerExtension({
       // untouched workflow opens flagged "modified" (Vue Compat #18).
       renderFace(this);
       queueMicrotask(() => renderFace(this));
+      watchUpstream();
       return r;
     };
 
