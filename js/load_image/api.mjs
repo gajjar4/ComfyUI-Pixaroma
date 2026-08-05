@@ -52,8 +52,14 @@ export function previewMatches(node, filename) {
     loaded = decodeURIComponent(img.src).match(/[?&]filename=([^&]*)/)?.[1] ?? null;
   }
   if (loaded == null) return false;
-  const { filename: want } = splitFilenameSubfolder(filename);
-  return loaded === want;
+  // Strip ComfyUI's type annotation. A combo value can be
+  // "clipspace/foo.png [input]", but the URL only ever carries "foo.png", so
+  // without this an annotated name could NEVER match - and since a mismatch
+  // triggers a refetch, that meant a guaranteed failing /view request on every
+  // setup for exactly the clipspace / Mask Editor path that matters most.
+  const stripAnnotation = (s) => String(s).replace(/\s*\[(input|output|temp)\]\s*$/i, "");
+  const { filename: want } = splitFilenameSubfolder(stripAnnotation(filename));
+  return loaded === stripAnnotation(want);
 }
 
 export function updateNativePreview(node, filename) {
