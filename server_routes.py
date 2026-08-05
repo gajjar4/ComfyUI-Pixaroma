@@ -60,6 +60,7 @@ from .nodes._lora_helpers import (
     get_custom_triggers as _lora_get_custom,
     set_custom_triggers as _lora_set_custom,
     find_custom_preview as _lora_find_custom_preview,
+    custom_preview_path as _lora_custom_preview_path,
     custom_preview_version as _lora_custom_preview_version,
     write_custom_preview as _lora_write_custom_preview,
     delete_custom_preview as _lora_delete_custom_preview,
@@ -2420,7 +2421,11 @@ async def api_lora_thumb(request):
     if not path:
         return web.Response(status=404)
     try:
+        # Gated like the write and the delete: this hands bytes back to the
+        # browser, so the same one guard decides what counts as ours.
         own = _lora_find_custom_preview(_lora_previews_dir(), name)
+        if own and not _lora_preview_path_checked(name):
+            own = None
     except Exception:
         own = None
     if own:
@@ -2660,6 +2665,24 @@ def _lora_previews_dir():
     return os.path.join(os.path.dirname(_lora_custom_file()), "lora_previews")
 
 
+def _lora_preview_path_checked(name):
+    """The on-disk path for one of our LoRA preview files, or None if it is not
+    one we could have written. Every route that writes, reads or deletes one
+    gates on this.
+
+    Mirrors `_wf_cover_path` deliberately. The filename is a sha1 WE generate and
+    the helper already regex-checks its shape, so nothing the caller sent ever
+    reaches the join - but the containment check goes through the pack's ONE
+    guard because that is what a reader will look for, and because
+    `nodes/_path_guard.py` says a check is imported, never re-rolled. Belt as
+    well as braces."""
+    folder = _lora_previews_dir()
+    path = _lora_custom_preview_path(folder, name)
+    if not path:
+        return None
+    return path if _is_path_under(path, folder) else None
+
+
 # A downscaled jpeg of a preview picture. The browser resizes to 512px before
 # uploading, so anything near this is already something we did not send.
 _LORA_PREVIEW_MAX_BYTES = 4 * 1024 * 1024
@@ -2700,6 +2723,8 @@ async def api_lora_preview_set(request):
     if not _wf_looks_like_image(raw):
         return web.json_response(
             {"ok": False, "message": "That file is not a picture the browser can show."})
+    if not _lora_preview_path_checked(name):
+        return web.json_response({"ok": False, "message": "Bad preview path."})
 
     import asyncio
     loop = asyncio.get_event_loop()
@@ -2732,6 +2757,8 @@ async def api_lora_preview_delete(request):
     roots = _lora_dirs()
     if not path or not roots or not _is_path_under(path, *roots):
         return web.json_response({"ok": False, "message": "LoRA not found."})
+    if not _lora_preview_path_checked(name):
+        return web.json_response({"ok": False, "message": "Bad preview path."})
     try:
         removed = _lora_delete_custom_preview(_lora_previews_dir(), name)
     except Exception as exc:
