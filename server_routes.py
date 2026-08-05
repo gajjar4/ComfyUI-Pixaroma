@@ -59,6 +59,10 @@ from .nodes._lora_helpers import (
     write_civitai_account as _civitai_write_account,
     get_custom_triggers as _lora_get_custom,
     set_custom_triggers as _lora_set_custom,
+    find_custom_preview as _lora_find_custom_preview,
+    custom_preview_version as _lora_custom_preview_version,
+    write_custom_preview as _lora_write_custom_preview,
+    delete_custom_preview as _lora_delete_custom_preview,
 )
 from .nodes.node_krea_lora_convert import (
     inspect_lora as _krea_lora_inspect,
@@ -2388,16 +2392,39 @@ async def api_lora_info(request):
         info["custom_triggers"] = _lora_get_custom(_lora_custom_file(), name)
     except Exception:
         info["custom_triggers"] = []
+    # ...and so does their own preview picture. `custom_preview` drives the panel's
+    # "remove" affordance; `preview_v` is the mtime that lets the browser past the
+    # thumb route's hour-long cache when the picture was replaced somewhere else
+    # (another node, another session) and this panel never saw it happen.
+    try:
+        folder = _lora_previews_dir()
+        info["preview_v"] = _lora_custom_preview_version(folder, name)
+        info["custom_preview"] = bool(info["preview_v"])
+        if info["custom_preview"]:
+            info["has_preview"] = True
+    except Exception:
+        info["custom_preview"] = False
+        info["preview_v"] = 0
     return web.json_response({"ok": True, "info": info})
 
 
 @PromptServer.instance.routes.get("/pixaroma/api/lora/thumb")
 async def api_lora_thumb(request):
-    """Serve the LoRA's local preview image (.preview.png etc.), or 404."""
+    """Serve the LoRA's preview image, or 404.
+
+    The user's OWN picture wins over the one beside the LoRA: this route is what
+    both the panel and any future thumbnail read, so the override has to be
+    honoured here rather than only where it happens to be displayed."""
     name = request.query.get("name", "")
     path = _resolve_lora_path(name)
     if not path:
         return web.Response(status=404)
+    try:
+        own = _lora_find_custom_preview(_lora_previews_dir(), name)
+    except Exception:
+        own = None
+    if own:
+        return web.FileResponse(own, headers={"Cache-Control": "public, max-age=3600"})
     prev = _lora_find_preview(path)
     roots = _lora_dirs()
     if not prev or not roots or not _is_path_under(prev, *roots):
@@ -2620,6 +2647,96 @@ def _lora_custom_file():
     except Exception:
         pass
     return os.path.join(d, "lora_triggers.json")
+
+
+def _lora_previews_dir():
+    """Where a user-picked LoRA preview lives: <ComfyUI user dir>/pixaroma/lora_previews.
+
+    Same folder and the same reasoning as the trigger store above - NOT beside the
+    .safetensors. A models folder is often read-only or a network share, and writing
+    a <base>.preview.png there would overwrite whatever a Civitai helper already put
+    next to the LoRA. Kept separate, ours simply WINS, and deleting it puts the
+    automatic picture back."""
+    return os.path.join(os.path.dirname(_lora_custom_file()), "lora_previews")
+
+
+# A downscaled jpeg of a preview picture. The browser resizes to 512px before
+# uploading, so anything near this is already something we did not send.
+_LORA_PREVIEW_MAX_BYTES = 4 * 1024 * 1024
+
+
+@PromptServer.instance.routes.post("/pixaroma/api/lora/preview")
+async def api_lora_preview_set(request):
+    """Store the user's own preview picture for one LoRA. POST {name, dataUrl}.
+
+    Same shape as the workflow-cover upload, and the same rules: the size is
+    checked BEFORE decoding (base64 expands by a third, so decoding first would
+    let an oversized payload set the memory it takes to reject it), and the bytes
+    have to LOOK like a picture - this file is served straight back to a browser
+    as an image, so one that is not would simply never render and read as the
+    feature being broken. Always 200."""
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    body = body or {}
+    name = str(body.get("name", "") or "")
+    data_url = str(body.get("dataUrl", "") or "")
+    path = _resolve_lora_path(name)
+    roots = _lora_dirs()
+    if not path or not roots or not _is_path_under(path, *roots):
+        return web.json_response({"ok": False, "message": "LoRA not found."})
+    if "," not in data_url:
+        return web.json_response({"ok": False, "message": "Nothing to save."})
+    payload = data_url.split(",", 1)[1]
+    if len(payload) > _LORA_PREVIEW_MAX_BYTES * 4 // 3 + 8:
+        return web.json_response({"ok": False, "message": "That picture is too large."})
+    try:
+        raw = base64.b64decode(payload)
+    except Exception:
+        return web.json_response({"ok": False, "message": "That picture could not be read."})
+    if not raw or len(raw) > _LORA_PREVIEW_MAX_BYTES:
+        return web.json_response({"ok": False, "message": "That picture is too large."})
+    if not _wf_looks_like_image(raw):
+        return web.json_response(
+            {"ok": False, "message": "That file is not a picture the browser can show."})
+
+    import asyncio
+    loop = asyncio.get_event_loop()
+    folder = _lora_previews_dir()
+    try:
+        written = await loop.run_in_executor(
+            None, _lora_write_custom_preview, folder, name, raw
+        )
+    except Exception as exc:
+        return web.json_response({"ok": False, "message": "Could not save: {}".format(exc)})
+    if not written:
+        return web.json_response({"ok": False, "message": "Could not save that picture."})
+    return web.json_response({"ok": True, "v": _lora_custom_preview_version(folder, name)})
+
+
+@PromptServer.instance.routes.post("/pixaroma/api/lora/preview_delete")
+async def api_lora_preview_delete(request):
+    """Remove the user's own preview so the automatic picture comes back. POST {name}.
+
+    The filename is derived from the LoRA name and checked against the one shape we
+    could have written before it reaches os.remove, so a hand-edited request cannot
+    aim this at anything else. Always 200."""
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    body = body or {}
+    name = str(body.get("name", "") or "") or request.query.get("name", "")
+    path = _resolve_lora_path(name)
+    roots = _lora_dirs()
+    if not path or not roots or not _is_path_under(path, *roots):
+        return web.json_response({"ok": False, "message": "LoRA not found."})
+    try:
+        removed = _lora_delete_custom_preview(_lora_previews_dir(), name)
+    except Exception as exc:
+        return web.json_response({"ok": False, "message": "Could not remove: {}".format(exc)})
+    return web.json_response({"ok": True, "removed": bool(removed)})
 
 
 @PromptServer.instance.routes.post("/pixaroma/api/lora/custom_triggers")

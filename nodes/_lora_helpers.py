@@ -686,6 +686,130 @@ def set_custom_triggers(path, name, words):
     return clean
 
 
+# ── the user's own preview picture ───────────────────────────────────────────
+#
+# Kept in <ComfyUI user dir>/pixaroma/lora_previews/, for exactly the reasons
+# custom_trigger_key's store is (see _lora_custom_file in server_routes): the
+# models folder is often read-only or a network share, and writing a
+# <base>.preview.png there would also overwrite whatever a Civitai helper had
+# already put beside the LoRA. This one is an OVERRIDE that WINS over both the
+# sidecar preview and a live Civitai thumbnail, and removing it puts the
+# automatic picture back - so nothing the user already had is ever destroyed.
+#
+# The filename is derived from the LoRA name, so it REPEATS: replacing a preview
+# writes the same path again. The browser therefore needs a cache-busting
+# version, which is why custom_preview_version returns the file's mtime in ms -
+# a counter would restart at 1 whenever the file had been deleted by hand and
+# hand back a url the browser is still holding (the workflow-cover lesson).
+
+# We generate this name ourselves, so anything not of this exact shape did not
+# come from us. Load-bearing for SAFETY, not tidiness: delete_custom_preview
+# feeds the result to os.remove, and os.path.join DISCARDS the folder when the
+# second part is absolute.
+_CUSTOM_PREVIEW_RE = re.compile(r"[0-9a-f]{16}\.jpg")
+
+
+def custom_preview_name(name):
+    """The filename we would store this LoRA's own preview under, or "" for junk.
+
+    Hashed from the SAME normalised key the trigger store uses, so the two stay
+    in step for a LoRA in a subfolder or on another OS."""
+    key = custom_trigger_key(name)
+    if not key:
+        return ""
+    return hashlib.sha1(key.encode("utf-8", "replace")).hexdigest()[:16] + ".jpg"
+
+
+def is_custom_preview_name(name):
+    """Is this a filename we could have written? Every os.remove goes through it."""
+    return isinstance(name, str) and bool(_CUSTOM_PREVIEW_RE.fullmatch(name))
+
+
+def custom_preview_path(folder, name):
+    """Full path for one LoRA's own preview, or None when the name is junk or the
+    joined path would land outside `folder`. Does NOT check the file exists."""
+    fn = custom_preview_name(name)
+    if not fn or not folder or not is_custom_preview_name(fn):
+        return None
+    path = os.path.join(str(folder), fn)
+    # Belt: fn is 16 hex + .jpg by construction, so this cannot currently fail -
+    # but the check is what makes that a guarantee rather than an assumption.
+    try:
+        base = os.path.abspath(str(folder))
+        full = os.path.abspath(path)
+    except Exception:
+        return None
+    if os.path.dirname(full) != base:
+        return None
+    return full
+
+
+def find_custom_preview(folder, name):
+    """The user's own preview for this LoRA, or None. Never raises."""
+    path = custom_preview_path(folder, name)
+    try:
+        if path and os.path.isfile(path):
+            return path
+    except Exception:
+        pass
+    return None
+
+
+def custom_preview_version(folder, name):
+    """Milliseconds mtime of the user's own preview, or 0 when there isn't one.
+
+    The URL for a preview never changes (the filename is derived from the LoRA
+    name) and the thumb route caches for an hour, so this is what lets a picture
+    replaced in one node show up in another one, or after a reload."""
+    path = find_custom_preview(folder, name)
+    if not path:
+        return 0
+    try:
+        return int(os.path.getmtime(path) * 1000)
+    except Exception:
+        return 0
+
+
+def write_custom_preview(folder, name, raw):
+    """Store `raw` as this LoRA's own preview. Returns the path, or None.
+
+    Temp file + os.replace, like every other repeating-filename write here: the
+    path is the same every time for a given LoRA, so a plain write would let a
+    request already in flight read a half-written jpg."""
+    path = custom_preview_path(folder, name)
+    if not path or not isinstance(raw, (bytes, bytearray)) or not raw:
+        return None
+    try:
+        os.makedirs(str(folder), exist_ok=True)
+    except Exception:
+        return None
+    tmp = "%s.%d.tmp" % (path, os.getpid())
+    try:
+        with open(tmp, "wb") as f:
+            f.write(bytes(raw))
+        os.replace(tmp, path)
+        return path
+    except Exception:
+        try:
+            os.remove(tmp)
+        except Exception:
+            pass
+        return None
+
+
+def delete_custom_preview(folder, name):
+    """Remove the user's own preview so the automatic picture comes back.
+    True when a file was removed. Never raises."""
+    path = find_custom_preview(folder, name)
+    if not path:
+        return False
+    try:
+        os.remove(path)
+        return True
+    except Exception:
+        return False
+
+
 def save_sidecar_cache(lora_path, civitai_obj):
     """Cache a raw Civitai response next to the LoRA as <base>.civitai.info so future
     reads are instant and offline. Returns True on success. Never raises."""

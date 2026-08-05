@@ -315,6 +315,19 @@ registerNodeHelp(CLASS, {
         "switched on for you. The small x on a word forgets it for that LoRA everywhere.",
     },
     {
+      heading: "Use your own picture",
+      body:
+        "The little picture at the top left of the info panel is the LoRA's preview. Click it to " +
+        "choose an image from your computer, or drop one onto it, or copy an image and press Ctrl+V " +
+        "over the panel. Handy for a LoRA you trained yourself, one that is not on Civitai, or simply " +
+        "when you would rather see your own example than the one that came with it.\n\n" +
+        "Your picture wins over everything else, including a later Civitai lookup, and the small x on " +
+        "the corner removes it and brings the automatic one back. Nothing is overwritten: the picture " +
+        "is kept on this computer alongside your other Pixaroma settings, never written into your " +
+        "models folder, so it survives an update and works even when your models sit on a read-only " +
+        "or network drive. It follows the LoRA, so every row and every workflow using that LoRA shows it.",
+    },
+    {
       heading: "Comparing LoRAs side by side",
       body:
         "XY Plot Pixaroma can drive this node. In its picker your rows show up under this " +

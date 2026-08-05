@@ -5,7 +5,8 @@
 
 import { app } from "/scripts/app.js";
 import { readState, patchLora, accentOf, BRAND } from "./core.mjs";
-import { loraInfo, thumbUrl, civitaiLookup, invalidateInfo, deleteCivitai, saveCustomTriggers } from "./api.mjs";
+import { loraInfo, thumbUrl, civitaiLookup, invalidateInfo, deleteCivitai, saveCustomTriggers,
+         saveLoraPreview, deleteLoraPreview } from "./api.mjs";
 import { getNodeRect } from "./settings.mjs";
 
 let _panel = null;
@@ -24,7 +25,21 @@ function injectCSS() {
       overflow:hidden; font:12px 'Segoe UI',system-ui,sans-serif; color:#ddd; }
     .pix-ll-info-top { display:flex; gap:11px; padding:12px; border-bottom:1px solid #1c1c1c; cursor:grab; }
     .pix-ll-info-th { width:64px; height:64px; border-radius:7px; flex:none; border:1px solid #000;
-      background:radial-gradient(circle at 60% 35%,#4a3a5b,#221a2e 72%); background-size:cover; background-position:center; }
+      background:radial-gradient(circle at 60% 35%,#4a3a5b,#221a2e 72%); background-size:cover; background-position:center;
+      position:relative; overflow:hidden; cursor:pointer; }
+    /* The hover label doubles as the drop target's feedback and the saving state,
+       so there is only ever one thing painted over the picture. */
+    .pix-ll-info-th::after { content:attr(data-hint); position:absolute; inset:0; display:flex;
+      align-items:center; justify-content:center; text-align:center; padding:2px;
+      background:rgba(0,0,0,0.58); color:#fff; font:9.5px 'Segoe UI',system-ui,sans-serif;
+      opacity:0; transition:opacity .12s; pointer-events:none; }
+    .pix-ll-info-th:hover::after, .pix-ll-info-th.drop::after, .pix-ll-info-th.busy::after { opacity:1; }
+    .pix-ll-info-th.drop { border-color:var(--acc,${BRAND}); box-shadow:inset 0 0 0 2px var(--acc,${BRAND}); }
+    .pix-ll-thx { position:absolute; top:2px; right:2px; width:15px; height:15px; z-index:2;
+      border-radius:50%; background:rgba(0,0,0,0.7); color:#ddd;
+      font:10px/15px 'Segoe UI',system-ui,sans-serif; text-align:center; opacity:0; transition:opacity .12s; }
+    .pix-ll-info-th:hover .pix-ll-thx { opacity:1; }
+    .pix-ll-thx:hover { background:#e0604a; color:#fff; }
     .pix-ll-info-h { min-width:0; flex:1; }
     .pix-ll-info-h h3 { margin:0 0 4px; font-size:13.5px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
     .pix-ll-info-meta { font:10px monospace; color:#7a7a7a; line-height:1.7; }
@@ -169,15 +184,21 @@ export async function openInfoPanel(node, id, refresh) {
   startFollowing(panel, node);
 
   // view data for this panel session
-  let info = { title: name || "LoRA", triggers: [], file_triggers: [], sidecar_triggers: [], source: "file", has_preview: false };
+  let info = { title: name || "LoRA", triggers: [], file_triggers: [], sidecar_triggers: [], source: "file", has_preview: false, custom_preview: false, preview_v: 0 };
   let civ = null; // { state:"searching"|"found"|"nofind"|"offline", info?, message? }
   // Which set of candidate words to SHOW: "file" | "civitai". null = auto (Civitai
   // when a saved sidecar / fresh lookup exists, else the file's own words). The
   // user's SELECTED words persist regardless of the view (they live in row.triggers).
   let viewSource = null;
-  // Bumped whenever this panel rewrites the sidecar (Civitai fetch / delete) so
-  // thumb() busts the browser's hour-long image cache for the changed preview.
+  // Bumped whenever this panel rewrites the sidecar (Civitai fetch / delete) or the
+  // user's own preview, so thumb() busts the browser's hour-long image cache.
   let _thumbBust = 0;
+  // A one-line problem note under the header (a picture that could not be saved).
+  // Cleared by the next thing that works.
+  let _msg = null;
+  // True while a picture is being encoded and uploaded, so a second drop or click
+  // cannot start a competing save onto the same filename.
+  let _busy = false;
 
   const selected = () => new Set((readState(node).loras.find((e) => e.id === id)?.triggers || []).map((w) => w.toLowerCase()));
 
@@ -307,12 +328,208 @@ export async function openInfoPanel(node, id, refresh) {
   }
 
   function thumb() {
+    // The user's OWN picture outranks everything, a live Civitai result included.
+    // "Replace it with my own" has to survive the next ↻ Civitai, or the override
+    // would quietly undo itself the first time they looked the LoRA up again.
+    // preview_v is the file's mtime, so a picture set in ANOTHER node or an
+    // earlier session still gets past the browser's hour-long image cache.
+    if (info.custom_preview && name) {
+      return thumbUrl(name, Math.max(_thumbBust, info.preview_v || 0));
+    }
     if (civ?.state === "found" && civ.info?.thumbnail) return civ.info.thumbnail;
     // _thumbBust is set when THIS panel changed the sidecar (Civitai fetch/delete):
     // the thumb URL never changes and the route sends max-age=3600, so without the
     // bust the browser kept showing the pre-change image for up to an hour.
     if (info.has_preview && name) return thumbUrl(name, _thumbBust);
     return null;
+  }
+
+  // ── the user's own preview picture ─────────────────────────────────────────
+  //
+  // Click the box to pick a file, drop one on it, or paste one. It is saved in
+  // ComfyUI's user folder (never into the models folder, which is often read-only
+  // or a network share) and simply WINS over the Civitai picture; Remove puts the
+  // automatic one back, so nothing they already had is ever destroyed.
+
+  const PREVIEW_MAX = 512;   // longest side; the box shows 64px, and a 4K drop is
+                             // otherwise megabytes of upload for a thumbnail
+
+  /** Downscale to a small jpeg in the BROWSER, so the upload is tens of KB and the
+   *  server needs no image library. The server still checks the size and the magic
+   *  bytes - this is for weight, not for trust. */
+  function toPreviewDataUrl(blob) {
+    return new Promise((resolve, reject) => {
+      const url = URL.createObjectURL(blob);
+      const img = new Image();
+      img.onload = () => {
+        URL.revokeObjectURL(url);
+        try {
+          const w0 = img.naturalWidth, h0 = img.naturalHeight;
+          if (!w0 || !h0) { reject(new Error("That file is not a picture.")); return; }
+          const k = Math.min(1, PREVIEW_MAX / Math.max(w0, h0));
+          const w = Math.max(1, Math.round(w0 * k)), h = Math.max(1, Math.round(h0 * k));
+          const c = document.createElement("canvas");
+          c.width = w; c.height = h;
+          const ctx = c.getContext("2d");
+          // A jpeg carries no transparency, so a png with alpha would come out on
+          // BLACK. Paint the panel's own dark background under it instead.
+          ctx.fillStyle = "#1d1d1d";
+          ctx.fillRect(0, 0, w, h);
+          ctx.drawImage(img, 0, 0, w, h);
+          resolve(c.toDataURL("image/jpeg", 0.9));
+        } catch (err) { reject(err); }
+      };
+      img.onerror = () => {
+        URL.revokeObjectURL(url);
+        reject(new Error("That file is not a picture the browser can show."));
+      };
+      img.src = url;
+    });
+  }
+
+  // Touches the live element rather than re-rendering: a full renderBody() here
+  // would rebuild the header twice per save for no visible gain. The hint has to
+  // move WITH the class - a render that happened while busy left "Saving…" as the
+  // hover label after the class came off.
+  function setBusy(v) {
+    _busy = !!v;
+    const t = panel.querySelector(".pix-ll-info-th");
+    if (!t) return;
+    t.classList.toggle("busy", _busy);
+    t.dataset.hint = hintFor();
+  }
+
+  function hintFor() { return _busy ? "Saving…" : (thumb() ? "Change" : "+ Picture"); }
+
+  async function reloadInfo() {
+    const fresh = await loraInfo(name, true);
+    if (!panel.isConnected) return;
+    if (fresh.ok && fresh.info) info = fresh.info;
+    renderBody();
+  }
+
+  async function applyPicture(blob) {
+    if (!name || _busy) return;
+    if (!blob || !/^image\//.test(blob.type || "")) {
+      showMsg("That is not a picture. Use a jpg, png or webp.");
+      return;
+    }
+    setBusy(true);
+    try {
+      const dataUrl = await toPreviewDataUrl(blob);
+      const res = await saveLoraPreview(name, dataUrl);
+      if (!panel.isConnected) return;
+      if (!res?.ok) { showMsg(res?.message || "Could not save that picture."); return; }
+      _msg = null;
+      _thumbBust = res.v || Date.now();
+      await reloadInfo();          // custom_preview / has_preview / preview_v
+    } catch (err) {
+      if (panel.isConnected) showMsg(String(err?.message || err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function removePicture() {
+    if (!name || _busy) return;
+    setBusy(true);
+    try {
+      const res = await deleteLoraPreview(name);
+      if (!panel.isConnected) return;
+      if (!res?.ok) { showMsg(res?.message || "Could not remove that picture."); return; }
+      _msg = null;
+      _thumbBust = Date.now();     // back to the automatic picture, past the 1h cache
+      await reloadInfo();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function pickPicture() {
+    if (_busy) return;
+    const inp = document.createElement("input");
+    inp.type = "file";
+    inp.accept = "image/*";
+    inp.style.display = "none";
+    document.body.appendChild(inp);
+    inp.addEventListener("change", () => {
+      const f = inp.files && inp.files[0];
+      inp.remove();
+      if (f) applyPicture(f);
+    });
+    // A CANCELLED dialog fires no `change` at all, so the input would sit in the
+    // body forever. The window regaining focus is the one signal both paths share.
+    window.addEventListener("focus", () => setTimeout(() => inp.remove(), 800), { once: true });
+    inp.click();
+  }
+
+  /** A URL dropped rather than a file - an image dragged from ComfyUI's own output
+   *  preview, say. Same-origin ONLY: anything else would have us fetching an
+   *  arbitrary site on the user's behalf, and a cross-origin picture taints the
+   *  canvas so toDataURL could not read it back anyway. */
+  async function pictureFromUrl(url) {
+    let u = null;
+    try { u = new URL(url, window.location.href); } catch { u = null; }
+    if (!u || u.origin !== window.location.origin) {
+      showMsg("Drag the picture file itself from your computer, or copy the image and paste it here.");
+      return;
+    }
+    try {
+      const r = await fetch(u.href);
+      if (!r.ok) throw new Error("Could not read that image.");
+      await applyPicture(await r.blob());
+    } catch (err) {
+      if (panel.isConnected) showMsg(String(err?.message || err));
+    }
+  }
+
+  function wireThumb(th, hasOwn) {
+    th.dataset.hint = hintFor();
+    if (_busy) th.classList.add("busy");
+    th.title = "Click to use your own picture for this LoRA. You can also drop an image "
+      + "here, or copy one and press Ctrl+V.";
+    th.addEventListener("click", (ev) => {
+      if (ev.target.closest(".pix-ll-thx")) return;   // the remove badge has its own job
+      pickPicture();
+    });
+    if (hasOwn) {
+      const rm = el("span", "pix-ll-thx", "✕");
+      rm.title = "Remove your picture (the automatic one comes back)";
+      rm.addEventListener("click", (ev) => { ev.stopPropagation(); removePicture(); });
+      th.appendChild(rm);
+    }
+    const stop = (ev) => { ev.preventDefault(); ev.stopPropagation(); };
+    th.addEventListener("dragenter", (ev) => { stop(ev); th.classList.add("drop"); });
+    th.addEventListener("dragover", (ev) => {
+      stop(ev);
+      if (ev.dataTransfer) ev.dataTransfer.dropEffect = "copy";
+      th.classList.add("drop");
+    });
+    th.addEventListener("dragleave", (ev) => {
+      // A leave whose relatedTarget is still inside the box is the cursor crossing
+      // the overlay or the ✕, not leaving - without this the highlight flickers.
+      if (ev.relatedTarget && th.contains(ev.relatedTarget)) return;
+      th.classList.remove("drop");
+    });
+    th.addEventListener("drop", (ev) => {
+      stop(ev);
+      th.classList.remove("drop");
+      const dt = ev.dataTransfer;
+      const f = dt?.files && dt.files[0];
+      if (f) { applyPicture(f); return; }
+      const raw = (dt?.getData("text/uri-list") || dt?.getData("text/plain") || "").trim();
+      const first = raw.split(/[\r\n]+/).find((x) => x && !x.startsWith("#"));
+      if (first) pictureFromUrl(first);
+      else showMsg("Nothing to use there. Drop an image file.");
+    });
+  }
+
+  function showMsg(m) { _msg = m || null; renderBody(); }
+
+  function msgStrip() {
+    const strip = el("div", "pix-ll-strip offline");
+    strip.append(el("span", "st-ic", "!"), el("div", null, _msg));
+    return strip;
   }
 
   function renderBody() {
@@ -327,6 +544,9 @@ export async function openInfoPanel(node, id, refresh) {
     // Strip quotes/backslashes so a stray char in a Civitai image URL can't break the
     // CSS url() value (thumbUrl(name, bust) is already percent-encoded; civ.info.thumbnail is raw).
     if (turl) th.style.backgroundImage = `url("${String(turl).replace(/["\\]/g, "")}")`;
+    // Pick / drop / paste your own picture, and remove it again. Wired on every
+    // render because renderBody() builds a fresh header each time.
+    if (name) wireThumb(th, !!info.custom_preview);
     const h = el("div", "pix-ll-info-h");
     const title = el("h3", null, (civ?.state === "found" && civ.info?.name) || info.title || "LoRA");
     const metaBits = [];
@@ -356,6 +576,9 @@ export async function openInfoPanel(node, id, refresh) {
     x.addEventListener("click", closeInfoPanel);
     top.append(th, h, x);
     panel.appendChild(top);
+
+    // ── a problem with the picture, when there was one ───────────────────
+    if (_msg) panel.appendChild(msgStrip());
 
     // ── optional Civitai status strip ────────────────────────────────────
     if (civ) panel.appendChild(civStrip());
@@ -527,14 +750,37 @@ export async function openInfoPanel(node, id, refresh) {
 
   const onDown = (e) => { if (!panel.contains(e.target) && !e.target.closest?.(".pix-ll-dd")) closeInfoPanel(); };
   const onKey = (e) => { if (e.key === "Escape") { e.stopPropagation(); closeInfoPanel(); } };
+  // Ctrl+V sets the LoRA's picture from the clipboard. On CAPTURE and stopping
+  // propagation, because ComfyUI pastes an image onto the CANVAS as a node - with
+  // this panel open that is never what was meant, and both happening at once is
+  // worse than either. Only when an image is really taken: an ordinary text paste
+  // falls through untouched.
+  const onPaste = (e) => {
+    if (!panel.isConnected || !name) return;
+    // Never steal a paste aimed at a text box - the "add your own trigger word"
+    // field is right there, and pasting a word into it has to keep working.
+    const t = e.target;
+    if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
+    for (const it of (e.clipboardData?.items || [])) {
+      if (it.kind !== "file" || !/^image\//.test(it.type || "")) continue;
+      const f = it.getAsFile();
+      if (!f) continue;
+      e.preventDefault();
+      e.stopPropagation();
+      applyPicture(f);
+      return;
+    }
+  };
   setTimeout(() => {
     if (_panel !== panel) return; // closed/replaced in the same tick - don't orphan listeners
     document.addEventListener("pointerdown", onDown, true);
     document.addEventListener("keydown", onKey, true);
+    document.addEventListener("paste", onPaste, true);
   }, 0);
   _cleanup = () => {
     document.removeEventListener("pointerdown", onDown, true);
     document.removeEventListener("keydown", onKey, true);
+    document.removeEventListener("paste", onPaste, true);
   };
 }
 
@@ -585,7 +831,7 @@ function dragBy(panel) {
     // clicked child never sees the click at all, and releasing capture on pointerup
     // does not undo it. That silently killed "View on Civitai ↗": the link is in
     // the header, so it was captured and stopped opening the model page.
-    if (e.target.closest(".pix-ll-info-x, .pix-ll-civlink")) return;
+    if (e.target.closest(".pix-ll-info-x, .pix-ll-civlink, .pix-ll-info-th")) return;
     const r = panel.getBoundingClientRect();
     const ox = e.clientX - r.left, oy = e.clientY - r.top;
 

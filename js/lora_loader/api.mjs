@@ -181,3 +181,44 @@ export async function deleteCivitai(name) {
     return { ok: false, message: "Could not reach the server." };
   }
 }
+
+// ── the user's own preview picture ───────────────────────────────────────────
+//
+// Stored in ComfyUI's user dir, keyed by LoRA name, and it WINS over both the
+// picture beside the .safetensors and a live Civitai thumbnail. Both calls
+// invalidate the cached info, which carries `custom_preview` / `preview_v` - a
+// stale one would leave the panel offering to remove a picture that has gone, or
+// showing the previous picture from the browser's hour-long image cache.
+
+/** Save a picture as this LoRA's preview. `dataUrl` is a downscaled jpeg the
+ *  panel encodes; the server still checks the size and the magic bytes. */
+export async function saveLoraPreview(name, dataUrl) {
+  try {
+    const r = await fetch(pixApiUrl("/pixaroma/api/lora/preview"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name, dataUrl }),
+    });
+    const j = await r.json();
+    if (j?.ok) invalidateInfo(name);
+    return j;
+  } catch {
+    return { ok: false, message: "Could not reach the server." };
+  }
+}
+
+/** Remove it, so the automatic picture comes back. */
+export async function deleteLoraPreview(name) {
+  try {
+    const r = await fetch(pixApiUrl("/pixaroma/api/lora/preview_delete"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name }),
+    });
+    const j = await r.json();
+    if (j?.ok) invalidateInfo(name);
+    return j;
+  } catch {
+    return { ok: false, message: "Could not reach the server." };
+  }
+}

@@ -96,7 +96,9 @@ export const KEYWORDS = {
   // ── Utility and editors ──
   PixaromaLoraLoader: "lora stack weight trigger civitai xy plot compare grid sweep "
     + "api key token login account not found missing nsfw adult uncensored mature "
-    + "civitai.red unrestricted thumbnail preview blocked hidden",
+    + "civitai.red unrestricted thumbnail preview blocked hidden "
+    + "own picture custom image replace cover photo change thumbnail drag drop paste "
+    + "upload set preview no picture blank empty box",
   Pixaroma3D: "mesh glb obj camera light render scene 3d",
   PixaromaPaint: "brush draw sketch layers erase paint",
   PixaromaImageComposition: "collage blend layers grade montage composite text layer font ttf otf custom font",
