@@ -31,14 +31,13 @@ RESAMPLES = ("auto", "lanczos", "bicubic", "bilinear", "nearest")
 MIN_DIM = 8
 MAX_DIM = 16384
 
-# The face defaults. The lists are UI-only - see strip_ui_keys.
-DEFAULT_SIZES = [512, 864, 1024, 1216, 1536, 2048]
-DEFAULT_RATIOS = ["keep", "1:1", "16:9", "9:16", "4:3", "3:4"]
+# The face defaults. The lists are UI-only - see strip_ui_keys - and are kept
+# here only so Python and the browser document the same starting point.
+DEFAULT_SIZES = [864, 1024, 1216, 1536, 2048]
+DEFAULT_RATIOS = ["keep", "1:1", "16:9", "9:16", "2:3"]
 
-# How many tabs / chips a row can hold before the labels start crowding at the
-# node's default width. Measured, not guessed: at seven the shape and its label
-# collide. The settings panel enforces this too.
-MAX_ROW_ITEMS = 6
+# How many tabs / chips a row may hold.
+MAX_ROW_ITEMS = 5
 
 DEFAULT_STATE = {
     "size": 1216,

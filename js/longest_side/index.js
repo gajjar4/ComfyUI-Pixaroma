@@ -12,6 +12,7 @@ import {
   installCanvasZoomPassthrough,
 } from "../shared/index.mjs";
 import { isGraphLoading } from "../shared/graph_loading.mjs";
+import { onRendererChange } from "../shared/renderer_switch.mjs";
 import { installNodeAccent, registerNodeSettings } from "../shared/node_settings.mjs";
 import { HIDDEN_INPUT_NAME, runState } from "./core.mjs";
 import { buildFace, WIDGET_H, DEFAULT_W, MIN_W } from "./ui.mjs";
@@ -27,10 +28,99 @@ function openPanel(node) {
   });
 }
 
-function setupNode(node) {
-  const { root, refresh } = buildFace(node, { onGear: openPanel });
+// ── where the band lives, per renderer ──────────────────────────────────────
+// The band sits on the `width` / `height` slot rows, whose left half is empty.
+// CLASSIC: lift it out of the widget flow with a measured offset (see ui.mjs).
+// NODES 2.0: Vue clips anything above the widget top, so the lift is no use -
+// park the band INSIDE the output-slot block, which is the dead-space itself,
+// so it needs no offset and cannot drift if a slot moves.
+//
+// DOM only, wrapped in try/catch: if a future frontend defeats it, the band
+// falls back to a plain row and the node still works.
+
+function vueSlotBlock(el) {
+  return el?.querySelector(".lg-slot--output")?.parentElement?.parentElement || null;
+}
+
+function parkBand(node) {
+  try {
+    const band = node._pixLsBand;
+    if (!band) return;
+    const el = document.querySelector(`.lg-node[data-node-id="${node.id}"]`);
+    const block = vueSlotBlock(el);
+    if (!block) return;
+    if (band.parentElement === block) return;   // steady state, one comparison
+    block.style.position = "relative";
+    block.appendChild(band);
+    band.classList.add("parked");
+  } catch { /* degrades to a row in the body */ }
+}
+
+function applyBandPlacement(node) {
+  const band = node._pixLsBand;
+  if (!band) return;
+  const classic = !isVueNodes();
+  band.classList.toggle("classic", classic);
+  if (classic) {
+    // Coming back from Nodes 2.0 the band is still parked in a slot block that
+    // does not exist in Classic - put it back at the top of our own root.
+    band.classList.remove("parked");
+    const root = node._pixLsRoot;
+    if (root && band.parentElement !== root) root.insertBefore(band, root.firstChild);
+  } else {
+    parkBand(node);
+  }
+}
+
+// Vue REPLACES the node element on re-render, orphaning the parked band, and it
+// can add the slots a frame late, so re-parking has to be a poll. That poll is
+// the shared watchdog below (sweep), not a per-node timer.
+
+const WIDGET_NAME = "pixaroma_longest_side_ui";
+
+/** Is this node's face actually present and ours? */
+function faceAlive(node) {
+  return !!node._pixLsRoot && (node.widgets || []).some((w) => w.name === WIDGET_NAME);
+}
+
+/** Drop whatever is left of a face so it can be rebuilt from scratch. */
+function teardownFace(node) {
+  node._pixLsFloorOff?.();
+  node._pixLsFloorOff = null;
+  try { node._pixLsBand?.remove(); } catch {}
+  try { node._pixLsRoot?.remove(); } catch {}
+  const i = (node.widgets || []).findIndex((w) => w.name === WIDGET_NAME);
+  if (i >= 0) node.widgets.splice(i, 1);
+  node._pixLsBand = null;
+  node._pixLsRoot = null;
+  node._pixLsRefresh = null;
+}
+
+/**
+ * IDEMPOTENT. Builds the face only if it is missing, so it is safe to call from
+ * a poll.
+ *
+ * Flipping "Modern Node Design" live does NOT just move things around: measured
+ * on this node, the flip left it with `widgets: []` and no face at all, because
+ * the widget is created once in nodeCreated and the flip tears the node down
+ * without running it again. ComfyUI marks that setting with no reload flag, so
+ * nobody is told to refresh, and core's own nodes re-render in place - people
+ * reasonably expect ours to as well.
+ */
+function ensureFace(node) {
+  if (faceAlive(node)) return false;
+  teardownFace(node);            // clear any half-built leftovers first
+  buildFaceOnNode(node);
+  return true;
+}
+
+function buildFaceOnNode(node) {
+  const { root, band, refresh } = buildFace(node, { onGear: openPanel });
   node._pixLsRoot = root;
+  node._pixLsBand = band;
   node._pixLsRefresh = refresh;
+
+  applyBandPlacement(node);
 
   // MANDATORY on every DOM widget: without it the wheel is swallowed by this
   // element and the canvas stops zooming while the cursor is over the node
@@ -65,13 +155,54 @@ function setupNode(node) {
   // renderer's own floor is a live DOM measurement, not getMinHeight. No-op in
   // legacy; uninstalled in onRemoved.
   node._pixLsFloorOff = installResizeFloor(root, () => WIDGET_H);
-
-  // Fresh-drop size only. configure() runs AFTER nodeCreated (Vue Compat #8) so
-  // a saved or duplicated node keeps its own size; this is never wrapped in a
-  // microtask, which would run after configure and clobber it (UI convention #9).
-  node.size[0] = DEFAULT_W;
-  node.size[1] = node.computeSize()[1];
+  // Deliberately NO node.size write here: this runs on a rebuild too, and
+  // resetting the size on a renderer flip would throw away a size the user set.
   node.setDirtyCanvas(true, true);
+}
+
+// ── one watchdog for every node of this type ────────────────────────────────
+// It does two jobs a per-node timer could not: rebuild a face the renderer flip
+// destroyed (the node INSTANCE can be replaced, so a captured `node` in a
+// per-node callback would be stale), and re-park the band after Vue replaces
+// the node element. Cheap in the steady state - two property checks per node -
+// and it stops as soon as the last node of this type is gone.
+let _watchdog = 0;
+let _rendererOff = null;
+let _emptySweeps = 0;
+
+function sweep() {
+  const nodes = (app.graph?._nodes || app.graph?.nodes || [])
+    .filter((n) => n && n.comfyClass === CLASS_NAME);
+  if (!nodes.length) {
+    // Do NOT stop on the first empty sweep. A renderer flip and a workflow
+    // switch both pass through a moment with zero nodes, and stopping there
+    // would leave the nodes that come back a second later with no watchdog to
+    // rebuild their faces. Three quiet passes (~1s) means genuinely gone.
+    if (++_emptySweeps < 3) return;
+    if (_watchdog) { clearInterval(_watchdog); _watchdog = 0; }
+    _rendererOff?.();
+    _rendererOff = null;
+    return;
+  }
+  _emptySweeps = 0;
+  for (const n of nodes) {
+    if (ensureFace(n)) n._pixLsRefresh?.();
+    if (isVueNodes()) parkBand(n);
+  }
+}
+
+function startWatchdog() {
+  if (!_watchdog) _watchdog = setInterval(sweep, 350);
+  if (!_rendererOff) {
+    _rendererOff = onRendererChange(() => {
+      // The flip and the re-render are not simultaneous, so sweep now AND let
+      // the interval catch whatever settles a few hundred ms later.
+      sweep();
+      for (const n of (app.graph?._nodes || [])) {
+        if (n.comfyClass === CLASS_NAME) { applyBandPlacement(n); n._pixLsRefresh?.(); }
+      }
+    });
+  }
 }
 
 app.registerExtension({
@@ -83,10 +214,13 @@ app.registerExtension({
     const _origConfigure = nodeType.prototype.onConfigure;
     nodeType.prototype.onConfigure = function () {
       const r = _origConfigure?.apply(this, arguments);
-      // Repaint from the restored properties. DOM only - nothing here may write
+      // Repaint from the restored properties, and re-assert the band placement
+      // (a saved node arrives without it). DOM only - nothing here may write
       // node.size or an untouched workflow opens flagged "modified"
       // (Vue Compat #18).
-      queueMicrotask(() => this._pixLsRefresh?.());
+      applyBandPlacement(this);
+      queueMicrotask(() => { applyBandPlacement(this); this._pixLsRefresh?.(); });
+      startWatchdog();   // belt: a node arriving by any path gets the watchdog
       return r;
     };
 
@@ -134,17 +268,31 @@ app.registerExtension({
 
     const _origOnRemoved = nodeType.prototype.onRemoved;
     nodeType.prototype.onRemoved = function () {
-      this._pixLsFloorOff?.();
-      this._pixLsFloorOff = null;
       closeLongestSidePanelFor(this);
-      this._pixLsRoot = null;
-      return _origOnRemoved?.apply(this, arguments);
+      // teardownFace also removes the BAND, which can be parked in the Vue slot
+      // block OUTSIDE our own root - removing the node would otherwise leave it
+      // behind in the DOM.
+      teardownFace(this);
+      const r = _origOnRemoved?.apply(this, arguments);
+      // Let the shared watchdog notice the graph is empty and stop itself,
+      // rather than counting nodes here (this fires before the node leaves the
+      // graph on some paths).
+      setTimeout(sweep, 0);
+      return r;
     };
   },
 
   nodeCreated(node) {
     if (node.comfyClass !== CLASS_NAME) return;
-    setupNode(node);
+    buildFaceOnNode(node);
+    // Fresh-drop size, set ONLY here and never on a rebuild. configure() runs
+    // AFTER nodeCreated (Vue Compat #8), so a saved or duplicated node keeps its
+    // own size; and this must not be deferred into a microtask, which would run
+    // after configure and clobber it (UI convention #9).
+    node.size[0] = DEFAULT_W;
+    node.size[1] = node.computeSize()[1];
+    node.setDirtyCanvas(true, true);
+    startWatchdog();
   },
 });
 

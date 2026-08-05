@@ -25,13 +25,17 @@ export const STEPS = [0, 8, 16, 32, 64];
 export const MIN_DIM = 8;
 export const MAX_DIM = 16384;
 
-// How many tabs / chips fit on one row before the labels crowd, at the node's
-// default width. Measured on the real node, not guessed: at seven the shape
-// swatch and its label collide. The settings panel enforces it.
-export const MAX_ROW_ITEMS = 6;
+// How many tabs / chips a row may hold. Five, so each one stays comfortably
+// wide on a small node.
+export const MAX_ROW_ITEMS = 5;
 
-export const DEFAULT_SIZES = [512, 864, 1024, 1216, 1536, 2048];
-export const DEFAULT_RATIOS = ["keep", "1:1", "16:9", "9:16", "4:3", "3:4"];
+export const DEFAULT_SIZES = [864, 1024, 1216, 1536, 2048];
+export const DEFAULT_RATIOS = ["keep", "1:1", "16:9", "9:16", "2:3"];
+
+// `keep` is not a shape, it is "leave the shape alone", and it is the way back
+// from any crop. It is therefore always slot 0 and cannot be removed - without
+// it a node cropped to 9:16 would have no control that undoes the crop.
+export const LOCKED_RATIO = "keep";
 
 export const ANCHORS = [
   "top-left", "top", "top-right",
@@ -79,18 +83,24 @@ export function readState(node) {
     ? d.sizes.map((v) => clampInt(v, MIN_DIM, MAX_DIM, 1024)).slice(0, MAX_ROW_ITEMS)
     : [...DEFAULT_SIZES];
 
-  const ratios = Array.isArray(d.ratios) && d.ratios.length
-    ? d.ratios.filter((r) => typeof r === "string" && r.trim()).slice(0, MAX_ROW_ITEMS)
-    : [...DEFAULT_RATIOS];
+  // `keep` is forced into slot 0 whatever the stored list says, so it can never
+  // be edited away and always sits in the same place.
+  const stored = Array.isArray(d.ratios)
+    ? d.ratios.filter((r) => typeof r === "string" && r.trim() && r !== LOCKED_RATIO)
+    : [...DEFAULT_RATIOS].filter((r) => r !== LOCKED_RATIO);
+  const ratios = [LOCKED_RATIO, ...stored].slice(0, MAX_ROW_ITEMS);
 
   const step = Number(d.step);
-  const ratio = typeof d.ratio === "string" && d.ratio.trim() ? d.ratio : "keep";
+  // An active shape that is no longer ON the row would leave every chip looking
+  // off while the run still cropped, so it falls back to what is showing.
+  let ratio = typeof d.ratio === "string" && d.ratio.trim() ? d.ratio : LOCKED_RATIO;
+  if (!ratios.includes(ratio)) ratio = LOCKED_RATIO;
 
   return {
     size: clampInt(d.size, MIN_DIM, MAX_DIM, DEFAULT_STATE.size),
     sizes,
     ratio,
-    ratios: ratios.length ? ratios : [...DEFAULT_RATIOS],
+    ratios,
     step: STEPS.includes(step) ? step : 0,
     anchor: ANCHORS.includes(d.anchor) ? d.anchor : "center",
     allow_upscale: d.allow_upscale === undefined ? true : !!d.allow_upscale,

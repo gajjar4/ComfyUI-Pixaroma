@@ -9,7 +9,7 @@
 import { app } from "/scripts/app.js";
 import { createAccentSection, accentOf } from "../shared/node_settings.mjs";
 import {
-  readState, writeState, parseRatio, MAX_ROW_ITEMS,
+  readState, writeState, snapToMultiple, MAX_ROW_ITEMS, LOCKED_RATIO, STEPS,
   DEFAULT_SIZES, DEFAULT_RATIOS, RATIO_CHOICES, ANCHORS, RESAMPLES,
   MIN_DIM, MAX_DIM,
 } from "./core.mjs";
@@ -92,13 +92,20 @@ function injectCSS() {
      and reads as unfinished (UI convention #13b). */
   .${CLS} input[type=checkbox]{ accent-color:var(--pix-acc,#f66744); cursor:pointer; }
   .${CLS} .note{ font-size:11px; color:rgba(255,255,255,0.45); line-height:1.5; }
-  .${CLS} .sugg{ display:flex; gap:3px; flex-wrap:wrap; }
-  .${CLS} .sugg button{
-    background:none; border:1px solid rgba(255,255,255,0.12); border-radius:3px;
-    color:rgba(255,255,255,0.5); font-size:10px; padding:2px 5px; cursor:pointer;
-    font-family:inherit;
+  /* The shape palette: every shape on offer, the ones on the row lit up. */
+  .${CLS} .sugg{ display:flex; gap:4px; flex-wrap:wrap; }
+  .${CLS} .chip{
+    background:#1d1d1d; border:1px solid #444; border-radius:4px;
+    color:rgba(255,255,255,0.6); font-size:11px; padding:4px 8px; cursor:pointer;
+    font-family:inherit; min-width:38px; text-align:center;
   }
-  .${CLS} .sugg button:hover{ border-color:var(--pix-acc,#f66744); color:#ddd; }
+  .${CLS} .chip:hover{ border-color:var(--pix-acc,#f66744); color:#ddd; }
+  .${CLS} .chip.on, .${CLS} .chip.on:hover{
+    background:var(--pix-acc,#f66744); border-color:var(--pix-acc,#f66744); color:#fff;
+  }
+  /* keep is always on the row, so it must not look clickable. */
+  .${CLS} .chip.locked{ cursor:default; opacity:0.8; }
+  .${CLS} .chip.locked:hover{ border-color:var(--pix-acc,#f66744); }
   `;
   document.head.appendChild(s);
 }
@@ -254,10 +261,35 @@ function section(parent, labelText, onReset) {
 function fill(bd, node, changed) {
   const st = readState(node);
 
+  // ── the step ─────────────────────────────────────────────────────────────
+  // Same control as the button on the node. It is first because it also
+  // constrains what you can type into the size tabs below.
+  {
+    const sec = section(bd, "Round sizes to");
+    const pills = document.createElement("div");
+    pills.className = "pills";
+    for (const m of STEPS) {
+      const p = document.createElement("button");
+      p.className = "pill" + (st.step === m ? " on" : "");
+      p.textContent = m === 0 ? "Off" : String(m);
+      p.title = m === 0
+        ? "Send sizes exactly as they are"
+        : `Round both sides to the nearest ${m} pixels`;
+      p.addEventListener("click", () => { writeState(node, { step: m }); changed(true); });
+      pills.appendChild(p);
+    }
+    sec.appendChild(pills);
+    const note = document.createElement("div");
+    note.className = "note";
+    note.textContent = "Most models want sizes in steps like these. This node only, "
+      + "and the small button on the node does the same thing.";
+    sec.appendChild(note);
+  }
+
   // ── size tabs ────────────────────────────────────────────────────────────
-  // Six slots as a grid rather than an add/remove list: the grid IS the row you
-  // will see, in the order you will see it, and it fits in a fraction of the
-  // height. A blank slot simply drops that tab.
+  // Typed, because a size is any number you like. The grid IS the row you will
+  // see, in the order you will see it, and it costs a fraction of the height an
+  // add/remove list would. A blank slot simply drops that tab.
   {
     const sec = section(bd, "Size tabs", () => {
       writeState(node, { sizes: [...DEFAULT_SIZES] });
@@ -270,14 +302,21 @@ function fill(bd, node, changed) {
       inp.type = "text";
       inp.value = st.sizes[i] != null ? String(st.sizes[i]) : "";
       inp.placeholder = "-";
-      inp.title = "A size for the row. Leave blank to drop this tab.";
+      inp.title = st.step > 0
+        ? `A size for the row, rounded to the nearest ${st.step}. Blank drops this tab.`
+        : "A size for the row. Blank drops this tab.";
       inp.addEventListener("change", () => {
+        const step = readState(node).step;
         const vals = [];
         for (const el of grid.querySelectorAll("input")) {
-          const n = Math.trunc(Number(el.value.trim()));
-          if (el.value.trim() && Number.isFinite(n) && n >= MIN_DIM && n <= MAX_DIM) {
-            vals.push(n);
-          }
+          const raw = el.value.trim();
+          if (!raw) continue;
+          let n = Math.trunc(Number(raw));
+          if (!Number.isFinite(n) || n < MIN_DIM || n > MAX_DIM) continue;
+          // A typed size obeys the SAME step as the output, so a tab can never
+          // promise a number the run would immediately round away from.
+          if (step > 0) n = snapToMultiple(n, step);
+          vals.push(n);
         }
         // Never leave the row empty - a node with no size tabs cannot be used
         // and there would be no way back from the face.
@@ -289,58 +328,62 @@ function fill(bd, node, changed) {
     sec.appendChild(grid);
     const note = document.createElement("div");
     note.className = "note";
-    note.textContent = `Up to ${MAX_ROW_ITEMS} fit on the row. Blank drops a tab.`;
+    note.textContent = st.step > 0
+      ? `Type any size. Up to ${MAX_ROW_ITEMS} fit on the row, and each is rounded `
+        + `to the nearest ${st.step} to match the step above.`
+      : `Type any size. Up to ${MAX_ROW_ITEMS} fit on the row. Blank drops a tab.`;
     sec.appendChild(note);
   }
 
   // ── shape chips ──────────────────────────────────────────────────────────
+  // Picked from a list rather than typed: a shape is one of a known set, and
+  // typing invites "16;9" and a chip that silently does nothing.
   {
     const sec = section(bd, "Shape chips", () => {
       writeState(node, { ratios: [...DEFAULT_RATIOS] });
       changed(true);
     });
+
+    const chosen = st.ratios;
+    const full = chosen.length >= MAX_ROW_ITEMS;
+
     const grid = document.createElement("div");
-    grid.className = "grid3";
-    const commit = () => {
-      const vals = [];
-      for (const el of grid.querySelectorAll("input")) {
-        const t = el.value.trim();
-        if (!t) continue;
-        const ok = t.toLowerCase() === "keep" || !!parseRatio(t);
-        el.classList.toggle("bad", !ok);
-        if (ok) vals.push(t.toLowerCase() === "keep" ? "keep" : t);
+    grid.className = "sugg";
+    for (const r of [LOCKED_RATIO, ...RATIO_CHOICES.filter((x) => x !== LOCKED_RATIO)]) {
+      const on = chosen.includes(r);
+      const locked = r === LOCKED_RATIO;
+      const b = document.createElement("button");
+      b.className = "chip" + (on ? " on" : "") + (locked ? " locked" : "");
+      b.textContent = r;
+      if (locked) {
+        b.title = "Always on the row. It is the way back from a crop, so it cannot be removed.";
+      } else if (on) {
+        b.title = `On the row. Click to take ${r} off.`;
+      } else if (full) {
+        b.title = `The row is full (${MAX_ROW_ITEMS}). Take one off to add ${r}.`;
+      } else {
+        b.title = `Click to put ${r} on the row.`;
       }
-      writeState(node, { ratios: vals.length ? vals : [...DEFAULT_RATIOS] });
-      changed(false);   // do NOT rebuild: it would blow away a half-typed field
-    };
-    for (let i = 0; i < MAX_ROW_ITEMS; i++) {
-      const inp = document.createElement("input");
-      inp.type = "text";
-      inp.value = st.ratios[i] != null ? String(st.ratios[i]) : "";
-      inp.placeholder = "-";
-      inp.title = "keep, or a shape like 16:9. Leave blank to drop this chip.";
-      inp.addEventListener("change", commit);
-      grid.appendChild(inp);
+      b.addEventListener("click", () => {
+        if (locked) return;                       // keep is not removable
+        const cur = readState(node).ratios;
+        let next;
+        if (cur.includes(r)) next = cur.filter((x) => x !== r);
+        else if (cur.length >= MAX_ROW_ITEMS) return;   // full, nothing to do
+        else next = [...cur, r];
+        writeState(node, { ratios: next });
+        changed(true);
+      });
+      grid.appendChild(b);
     }
     sec.appendChild(grid);
 
-    const sugg = document.createElement("div");
-    sugg.className = "sugg";
-    for (const r of RATIO_CHOICES) {
-      const b = document.createElement("button");
-      b.textContent = r;
-      b.title = `Put ${r} in the first blank slot`;
-      b.addEventListener("click", () => {
-        const inputs = [...grid.querySelectorAll("input")];
-        const slot = inputs.find((el) => !el.value.trim());
-        if (!slot) return;
-        slot.value = r;
-        commit();
-        changed(true);
-      });
-      sugg.appendChild(b);
-    }
-    sec.appendChild(sugg);
+    const note = document.createElement("div");
+    note.className = "note";
+    note.textContent = full
+      ? `The row is full. Click one that is on to take it off, then add another.`
+      : `Click to add or remove. Up to ${MAX_ROW_ITEMS} fit, and keep is always there.`;
+    sec.appendChild(note);
   }
 
   // ── crop anchor ──────────────────────────────────────────────────────────

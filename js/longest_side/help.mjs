@@ -34,11 +34,12 @@ registerNodeHelp("PixaromaLongestSide", {
       body:
         "The little rectangle on each chip shows you the shape you will get.",
       defs: [
-        ["keep", "Leave the picture's own shape alone and just scale it. This is the usual choice."],
+        ["keep", "Leave the picture's own shape alone and just scale it. This is the usual choice, and it is always on the row so there is always a way back from a crop."],
         ["1:1", "A square."],
         ["16:9", "Wide, like a TV screen."],
         ["9:16", "Tall, like a phone screen."],
-        ["anything else", "Add the shapes you use in the settings, or type your own like 3:2 or 21:9."],
+        ["2:3", "The classic photo shape, standing up."],
+        ["swapping them", "The settings hold every shape on offer. Click one to put it on the row or take it off. Five fit."],
       ],
     },
     {
@@ -55,8 +56,8 @@ registerNodeHelp("PixaromaLongestSide", {
     {
       heading: "The buttons on the node",
       defs: [
-        ["The small button", "Steps through Off, 8, 16, 32 and 64. Most models want sizes in steps like these, so this rounds BOTH sides to the nearest step. Each node remembers its own."],
-        ["The gear", "Opens the settings: which sizes and shapes appear on the rows, where a crop is taken from, whether small pictures may grow, the resample quality, and the node's colour."],
+        ["The small button", "Steps through Off, 8, 16, 32 and 64. Most models want sizes in steps like these, so this rounds BOTH sides to the nearest step. Each node remembers its own, and the same choice is in the settings."],
+        ["The gear", "Opens the settings: the step, the sizes on the row (type any number you like), which shapes appear, where a crop is taken from, whether small pictures may grow, the resample quality, and the node's colour."],
         ["The orange size", "What this node will send. It shows the exact numbers once you have run it, and an estimate marked with a squiggle before that, because the exact answer depends on the picture coming in."],
       ],
     },
