@@ -9,7 +9,7 @@ import { ACC, accentOf } from "../shared/node_settings.mjs";
 import { canvasBackingScale } from "../shared/nodes2.mjs";
 import { pixAsset } from "../shared/api_url.mjs";
 import { placeZoomedPopup } from "../shared/popup_zoom.mjs";
-import { WAVE_H, fmtTime, readState, writeState } from "./core.mjs";
+import { DEFAULT_STATE, WAVE_H, fmtTime, readState, writeState } from "./core.mjs";
 import { audioFileUrl, listAudioFiles, uploadAudio } from "./api.mjs";
 import { drawWave, forgetPeaks, loadPeaks, makePlayer } from "./waveform.mjs";
 
@@ -253,9 +253,19 @@ function windowSeconds(node, st, duration) {
  */
 function selectFile(node, name) {
   stopPlay(node);
-  writeState(node, { file: name, start: 0, whenUnwired: "whole" });
+  // `length` goes too. It is still read on the wired-but-unknown path, so a
+  // leftover from the previous file shows up as the stand-in window length on
+  // the new one; and flipping back to "Use length" in the gear panel would
+  // otherwise resurrect it.
+  writeState(node, { file: name, start: 0, length: DEFAULT_STATE.length,
+                     whenUnwired: "whole" });
   node._pixLaDur = 0;
   node._pixLaCue = null;
+  // The PER-NODE peaks copy, not just the shared module cache. Its freshness
+  // test is `cached.file === state.file`, which still matches after a re-upload
+  // under the SAME name - so the box kept drawing the old recording, and worse,
+  // restored the old duration, making clicks map to the wrong times.
+  node._pixLaPeaks = null;
 }
 
 export function buildFace(node, openPanel) {
@@ -466,6 +476,13 @@ function attachDrag(node, wave) {
   wave.addEventListener("pointerdown", (e) => {
     const info = zoneAt(node, wave, e.clientX);
     if (!info.zone) return;
+    // Only the primary button, and never while a drag is already live. A second
+    // press (right button while holding left, or a second finger) otherwise runs
+    // this handler again and attaches a SECOND move listener; the first finish()
+    // then flips the shared flag and the second returns early without removing
+    // its own listener, leaving an orphan that fights every later drag with
+    // stale zone/offset values for the rest of the node's life.
+    if (e.button !== 0 || node._pixLaDragging) return;
     e.stopPropagation();
     e.preventDefault();
     try { wave.setPointerCapture(e.pointerId); } catch (_x) { /* mouse only */ }
@@ -483,15 +500,22 @@ function attachDrag(node, wave) {
     };
     // Where inside the window the grab happened, so the window follows the
     // cursor from THAT point instead of snapping its centre to it.
-    // How far right the START may go.
+    // How far right the START may go. This has been wrong twice, in opposite
+    // directions, so both cases are spelled out.
     //
-    // The obvious `dur - len0` collapses to ZERO the moment the wanted length
-    // exceeds the file - ask for 5.17s of a 4.65s song and the selection pins
-    // itself at 0 and simply stops responding to the mouse, with nothing on
-    // screen saying why. That is a dead control, which reads as a broken one.
-    // When the window cannot fit, let it slide anyway: the tail is padded (and
-    // the readout already says so), which is a real choice someone might want.
-    const maxStart = len0 >= dur
+    // `dur - len0` is only right when the length is FIXED. In "whole file from
+    // here" mode the window's end IS the file end, so its length shrinks as the
+    // start moves right - and `dur - len0` then evaluates to exactly the
+    // current start, pinning the selection where it already is. Measured: slide
+    // right once and it never moves right again.
+    //
+    // And when a FIXED length is longer than the file, `dur - len0` goes
+    // negative and clamps to zero, which pins it at the very start instead.
+    //
+    // Both are the same failure to the user: a control that silently stops
+    // responding, which reads as a broken one rather than a limit.
+    const fixedLength = durationWired(node) || st0.whenUnwired === "length";
+    const maxStart = (!fixedLength || len0 >= dur)
       ? Math.max(0, dur - MIN_WINDOW_S)
       : dur - len0;
 
@@ -537,6 +561,10 @@ function attachDrag(node, wave) {
       // means "from the beginning of what I just chose" unless you deliberately
       // click somewhere else afterwards.
       node._pixLaCue = null;
+      // Re-arm the stop point while playing, or editing the selection mid-play
+      // leaves the audio cutting out at the OLD boundary: drag the right handle
+      // out and it still stops where the edge used to be.
+      if (node._pixLaAudio) node._pixLaStopAt = playStopAt(node);
       liveUpdate(node);
     };
     // NOTHING is applied on pointerdown any more - that is what made every
@@ -608,6 +636,12 @@ function setCue(node, seconds) {
 function playStopAt(node) {
   const st = readState(node);
   const dur = node._pixLaDur || 0;
+  // No decode yet (or it failed): we do not know where anything is, so let the
+  // element's own `ended` event stop it. Returning 0 here made Play a silent
+  // no-op - the icon flicked to stop and straight back, with no sound - both
+  // for the first second after picking a big file and forever after a file the
+  // waveform could not decode but <audio> can still stream.
+  if (dur <= 0) return Infinity;
   const from = cueSeconds(node, st);
   const selEnd = Math.min(dur, st.start + windowSeconds(node, st, dur));
   const inside = from >= st.start - 0.001 && from < selEnd - 0.001;
@@ -657,7 +691,9 @@ export function stopPlay(node) {
   if (!node) return;
   const el = node._pixLaAudio;
   if (el) {
-    try { el.pause(); el.src = ""; } catch (_e) { /* already torn down */ }
+    // NOT src = "": an empty src resolves against the document URL, so the
+    // browser re-requests the ComfyUI page as media and logs an error.
+    try { el.pause(); el.removeAttribute("src"); el.load(); } catch (_e) { /* already torn down */ }
   }
   node._pixLaAudio = null;
   if (node._pixLaPlayRaf) {

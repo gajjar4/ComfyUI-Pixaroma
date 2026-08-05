@@ -60,29 +60,49 @@ function computePeaks(buffer, buckets) {
 /**
  * { peaks, duration, error } for a file, decoded once and remembered.
  * Never rejects - a failure comes back as { error } so the face can say so.
+ *
+ * The cache holds the IN-FLIGHT PROMISE, not the settled result. Writing it
+ * only on resolve meant every concurrent caller missed: a workflow open renders
+ * the face up to five times before the first decode lands (onConfigure, two
+ * queued microtasks, the ResizeObserver self-heal and the first upstream poll),
+ * so one file was downloaded and decoded five times over. Measured: 5 calls, 5
+ * downloads. A 3-minute song is megabytes each pass.
+ *
+ * A FAILURE is cached too - otherwise a bad file re-downloads on every render -
+ * but only briefly. Cached forever, a transient miss (a file still being
+ * written, a momentary 404) became permanent: re-picking the same file returned
+ * the stale error and the only ways out were a re-upload or F5. Measured.
  */
-export async function loadPeaks(name, url, buckets = 240) {
-  if (!name || !url) return { peaks: null, duration: 0, error: false, empty: true };
+const ERROR_TTL_MS = 10000;
+
+export function loadPeaks(name, url, buckets = 240) {
+  if (!name || !url) {
+    return Promise.resolve({ peaks: null, duration: 0, error: false, empty: true });
+  }
   const key = `${name}|${buckets}`;
   const hit = _cache.get(key);
-  if (hit) return hit;
+  if (hit && !(hit.failedAt && Date.now() - hit.failedAt > ERROR_TTL_MS)) return hit.promise;
+  if (hit) _cache.delete(key);                 // stale failure: let it try again
 
-  let result;
-  try {
-    const res = await fetch(url, { cache: "no-store" });
-    if (!res.ok) throw new Error(String(res.status));
-    const bytes = await res.arrayBuffer();
-    const ctx = audioContext();
-    if (!ctx) throw new Error("no Web Audio");
-    const buffer = await ctx.decodeAudioData(bytes);
-    result = { peaks: computePeaks(buffer, buckets), duration: buffer.duration, error: false };
-  } catch (_e) {
-    result = { peaks: null, duration: 0, error: true };
-  }
+  const entry = { promise: null, failedAt: 0 };
+  entry.promise = (async () => {
+    try {
+      const res = await fetch(url, { cache: "no-store" });
+      if (!res.ok) throw new Error(String(res.status));
+      const bytes = await res.arrayBuffer();
+      const ctx = audioContext();
+      if (!ctx) throw new Error("no Web Audio");
+      const buffer = await ctx.decodeAudioData(bytes);
+      return { peaks: computePeaks(buffer, buckets), duration: buffer.duration, error: false };
+    } catch (_e) {
+      entry.failedAt = Date.now();
+      return { peaks: null, duration: 0, error: true };
+    }
+  })();
 
   if (_cache.size >= MAX_CACHE) _cache.delete(_cache.keys().next().value);
-  _cache.set(key, result);
-  return result;
+  _cache.set(key, entry);
+  return entry.promise;
 }
 
 /** Drop a file's cached peaks - call after a re-upload under the same name. */

@@ -13,6 +13,14 @@ return a short buffer while believing it matched.
 from __future__ import annotations
 
 
+# A day. Anything past this is a corrupted blob or an attack, never a clip
+# someone meant. It exists because `start * sample_rate` on a large-but-FINITE
+# float overflows to inf inside the multiply, and round(inf) raises an uncaught
+# OverflowError that kills the run with a traceback naming neither the node nor
+# the field.
+_MAX_SECONDS = 86400.0
+
+
 def _as_float(v, default=0.0) -> float:
     """Never raise on a value that arrived from a widget or a state blob."""
     try:
@@ -22,6 +30,9 @@ def _as_float(v, default=0.0) -> float:
     # NaN and inf both come back from a broken upstream FLOAT wire; either would
     # turn into a nonsense sample count below.
     if f != f or f in (float("inf"), float("-inf")):
+        return default
+    # Finite but absurd is the same problem one step later - see _MAX_SECONDS.
+    if f > _MAX_SECONDS or f < -_MAX_SECONDS:
         return default
     return f
 

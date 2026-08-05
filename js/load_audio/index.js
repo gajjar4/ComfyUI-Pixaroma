@@ -37,8 +37,12 @@ const _lastSeen = new WeakMap();
 function watchUpstream() {
   if (_watch) return;
   _watch = setInterval(() => {
-    const nodes = (app.graph?._nodes || app.graph?.nodes || [])
-      .filter((n) => n.comfyClass === CLASS);
+    // buildIndex, not app.graph._nodes: the latter is the ROOT graph only, so
+    // a Load Audio inside a subgraph never repaints and its readout keeps
+    // reporting an old length while execution is perfectly correct - the
+    // hardest kind of report to diagnose. (The tick writes nothing serialized,
+    // so this cannot dirty a workflow.)
+    const nodes = [...buildIndex().values()];
     if (!nodes.length) { clearInterval(_watch); _watch = 0; return; }
     for (const n of nodes) {
       // The LINK id is part of the key: dragging the wire to a different source

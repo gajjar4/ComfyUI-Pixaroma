@@ -26,6 +26,10 @@ from ._path_guard import comfy_roots, is_path_under, rel_is_rooted
 
 HIDDEN_INPUT = "LoadAudioState"
 
+# An hour. A generous ceiling for a real trim, and a hard stop on a state blob
+# that asks for a window big enough to exhaust memory.
+MAX_WINDOW_S = 3600.0
+
 
 def _decode(path):
     """(waveform [C, L], sample_rate). Uses core's own loader when it is there.
@@ -62,10 +66,13 @@ def _resolve(name):
         path = folder_paths.get_annotated_filepath(name)
     except Exception:
         return None
-    if not path or not os.path.isfile(path):
-        return None
+    # Containment decides FIRST, before anything touches the disk. is_path_under
+    # is safe on a path that does not exist, and the rooted prescreen already
+    # ran, so this only removes a stat-outside-the-roots existence oracle.
     roots = comfy_roots()
     if not roots or not is_path_under(path, *roots):
+        return None
+    if not os.path.isfile(path):
         return None
     return path
 
@@ -154,7 +161,17 @@ class PixaromaLoadAudio:
                 + ". Pick one on the node, or use its Upload button."
             )
 
-        waveform, sample_rate = _decode(path)
+        try:
+            waveform, sample_rate = _decode(path)
+        except Exception as exc:
+            # Both decoders failing raises "During handling of the above
+            # exception, another exception occurred" with two decoder stack
+            # traces and no mention of this node or the file.
+            raise ValueError(
+                "[Pixaroma] Load Audio: {!r} could not be read as audio. It may be "
+                "an unsupported format, truncated, or not a sound file at all. "
+                "({}: {})".format(os.path.basename(path), type(exc).__name__, exc)
+            ) from exc
         if waveform.ndim == 2:
             waveform = waveform.unsqueeze(0)      # [C, L] -> [1, C, L]
 
@@ -165,7 +182,28 @@ class PixaromaLoadAudio:
         else:
             want = seconds
 
+        # /prompt is unauthenticated, so `want` is attacker-controlled. Without a
+        # cap, {"whenUnwired":"length","length":20000} asks for 960 million
+        # samples - a 7.7 GB allocation, doubled transiently by the concat -
+        # which OOM-kills the ComfyUI process. Measured.
+        if want and want > MAX_WINDOW_S:
+            raise ValueError(
+                "[Pixaroma] Load Audio: asked for {:.0f} seconds of audio, which is past the "
+                "{:.0f} second limit. Check the length in this node's settings, or what is "
+                "wired into its seconds input.".format(float(want), MAX_WINDOW_S)
+            )
+
         plan = plan_window(waveform.shape[-1], sample_rate, st.get("start", 0.0), want)
+        if plan["want"] <= 0:
+            # Silently returning an empty clip here just moves the failure
+            # downstream, where it surfaces as an obscure encoder error.
+            raise ValueError(
+                "[Pixaroma] Load Audio: that selection contains no audio. The start point "
+                "({:.2f}s) is at or past the end of {!r}, which is {:.2f}s long. Drag the "
+                "selection back into the file.".format(
+                    st.get("start", 0.0), os.path.basename(path),
+                    waveform.shape[-1] / float(sample_rate or 1))
+            )
         when_short = "loop" if st.get("whenShort") == "loop" else "silence"
         out = apply_window(waveform, plan, when_short)
         rep = window_report(plan, sample_rate)
@@ -175,7 +213,10 @@ class PixaromaLoadAudio:
                 "[Pixaroma] Load Audio: wanted {:.2f}s from {:.2f}s but the file only had "
                 "{:.2f}s left, so {:.2f}s was {}.".format(
                     rep["want_s"], rep["start_s"], rep["take_s"], rep["fill_s"],
-                    "looped" if when_short == "loop" else "filled with silence")
+                    # take_s == 0 means there was nothing to loop FROM, so
+                    # apply_window correctly zero-filled regardless of the mode.
+                    "looped" if (when_short == "loop" and rep["take_s"] > 0)
+                    else "filled with silence")
             )
 
         return {
