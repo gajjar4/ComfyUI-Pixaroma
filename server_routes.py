@@ -3631,3 +3631,36 @@ async def api_duration_preview(request):
         {"ok": ok, "frames": int(frames), "actual": float(actual)},
         headers={"Cache-Control": "no-store"},
     )
+
+
+# ── Load Audio Pixaroma ─────────────────────────────────────────────────────
+# The node's picker is our own DOM popup, not a native combo, so ComfyUI's R
+# (Refresh Node Definitions) cannot reach it - core only rewrites native combo
+# widgets. Convention #18: the picker re-fetches on EVERY open and this answer
+# is never cached, so a file dropped in the input folder shows up without a
+# refresh, let alone a restart.
+_AUDIO_EXTS = (".wav", ".mp3", ".flac", ".ogg", ".opus", ".m4a", ".aac", ".wma", ".aiff", ".aif")
+
+
+@PromptServer.instance.routes.get("/pixaroma/api/load_audio/list")
+async def api_load_audio_list(request):
+    """Sound files sitting in ComfyUI's input folder."""
+    hdrs = {"Cache-Control": "no-store"}
+    try:
+        input_dir = folder_paths.get_input_directory()
+        names = []
+        for n in os.listdir(input_dir):
+            if not n.lower().endswith(_AUDIO_EXTS):
+                continue
+            try:
+                if os.path.isfile(os.path.join(input_dir, n)):
+                    names.append(n)
+            except OSError:
+                continue
+        names.sort(key=lambda s: s.lower())
+    except Exception:
+        # A SCAN FAILURE is not an empty folder. Saying [] would make the node
+        # report "no audio files" on a transient locked-folder hiccup, which
+        # reads as "my files are gone" (same reasoning as the LoRA list above).
+        return web.json_response({"files": [], "error": True}, headers=hdrs)
+    return web.json_response({"files": names}, headers=hdrs)

@@ -72,6 +72,9 @@ export const KEYWORDS = {
   PixaromaSeed: "random fixed number sampler noise",
   PixaromaNumber: "int float value amount",
   PixaromaDuration: "duration seconds length how long video length frames frame count fps frame rate clip length 5 seconds 10 seconds convert seconds to frames how many frames minimax h3 wan hunyuan ltx 4n+1 8n+1 17n+5 multiple of 4 plus 1 length must be math expression formula video too short video too long sampler rejected frame count",
+  // ── Sound ──
+  PixaromaLoadAudio: "audio sound music song track wav mp3 flac ogg m4a load audio open audio import audio waveform wave shape see the sound trim cut clip chop shorten crop audio start at start time offset pick the chorus drag select selection window play preview listen upload voice speech dialogue voiceover narration soundtrack backing track how long silence pad loop repeat",
+  PixaromaH3AudioSync: "h3 minimax minimax h3 lipsync lip sync lip-sync mouth singing sing song music video native audio audio lock lock the audio exact audio real audio my own audio use my song talking head speech dialogue av latent joint latent freeze audio noise mask 15 seconds too long clip length audio does not match video sound out of sync drift silent gibberish mumbling made up audio",
   PixaromaDropdown: "dropdown drop down list options preset choose pick select menu combo trigger word lora trigger shortcut saved values my own list named values swap between",
   PixaromaWH: "width height size dimensions",
   PixaromaPortraitLandscape: "rotate orientation flip tall wide multiple of 8 16 32 64 round size snap size divisible by step size must be multiple resolution not accepted size error round to nearest",

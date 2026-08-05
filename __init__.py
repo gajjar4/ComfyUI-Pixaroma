@@ -128,6 +128,10 @@ from .nodes.node_dropdown import NODE_CLASS_MAPPINGS as _MAPS_DROPDOWN
 from .nodes.node_dropdown import NODE_DISPLAY_NAME_MAPPINGS as _NAMES_DROPDOWN
 from .nodes.node_duration import NODE_CLASS_MAPPINGS as _MAPS_DURATION
 from .nodes.node_duration import NODE_DISPLAY_NAME_MAPPINGS as _NAMES_DURATION
+from .nodes.node_load_audio import NODE_CLASS_MAPPINGS as _MAPS_LOAD_AUDIO
+from .nodes.node_load_audio import NODE_DISPLAY_NAME_MAPPINGS as _NAMES_LOAD_AUDIO
+from .nodes.node_h3_audio_sync import NODE_CLASS_MAPPINGS as _MAPS_H3_SYNC
+from .nodes.node_h3_audio_sync import NODE_DISPLAY_NAME_MAPPINGS as _NAMES_H3_SYNC
 
 # development mode for loading additional refrence nodes
 dev_mode = False
@@ -205,6 +209,8 @@ NODE_CLASS_MAPPINGS = {
     **_MAPS_TEXT_JOIN,
     **_MAPS_DROPDOWN,
     **_MAPS_DURATION,
+    **_MAPS_LOAD_AUDIO,
+    **_MAPS_H3_SYNC,
 }
 
 # combine all node display name mappings
@@ -274,6 +280,8 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     **_NAMES_TEXT_JOIN,
     **_NAMES_DROPDOWN,
     **_NAMES_DURATION,
+    **_NAMES_LOAD_AUDIO,
+    **_NAMES_H3_SYNC,
 }
 
 # web directory for loading js files
