@@ -44,6 +44,30 @@ export function isInputConnected(node) {
 }
 
 /**
+ * Nodes whose `imgs` preview is NOT what they output, so their preview must
+ * never be measured.
+ *
+ * Both Pixaroma loaders set `node.imgs` from the FILE ON DISK
+ * (`updateNativePreview` in js/load_image/api.mjs) but pass the picture through
+ * `_resize_frame` before returning it (nodes/node_load_image.py). With their
+ * inline resize on, the preview is the ORIGINAL and the output is the resized
+ * one, so trusting it prints a confident wrong size - the exact failure this
+ * module exists to avoid.
+ *
+ * They fall back to the run-measured size instead, which Python reports and is
+ * always right. The only cost is that behind one of these two, the preview is
+ * an estimate until the first run.
+ *
+ * Deliberately NOT solved by reading their resize state: that couples this file
+ * to another node's state schema, and a schema change would silently start
+ * trusting a resizing node again. Refusing outright cannot rot.
+ */
+const PREVIEW_IS_NOT_OUTPUT = new Set([
+  "PixaromaLoadImage",
+  "PixaromaLoadImageMini",
+]);
+
+/**
  * The dimensions of the picture the upstream node is showing.
  *
  * DIRECT upstream only, deliberately. Walking further back would be wrong, not
@@ -76,6 +100,9 @@ function upstreamImageDims(node) {
     // the 2000x1000 original is what actually flows past it. Returning null
     // falls back to the honest estimate instead.
     if (up.mode === 2 || up.mode === 4) return null;
+
+    // A node whose preview is not its output (see the set above).
+    if (PREVIEW_IS_NOT_OUTPUT.has(up.comfyClass)) return null;
 
     // node.imgs is the batch the node is previewing; imageIndex is which one is
     // on show. A batch is uniform in size, so the first is representative.

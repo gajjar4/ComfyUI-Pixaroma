@@ -54,7 +54,14 @@ function parkBand(node) {
     block.style.position = "relative";
     block.appendChild(band);
     band.classList.add("parked");
-  } catch { /* degrades to a row in the body */ }
+  } catch {
+    // Degrades to an IN-FLOW row, not a tidy one: WIDGET_H deliberately
+    // excludes the band's height, so a permanent park failure (a future
+    // frontend renaming .lg-slot--output) would clip the chip row rather than
+    // simply moving it. Making the height hooks vary with DOM state is not the
+    // answer - a measured height is what rewrites node.size and false-dirties
+    // workflows. Saying so here so nobody "fixes" it that way.
+  }
 }
 
 function applyBandPlacement(node) {
@@ -70,6 +77,14 @@ function applyBandPlacement(node) {
     if (root && band.parentElement !== root) root.insertBefore(band, root.firstChild);
   } else {
     parkBand(node);
+    // Retry immediately as well as on the 350ms sweep. On a fresh node the
+    // .lg-node element does not exist yet when this first runs, so parkBand
+    // bails - and until it lands the band is a normal 40px row inside a widget
+    // pinned to 66px, which pushes the chip row out of the box. Waiting a whole
+    // sweep tick for that makes it a visible flash on every drop and every Vue
+    // re-render. parkBand is idempotent, so the extra calls cost nothing.
+    requestAnimationFrame(() => parkBand(node));
+    setTimeout(() => parkBand(node), 150);
   }
 }
 
@@ -140,7 +155,10 @@ function buildFaceOnNode(node) {
   installNodeAccent(node, root);   // the face follows this node's accent colour
 
   const height = () => WIDGET_H;
-  const w = node.addDOMWidget("pixaroma_longest_side_ui", "pixaroma_longest_side", root, {
+  // WIDGET_NAME, not a repeated literal: faceAlive and teardownFace both search
+  // for it, so if the two ever drifted apart teardownFace would silently stop
+  // removing the widget and the sweep would build a second face every tick.
+  const w = node.addDOMWidget(WIDGET_NAME, "pixaroma_longest_side", root, {
     // canvasOnly is set adaptively: true in legacy (keeps it out of the
     // Parameters tab), false in Nodes 2.0 (so the Vue body renders it).
     getValue: () => null,
@@ -181,9 +199,37 @@ let _watchdog = 0;
 let _rendererOff = null;
 let _emptySweeps = 0;
 
+/**
+ * Every node of this type ANYWHERE, subgraphs included.
+ *
+ * `app.graph._nodes` is the root level only. A node inside a subgraph would
+ * therefore never get its band parked or its readout refreshed - and worse, a
+ * workflow whose only such nodes live in subgraphs would look empty to sweep(),
+ * which after three quiet passes stops the watchdog for the whole page.
+ *
+ * Deliberately NOT reusing buildNodeIndex(): that Map is keyed on the bare
+ * node id, and subgraph ids share the root id space, so it silently drops
+ * colliding nodes. A plain array cannot.
+ */
+function collectNodes() {
+  const found = [];
+  const seen = new Set();
+  const visit = (graph) => {
+    if (!graph || seen.has(graph)) return;
+    seen.add(graph);
+    for (const n of (graph._nodes || graph.nodes || [])) {
+      if (!n) continue;
+      if (n.comfyClass === CLASS_NAME) found.push(n);
+      const inner = n.subgraph || n.graph || n._graph;
+      if (inner && inner !== graph) visit(inner);
+    }
+  };
+  visit(app.graph);
+  return found;
+}
+
 function sweep() {
-  const nodes = (app.graph?._nodes || app.graph?.nodes || [])
-    .filter((n) => n && n.comfyClass === CLASS_NAME);
+  const nodes = collectNodes();
   if (!nodes.length) {
     // Do NOT stop on the first empty sweep. A renderer flip and a workflow
     // switch both pass through a moment with zero nodes, and stopping there
@@ -197,17 +243,24 @@ function sweep() {
   }
   _emptySweeps = 0;
   for (const n of nodes) {
-    const rebuilt = ensureFace(n);
-    // The incoming picture's size can change with no event we can hook: the
-    // user swaps the file on the upstream node, or the <img> simply finishes
-    // decoding (naturalWidth is 0 until it does). Comparing a cheap key is far
-    // simpler than trying to observe every way that can happen.
-    const key = inputSizeKey(n);
-    if (rebuilt || key !== n._pixLsSizeKey) {
-      n._pixLsSizeKey = key;
-      n._pixLsRefresh?.();
+    // Per-node try/catch: without it one node in a bad state throws out of the
+    // interval callback and every OTHER node of this type silently stops being
+    // serviced - no re-parking, no readout refresh - forever.
+    try {
+      const rebuilt = ensureFace(n);
+      // The incoming picture's size can change with no event we can hook: the
+      // user swaps the file on the upstream node, or the <img> simply finishes
+      // decoding (naturalWidth is 0 until it does). Comparing a cheap key is far
+      // simpler than trying to observe every way that can happen.
+      const key = inputSizeKey(n);
+      if (rebuilt || key !== n._pixLsSizeKey) {
+        n._pixLsSizeKey = key;
+        n._pixLsRefresh?.();
+      }
+      if (isVueNodes()) parkBand(n);
+    } catch (e) {
+      console.error("[Pixaroma] Longest Side sweep failed for one node", e);
     }
-    if (isVueNodes()) parkBand(n);
   }
 }
 
@@ -260,7 +313,7 @@ app.registerExtension({
       return r;
     };
 
-    // Width clamp so the six chips never clip past the right edge. LEGACY-ONLY:
+    // Width clamp so the five chips never clip past the right edge. LEGACY-ONLY:
     // in Nodes 2.0 the rendered size lives in the Vue layout store, so clamping
     // node.size there desyncs the two and makes the node jump on a workflow
     // switch.

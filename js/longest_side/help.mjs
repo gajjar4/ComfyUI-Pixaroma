@@ -27,7 +27,8 @@ registerNodeHelp("PixaromaLongestSide", {
         + "is the one that gets the number, so you never have to work out whether "
         + "you meant width or height. A wide 1920 by 1080 photo at 1216 becomes "
         + "1216 by 684. A tall one becomes 684 by 1216.\n\n"
-        + "The six sizes on the row are yours to change in the settings.",
+        + "The five sizes on the row are yours to change in the settings: type "
+        + "any number you like, and each one is rounded to match the step.",
     },
     {
       heading: "The shape chips",

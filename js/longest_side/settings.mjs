@@ -143,6 +143,15 @@ function outsideClose(e) {
   // click reaches openLongestSidePanel with a different node, which closes the
   // previous panel before opening its own.
   if (e.target?.closest?.(".pix-ls-gear")) return;
+  // Let a half-typed field COMMIT before the panel goes. This runs in the
+  // CAPTURE phase, so without this the panel is torn down before the browser
+  // moves focus, the input is detached with a pending edit, and no `change`
+  // event ever fires - typing a size and then clicking the canvas silently
+  // threw the value away. Blurring first fires `change` synchronously.
+  try {
+    const active = document.activeElement;
+    if (active && PANEL.contains(active)) active.blur?.();
+  } catch { /* committing is best-effort; closing must still happen */ }
   closePanel();
 }
 
@@ -311,6 +320,11 @@ function fill(bd, node, changed) {
       const inp = document.createElement("input");
       inp.type = "text";
       inp.value = st.sizes[i] != null ? String(st.sizes[i]) : "";
+      // The last value this slot successfully held, so a typo can be refused
+      // WITHOUT losing the size that was there. Kept on the element rather than
+      // by index, because blank slots make list indices and input indices
+      // drift apart.
+      inp.dataset.good = inp.value;
       inp.placeholder = "-";
       inp.title = st.step > 0
         ? `A size for the row, rounded to the nearest ${st.step}. Blank drops this tab.`
@@ -318,11 +332,23 @@ function fill(bd, node, changed) {
       inp.addEventListener("change", () => {
         const step = readState(node).step;
         const vals = [];
-        for (const el of grid.querySelectorAll("input")) {
+        const inputs = [...grid.querySelectorAll("input")];
+        for (const el of inputs) {
           const raw = el.value.trim();
-          if (!raw) continue;
+          el.classList.remove("bad");
+          if (!raw) { el.dataset.good = ""; continue; }   // blank drops a tab, deliberately
           let n = Math.trunc(Number(raw));
-          if (!Number.isFinite(n) || n < MIN_DIM || n > MAX_DIM) continue;
+          if (!Number.isFinite(n) || n < MIN_DIM || n > MAX_DIM) {
+            // Refuse the typo but KEEP the size that was there. Before this a
+            // mistyped character deleted that tab outright and shifted every
+            // later one left, with no feedback - the .bad style existed in the
+            // stylesheet and was applied to nothing.
+            el.classList.add("bad");
+            el.title = `Not a size between ${MIN_DIM} and ${MAX_DIM}. The previous value is kept.`;
+            const keep = Math.trunc(Number(el.dataset.good));
+            if (Number.isFinite(keep) && keep >= MIN_DIM) vals.push(keep);
+            continue;
+          }
           // A typed size obeys the SAME step as the output, so a tab can never
           // promise a number the run would immediately round away from.
           if (step > 0) n = snapToMultiple(n, step);
@@ -330,8 +356,25 @@ function fill(bd, node, changed) {
         }
         // Never leave the row empty - a node with no size tabs cannot be used
         // and there would be no way back from the face.
-        writeState(node, { sizes: vals.length ? vals : [...DEFAULT_SIZES] });
-        changed(true);
+        const next = vals.length ? vals : [...DEFAULT_SIZES];
+        writeState(node, { sizes: next });
+
+        // changed(FALSE): repaint the node face but do NOT rebuild the panel
+        // body. A rebuild here destroys every other control between the
+        // mousedown and the mouseup of whatever the user clicked next, so
+        // clicking a step pill (or reset, or an anchor cell) right after typing
+        // a size did nothing at all and had to be clicked twice. Nothing else
+        // in this panel depends on the size list, so writing the normalised
+        // values straight back into the fields is enough.
+        inputs.forEach((el, i) => {
+          if (el.classList.contains("bad")) return;   // leave the typo visible to be corrected
+          el.value = next[i] != null ? String(next[i]) : "";
+          el.dataset.good = el.value;
+          el.title = step > 0
+            ? `A size for the row, rounded to the nearest ${step}. Blank drops this tab.`
+            : "A size for the row. Blank drops this tab.";
+        });
+        changed(false);
       });
       grid.appendChild(inp);
     }
