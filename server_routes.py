@@ -622,9 +622,25 @@ def _embed_workflow_metadata(workflow, prompt) -> PngInfo:
     return _build_pnginfo(prompt=prompt, workflow=workflow)
 
 
+# ── `if not isinstance(<body>, dict): <body> = {}` - why EVERY json route has it ──
+#
+# `await request.json()` does NOT check Content-Type and does not require an
+# object, so a body of `[1]` / `"x"` / `5` / `true` parses fine and is TRUTHY.
+# The old house idiom `data = data or {}` therefore let it straight through to
+# `.get()`, which raises AttributeError out of the handler and 500s the route -
+# and every one of these routes is UNAUTHENTICATED, so any page the user visits
+# can do it. Only the FALSY non-dicts (`[]`, `""`, `0`, `null`) were ever caught,
+# which is why the shape survived in a dozen routes for a year.
+#
+# Swept across all of them 2026-08-05 after a review found two. Add the guard to
+# any new json route; `or {}` alone is not enough.
+# Harness: D:\Claude Tests\_json_body_guard_test.py
+
 @PromptServer.instance.routes.post("/pixaroma/api/layer/upload")
 async def upload_raw_layer(request):
     data = await request.json()
+    if not isinstance(data, dict):
+        data = {}
     b64_data = data.get("image", "")
     raw_id = data.get("layer_id", "")
     layer_id = _sanitize_id(raw_id, str(uuid.uuid4()).replace("-", ""))
@@ -646,6 +662,8 @@ async def upload_raw_layer(request):
 @PromptServer.instance.routes.post("/pixaroma/api/project/save")
 async def save_project(request):
     data = await request.json()
+    if not isinstance(data, dict):
+        data = {}
     merged_b64 = data.get("image_merged", "")
     raw_id = data.get("project_id", "")
     project_id = _sanitize_id(raw_id, str(uuid.uuid4()).replace("-", ""))
@@ -667,6 +685,8 @@ async def save_project(request):
 @PromptServer.instance.routes.post("/pixaroma/api/paint/save")
 async def save_paint_composite(request):
     data = await request.json()
+    if not isinstance(data, dict):
+        data = {}
     merged_b64 = data.get("image_merged", "")
     raw_id = data.get("project_id", "")
     project_id = _sanitize_id(raw_id, str(uuid.uuid4()).replace("-", ""))
@@ -688,6 +708,8 @@ async def save_paint_composite(request):
 @PromptServer.instance.routes.post("/pixaroma/api/3d/save")
 async def save_3d_render(request):
     data = await request.json()
+    if not isinstance(data, dict):
+        data = {}
     merged_b64 = data.get("image_merged", "")
     raw_id = data.get("project_id", "")
     project_id = _sanitize_id(raw_id, str(uuid.uuid4()).replace("-", ""))
@@ -717,6 +739,8 @@ async def save_3d_model_upload(request):
     except Exception:
         return web.json_response({"status": "error", "msg": "bad_json"}, status=400)
 
+    if not isinstance(data, dict):
+        data = {}
     raw_id = data.get("project_id", "")
     project_id = _sanitize_id(raw_id, str(uuid.uuid4()).replace("-", ""))
     filename = data.get("filename", "")
@@ -767,6 +791,8 @@ async def save_3d_model_upload(request):
 @PromptServer.instance.routes.post("/pixaroma/api/3d/bg_upload")
 async def save_3d_bg_image(request):
     data = await request.json()
+    if not isinstance(data, dict):
+        data = {}
     b64_data = data.get("image", "")
     raw_id = data.get("project_id", "")
     project_id = _sanitize_id(raw_id, str(uuid.uuid4()).replace("-", ""))
@@ -788,6 +814,8 @@ async def save_3d_bg_image(request):
 @PromptServer.instance.routes.post("/pixaroma/api/crop/save")
 async def save_crop_composite(request):
     data = await request.json()
+    if not isinstance(data, dict):
+        data = {}
     merged_b64 = data.get("image_merged", "")
     raw_id = data.get("project_id", "")
     project_id = _sanitize_id(raw_id, str(uuid.uuid4()).replace("-", ""))
@@ -809,6 +837,8 @@ async def save_crop_composite(request):
 @PromptServer.instance.routes.post("/pixaroma/api/crop/upload_src")
 async def upload_crop_source(request):
     data = await request.json()
+    if not isinstance(data, dict):
+        data = {}
     b64_data = data.get("image", "")
     raw_id = data.get("project_id", "")
     project_id = _sanitize_id(raw_id, str(uuid.uuid4()).replace("-", ""))
@@ -834,6 +864,8 @@ async def upload_crop_source(request):
 @PromptServer.instance.routes.post("/pixaroma/api/inpaint/upload_src")
 async def upload_inpaint_source(request):
     data = await request.json()
+    if not isinstance(data, dict):
+        data = {}
     raw_id = data.get("project_id", "")
     project_id = _sanitize_id(raw_id, str(uuid.uuid4()).replace("-", ""))
 
@@ -857,6 +889,8 @@ async def upload_inpaint_source(request):
 @PromptServer.instance.routes.post("/pixaroma/api/inpaint/save_mask")
 async def save_inpaint_mask(request):
     data = await request.json()
+    if not isinstance(data, dict):
+        data = {}
     raw_id = data.get("project_id", "")
     project_id = _sanitize_id(raw_id, str(uuid.uuid4()).replace("-", ""))
 
@@ -1239,6 +1273,8 @@ async def remove_bg_info(request):
 @PromptServer.instance.routes.post("/pixaroma/remove_bg")
 async def remove_bg(request):
     data = await request.json()
+    if not isinstance(data, dict):
+        data = {}
     b64_data = data.get("image", "")
     # Accept the new explicit `model` field; fall back to legacy `quality`
     # ("normal"/"high") so old clients keep working.
@@ -1350,6 +1386,8 @@ async def api_preview_save(request):
     except Exception:
         return web.json_response({"error": "invalid JSON"}, status=400)
 
+    if not isinstance(data, dict):
+        data = {}
     image_b64 = data.get("image_b64", "")
     prefix_raw = data.get("filename_prefix", "Preview")
     workflow = data.get("workflow")
@@ -1409,6 +1447,8 @@ async def api_preview_prepare(request):
     except Exception:
         return web.json_response({"error": "invalid JSON"}, status=400)
 
+    if not isinstance(data, dict):
+        data = {}
     image_b64 = data.get("image_b64", "")
     prefix_raw = data.get("filename_prefix", "Preview")
     workflow = data.get("workflow")
@@ -1468,6 +1508,8 @@ async def api_xy_plot_save(request):
     except Exception:
         return web.json_response({"error": "invalid JSON"}, status=400)
 
+    if not isinstance(data, dict):
+        data = {}
     grid_filename = data.get("grid_filename")
     if not isinstance(grid_filename, str) or not grid_filename:
         return web.json_response({"error": "missing grid_filename"}, status=400)
@@ -1568,6 +1610,8 @@ async def api_xy_plot_render_full(request):
         data = await request.json()
     except Exception:
         return web.json_response({"error": "invalid JSON"}, status=400)
+    if not isinstance(data, dict):
+        data = {}
     session_id = data.get("session_id")
     if not isinstance(session_id, str) or not _SAFE_ID_RE.match(session_id) or len(session_id) > _MAX_ID_LEN:
         return web.json_response({"error": "invalid session id"}, status=400)
@@ -1601,6 +1645,8 @@ async def api_xy_plot_restyle(request):
         data = await request.json()
     except Exception:
         return web.json_response({"error": "invalid JSON"}, status=400)
+    if not isinstance(data, dict):
+        data = {}
     session_id = data.get("session_id")
     theme = data.get("theme") or "dark"
     if not isinstance(session_id, str) or not _SAFE_ID_RE.match(session_id) or len(session_id) > _MAX_ID_LEN:
@@ -2194,6 +2240,8 @@ async def api_save_image_open_folder(request):
     try:
         data = await request.json()
     except Exception:
+        data = {}
+    if not isinstance(data, dict):
         data = {}
     folder_raw = str(data.get("folder", "") or "")
     if not _pix_prescreen_field(folder_raw):    # expansion-aware, see round-3 #4
@@ -2790,7 +2838,8 @@ async def api_lora_custom_triggers(request):
         data = await request.json()
     except Exception:
         data = {}
-    data = data or {}
+    if not isinstance(data, dict):
+        data = {}
     name = data.get("name", "") or request.query.get("name", "")
     words = data.get("words", [])
     path = _resolve_lora_path(name)
@@ -2817,7 +2866,9 @@ async def api_lora_civitai_delete(request):
         data = await request.json()
     except Exception:
         data = {}
-    name = (data or {}).get("name", "") or request.query.get("name", "")
+    if not isinstance(data, dict):
+        data = {}
+    name = data.get("name", "") or request.query.get("name", "")
     path = _resolve_lora_path(name)
     roots = _lora_dirs()
     if not path or not roots or not _is_path_under(path, *roots):
@@ -3130,6 +3181,8 @@ async def api_workflows_folder(request):
         data = await request.json()
     except Exception:
         data = {}
+    if not isinstance(data, dict):
+        data = {}
     action = str(data.get("action", ""))
     root = _wf_root(request)
     path = _wf_resolve(root, data.get("path", ""))
@@ -3192,6 +3245,8 @@ async def api_workflows_reveal(request):
     try:
         data = await request.json()
     except Exception:
+        data = {}
+    if not isinstance(data, dict):
         data = {}
     root = _wf_root(request)
     target = _wf_resolve(root, data.get("path", "")) or root
@@ -3389,6 +3444,8 @@ async def api_workflows_cover_set(request):
     try:
         body = await request.json()
     except Exception:
+        body = {}
+    if not isinstance(body, dict):
         body = {}
     rel = str(body.get("rel", "") or "")
     data_url = str(body.get("dataUrl", "") or "")

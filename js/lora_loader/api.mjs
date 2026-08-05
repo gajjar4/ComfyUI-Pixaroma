@@ -107,6 +107,16 @@ export function invalidateList() {
 }
 export function invalidateAllInfo() {
   _infoCache.clear();
+  // Bump EVERY known generation too, not just the cache. Clearing alone left the
+  // R-key refresh beatable: a reply already in flight came back with its
+  // generation unchanged, so it repopulated the cache with the pre-refresh answer
+  // - exactly the hole the counter was added to close, reached through the other
+  // invalidator. Safe to do now that every consumer asks again once on a stale
+  // answer; before that retry existed this would have left a blank panel.
+  for (const k of [..._infoGen.keys()]) _infoGen.set(k, _infoGen.get(k) + 1);
+  // A name that has never been invalidated has no entry, and an in-flight fetch
+  // for it captured gen 0 - so give it one, or that reply would still slip through.
+  for (const k of [..._infoPromise.keys()]) if (!_infoGen.has(k)) _infoGen.set(k, 1);
 }
 
 // Is this name in the last fetched list? null = list not fetched yet (unknown),

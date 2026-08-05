@@ -419,10 +419,55 @@ export async function openInfoPanel(node, id, refresh) {
 
   function hintFor() { return _busy ? "Saving…" : (thumb() ? "Change" : "+ Picture"); }
 
+  /**
+   * Load this LoRA's info and adopt it - unless a NEWER load has started since,
+   * in which case this answer is simply out of date and must be dropped.
+   *
+   * Every info load in this panel takes a ticket, because more than one can be
+   * in flight at once and they can land out of order: clicking ↻ Civitai starts
+   * one, dropping a picture a moment later starts another, and if the second
+   * answers first the slower Civitai answer would then overwrite it - putting
+   * `custom_preview:false` back and making the picture and its ✕ vanish with no
+   * way to get them back short of reopening. `panel.isConnected` alone does not
+   * catch that: both requests belong to the SAME live panel.
+   *
+   * `.stale` (from api.mjs) is a different signal and both are needed: it means
+   * the data is known out of date because something invalidated this LoRA while
+   * the request was out, whether or not this panel started anything newer.
+   */
+  let _infoSeq = 0;
+  let _hydrated = false;
+
+  async function attemptInfo(force) {
+    const ticket = ++_infoSeq;
+    const j = await loraInfo(name, force);
+    if (!panel.isConnected) return "dead";
+    if (ticket !== _infoSeq) return "superseded";   // someone newer owns the answer
+    if (!j?.ok || !j.info) return "failed";
+    if (j.stale) return "stale";                    // known out of date, do not paint it
+    info = j.info;
+    // Exactly once per panel, on whichever load first succeeds. Tying this to the
+    // FIRST load alone is what lost it: when that load came back stale or
+    // superseded, hydrateCustom - which has no other call site - never ran, and
+    // the user's stored trigger words never reached the row.
+    if (!_hydrated) { _hydrated = true; hydrateCustom(); }
+    return "ok";
+  }
+
+  /** Load this LoRA's info and adopt it. A stale answer is asked again, ONCE. */
+  async function loadInfo({ force = false } = {}) {
+    const r = await attemptInfo(force);
+    // "stale" means something invalidated this LoRA while the request was out.
+    // Dropping it is right; stopping there is not, because for some invalidators
+    // (a custom word being saved) nothing else would ever refresh us. So ask
+    // again, forced, exactly once - never a loop.
+    if (r === "stale") return await attemptInfo(true);
+    return r;
+  }
+
   async function reloadInfo() {
-    const fresh = await loraInfo(name, true);
+    await loadInfo({ force: true });
     if (!panel.isConnected) return;
-    if (fresh.ok && fresh.info) info = fresh.info;
     renderBody();
   }
 
@@ -777,10 +822,9 @@ export async function openInfoPanel(node, id, refresh) {
       _thumbBust = Date.now();              // the lookup may have written a new preview
       invalidateInfo(name);
       // refresh offline info so the source badge / cached ids reflect the new sidecar,
-      // then repaint (the panel may have been closed meanwhile - guard on isConnected).
-      loraInfo(name, true).then((j) => {
-        if (j.ok && j.info && panel.isConnected) { info = j.info; renderBody(); }
-      });
+      // then repaint. Through loadInfo, so this slow answer cannot overwrite a
+      // picture the user set while the lookup was still running.
+      loadInfo({ force: true }).then((ok) => { if (ok) renderBody(); });
     } else if (res.reason === "notfound") {
       civ = { state: "nofind" };
     } else {
@@ -797,9 +841,8 @@ export async function openInfoPanel(node, id, refresh) {
     invalidateInfo(name);                 // drop the cached (sidecar-flavoured) info
     civ = null;
     viewSource = "file";                  // nothing to toggle to now - show the file words
-    const fresh = await loraInfo(name, true);
+    await loadInfo({ force: true });
     if (!panel.isConnected) return;
-    if (fresh.ok && fresh.info) info = fresh.info;
     renderBody();
   }
 
@@ -808,34 +851,19 @@ export async function openInfoPanel(node, id, refresh) {
   // once the content is final so it sits correctly against its true height.
   renderBody();
   place(panel, node);
-  const first = await loraInfo(name);
+  // WIRED BEFORE THE AWAIT. The panel is on screen and interactive for the whole
+  // of the load below, so arming the drop catch afterwards left a window in which
+  // a file dropped on it escaped to ComfyUI and became a Load Image node on the
+  // canvas - the very thing this exists to stop. Same reasoning as place()
+  // above, which is called before the await for the same "it is already visible"
+  // reason. Both only touch the panel element, which exists by now.
+  dragBy(panel);
+  wirePanelDrop(panel);
+
+  await loadInfo();
   if (!panel.isConnected) return;
-  // `first.stale` means something changed this LoRA while the request was out -
-  // the user set a picture or typed a trigger word during a slow first load.
-  // Painting it would undo what they just did (measured: the picture and its
-  // remove ✕ vanished, and the panel could not get them back).
-  //
-  // But DROPPING it is not enough either, and the first cut of this got that
-  // wrong: the stale reply also carries the title, the base model, the rank and
-  // the file's own trigger words, none of which the invalidation touched, and
-  // hydrateCustom() has NO other call site. Measured: typing a word during a slow
-  // load left the panel showing the raw filename, no metadata and 1 chip instead
-  // of 20, with the user's stored words never reaching the row. So ASK AGAIN
-  // rather than give up - once, forced, no loop.
-  if (first.ok && first.info && !first.stale) {
-    info = first.info;
-    hydrateCustom();
-  } else if (first.stale) {
-    const again = await loraInfo(name, true);
-    if (!panel.isConnected) return;
-    if (again.ok && again.info) { info = again.info; hydrateCustom(); }
-  }
   renderBody();
   place(panel, node);
-
-  // drag by the header, close on outside / Esc
-  dragBy(panel);
-  wirePanelDrop(panel);   // catch a file dropped near, but not on, the picture box
 
   const onDown = (e) => { if (!panel.contains(e.target) && !e.target.closest?.(".pix-ll-dd")) closeInfoPanel(); };
   const onKey = (e) => { if (e.key === "Escape") { e.stopPropagation(); closeInfoPanel(); } };
