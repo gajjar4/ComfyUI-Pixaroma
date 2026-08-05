@@ -22,6 +22,7 @@ import { applyAdaptiveCanvasOnly, isVueNodes, canvasBackingScale, installZoomRep
 import {
   setSelectedImage, updateNativePreview, previewMatches, pickAndUploadFile,
   pasteFromClipboard, uploadImageToInput, splitFilenameSubfolder,
+  splitTypeAnnotation,
 } from "../load_image/api.mjs";
 import { openImageDropdown, injectCSS as injectLiCSS } from "../load_image/ui.mjs";
 import { previewResize } from "../load_image/resize_modes.mjs";
@@ -437,8 +438,12 @@ function updatePreview(node) {
   if (!(im?.complete && im.naturalWidth)) {
     const fn = node._pixLiImageWidget?.value;
     if (fn) {
-      const { subfolder, filename } = splitFilenameSubfolder(fn);
-      const src = pixApiUrl(`/view?filename=${encodeURIComponent(filename)}&type=input&subfolder=${encodeURIComponent(subfolder)}&t=${Date.now()}`);
+      // Annotation off first, same as api.mjs and Load Image's updateLoadPreview
+      // (see the note there): a Mask Editor value is "...png [input]", and
+      // leaving the annotation in filename= 404s.
+      const { name, type } = splitTypeAnnotation(fn);
+      const { subfolder, filename } = splitFilenameSubfolder(name);
+      const src = pixApiUrl(`/view?filename=${encodeURIComponent(filename)}&type=${encodeURIComponent(type)}&subfolder=${encodeURIComponent(subfolder)}&t=${Date.now()}`);
       let elImg = node._pixLmPreviewImgEl;
       if (!elImg) { elImg = new Image(); node._pixLmPreviewImgEl = elImg; }
       elImg.onload = () => { renderCards(node); renderPreviewCanvas(node); node.setDirtyCanvas?.(true, true); };

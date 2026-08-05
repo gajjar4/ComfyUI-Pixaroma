@@ -9,7 +9,7 @@ import {
   injectCSS, buildRoot, hideNativeImageCombo, openImageDropdown,
   renderChips, renderGlobalControls,
 } from "./ui.mjs";
-import { pickAndUploadFile, pasteFromClipboard, uploadImageToInput, setSelectedImage, updateNativePreview, previewMatches, splitFilenameSubfolder } from "./api.mjs";
+import { pickAndUploadFile, pasteFromClipboard, uploadImageToInput, setSelectedImage, updateNativePreview, previewMatches, splitFilenameSubfolder, splitTypeAnnotation } from "./api.mjs";
 import { buildModePanel, previewResize } from "./resize_modes.mjs";
 import { applyInlineLabel, applyWHLayout, applyCoverControls } from "./panel_polish.mjs";
 
@@ -273,8 +273,15 @@ function updateLoadPreview(node) {
     // our own Image so the canvas + cards have real dims to draw/measure.
     const fn = node._pixLiImageWidget?.value;
     if (fn) {
-      const { subfolder, filename } = splitFilenameSubfolder(fn);
-      const src = pixApiUrl(`/view?filename=${encodeURIComponent(filename)}&type=input&subfolder=${encodeURIComponent(subfolder)}&t=${Date.now()}`);
+      // Peel ComfyUI's type annotation off first, exactly as api.mjs does.
+      // A Mask Editor save leaves the widget holding "...png [input]"; without
+      // this the annotation lands inside filename= and the fetch 404s, which is
+      // the same bug that was just fixed one function over. Leaving two of the
+      // three copies unfixed is precisely how the original survived in two
+      // places, so all three now share splitTypeAnnotation.
+      const { name, type } = splitTypeAnnotation(fn);
+      const { subfolder, filename } = splitFilenameSubfolder(name);
+      const src = pixApiUrl(`/view?filename=${encodeURIComponent(filename)}&type=${encodeURIComponent(type)}&subfolder=${encodeURIComponent(subfolder)}&t=${Date.now()}`);
       let el = node._pixLiPreviewImgEl;
       if (!el) { el = new Image(); node._pixLiPreviewImgEl = el; }
       el.onload = () => { renderLoadPreviewCanvas(node); node.setDirtyCanvas?.(true, true); };

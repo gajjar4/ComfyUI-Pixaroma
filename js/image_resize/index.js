@@ -4,7 +4,6 @@ import { hideJsonWidget, BRAND,
   installCanvasZoomPassthrough, installNodeAccent, registerNodeAccent, accentOf, accentRgba,
 } from "../shared/index.mjs";
 import { isVueNodes, applyAdaptiveCanvasOnly, canvasBackingScale } from "../shared/nodes2.mjs";
-import { upstreamImageDims } from "../shared/upstream_image_size.mjs";
 import { buildModePanel, previewResize, injectResizePanelCSS } from "../shared/resize_panel.mjs";
 import {
   injectCSS, buildModeChips, buildFooter, buildResampleAndUpscale,
@@ -89,23 +88,34 @@ function refit(node) {
   });
 }
 
-// The INPUT half of the Input -> Output card. Reads the size off the upstream
-// node's own preview, so the card is right before you run anything.
+// The INPUT half of the Input -> Output card.
 //
-// Uses the SHARED reader rather than reading node.imgs directly, because two
-// upstream states make that preview a lie and this node used to believe both
-// (measured 2026-08-05, both reported a stale 480x832):
-//   - a MUTED or BYPASSED upstream, which passes its own input through, so its
-//     preview is of a picture that never reaches us;
-//   - a Pixaroma loader with its own inline resize on, whose preview is the
-//     file on disk while its OUTPUT is the resized version.
-// The shared module also owns the refusal list, which must exist exactly once
-// or it drifts when a new loader is added.
+// ⚠️ DELIBERATELY NOT using js/shared/upstream_image_size.mjs, though it exists
+// and does exactly this with two extra guards. Tried on 2026-08-05 and REVERTED
+// the same day, because this node's readout has a fallback that Longest Side's
+// does not: when the reader returns null, `getReadoutInfo` drops to
+// `node.properties.pixIrDims`, the LAST RUN's dims, painted identically to a
+// live reading with no caveat. So refusing an upstream does not show "no size",
+// it shows a CACHED size - and that made a common case worse:
+//   rewire to a Pixaroma loader with its inline resize OFF (the default) and
+//   the card showed the PREVIOUS upstream's size, where reading live was right.
 //
-// Returning null shows no INPUT size rather than a confident wrong one. The
-// actual resize is unaffected either way: Python works from the real tensor.
+// Making this correct needs two things this node does not have yet: the reader
+// must distinguish "refused" from "no preview available" (the cache is genuinely
+// right for a KSampler upstream, and genuinely wrong for a bypassed one), and
+// pixIrDims needs invalidating on a link change the way Longest Side clears its
+// run cache. Both are recorded as a follow-up, together with the five other
+// nodes that read an upstream preview unguarded.
 function getInputDims(node) {
-  return upstreamImageDims(node, "image");
+  const inp = node.inputs?.find((i) => i.name === "image");
+  if (!inp || inp.link == null) return null;
+  let l = node.graph?.links?.[inp.link];
+  if (!l && typeof node.graph?.links?.get === "function") l = node.graph.links.get(inp.link);
+  if (!l) return null;
+  const up = node.graph.getNodeById(l.origin_id);
+  const img = up?.imgs?.[0];
+  if (img?.naturalWidth) return { w: img.naturalWidth, h: img.naturalHeight };
+  return null;
 }
 
 function gcd(a, b) { a = Math.abs(a); b = Math.abs(b); while (b) { const t = b; b = a % b; a = t; } return a || 1; }
