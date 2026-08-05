@@ -587,17 +587,31 @@ function setCue(node, seconds) {
   const el = node._pixLaAudio;
   if (el) {
     try { el.currentTime = node._pixLaCue; } catch (_e) { /* not seekable yet */ }
-    node._pixLaStopAt = node._pixLaCue + playLength(node);
+    node._pixLaStopAt = playStopAt(node);
     node._pixLaPlayAt = node._pixLaCue;
   }
   repaintWave(node);
 }
 
-/** How long Play runs for: the selection's length, capped by the file end. */
-function playLength(node) {
+/**
+ * Where Play stops, which depends on WHY you are playing.
+ *
+ * Cue inside the selection: you are checking the clip you chose, so stop at its
+ * end. Cue outside it: you clicked over there to go looking for something, so
+ * keep playing to the end of the file - cutting out after the selection's
+ * length is meaningless once the cue has nothing to do with the selection, and
+ * that is exactly how it felt.
+ *
+ * The boundary is not arbitrary: it is the visible orange edge, so which of the
+ * two you get is something you can see before you press anything.
+ */
+function playStopAt(node) {
   const st = readState(node);
-  const len = windowSeconds(node, st, node._pixLaDur || 0);
-  return len > 0 ? len : Math.max(0, (node._pixLaDur || 0) - cueSeconds(node, st));
+  const dur = node._pixLaDur || 0;
+  const from = cueSeconds(node, st);
+  const selEnd = Math.min(dur, st.start + windowSeconds(node, st, dur));
+  const inside = from >= st.start - 0.001 && from < selEnd - 0.001;
+  return inside ? selEnd : dur;
 }
 
 /** The cheap per-frame update: the two numbers plus a repaint. No decoding. */
@@ -620,7 +634,7 @@ function togglePlay(node) {
   el.currentTime = from;
   // Read on every tick rather than captured once, so clicking elsewhere while
   // it plays moves both the position AND the point it will stop at.
-  node._pixLaStopAt = from + playLength(node);
+  node._pixLaStopAt = playStopAt(node);
   el.addEventListener("ended", () => stopPlay(node));
   el.play().catch(() => stopPlay(node));
   els.play.className = "stop";
