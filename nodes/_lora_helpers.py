@@ -21,6 +21,7 @@ import json
 import os
 import re
 import struct
+import threading
 
 # Real LoRA headers are tens of KB; cap far above that so a corrupt length field can
 # never make us allocate gigabytes.
@@ -783,7 +784,13 @@ def write_custom_preview(folder, name, raw):
         os.makedirs(str(folder), exist_ok=True)
     except Exception:
         return None
-    tmp = "%s.%d.tmp" % (path, os.getpid())
+    # pid AND thread id. The route hands this to run_in_executor, so two requests
+    # for the SAME LoRA land on two pool threads sharing one pid - measured: four
+    # concurrent writers used ONE temp path. On POSIX their writes interleave and
+    # os.replace publishes a corrupt jpeg; on Windows the second replace hits a
+    # sharing violation and a valid save reports failure. The cover route uses
+    # threading.get_ident() for exactly this reason.
+    tmp = "%s.%d.%d.tmp" % (path, os.getpid(), threading.get_ident())
     try:
         with open(tmp, "wb") as f:
             f.write(bytes(raw))

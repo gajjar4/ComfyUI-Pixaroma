@@ -38,36 +38,55 @@ export async function listLoras(force = false) {
   return p;
 }
 
+// Bumped by invalidateInfo. A reply that was already in flight when its LoRA
+// changed must NOT be cached: it describes the world before the change, and the
+// cache outlives the panel, so it would keep serving that answer all session.
+// Measured: set a picture while the first info load was still outstanding and the
+// panel reverted to "no picture" when the old reply landed, with the stale copy
+// cached behind it - so reopening still showed it gone and it could not be removed.
+const _infoGen = new Map();
+const genOf = (name) => _infoGen.get(name) || 0;
+
 export async function loraInfo(name, force = false) {
   if (!name) return { ok: false, message: "No LoRA selected." };
   if (!force && _infoCache.has(name)) return _infoCache.get(name);
   // Dedupe concurrent non-forced fetches for the same name (two nodes, same LoRA)
   // so they share one response instead of racing to overwrite the cache.
   if (!force && _infoPromise.has(name)) return _infoPromise.get(name);
+  const gen = genOf(name);
   const p = (async () => {
     try {
-      const r = await fetch(pixApiUrl("/pixaroma/api/lora/info?name=" + encodeURIComponent(name)));
+      const r = await fetch(pixApiUrl("/pixaroma/api/lora/info?name=" + encodeURIComponent(name)),
+                            { cache: "no-store" });
       const j = await r.json();
-      // Cache SUCCESS only. A server-reported failure ({ok:false}) used to be
+      // Cache SUCCESS only, and only when nothing invalidated this LoRA while the
+      // request was out. A server-reported failure ({ok:false}) used to be
       // cached like a hit, so a LoRA that was briefly unresolvable (still copying,
       // a path the server could not verify) showed its error for the rest of the
       // session even after the cause was gone - plain panel opens are non-forced,
       // so only F5 cleared it.
-      if (j && j.ok) _infoCache.set(name, j);
+      if (j && j.ok && genOf(name) === gen) _infoCache.set(name, j);
+      // The caller needs to know its answer is out of date, or it will paint it.
+      if (genOf(name) !== gen && j && typeof j === "object") j.stale = true;
       return j;
     } catch (e) {
       return { ok: false, message: "Could not reach the server." }; // not cached -> retry next time
     } finally {
-      _infoPromise.delete(name);
+      // Only clear the slot we own: a FORCED call settling must not drop a
+      // concurrent non-forced call's dedupe entry.
+      if (_infoPromise.get(name) === p) _infoPromise.delete(name);
     }
   })();
   if (!force) _infoPromise.set(name, p);
   return p;
 }
 
-// Drop a cached info entry (after a Civitai fetch rewrote the sidecar).
+// Drop a cached info entry (after a Civitai fetch or a preview change rewrote what
+// it describes). Bumping the generation is what stops an ALREADY-IN-FLIGHT reply
+// from repopulating the cache with the pre-change answer a moment later.
 export function invalidateInfo(name) {
   _infoCache.delete(name);
+  _infoGen.set(name, genOf(name) + 1);
 }
 
 // Refresh-time invalidators (wired to ComfyUI's R via js/shared/refresh.mjs).

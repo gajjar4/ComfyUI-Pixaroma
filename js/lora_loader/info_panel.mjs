@@ -202,7 +202,14 @@ export async function openInfoPanel(node, id, refresh) {
 
   const selected = () => new Set((readState(node).loras.find((e) => e.id === id)?.triggers || []).map((w) => w.toLowerCase()));
 
+  // A picture problem is about the LAST thing the user tried, so any other
+  // deliberate action clears it. Without this the strip was sticky: drop a .txt
+  // by mistake and the warning sat under the header through every chip tick and
+  // every Civitai lookup for the rest of the panel's life.
+  function clearMsg() { _msg = null; }
+
   function toggleWord(word) {
+    clearMsg();
     const st = readState(node);
     const e = st.loras.find((x) => x.id === id);
     if (!e) return;
@@ -214,6 +221,7 @@ export async function openInfoPanel(node, id, refresh) {
     renderBody();
   }
   function setWords(words) {
+    clearMsg();
     patchLora(node, id, { triggers: words.slice() });
     refresh?.(false);
     renderBody();
@@ -269,6 +277,7 @@ export async function openInfoPanel(node, id, refresh) {
   }
 
   function addCustom(word) {
+    clearMsg();
     const w = (word || "").trim();
     if (!w) return;
     const e = readState(node).loras.find((x) => x.id === id);
@@ -288,6 +297,7 @@ export async function openInfoPanel(node, id, refresh) {
   }
 
   function removeCustom(word) {
+    clearMsg();
     const key = (word || "").toLowerCase();
     const e = readState(node).loras.find((x) => x.id === id);
     if (!e) return;
@@ -476,6 +486,9 @@ export async function openInfoPanel(node, id, refresh) {
    *  arbitrary site on the user's behalf, and a cross-origin picture taints the
    *  canvas so toDataURL could not read it back anyway. */
   async function pictureFromUrl(url) {
+    // The fetch below is an await with no busy flag set, so without this a URL
+    // drop and a file drop could both be accepted and land in the wrong order.
+    if (_busy) return;
     let u = null;
     try { u = new URL(url, window.location.href); } catch { u = null; }
     if (!u || u.origin !== window.location.origin) {
@@ -489,6 +502,35 @@ export async function openInfoPanel(node, id, refresh) {
     } catch (err) {
       if (panel.isConnected) showMsg(String(err?.message || err));
     }
+  }
+
+  /**
+   * A drop anywhere on the PANEL, not just on the 64px box.
+   *
+   * Measured: a file released 10px wide of the box left our code entirely,
+   * bubbled to document, and ComfyUI turned it into a Load Image node on the
+   * canvas BEHIND the panel (node count 2 -> 3). A feature that invites people to
+   * drag a file at a 64px target inside a 340px panel has to catch the near miss.
+   *
+   * So the panel swallows every drop on itself: routed to the picture when it is
+   * an image and pictures are on, and simply cancelled otherwise. Wired ONCE on
+   * the persistent panel element (renderBody rebuilds its children), before the
+   * box's own handlers see anything, and the box still stops propagation so a
+   * bullseye is not handled twice.
+   */
+  function wirePanelDrop(p) {
+    p.addEventListener("dragover", (ev) => {
+      ev.preventDefault();               // "a drop is allowed here", i.e. not the canvas
+      if (ev.dataTransfer) ev.dataTransfer.dropEffect = thumbsOn() ? "copy" : "none";
+    });
+    p.addEventListener("drop", (ev) => {
+      ev.preventDefault();
+      ev.stopPropagation();
+      if (!thumbsOn() || !name) return;   // swallowed, deliberately: no picture slot on offer
+      const f = ev.dataTransfer?.files && ev.dataTransfer.files[0];
+      if (f) applyPicture(f);
+      else showMsg("Drop the picture onto the small box at the top left.");
+    });
   }
 
   function wireThumb(th, hasOwn) {
@@ -547,9 +589,13 @@ export async function openInfoPanel(node, id, refresh) {
 
     // ── header ───────────────────────────────────────────────────────────
     const top = el("div", "pix-ll-info-top");
-    // The picture box, unless the gear has pictures switched off.
+    // The picture box - only when the gear has pictures on AND the row actually
+    // has a LoRA. On a nameless row (add a row, dismiss the picker) there is
+    // nothing to set a picture FOR, and the box was a dead affordance: it kept
+    // its pointer cursor and darkened on hover to show an empty label, because
+    // the hint is only written by wireThumb.
     let th = null;
-    if (thumbsOn()) {
+    if (thumbsOn() && name) {
       th = el("div", "pix-ll-info-th");
       const turl = thumb();
       // Strip quotes/backslashes so a stray char in a Civitai image URL can't break the
@@ -557,7 +603,7 @@ export async function openInfoPanel(node, id, refresh) {
       if (turl) th.style.backgroundImage = `url("${String(turl).replace(/["\\]/g, "")}")`;
       // Pick / drop / paste your own picture, and remove it again. Wired on every
       // render because renderBody() builds a fresh header each time.
-      if (name) wireThumb(th, !!info.custom_preview);
+      wireThumb(th, !!info.custom_preview);
     }
     const h = el("div", "pix-ll-info-h");
     const title = el("h3", null, (civ?.state === "found" && civ.info?.name) || info.title || "LoRA");
@@ -711,6 +757,7 @@ export async function openInfoPanel(node, id, refresh) {
   }
 
   async function runCivitai() {
+    clearMsg();
     civ = { state: "searching" };
     renderBody();
     const res = await civitaiLookup(name);
@@ -734,6 +781,7 @@ export async function openInfoPanel(node, id, refresh) {
   }
 
   async function runDeleteCivitai() {
+    clearMsg();
     await deleteCivitai(name);
     if (!panel.isConnected) return;
     _thumbBust = Date.now();              // the sidecar (and so the preview) changed
@@ -753,12 +801,18 @@ export async function openInfoPanel(node, id, refresh) {
   place(panel, node);
   const first = await loraInfo(name);
   if (!panel.isConnected) return;
-  if (first.ok && first.info) { info = first.info; hydrateCustom(); }
+  // `first.stale` means something changed this LoRA while the request was out -
+  // the user set or removed a picture during a slow first load. Painting it would
+  // undo what they just did (measured: the picture and its remove ✕ vanished, and
+  // the panel could not get them back). reloadInfo() has already put the truth in
+  // `info`, so the only right move is to drop this answer.
+  if (first.ok && first.info && !first.stale) { info = first.info; hydrateCustom(); }
   renderBody();
   place(panel, node);
 
   // drag by the header, close on outside / Esc
   dragBy(panel);
+  wirePanelDrop(panel);   // catch a file dropped near, but not on, the picture box
 
   const onDown = (e) => { if (!panel.contains(e.target) && !e.target.closest?.(".pix-ll-dd")) closeInfoPanel(); };
   const onKey = (e) => { if (e.key === "Escape") { e.stopPropagation(); closeInfoPanel(); } };

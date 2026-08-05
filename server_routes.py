@@ -2406,7 +2406,12 @@ async def api_lora_info(request):
     except Exception:
         info["custom_preview"] = False
         info["preview_v"] = 0
-    return web.json_response({"ok": True, "info": info})
+    # no-store: this answer now CARRIES the cache-buster (`preview_v`) that the
+    # thumbnail URL is built from, so a heuristically cached copy would hand back
+    # a stale version and defeat the very mechanism it exists for. aiohttp's
+    # json_response sends no cache headers of its own - the same absent-headers
+    # class that got our .mjs modules cached, and why /lora/list already says this.
+    return web.json_response({"ok": True, "info": info}, headers={"Cache-Control": "no-store"})
 
 
 @PromptServer.instance.routes.get("/pixaroma/api/lora/thumb")
@@ -2702,7 +2707,12 @@ async def api_lora_preview_set(request):
         body = await request.json()
     except Exception:
         body = {}
-    body = body or {}
+    # `body or {}` is NOT enough: request.json() ignores Content-Type, so a body of
+    # `[1]` / `"x"` / `5` / `true` parses to a truthy NON-dict and reaches .get,
+    # raising AttributeError out of the handler and 500-ing an unauthenticated
+    # route. The falsy non-dicts ([], "", 0, null) are why that survived testing.
+    if not isinstance(body, dict):
+        body = {}
     name = str(body.get("name", "") or "")
     data_url = str(body.get("dataUrl", "") or "")
     path = _resolve_lora_path(name)
@@ -2751,7 +2761,8 @@ async def api_lora_preview_delete(request):
         body = await request.json()
     except Exception:
         body = {}
-    body = body or {}
+    if not isinstance(body, dict):      # see api_lora_preview_set - a truthy non-dict 500s it
+        body = {}
     name = str(body.get("name", "") or "") or request.query.get("name", "")
     path = _resolve_lora_path(name)
     roots = _lora_dirs()
