@@ -237,6 +237,27 @@ function windowSeconds(node, st, duration) {
   return Math.max(0, duration - st.start);
 }
 
+/**
+ * Point the node at a different recording. ONE function, because there are two
+ * ways in - the picker and Upload - and when they were written out separately
+ * only one of them got fixed, so uploading kept the old file's length, cue and
+ * playback while choosing from the list did not.
+ *
+ * A NEW FILE IS A FRESH START. A start point, a length and a play cursor are
+ * all positions INSIDE one particular recording, so carrying them across is
+ * meaningless: pick a 4.65s drum loop, then a 7.08s song, and you got the song
+ * cropped to 4.65s for no stated reason. whenUnwired goes back to "whole" so
+ * the new file is selected end to end. That is harmless while the seconds input
+ * is wired, because the wire wins anyway, and it means unplugging later gives
+ * the whole file rather than a leftover.
+ */
+function selectFile(node, name) {
+  stopPlay(node);
+  writeState(node, { file: name, start: 0, whenUnwired: "whole" });
+  node._pixLaDur = 0;
+  node._pixLaCue = null;
+}
+
 export function buildFace(node, openPanel) {
   injectCSS();
   const root = document.createElement("div");
@@ -254,10 +275,7 @@ export function buildFace(node, openPanel) {
   file.append(nm, ar);
   file.title = "Choose a sound file from ComfyUI's input folder";
   file.addEventListener("click", () => openPicker(node, file, (name) => {
-    writeState(node, { file: name, start: 0 });
-    node._pixLaDur = 0;
-    node._pixLaCue = null;          // a position in the OLD file means nothing here
-    stopPlay(node);
+    selectFile(node, name);
     renderFace(node);
   }));
 
@@ -277,8 +295,7 @@ export function buildFace(node, openPanel) {
         const name = await uploadAudio(f);
         // Same name, new bytes: the cached picture would be of the old file.
         forgetPeaks(name);
-        writeState(node, { file: name, start: 0 });
-        node._pixLaDur = 0;
+        selectFile(node, name);
       } catch (_e) {
         nm.textContent = "upload failed";
         return;
