@@ -140,7 +140,16 @@ function upstreamImage(node) {
     // graph.links can be a Map in newer frontends (Vue Compat #3).
     let link = graph?.links?.[slot.link];
     if (!link && typeof graph?.links?.get === "function") link = graph.links.get(slot.link);
-    const img = link && graph.getNodeById?.(link.origin_id)?.imgs?.[0];
+    const up = link && graph.getNodeById?.(link.origin_id);
+    // A MUTED (mode 2) or BYPASSED (mode 4) upstream is not producing the
+    // picture it is still showing: bypass passes its own INPUT straight
+    // through, so its preview is of an image that never arrives here. This node
+    // puts numbers on its face from that picture (source size, canvas size,
+    // which axis grows), so trusting it states a confident wrong size and draws
+    // the wrong preview. Returning null falls through to tier 2 (the frame the
+    // last run stashed) and then to the already-handled "no picture" state.
+    if (up && (up.mode === 2 || up.mode === 4)) return null;
+    const img = up?.imgs?.[0];
     if (img && img.naturalWidth > 0 && img.naturalHeight > 0) return img;
   } catch (_e) { /* an unresolved wire is not an error, just an unknown picture */ }
   return null;

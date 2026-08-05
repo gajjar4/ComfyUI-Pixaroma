@@ -31,10 +31,28 @@ import { app } from "/scripts/app.js";
  * trusting a resizing node again. Refusing outright cannot rot.
  *
  * ADD ANY FUTURE NODE whose preview is not its output.
+ *
+ * HOW TO KNOW WHETHER A NODE BELONGS HERE. `node.imgs` is only ever populated
+ * three ways: core's `image_upload: True` setter, core turning a `ui.images`
+ * payload into a preview, and our own `updateNativePreview`. A Pixaroma node
+ * that transforms its picture in Python but reports a custom ui key (say
+ * `pixaroma_crop_source`) is invisible to this reader and needs no entry - but
+ * **the day one of those is switched to `ui.images`, it must be added here**,
+ * because several of them deliberately emit the SOURCE picture rather than the
+ * result (Crop, Inpaint Crop and Outpaint all do). Audited 2026-08-05: the set
+ * is complete for the pack as it stands.
+ *
+ * A third-party node with `image_upload` plus an internal resize cannot be
+ * listed by anyone, so it stays a known blind spot rather than a bug we can fix.
  */
 export const PREVIEW_IS_NOT_OUTPUT = new Set([
   "PixaromaLoadImage",
   "PixaromaLoadImageMini",
+  // Same "file on disk in, _resize_frame'd image out" shape as the two above.
+  // Its frontend does not touch node.imgs today, so it yields no dims either
+  // way - listed pre-emptively so that adding a gallery preview later cannot
+  // silently turn it into a confident wrong number.
+  "PixaromaLoadImagesFolder",
 ]);
 
 /**
