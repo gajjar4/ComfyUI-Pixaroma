@@ -9,7 +9,7 @@ import {
   injectCSS, buildRoot, hideNativeImageCombo, openImageDropdown,
   renderChips, renderGlobalControls,
 } from "./ui.mjs";
-import { pickAndUploadFile, pasteFromClipboard, uploadImageToInput, setSelectedImage, updateNativePreview, splitFilenameSubfolder } from "./api.mjs";
+import { pickAndUploadFile, pasteFromClipboard, uploadImageToInput, setSelectedImage, updateNativePreview, previewMatches, splitFilenameSubfolder } from "./api.mjs";
 import { buildModePanel, previewResize } from "./resize_modes.mjs";
 import { applyInlineLabel, applyWHLayout, applyCoverControls } from "./panel_polish.mjs";
 
@@ -966,12 +966,20 @@ function setupLoadImageNode(node) {
     // Fresh drop: fit once the default image loads (the image-ready path reads
     // this flag). A restored workflow keeps its saved size (Vue Compat #18).
     if (!wasConfigured) node._pixLiFitPending = true;
-    // Nodes 2.0: explicitly fetch the selected image into node.imgs so our DOM
-    // preview + the cards' INPUT dims populate on restore (the native image path
-    // may feed internal state without setting node.imgs there).
-    if (isVueNodes() && node._pixLiImageWidget?.value && !node.imgs?.[0]?.naturalWidth) {
-      updateNativePreview(node, node._pixLiImageWidget.value);
-    }
+    // Fetch the selected image into node.imgs whenever what is loaded is not
+    // what the widget names, so the preview and the cards' INPUT dims match the
+    // restored file. The native image path may feed internal state without
+    // setting node.imgs at all.
+    //
+    // This is the SAME one-line bug that was reported on Load Image Mini
+    // (2026-08-05, wrong picture after a workflow switch), in copied code: the
+    // old guard ran in Nodes 2.0 ONLY, and only when nothing was loaded yet -
+    // so a node already showing a PREVIOUS image, which is precisely the broken
+    // case, was skipped. Fixed here at the same time because it is one bug in
+    // two copies and node.imgs also drives the INPUT size card, Mask Editor and
+    // Clipspace.
+    const want = node._pixLiImageWidget?.value;
+    if (want && !previewMatches(node, want)) updateNativePreview(node, want);
     // Nodes 2.0: the node frame does NOT auto-grow to the controls panel, so a fresh
     // node opens too short and clips the body (console: node H 219 vs content 631).
     // Size it to the content once, AFTER layout (so the measure is real). Fresh drops

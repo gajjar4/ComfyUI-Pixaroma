@@ -24,6 +24,38 @@ export function splitFilenameSubfolder(path) {
 // queue two concurrent fetches; img.onload fires in LOAD order, not call
 // order, so a slow A landing after a fast B would clobber node.imgs back to A.
 // Per-node monotonic request-id discards stale onloads.
+/**
+ * Is the picture currently in `node.imgs` actually the file `filename` names?
+ *
+ * Needed on the LOAD path. ComfyUI populates node.imgs from the image_upload
+ * combo's setter, but a restored workflow does not always fire it, so a node
+ * can end up holding the PREVIOUS workflow's picture while its widget, its
+ * filename cache and its origName all correctly name the new one. Reported
+ * 2026-08-05 after switching workflows: the picker read one file and the
+ * preview showed another.
+ *
+ * This is not cosmetic. node.imgs feeds the INPUT size card (the node reported
+ * 1024x1024 for an image that is 1376x768) and is what Mask Editor and
+ * Clipspace read.
+ *
+ * Compares the `filename` query parameter rather than a substring of the whole
+ * URL, so a name that merely appears inside a subfolder or a cache-busting
+ * parameter cannot produce a false match.
+ */
+export function previewMatches(node, filename) {
+  const img = node?.imgs?.[0];
+  if (!img?.src || !filename) return false;
+  let loaded = null;
+  try {
+    loaded = new URL(img.src, window.location.href).searchParams.get("filename");
+  } catch {
+    loaded = decodeURIComponent(img.src).match(/[?&]filename=([^&]*)/)?.[1] ?? null;
+  }
+  if (loaded == null) return false;
+  const { filename: want } = splitFilenameSubfolder(filename);
+  return loaded === want;
+}
+
 export function updateNativePreview(node, filename) {
   if (!filename) return;
   node._pixLiPreviewReqId = (node._pixLiPreviewReqId | 0) + 1;

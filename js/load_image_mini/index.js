@@ -20,8 +20,8 @@ import { isGraphLoading } from "../shared/graph_loading.mjs";
 import { registerNodeSettings } from "../shared/node_settings.mjs";
 import { applyAdaptiveCanvasOnly, isVueNodes, canvasBackingScale, installZoomRepaint } from "../shared/nodes2.mjs";
 import {
-  setSelectedImage, updateNativePreview, pickAndUploadFile, pasteFromClipboard,
-  uploadImageToInput, splitFilenameSubfolder,
+  setSelectedImage, updateNativePreview, previewMatches, pickAndUploadFile,
+  pasteFromClipboard, uploadImageToInput, splitFilenameSubfolder,
 } from "../load_image/api.mjs";
 import { openImageDropdown, injectCSS as injectLiCSS } from "../load_image/ui.mjs";
 import { previewResize } from "../load_image/resize_modes.mjs";
@@ -692,9 +692,20 @@ function setupNode(node) {
     refreshDropdown(node);
     renderCards(node);
     applyAccent(node);
-    if (isVueNodes() && node._pixLiImageWidget?.value && !node.imgs?.[0]?.naturalWidth) {
-      updateNativePreview(node, node._pixLiImageWidget.value);
-    }
+    // Refresh the preview whenever the loaded <img> is not the file the widget
+    // actually holds. Both halves of the old guard were wrong:
+    //   - `isVueNodes()` made this Nodes-2.0 ONLY, so in Classic the preview was
+    //     never reconciled with a restored filename at all;
+    //   - `!naturalWidth` meant "only when nothing is loaded yet", so a node
+    //     already showing a PREVIOUS image was skipped - which is exactly the
+    //     case that goes wrong.
+    // Reported after switching workflows: the picker read
+    // "Bunny_dressed_tribal_warrior...jpeg" while the preview showed
+    // Architecture.png. Not merely cosmetic - node.imgs also feeds the INPUT
+    // size card, so the node reported 1024x1024 for an image that is 1376x768,
+    // and Mask Editor / Clipspace read node.imgs too.
+    const want = node._pixLiImageWidget?.value;
+    if (want && !previewMatches(node, want)) updateNativePreview(node, want);
     // Nodes 2.0 fresh node: grow to fit the clipped content once (never on the
     // load path - Vue Compat #18).
     if (isVueNodes()) {
