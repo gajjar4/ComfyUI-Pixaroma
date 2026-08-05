@@ -10,7 +10,7 @@ import { installCanvasZoomPassthrough } from "../shared/canvas_zoom.mjs";
 import { installResizeFloor } from "../shared/resize_floor.mjs";
 import { registerNodeHelp } from "../shared/help.mjs";
 import { installNodeAccent, registerNodeSettings, repaintAccent } from "../shared/node_settings.mjs";
-import { CLASS, HIDDEN_INPUT, MIN_W, DEFAULT_W, injectedState } from "./core.mjs";
+import { CLASS, HIDDEN_INPUT, MIN_W, DEFAULT_W, injectedState, readState, writeState } from "./core.mjs";
 import { buildFace, renderFace, destroyFace, injectCSS, stopPlay, repaintWave } from "./ui.mjs";
 import { openLoadAudioPanel, closeLoadAudioPanelFor } from "./settings.mjs";
 import { LOAD_AUDIO_HELP } from "./help.mjs";
@@ -51,6 +51,35 @@ function watchUpstream() {
       renderFace(n);
     }
   }, 400);
+}
+
+function secondsWired(node) {
+  const s = node?.inputs?.find((i) => i && i.name === "seconds");
+  return !!(s && s.link != null);
+}
+
+/**
+ * Unplugging the length wire must not leave an impossible request behind.
+ *
+ * The stored length can easily be one only the WIRE could satisfy - or, as
+ * reported, one captured when the start was somewhere else. Left alone the node
+ * then sits there warning "file ends first, will pad with silence" about a
+ * length nobody asked for, which reads as the node having broken itself.
+ *
+ * Clamping (rather than resetting to the whole file) keeps a length the user
+ * DID choose by dragging an edge, while turning a leftover into the obvious
+ * thing: everything from the start point to the end of the file.
+ */
+function releaseWiredLength(node) {
+  if (secondsWired(node)) return;                 // already re-wired elsewhere
+  const dur = node._pixLaDur || 0;
+  if (dur <= 0) return;                           // not decoded yet, nothing to clamp against
+  const st = readState(node);
+  if (st.whenUnwired !== "length") return;
+  const fits = Math.max(0, dur - st.start);
+  if (st.length <= fits + 0.005) return;          // it already fits: leave the choice alone
+  writeState(node, { length: Math.round(fits * 100) / 100 });
+  renderFace(node);
 }
 
 /** The upstream's published length, or null. Mirrors ui.mjs's own reader. */
@@ -128,6 +157,34 @@ app.registerExtension({
 
       queueMicrotask(() => renderFace(this));
       watchUpstream();
+    };
+
+    // The gate has to sit on `configure` itself, NOT on the onConfigure HOOK:
+    // LGraphNode.configure fires onConnectionsChange for every saved input and
+    // only THEN calls onConfigure, so a flag raised in the hook gates nothing
+    // (Vue Compat #17's correction).
+    const _origConfigureFn = nodeType.prototype.configure;
+    nodeType.prototype.configure = function () {
+      this._pixLaConfiguring = true;
+      try { return _origConfigureFn.apply(this, arguments); }
+      finally { this._pixLaConfiguring = false; }
+    };
+
+    // Writing `length` is writing SERIALIZED state, so it must never happen
+    // during a load or an untouched workflow opens flagged "modified"
+    // (Vue Compat #18/#19). isGraphLoading covers the graph-level link restore
+    // that runs after every node's configure has already returned.
+    const _origConnChange = nodeType.prototype.onConnectionsChange;
+    nodeType.prototype.onConnectionsChange = function (type, index, connected, link, ioSlot) {
+      const r = _origConnChange?.apply(this, arguments);
+      const INPUT = window.LiteGraph?.INPUT ?? 1;
+      if (type === INPUT && !connected && ioSlot?.name === "seconds"
+          && !this._pixLaConfiguring && !isGraphLoading()) {
+        // Deferred: the link is not fully torn down until this handler returns,
+        // so secondsWired would still say true.
+        queueMicrotask(() => releaseWiredLength(this));
+      }
+      return r;
     };
 
     const _configure = nodeType.prototype.onConfigure;
