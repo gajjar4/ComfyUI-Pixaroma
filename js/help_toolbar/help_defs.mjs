@@ -1152,11 +1152,18 @@ const HELP = {
         heading: "Outputs",
         defs: [
           ["image", "The resized image."],
-          ["mask", "The resized mask. In Pad mode the added border is white."],
+          ["mask", "The resized mask. In Pad mode the added border is white. If you leave the mask input empty and the picture already has a see-through background, that transparency comes out here instead of being lost."],
           ["width", "Final output width in pixels."],
           ["height", "Final output height in pixels."],
           ["longest_side", "The longer of the output width and height."],
         ],
+      },
+      {
+        heading: "Pictures with a see-through background",
+        body:
+          "If you feed in a picture whose background has been removed, wire the mask output along with the image into Join Image with Alpha, and you get the cut-out back at the new size, ready to save as a transparent PNG.\n\n" +
+          "You do not need to wire anything into the mask input for this: when that input is empty, the picture's own transparency is used, and it is cropped and resized exactly the same way the picture is. If you do wire a mask in, yours is used instead.\n\n" +
+          "The image output itself always stays a normal picture, on purpose. Transparency travels in the mask in ComfyUI, and a picture carrying a see-through channel cannot be fed to a sampler: it stops the run with an error. Keeping the two apart means this node fits anywhere.",
       },
       {
         heading: "The buttons on the node",

@@ -94,6 +94,8 @@ export const KEYWORDS = {
   PixaromaVersionCheck: "version diagnostic about update which version",
 
   // ── Utility and editors ──
+  PixaromaImageResize: "alpha transparency transparent background removed rmbg cutout "
+    + "png black background lost preserve keep join image with alpha mask channel rgba",
   PixaromaLoraLoader: "lora stack weight trigger civitai xy plot compare grid sweep "
     + "api key token login account not found missing nsfw adult uncensored mature "
     + "civitai.red unrestricted thumbnail preview blocked hidden "

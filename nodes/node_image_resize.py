@@ -10,7 +10,7 @@ import uuid
 
 import numpy as np
 import torch
-from PIL import Image
+from PIL import Image, ImageOps
 
 import folder_paths
 
@@ -26,21 +26,54 @@ _WH_MODES = ("fit_inside", "cover")
 
 
 def _tensor_to_pils(image_t):
-    """BHWC float tensor -> list of RGB PIL images. Defensive about channel
-    count: ComfyUI IMAGE is normally 3-channel, but a stray 1-channel image
-    (grayscale, or a mask rewired into the image slot) or a 4-channel RGBA
-    tensor must not crash the run. 1ch -> replicated to RGB; 4ch -> alpha
-    dropped (the node has a separate mask output)."""
+    """BHWC float tensor -> (list of RGB PIL images, list of alpha PIL 'L' or None).
+
+    Defensive about channel count: ComfyUI IMAGE is normally 3-channel, but a
+    stray 1-channel image (grayscale, or a mask rewired into the image slot) or
+    a 4-channel RGBA tensor must not crash the run. 1ch -> replicated to RGB.
+
+    THE IMAGE STAYS 3-CHANNEL, deliberately. Some packs really do put a
+    4-channel RGBA in the IMAGE wire (ComfyUI-RMBG with Background: Alpha does),
+    and it is tempting to pass that straight through - but ComfyUI's own
+    VAEEncode hands `pixels` to `vae.encode` with NO channel slicing, so a
+    4-channel image reaching a sampler dies in the first conv. Worse, THIS NODE
+    dropping the alpha is currently what makes RMBG -> resize -> VAE Encode work
+    at all, so preserving it would break graphs that work today.
+
+    What was wrong was throwing the alpha AWAY. It now leaves through the MASK
+    output instead (see resize()), which is where ComfyUI keeps transparency.
+    """
     arr = (image_t.clamp(0, 1).cpu().numpy() * 255.0).round().astype(np.uint8)
-    out = []
+    out, alphas = [], []
     for frame in arr:
+        alpha = None
         if frame.ndim == 2:                       # (H,W) grayscale
             frame = np.stack([frame] * 3, axis=-1)
-        elif frame.shape[-1] >= 3:                 # RGB / RGBA (drop alpha)
+        elif frame.shape[-1] >= 3:                 # RGB / RGBA
+            if frame.shape[-1] >= 4:
+                alpha = Image.fromarray(frame[..., 3], "L")
             frame = frame[..., :3]
         else:                                      # 1- or 2-channel -> grayscale
             frame = np.repeat(frame[..., :1], 3, axis=-1)
         out.append(Image.fromarray(frame, "RGB"))
+        alphas.append(alpha)
+    return out, (alphas if any(a is not None for a in alphas) else None)
+
+
+def _alpha_to_mask_pils(alphas, size):
+    """The picture's own alpha, as masks in ComfyUI's polarity.
+
+    INVERTED, and that is not a detail: `LoadImage` builds its MASK output as
+    `1.0 - alpha` and `JoinImageWithAlpha` reads it back as `1.0 - mask`, so the
+    house convention is **1 = transparent**. Emitting raw alpha would look
+    plausible and rebuild every picture inside out.
+    """
+    out = []
+    for a in alphas:
+        if a is None:
+            out.append(Image.new("L", size, 0))   # opaque -> nothing masked
+        else:
+            out.append(ImageOps.invert(a if a.size == size else a.resize(size, Image.NEAREST)))
     return out
 
 
@@ -149,7 +182,11 @@ class PixaromaImageResize:
     RETURN_NAMES = ("image", "mask", "width", "height", "longest_side")
     OUTPUT_TOOLTIPS = (
         "The resized image.",
-        "The resized mask (white = the padded / inpaint area when using Pad).",
+        "The resized mask (white = the padded / inpaint area when using Pad). If "
+        "you leave the mask input empty and the picture carries its own "
+        "transparency, that transparency comes out here, resized to match - wire "
+        "it with the image into Join Image with Alpha to get the transparent "
+        "picture back.",
         "Final output width in pixels.",
         "Final output height in pixels.",
         "The longer of the output's width and height, whatever the resize produced. Use it when you want the longest dimension without caring about orientation.",
@@ -159,9 +196,21 @@ class PixaromaImageResize:
     def resize(self, image, mask=None, width=None, height=None, longest_side=None, ImageResizeState=""):
         state = parse_resize_state(ImageResizeState, DEFAULT_STATE)
 
-        rgb_frames = _tensor_to_pils(image)
+        rgb_frames, alpha_frames = _tensor_to_pils(image)
         orig_w, orig_h = rgb_frames[0].size
-        mask_frames = _mask_to_pils(mask, len(rgb_frames), (orig_w, orig_h))
+        # A picture that carries its own transparency, with nothing wired into
+        # `mask`, hands that transparency to the mask output - so it survives the
+        # crop or resize instead of being silently thrown away (GitLab #21: a
+        # background-removed image came out on solid black with an EMPTY mask,
+        # i.e. unrecoverable). A WIRED mask always wins: that is an explicit
+        # choice, and second-guessing it would be worse than the bug.
+        if mask is None and alpha_frames is not None:
+            mask_frames = _alpha_to_mask_pils(alpha_frames, (orig_w, orig_h))
+            while len(mask_frames) < len(rgb_frames):
+                mask_frames.append(Image.new("L", (orig_w, orig_h), 0))
+            mask_frames = mask_frames[:len(rgb_frames)]
+        else:
+            mask_frames = _mask_to_pils(mask, len(rgb_frames), (orig_w, orig_h))
 
         state = _apply_wired_size(state, width, height, longest_side, orig_w, orig_h)
 
