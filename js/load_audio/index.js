@@ -30,7 +30,13 @@ registerNodeHelp(CLASS, LOAD_AUDIO_HELP);
 // there is no connection hook that fires for "the upstream recalculated". One
 // shared 400ms poll, running ONLY while a Load Audio node is on the canvas, and
 // repainting only when a value actually differs from last time - so an idle
-// graph costs one link lookup per node per tick and no paint at all.
+// graph does the walk below and no paint at all.
+//
+// The tick walks the graph (including subgraphs) rather than reading
+// app.graph._nodes, so a node nested in a subgraph is not left with a lying
+// readout. That is a Map plus a Set plus an array spread, 2.5 times a second:
+// negligible next to a frame, but no longer the "one link lookup" this comment
+// used to claim, and worth knowing before anyone profiles it.
 let _watch = 0;
 const _lastSeen = new WeakMap();
 

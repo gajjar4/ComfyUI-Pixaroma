@@ -563,8 +563,11 @@ function attachDrag(node, wave) {
       node._pixLaCue = null;
       // Re-arm the stop point while playing, or editing the selection mid-play
       // leaves the audio cutting out at the OLD boundary: drag the right handle
-      // out and it still stops where the edge used to be.
-      if (node._pixLaAudio) node._pixLaStopAt = playStopAt(node);
+      // out and it still stops where the edge used to be. Measured FROM WHERE
+      // THE AUDIO ACTUALLY IS, not from the (just-nulled) cue - see playStopAt.
+      if (node._pixLaAudio) {
+        node._pixLaStopAt = playStopAt(node, node._pixLaAudio.currentTime);
+      }
       liveUpdate(node);
     };
     // NOTHING is applied on pointerdown any more - that is what made every
@@ -633,7 +636,7 @@ function setCue(node, seconds) {
  * The boundary is not arbitrary: it is the visible orange edge, so which of the
  * two you get is something you can see before you press anything.
  */
-function playStopAt(node) {
+function playStopAt(node, origin) {
   const st = readState(node);
   const dur = node._pixLaDur || 0;
   // No decode yet (or it failed): we do not know where anything is, so let the
@@ -642,7 +645,12 @@ function playStopAt(node) {
   // for the first second after picking a big file and forever after a file the
   // waveform could not decode but <audio> can still stream.
   if (dur <= 0) return Infinity;
-  const from = cueSeconds(node, st);
+  // `origin` lets a caller ask "from HERE", which matters when re-arming during
+  // a drag: apply() has just nulled the cue, so cueSeconds would answer with
+  // the selection start - always inside - and collapse the stop to the
+  // selection end even when the audio is playing somewhere else entirely.
+  // Measured: playing at 10.85s past a [0,3] selection, one nudge killed it.
+  const from = Number.isFinite(origin) ? origin : cueSeconds(node, st);
   const selEnd = Math.min(dur, st.start + windowSeconds(node, st, dur));
   const inside = from >= st.start - 0.001 && from < selEnd - 0.001;
   return inside ? selEnd : dur;

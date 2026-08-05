@@ -182,15 +182,37 @@ class PixaromaLoadAudio:
         else:
             want = seconds
 
+        # The guard has to be TOTAL: `want` reaches here straight from the state
+        # blob or from a wire, so it can be a string, a list or None. Comparing
+        # those against a float raises a TypeError that names neither the node
+        # nor the field - and it used to degrade gracefully, because _as_float
+        # inside plan_window absorbed them.
+        try:
+            want = float(want)
+            if want != want:                      # NaN
+                want = 0.0
+        except (TypeError, ValueError):
+            want = 0.0
+
         # /prompt is unauthenticated, so `want` is attacker-controlled. Without a
         # cap, {"whenUnwired":"length","length":20000} asks for 960 million
         # samples - a 7.7 GB allocation, doubled transiently by the concat -
         # which OOM-kills the ComfyUI process. Measured.
-        if want and want > MAX_WINDOW_S:
+        #
+        # But the cap must track what is FABRICATED, not how the ask was phrased.
+        # Gating on the length alone refused a real 70-minute selection out of a
+        # 90-minute file while the SAME 90 minutes sailed through in "whole file"
+        # mode (where want is 0 and skipped the check entirely) - so it punished
+        # the honest case and missed the equivalent one. Comparing against the
+        # file's own length fixes both: you can never conjure more than an hour
+        # of audio that is not in the file, and everything real still loads.
+        have_s = waveform.shape[-1] / float(sample_rate or 1)
+        if want > MAX_WINDOW_S and want > have_s:
             raise ValueError(
-                "[Pixaroma] Load Audio: asked for {:.0f} seconds of audio, which is past the "
-                "{:.0f} second limit. Check the length in this node's settings, or what is "
-                "wired into its seconds input.".format(float(want), MAX_WINDOW_S)
+                "[Pixaroma] Load Audio: asked for {:.0f} seconds of audio, but {!r} is only "
+                "{:.0f} seconds long and the most that can be padded on is {:.0f} seconds. "
+                "Check the length in this node's settings, or what is wired into its seconds "
+                "input.".format(want, os.path.basename(path), have_s, MAX_WINDOW_S)
             )
 
         plan = plan_window(waveform.shape[-1], sample_rate, st.get("start", 0.0), want)
