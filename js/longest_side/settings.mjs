@@ -133,6 +133,16 @@ function outsideClose(e) {
   // this exception picking a colour would dismiss the panel underneath.
   if (PANEL.contains(e.target)
       || e.target?.closest?.(".pix-cp-popup, .pix-cp-modal-backdrop")) return;
+  // The gear must be exempt too, or it can never CLOSE the panel: this is a
+  // capture-phase pointerdown, so pressing the gear closed the panel here and
+  // the click that followed immediately reopened it - and because closePanel
+  // resets _userMoved, a panel the user had dragged aside snapped back to the
+  // node. Looked like "the gear does nothing". Reproduced with a real pointer
+  // sequence; a synthetic .click() does NOT show it, because it fires no
+  // pointerdown. Switching from one node's gear to another still works: that
+  // click reaches openLongestSidePanel with a different node, which closes the
+  // previous panel before opening its own.
+  if (e.target?.closest?.(".pix-ls-gear")) return;
   closePanel();
 }
 

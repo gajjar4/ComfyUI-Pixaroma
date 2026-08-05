@@ -54,6 +54,16 @@ DEFAULT_STATE = {
 UI_ONLY_KEYS = ("sizes", "ratios")
 
 
+# Every numeric conversion below catches THIS tuple, not just (TypeError,
+# ValueError). `int(float("inf"))` raises OverflowError, which subclasses
+# ArithmeticError and slips straight past a TypeError/ValueError handler - and
+# Python's json.loads accepts the bare literals `Infinity`, `-Infinity` and
+# `1e999` by default, so `{"size": Infinity}` reached int() and aborted the whole
+# run. Reachable from the unauthenticated /prompt endpoint. Reproduced before
+# fixing; locked by the harness.
+_NUM_ERRORS = (TypeError, ValueError, OverflowError)
+
+
 def _round_div(a, b):
     """`a / b` rounded half UP, in integers only.
 
@@ -77,7 +87,7 @@ def snap_to_multiple(value, multiple):
     try:
         value = int(value)
         multiple = int(multiple)
-    except (TypeError, ValueError):
+    except _NUM_ERRORS:
         return value
     if multiple <= 1:
         return value
@@ -97,7 +107,7 @@ def parse_ratio(name):
             a, _, b = text.partition(sep)
             try:
                 rw, rh = int(float(a.strip())), int(float(b.strip()))
-            except (TypeError, ValueError):
+            except _NUM_ERRORS:
                 return None
             if rw > 0 and rh > 0:
                 return (rw, rh)
@@ -166,7 +176,7 @@ def target_size(cw, ch, longest, allow_upscale=True):
 
     try:
         longest = int(longest)
-    except (TypeError, ValueError):
+    except _NUM_ERRORS:
         longest = MIN_DIM
     if longest <= 0:
         longest = MIN_DIM
@@ -236,7 +246,7 @@ def normalize_state(raw):
 
     try:
         size = int(data.get("size", st["size"]))
-    except (TypeError, ValueError):
+    except _NUM_ERRORS:
         size = st["size"]
     st["size"] = max(MIN_DIM, min(size, MAX_DIM))
 
@@ -245,7 +255,7 @@ def normalize_state(raw):
 
     try:
         step = int(data.get("step", 0))
-    except (TypeError, ValueError):
+    except _NUM_ERRORS:
         step = 0
     st["step"] = step if step in ALLOWED_STEPS else 0
 

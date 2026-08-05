@@ -15,6 +15,7 @@ import { isGraphLoading } from "../shared/graph_loading.mjs";
 import { onRendererChange } from "../shared/renderer_switch.mjs";
 import { installNodeAccent, registerNodeSettings } from "../shared/node_settings.mjs";
 import { HIDDEN_INPUT_NAME, runState } from "./core.mjs";
+import { inputSizeKey } from "./input_size.mjs";
 import { buildFace, WIDGET_H, DEFAULT_W, MIN_W } from "./ui.mjs";
 import { openLongestSidePanel, closeLongestSidePanelFor } from "./settings.mjs";
 import "./help.mjs";
@@ -90,7 +91,17 @@ function teardownFace(node) {
   try { node._pixLsBand?.remove(); } catch {}
   try { node._pixLsRoot?.remove(); } catch {}
   const i = (node.widgets || []).findIndex((w) => w.name === WIDGET_NAME);
-  if (i >= 0) node.widgets.splice(i, 1);
+  if (i >= 0) {
+    // Splice AND onRemove. Removing our own element drops what WE made, but
+    // ComfyUI created a wrapper and a registration of its own in addDOMWidget
+    // and only onRemove releases those. Without it every renderer flip and
+    // every node delete left an orphan behind, and this function runs on both.
+    // Same order as js/switch/vue_list.mjs, js/mute_switch/vue_list.mjs and
+    // js/sliders/ui.mjs; try/catch because the element may already be detached.
+    const w = node.widgets[i];
+    node.widgets.splice(i, 1);
+    try { w?.onRemove?.(); } catch { /* already detached */ }
+  }
   node._pixLsBand = null;
   node._pixLsRoot = null;
   node._pixLsRefresh = null;
@@ -186,7 +197,16 @@ function sweep() {
   }
   _emptySweeps = 0;
   for (const n of nodes) {
-    if (ensureFace(n)) n._pixLsRefresh?.();
+    const rebuilt = ensureFace(n);
+    // The incoming picture's size can change with no event we can hook: the
+    // user swaps the file on the upstream node, or the <img> simply finishes
+    // decoding (naturalWidth is 0 until it does). Comparing a cheap key is far
+    // simpler than trying to observe every way that can happen.
+    const key = inputSizeKey(n);
+    if (rebuilt || key !== n._pixLsSizeKey) {
+      n._pixLsSizeKey = key;
+      n._pixLsRefresh?.();
+    }
     if (isVueNodes()) parkBand(n);
   }
 }

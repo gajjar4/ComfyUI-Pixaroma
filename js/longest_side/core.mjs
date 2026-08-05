@@ -225,24 +225,45 @@ export function computeSize(inW, inH, st) {
 /**
  * What the face shows.
  *
- * The exact answer needs the incoming image's size, which the browser only
- * learns when a run reports it back (cached on node._pixLsLastIn, runtime-only
- * so a run can never dirty a saved workflow).
+ * `dims` is the incoming image's size when it is known, resolved by
+ * input_size.mjs (which reads the UPSTREAM node's own preview, so no run is
+ * needed) and falling back to what the last run actually received. This module
+ * stays free of ComfyUI imports on purpose - that is what lets the parity
+ * harness load it with plain node - so the resolving happens outside and the
+ * answer is handed in.
  *
- * Without it we do NOT invent a confident number. With a shape picked we can
- * still say what the shape and size intend, marked as an estimate, because
- * integer rounding of the crop box can move it by a pixel: 9:16 at 1216 is 684
- * from a square source but 685 from a 1920x1080 one. With `keep` even that is
- * unknowable, so we say only the part that is always true - the long side.
+ * With no size available we do NOT invent a confident number. With a shape
+ * picked we can still say what the shape and size intend, marked as an
+ * estimate, because integer rounding of the crop box moves it by a pixel: 9:16
+ * at 1216 is 684 from a square source but 685 from a 1920x1080 one. With `keep`
+ * even that is unknowable, so we say only the part that is always true.
  */
-export function previewText(node) {
+export function previewText(node, dims, connected = true) {
   const st = readState(node);
-  const last = node?._pixLsLastIn;
 
-  if (last?.w > 0 && last?.h > 0) {
-    const [w, h] = computeSize(last.w, last.h, st).size;
-    return { text: `${w}x${h}`, dim: false,
-      title: `This node will send ${w} x ${h}` };
+  if (dims?.w > 0 && dims?.h > 0) {
+    const [w, h] = computeSize(dims.w, dims.h, st).size;
+    // Say WHERE the size came from. "upstream" is read live off the node
+    // feeding us, so it is current. "run" is what the last execution received:
+    // a real measurement, but of the last run, so it can be out of date if
+    // something upstream changed since. Both are worth showing as a real
+    // number; only the wording differs, and the tooltip must not claim a live
+    // source it did not read.
+    const fromRun = dims.source === "run";
+    return {
+      text: `${w}x${h}`,
+      dim: false,
+      title: fromRun
+        ? `This node will send ${w} x ${h}. Measured on the last run, from a `
+          + `${dims.w} x ${dims.h} picture - the node feeding this one shows no `
+          + `preview of its own, so it may be out of date.`
+        : `This node will send ${w} x ${h}, from a ${dims.w} x ${dims.h} picture`,
+    };
+  }
+
+  if (!connected) {
+    return { text: `${st.size} long side`, dim: true,
+      title: `Wire a picture in and this shows the exact size. The longer side will be ${st.size}.` };
   }
 
   const ratio = parseRatio(st.ratio);
@@ -251,9 +272,9 @@ export function previewText(node) {
     let [w, h] = targetSize(ratio[0], ratio[1], st.size, true);
     if (st.step > 0) { w = snapToMultiple(w, st.step); h = snapToMultiple(h, st.step); }
     return { text: `~${w}x${h}`, dim: true,
-      title: `About ${w} x ${h}. Run once and this shows the exact size.` };
+      title: `About ${w} x ${h}. The exact size needs the incoming picture's size.` };
   }
 
   return { text: `${st.size} long side`, dim: true,
-    title: `The longer side will be ${st.size}. Run once to see both numbers.` };
+    title: `The longer side will be ${st.size}. The other side needs the incoming picture's size.` };
 }

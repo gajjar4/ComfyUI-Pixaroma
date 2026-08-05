@@ -20,7 +20,7 @@ import torch
 from PIL import Image
 
 from ._longest_side_helpers import (
-    ALLOWED_STEPS, DEFAULT_STATE, compute, parse_state,
+    ALLOWED_STEPS, DEFAULT_STATE, MIN_DIM, compute, parse_state,
 )
 from ._resize_helpers import _pick_resample
 
@@ -91,6 +91,23 @@ class PixaromaLongestSide:
         state = parse_state(LongestSideState)
 
         frames = _tensor_to_pils(image)
+
+        # A zero-length IMAGE batch has no frame to measure, so `frames[0]`
+        # aborted the run with a bare IndexError that named neither this node
+        # nor the reason. Nothing here can invent a truthful width and height,
+        # so pass the empty batch straight through and say what happened in the
+        # log - the fault is upstream, and stopping the whole queue for it helps
+        # nobody.
+        if not frames:
+            print("[PixaromaLongestSide] the incoming image batch is empty; "
+                  "passing it through unchanged")
+            return {
+                "ui": {"pixaroma_longest_side": [{
+                    "in_w": 0, "in_h": 0, "out_w": 0, "out_h": 0, "cropped": False,
+                }]},
+                "result": (image, MIN_DIM, MIN_DIM),
+            }
+
         in_w, in_h = frames[0].size
 
         plan = compute(in_w, in_h, state)

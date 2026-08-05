@@ -15,6 +15,7 @@ import { ACC } from "../shared/node_settings.mjs";
 import {
   readState, writeState, nextStep, stepLabel, previewText, parseRatio,
 } from "./core.mjs";
+import { resolveInputSize, isInputConnected } from "./input_size.mjs";
 
 const PAD = 6;
 const GAP = 4;
@@ -283,7 +284,7 @@ export function buildFace(node, { onGear }) {
       ? `Both sides are rounded to the nearest ${st.step} pixels. Click for the next step.`
       : "Sizes go out exactly. Click to round both sides to 8, 16, 32 or 64.";
 
-    const p = previewText(node);
+    const p = previewText(node, resolveInputSize(node), isInputConnected(node));
     prev.textContent = p.text;
     prev.classList.toggle("dim", p.dim);
     prev.title = p.title;
