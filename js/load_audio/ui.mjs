@@ -256,6 +256,8 @@ export function buildFace(node, openPanel) {
   file.addEventListener("click", () => openPicker(node, file, (name) => {
     writeState(node, { file: name, start: 0 });
     node._pixLaDur = 0;
+    node._pixLaCue = null;          // a position in the OLD file means nothing here
+    stopPlay(node);
     renderFace(node);
   }));
 
@@ -299,8 +301,8 @@ export function buildFace(node, openPanel) {
   wavebox.className = "wavebox";
   const wave = document.createElement("canvas");
   wave.className = "wave";
-  wave.title = "Drag either orange edge to trim, drag the middle to slide the "
-    + "selection, or click anywhere to jump there";
+  wave.title = "Click anywhere to put the play cursor there. Drag either orange "
+    + "edge to trim, or drag the middle to slide the selection.";
   const times = document.createElement("div");
   times.className = "times";
   const tA = document.createElement("span");
@@ -464,22 +466,40 @@ function attachDrag(node, wave) {
     };
     // Where inside the window the grab happened, so the window follows the
     // cursor from THAT point instead of snapping its centre to it.
+    // How far right the START may go.
+    //
+    // The obvious `dur - len0` collapses to ZERO the moment the wanted length
+    // exceeds the file - ask for 5.17s of a 4.65s song and the selection pins
+    // itself at 0 and simply stops responding to the mouse, with nothing on
+    // screen saying why. That is a dead control, which reads as a broken one.
+    // When the window cannot fit, let it slide anyway: the tail is padded (and
+    // the readout already says so), which is a real choice someone might want.
+    const maxStart = len0 >= dur
+      ? Math.max(0, dur - MIN_WINDOW_S)
+      : dur - len0;
+
     const grabOffset = secAt(e.clientX) - st0.start;
+    const downX = e.clientX;
+    // A press that never really moves is a CLICK, and a click places the play
+    // cursor instead of touching the selection. Without this split there is no
+    // way to audition a different part of a long file without dragging your
+    // selection off the spot you had chosen.
+    let moved = false;
     let zone = info.zone;
-    if (zone === "jump") {                 // a click outside starts a move drag
-      const start = Math.max(0, Math.min(Math.max(0, dur - len0), secAt(e.clientX) - len0 / 2));
+    let jumpOffset = grabOffset;
+    const beginJumpDrag = (cx) => {
+      const start = Math.max(0, Math.min(maxStart, secAt(cx) - len0 / 2));
       writeState(node, { start: round2(start) });
       zone = "move";
-    }
-    const jumpOffset = zone === "move" && info.zone === "jump"
-      ? secAt(e.clientX) - readState(node).start : grabOffset;
+      jumpOffset = secAt(cx) - readState(node).start;
+    };
 
     const apply = (cx) => {
       const t = secAt(cx);
       if (zone === "start") {
         if (durationWired(node)) {
           // Length is fixed by the wire, so the left edge SLIDES the window.
-          writeState(node, { start: round2(Math.max(0, Math.min(Math.max(0, dur - len0), t))) });
+          writeState(node, { start: round2(Math.max(0, Math.min(maxStart, t))) });
         } else {
           const start = Math.max(0, Math.min(end0 - MIN_WINDOW_S, t));
           writeState(node, { start: round2(start), length: round2(end0 - start),
@@ -490,28 +510,39 @@ function attachDrag(node, wave) {
         const len = Math.max(MIN_WINDOW_S, Math.min(dur - cur.start, t - cur.start));
         writeState(node, { length: round2(len), whenUnwired: "length" });
       } else {
-        const start = Math.max(0, Math.min(Math.max(0, dur - len0), t - jumpOffset));
+        const start = Math.max(0, Math.min(maxStart, t - jumpOffset));
         writeState(node, { start: round2(start) });
       }
       // IN PLACE, never renderFace: that re-runs the decode promise and repaints
       // twice per pointermove, which is what made the drag feel like it was
       // catching up afterwards (Duration pattern #12, same lesson).
+      // Dragging the selection resets the cue to its start, so Play always
+      // means "from the beginning of what I just chose" unless you deliberately
+      // click somewhere else afterwards.
+      node._pixLaCue = null;
       liveUpdate(node);
     };
-    apply(e.clientX);
+    // NOTHING is applied on pointerdown any more - that is what made every
+    // press move the selection, even one you meant as a click.
 
     const move = (mv) => {
       // Convention #20: a lost release must not leave the window following the
       // cursor forever. Synthetic events never reproduce it; real mice do.
       if (!(mv.buttons & 1)) { finish(); return; }
+      if (!moved) {
+        if (Math.abs(mv.clientX - downX) < 3) return;   // still a click so far
+        moved = true;
+        if (zone === "jump") beginJumpDrag(downX);
+      }
       apply(mv.clientX);
     };
-    const finish = () => {
+    const finish = (ev) => {
       if (!node._pixLaDragging) return;         // idempotent: the guard can also call it
       node._pixLaDragging = false;
       wave.style.cursor = "default";
       wave.removeEventListener("pointermove", move);
       try { wave.releasePointerCapture(e.pointerId); } catch (_x) { /* fine */ }
+      if (!moved) setCue(node, secAt(ev && ev.clientX != null ? ev.clientX : downX));
     };
     wave.addEventListener("pointermove", move);
     wave.addEventListener("pointerup", finish, { once: true });
@@ -521,6 +552,36 @@ function attachDrag(node, wave) {
 }
 
 function round2(v) { return Math.round(v * 100) / 100; }
+
+/** Where Play starts from: your last click, or the start of the selection. */
+function cueSeconds(node, st) {
+  const c = node?._pixLaCue;
+  return Number.isFinite(c) ? c : st.start;
+}
+
+/**
+ * Put the play cursor somewhere. If audio is already playing, jump there
+ * instead of stopping - that is what makes it usable for finding a moment in a
+ * long file.
+ */
+function setCue(node, seconds) {
+  const dur = node._pixLaDur || 0;
+  node._pixLaCue = Math.max(0, Math.min(dur, seconds));
+  const el = node._pixLaAudio;
+  if (el) {
+    try { el.currentTime = node._pixLaCue; } catch (_e) { /* not seekable yet */ }
+    node._pixLaStopAt = node._pixLaCue + playLength(node);
+    node._pixLaPlayAt = node._pixLaCue;
+  }
+  repaintWave(node);
+}
+
+/** How long Play runs for: the selection's length, capped by the file end. */
+function playLength(node) {
+  const st = readState(node);
+  const len = windowSeconds(node, st, node._pixLaDur || 0);
+  return len > 0 ? len : Math.max(0, (node._pixLaDur || 0) - cueSeconds(node, st));
+}
 
 /** The cheap per-frame update: the two numbers plus a repaint. No decoding. */
 function liveUpdate(node) {
@@ -538,9 +599,11 @@ function togglePlay(node) {
   if (node._pixLaAudio) { stopPlay(node); return; }
   const el = makePlayer(audioFileUrl(st.file));
   node._pixLaAudio = el;
-  const len = windowSeconds(node, st, node._pixLaDur || 0);
-  el.currentTime = st.start;
-  const stopAt = st.start + (len > 0 ? len : Infinity);
+  const from = cueSeconds(node, st);
+  el.currentTime = from;
+  // Read on every tick rather than captured once, so clicking elsewhere while
+  // it plays moves both the position AND the point it will stop at.
+  node._pixLaStopAt = from + playLength(node);
   el.addEventListener("ended", () => stopPlay(node));
   el.play().catch(() => stopPlay(node));
   els.play.className = "stop";
@@ -548,10 +611,10 @@ function togglePlay(node) {
 
   // A rAF playhead rather than the `timeupdate` event: timeupdate fires about
   // four times a second, which draws a visibly stepping line. This also does
-  // the stop-at-the-end check, so the window boundary is honoured smoothly.
+  // the stop check, so the boundary is honoured smoothly.
   const tick = () => {
     if (node._pixLaAudio !== el) return;                 // stopped or replaced
-    if (el.currentTime >= stopAt) { stopPlay(node); return; }
+    if (el.currentTime >= node._pixLaStopAt) { stopPlay(node); return; }
     node._pixLaPlayAt = el.currentTime;
     repaintWave(node);
     node._pixLaPlayRaf = requestAnimationFrame(tick);
@@ -596,10 +659,11 @@ function paint(node, peaks, dur, error) {
     : null;
   // Pass the CSS size: canvasBackingScale caps the backing buffer against it,
   // and calling it bare lets a zoomed-in node allocate a needlessly huge canvas.
-  const playAt = (node._pixLaPlayAt != null && dur > 0)
-    ? Math.max(0, Math.min(1, node._pixLaPlayAt / dur)) : null;
+  const frac = (v) => (v != null && dur > 0) ? Math.max(0, Math.min(1, v / dur)) : null;
+  const cue = Number.isFinite(node._pixLaCue) ? node._pixLaCue : null;
   drawWave(els.wave, peaks, sel, accentOf(node),
-    canvasBackingScale(els.wave.clientWidth, els.wave.clientHeight), playAt);
+    canvasBackingScale(els.wave.clientWidth, els.wave.clientHeight),
+    { play: frac(node._pixLaPlayAt), cue: frac(cue) });
   els.tA.textContent = dur > 0 ? "0:00" : "";
   els.tB.textContent = dur > 0 ? fmtTime(dur) : "";
   els.tSel.textContent = dur > 0 && len > 0
@@ -683,5 +747,6 @@ export function destroyFace(node) {
     node._pixLaRO = null;
     node._pixLaEls = null;
     node._pixLaPeaks = null;
+    node._pixLaCue = null;
   }
 }

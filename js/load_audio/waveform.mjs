@@ -97,7 +97,13 @@ export function forgetPeaks(name) {
  * Paint the waveform with the selected window highlighted.
  * `sel` is { from, to } as fractions of the whole file, or null for none.
  */
-export function drawWave(canvas, peaks, sel, accent, backing = 1, playAt = null) {
+/**
+ * `marks` carries the two cursors, both as fractions of the whole file:
+ *   cue  where Play will start from. Always drawn, so you can see it before
+ *        you press anything.
+ *   play where playback has reached. Only while something is playing.
+ */
+export function drawWave(canvas, peaks, sel, accent, backing = 1, marks = null) {
   if (!canvas) return;
   const cssW = canvas.clientWidth || 1;
   const cssH = canvas.clientHeight || 1;
@@ -153,7 +159,25 @@ export function drawWave(canvas, peaks, sel, accent, backing = 1, playAt = null)
     }
   }
 
+  // The cue: where Play will start. Drawn dimmer than the playhead, and with a
+  // small tab on top so it reads as something you placed rather than an edge of
+  // the selection.
+  const cue = marks && marks.cue;
+  if (cue != null && cue >= 0 && cue <= 1) {
+    const px = cue * cssW;
+    const x = Math.max(0, Math.min(cssW - 1, px));
+    ctx.fillStyle = "rgba(255,255,255,0.55)";
+    ctx.fillRect(x - 0.5, 0, 1, cssH);
+    ctx.beginPath();
+    ctx.moveTo(x - 3.5, 0);
+    ctx.lineTo(x + 3.5, 0);
+    ctx.lineTo(x, 5);
+    ctx.closePath();
+    ctx.fill();
+  }
+
   // The playhead, only while something is actually playing.
+  const playAt = marks && marks.play;
   if (playAt != null && playAt >= 0 && playAt <= 1) {
     const px = playAt * cssW;
     ctx.fillStyle = "#ffffff";
