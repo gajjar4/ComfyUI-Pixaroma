@@ -146,16 +146,20 @@ export function drawWave(canvas, peaks, sel, accent, backing = 1, marks = null) 
     ctx.fillRect(x + bw * 0.15, mid - bh / 2, Math.max(0.7, bw * 0.7), bh);
   }
 
-  // The edge handles. Deliberately drawn WIDER than a hairline and with a grip
-  // bar, because they are drag targets: a 2px line is findable by eye but not
-  // by mouse, which is exactly what made the first version feel broken.
+  // The edge handles. Deliberately drawn WIDER than a hairline and with a grip,
+  // because they are drag targets: a 2px line is findable by eye but not by
+  // mouse, which is exactly what made the first version feel broken.
+  //
+  // TWO TONES, and the reason matters: the tall bar is the selection BOUNDARY
+  // so it carries the accent, while the grip is the AFFORDANCE and is white.
+  // With both in accent they vanished against the orange bars inside the
+  // selection - the edge was invisible exactly where you most need to find it.
   if (sel && xTo > xFrom) {
-    ctx.fillStyle = accent;
     for (const x of [xFrom, xTo]) {
-      const gx = Math.max(0, Math.min(cssW - 3, x - 1.5));
-      ctx.fillRect(gx, 0, 3, cssH);
-      // a fatter grip in the middle third, so the handle reads as grabbable
-      ctx.fillRect(Math.max(0, Math.min(cssW - 5, x - 2.5)), cssH * 0.34, 5, cssH * 0.32);
+      ctx.fillStyle = accent;
+      ctx.fillRect(Math.max(0, Math.min(cssW - 3, x - 1.5)), 0, 3, cssH);
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(Math.max(0, Math.min(cssW - 5, x - 2.5)), cssH * 0.36, 5, cssH * 0.28);
     }
   }
 
