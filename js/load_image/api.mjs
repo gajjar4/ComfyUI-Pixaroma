@@ -14,6 +14,23 @@ export function splitFilenameSubfolder(path) {
   return { subfolder: norm.slice(0, idx), filename: norm.slice(idx + 1) };
 }
 
+/**
+ * Split ComfyUI's type annotation off a combo value.
+ *
+ * A value can be `clipspace-painted-masked-123.png [input]` - MEASURED, that is
+ * exactly what the widget holds after a Mask Editor save. The annotation names
+ * the folder the file lives in, and it must NEVER reach the `filename` query
+ * parameter: doing so produced `...png+[input]` in the URL, a guaranteed 404,
+ * and because the preview then never matched the widget the reconcile refetched
+ * on every setup forever. Found by masking a real image and reloading.
+ */
+export function splitTypeAnnotation(value) {
+  const s = String(value ?? "");
+  const m = s.match(/^(.*?)\s*\[(input|output|temp)\]\s*$/i);
+  if (!m) return { name: s, type: "input" };
+  return { name: m[1], type: m[2].toLowerCase() };
+}
+
 // Fetch the image from ComfyUI's /view route and assign it to node.imgs so
 // the native bottom-of-node preview updates. ComfyUI populates node.imgs
 // automatically on workflow load via the image_upload combo's setter, but
@@ -52,21 +69,28 @@ export function previewMatches(node, filename) {
     loaded = decodeURIComponent(img.src).match(/[?&]filename=([^&]*)/)?.[1] ?? null;
   }
   if (loaded == null) return false;
-  // Strip ComfyUI's type annotation. A combo value can be
-  // "clipspace/foo.png [input]", but the URL only ever carries "foo.png", so
-  // without this an annotated name could NEVER match - and since a mismatch
-  // triggers a refetch, that meant a guaranteed failing /view request on every
-  // setup for exactly the clipspace / Mask Editor path that matters most.
-  const stripAnnotation = (s) => String(s).replace(/\s*\[(input|output|temp)\]\s*$/i, "");
-  const { filename: want } = splitFilenameSubfolder(stripAnnotation(filename));
-  return loaded === stripAnnotation(want);
+  // Normalise BOTH sides. Our own updateNativePreview strips the annotation
+  // before building the URL, but ComfyUI's native image_upload setter does NOT:
+  // on a workflow load it sets node.imgs with `filename=...png+[input]` (that
+  // URL works, its /view parses the annotation server-side). MEASURED after a
+  // Mask Editor save plus a reload. Stripping only the widget side meant the
+  // two could never agree behind a core-populated preview, so the reconcile
+  // refetched on every single setup - wasteful, and it made "match" a
+  // permanently false signal.
+  const bare = (v) => splitFilenameSubfolder(splitTypeAnnotation(v).name).filename;
+  return bare(loaded) === bare(filename);
 }
 
 export function updateNativePreview(node, filename) {
   if (!filename) return;
   node._pixLiPreviewReqId = (node._pixLiPreviewReqId | 0) + 1;
   const myReq = node._pixLiPreviewReqId;
-  const { subfolder, filename: name } = splitFilenameSubfolder(filename);
+  // Peel the type annotation off BEFORE splitting, and use it as the /view
+  // `type`. A Mask Editor save leaves the widget holding
+  // "clipspace-painted-masked-123.png [input]"; without this the annotation
+  // ended up inside filename= as "...png+[input]", which 404s.
+  const { name: bare, type } = splitTypeAnnotation(filename);
+  const { subfolder, filename: name } = splitFilenameSubfolder(bare);
   const img = new Image();
   img.onload = () => {
     if (node._pixLiPreviewReqId !== myReq) return; // stale, newer pick won
@@ -81,7 +105,7 @@ export function updateNativePreview(node, filename) {
     if (node._pixLiPreviewReqId !== myReq) return;
     console.warn("[PixaromaLoadImage] preview fetch failed for", filename);
   };
-  img.src = pixApiUrl(`/view?filename=${encodeURIComponent(name)}&type=input&subfolder=${encodeURIComponent(subfolder)}&t=${Date.now()}`);
+  img.src = pixApiUrl(`/view?filename=${encodeURIComponent(name)}&type=${encodeURIComponent(type)}&subfolder=${encodeURIComponent(subfolder)}&t=${Date.now()}`);
 }
 
 // Single source of truth for picking an image (dropdown click, arrow nav,
