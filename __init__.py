@@ -78,6 +78,8 @@ from .nodes.node_image_resize import NODE_CLASS_MAPPINGS as _MAPS_IMAGE_RESIZE
 from .nodes.node_image_resize import NODE_DISPLAY_NAME_MAPPINGS as _NAMES_IMAGE_RESIZE
 from .nodes.node_resize_crop import NODE_CLASS_MAPPINGS as _MAPS_RESIZE_CROP
 from .nodes.node_resize_crop import NODE_DISPLAY_NAME_MAPPINGS as _NAMES_RESIZE_CROP
+from .nodes.node_longest_side import NODE_CLASS_MAPPINGS as _MAPS_LONGEST_SIDE
+from .nodes.node_longest_side import NODE_DISPLAY_NAME_MAPPINGS as _NAMES_LONGEST_SIDE
 from .nodes.node_outpaint import NODE_CLASS_MAPPINGS as _MAPS_OUTPAINT
 from .nodes.node_outpaint import NODE_DISPLAY_NAME_MAPPINGS as _NAMES_OUTPAINT
 from .nodes.node_outpaint_stitch import NODE_CLASS_MAPPINGS as _MAPS_OUTPAINT_STITCH
@@ -178,6 +180,7 @@ NODE_CLASS_MAPPINGS = {
     **_MAPS_TEXT_OVERLAY,
     **_MAPS_IMAGE_RESIZE,
     **_MAPS_RESIZE_CROP,
+    **_MAPS_LONGEST_SIDE,
     **_MAPS_OUTPAINT,
     **_MAPS_OUTPAINT_STITCH,
     **_MAPS_TEXT_WATERMARK,
@@ -246,6 +249,7 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     **_NAMES_TEXT_OVERLAY,
     **_NAMES_IMAGE_RESIZE,
     **_NAMES_RESIZE_CROP,
+    **_NAMES_LONGEST_SIDE,
     **_NAMES_OUTPAINT,
     **_NAMES_OUTPAINT_STITCH,
     **_NAMES_TEXT_WATERMARK,
