@@ -48,6 +48,16 @@ function parkBand(node) {
     const band = node._pixLsBand;
     if (!band) return;
     const el = document.querySelector(`.lg-node[data-node-id="${node.id}"]`);
+    // PROVE the element is really this node's before parking anything in it.
+    // `data-node-id` is NOT page-unique: subgraph ids are local and restart at
+    // 1, which is exactly why findNode() below has to strip a "12:5" prefix.
+    // Once collectNodes() started feeding subgraph-resident nodes in here, a
+    // bare id query could match an unrelated root node and glue this node's
+    // step button and gear onto it. Containment is the cheap proof - our widget
+    // root lives inside our own .lg-node and nobody else's. Bailing when the
+    // root is not mounted yet is harmless: the rAF, the 150ms retry and the
+    // sweep all come back.
+    if (!el || !node._pixLsRoot || !el.contains(node._pixLsRoot)) return;
     const block = vueSlotBlock(el);
     if (!block) return;
     if (band.parentElement === block) return;   // steady state, one comparison
@@ -152,7 +162,13 @@ function buildFaceOnNode(node) {
   // element and the canvas stops zooming while the cursor is over the node
   // (UI convention #17). No-op in Nodes 2.0, which forwards it itself.
   installCanvasZoomPassthrough(root);
-  installNodeAccent(node, root);   // the face follows this node's accent colour
+  // BOTH root and band. installNodeAccent writes --pix-acc inline on each
+  // element it is given, and in Nodes 2.0 the band is moved OUT of root into
+  // the slot block, so it stops inheriting the variable: measured, the tabs and
+  // chips followed a custom accent while the step button and the size readout
+  // stayed brand orange. The helper prunes detached elements on every call, so
+  // handing it both cannot grow a list across rebuilds.
+  installNodeAccent(node, root, band);
 
   const height = () => WIDGET_H;
   // WIDGET_NAME, not a repeated literal: faceAlive and teardownFace both search
@@ -248,6 +264,19 @@ function sweep() {
     // serviced - no re-parking, no readout refresh - forever.
     try {
       const rebuilt = ensureFace(n);
+
+      // A REWIRE makes the run-cached size belong to a source that is no longer
+      // feeding us. Unplugging is already handled (resolveInputSize checks the
+      // wire first), but dragging the wire to a DIFFERENT node was not: behind
+      // a source we cannot read live, the face kept showing the old size
+      // UNDIMMED until the next run - the one confident-wrong-number case left.
+      // Comparing the link id here costs nothing, needs no connection hook, and
+      // touches only a runtime field, so it can never dirty a workflow.
+      const linkId = n.inputs?.[0]?.link ?? null;
+      if (n._pixLsLinkSeen !== undefined && n._pixLsLinkSeen !== linkId) {
+        n._pixLsLastIn = null;
+      }
+      n._pixLsLinkSeen = linkId;
       // The incoming picture's size can change with no event we can hook: the
       // user swaps the file on the upstream node, or the <img> simply finishes
       // decoding (naturalWidth is 0 until it does). Comparing a cheap key is far
@@ -265,15 +294,21 @@ function sweep() {
 }
 
 function startWatchdog() {
+  // Reset the grace counter, or a watchdog that stopped once (leaving it at 3)
+  // would stop again on the very first empty tick after restarting, throwing
+  // away the three-pass window that exists to survive a renderer flip.
+  _emptySweeps = 0;
   if (!_watchdog) _watchdog = setInterval(sweep, 350);
   if (!_rendererOff) {
     _rendererOff = onRendererChange(() => {
       // The flip and the re-render are not simultaneous, so sweep now AND let
       // the interval catch whatever settles a few hundred ms later.
       sweep();
-      for (const n of (app.graph?._nodes || [])) {
-        if (n.comfyClass === CLASS_NAME) { applyBandPlacement(n); n._pixLsRefresh?.(); }
-      }
+      // collectNodes, not app.graph._nodes: a node inside a subgraph otherwise
+      // never gets applyBandPlacement on a flip, so coming back to Classic it
+      // keeps the `parked` styling for a slot block Classic does not build, and
+      // its band simply disappears.
+      for (const n of collectNodes()) { applyBandPlacement(n); n._pixLsRefresh?.(); }
     });
   }
 }
@@ -324,7 +359,11 @@ app.registerExtension({
       // ungated clamp rewrites the saved size of a file nobody touched and
       // flags it modified (Vue Compat #18). Measured: a workflow saved at
       // height 210 reopened at 144 with the gate missing.
-      if (!isVueNodes() && !isGraphLoading()) {
+      // faceAlive too: computeSize() only means anything while our widget is on
+      // the node. A renderer flip leaves it with widgets: [] until the next
+      // sweep rebuilds it, and pinning to a title-plus-slots height in that
+      // window would leave the node clipped with nothing to restore it.
+      if (!isVueNodes() && !isGraphLoading() && faceAlive(this)) {
         if (size[0] < MIN_W) size[0] = MIN_W;
         if (this.size[0] < MIN_W) this.size[0] = MIN_W;
         // WIDTH ONLY. The body is a fixed stack of rows, so dragging the node

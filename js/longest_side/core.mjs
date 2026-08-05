@@ -253,10 +253,14 @@ export function previewText(node, dims, connected = true) {
     return {
       text: `${w}x${h}`,
       dim: false,
+      // Do NOT say "the node feeding this one shows no preview": the two
+      // Pixaroma loaders take this branch precisely BECAUSE they show a big
+      // preview we refuse to measure (it is the file, not what they output).
+      // Describing the screen wrongly is worse than saying less.
       title: fromRun
         ? `This node will send ${w} x ${h}. Measured on the last run, from a `
-          + `${dims.w} x ${dims.h} picture - the node feeding this one shows no `
-          + `preview of its own, so it may be out of date.`
+          + `${dims.w} x ${dims.h} picture. The incoming size cannot be read `
+          + `live here, so it may be out of date.`
         : `This node will send ${w} x ${h}, from a ${dims.w} x ${dims.h} picture`,
     };
   }

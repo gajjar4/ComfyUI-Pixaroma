@@ -19,6 +19,10 @@ let PANEL_NODE = null;
 let _followRaf = 0;
 let _userMoved = false;
 let _cssDone = false;
+// The colour picker lives on document.body, outside the panel, so closing the
+// panel programmatically (node deleted, workflow loaded) would otherwise strand
+// it over the canvas with its own document listeners still attached.
+let _cpHandle = null;
 
 const CLS = "pix-lsp";
 
@@ -115,6 +119,8 @@ export function closeLongestSidePanelFor(node) {
 }
 
 function closePanel() {
+  try { _cpHandle?.close?.(); } catch {}
+  _cpHandle = null;
   if (_followRaf) cancelAnimationFrame(_followRaf);
   _followRaf = 0;
   try { PANEL?.remove(); } catch {}
@@ -156,7 +162,15 @@ function outsideClose(e) {
 }
 
 function escClose(e) {
-  if (e.key === "Escape" && PANEL) { e.stopPropagation(); closePanel(); }
+  if (e.key !== "Escape" || !PANEL) return;
+  // Do not swallow Escape belonging to the Help or Workflows windows. This is a
+  // CAPTURE listener on document and theirs bubble on their own element, so
+  // without the exemption ours always wins: reading the Help window with this
+  // panel open, Escape closed the panel and left the window up. The shared
+  // settings panel carries the same exemption.
+  if (e.target?.closest?.(".pixhb-win, .pixwb-win")) return;
+  e.stopPropagation();
+  closePanel();
 }
 
 function place(node) {
@@ -519,6 +533,8 @@ function fill(bd, node, changed) {
         PANEL?.style.setProperty("--pix-acc", accentOf(node));
         changed(false);
       },
+      // Keep the picker's handle so closePanel can take it down with us.
+      onPickerOpen: (h) => { _cpHandle = h; },
     }));
   } catch {}
 }
