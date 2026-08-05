@@ -266,9 +266,23 @@ app.registerExtension({
     // switch.
     const _origOnResize = nodeType.prototype.onResize;
     nodeType.prototype.onResize = function (size) {
-      if (!isVueNodes()) {
+      // isGraphLoading as well as the renderer check. onResize is NOT only a
+      // user drag - LiteGraph calls it while restoring a workflow, so an
+      // ungated clamp rewrites the saved size of a file nobody touched and
+      // flags it modified (Vue Compat #18). Measured: a workflow saved at
+      // height 210 reopened at 144 with the gate missing.
+      if (!isVueNodes() && !isGraphLoading()) {
         if (size[0] < MIN_W) size[0] = MIN_W;
         if (this.size[0] < MIN_W) this.size[0] = MIN_W;
+        // WIDTH ONLY. The body is a fixed stack of rows, so dragging the node
+        // taller adds nothing but dead space under the chips.
+        //
+        // Deliberately NOT also done in onDrawForeground: a draw hook keeps
+        // firing long after the load guard expires, so pinning there would
+        // rewrite an old saved height the moment the node was simply looked at.
+        const natural = this.computeSize()[1];
+        size[1] = natural;
+        this.size[1] = natural;
       }
       if (_origOnResize) return _origOnResize.apply(this, arguments);
     };
