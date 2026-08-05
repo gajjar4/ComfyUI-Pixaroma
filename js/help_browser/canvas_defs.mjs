@@ -177,7 +177,7 @@ export const CANVAS_FEATURES = [
           ["A A A", "How big everything in the panel is drawn: text, cards, covers and the folder list together. The small A is how the panel first shipped, the middle one is the normal size, and the large one is for a big screen or tired eyes. It is remembered."],
           ["Sort", "Recent, Name, or number of Nodes. It greys out in Recent and while searching, because those two already have an order of their own."],
           ["Open folder", "Opens the selected folder on your computer. On Windows it opens BEHIND the browser, so look in your taskbar for it."],
-          ["Save open workflow here", "Saves whatever is on the canvas into the folder you have selected, so new work stops landing loose in the root."],
+          ["Save open workflow here", "Saves whatever is on the canvas into the folder you have selected, so new work stops landing loose in the root. A workflow you have never saved becomes that file, so the tab you are working in follows it. One that is already saved somewhere gets a copy in the folder and the tab stays on the original."],
         ],
       },
       {

@@ -217,7 +217,31 @@ export async function remove(rel) {
   await s.syncWorkflows?.();
 }
 
-/** Save the workflow that is open RIGHT NOW into a folder. User action only. */
+/**
+ * Save the workflow that is open RIGHT NOW into a folder. User action only.
+ *
+ * ⚠ A NEVER-SAVED workflow cannot go through saveAs, and the failure is silent.
+ * Core's `UserFile.saveAs(path)` is:
+ *
+ *     async saveAs(path) {
+ *       const f = this.isTemporary ? this : UserFile.createTemporary(path)
+ *       f.content = this.content; await f.save(); return f
+ *     }
+ *
+ * so for a TEMPORARY workflow it saves ITSELF at ITS OWN path and the path we
+ * asked for is discarded. Measured: "Save open workflow here" into a folder
+ * wrote `workflows/Unsaved Workflow.json` at the ROOT, the chosen folder AND the
+ * chosen name both ignored, while the panel toasted "Saved". The workflow was
+ * persisted by that write, so a SECOND attempt took the other branch and worked
+ * - which is why it reads as "it only saves the second time" and why the folder
+ * (usually a folder just created, hence empty) gets the blame.
+ *
+ * Core's own saveWorkflowAs never calls saveAs on a temporary workflow. It
+ * RENAMES it to the destination first and then saves, which is what this does.
+ * Going through the store's renameWorkflow rather than `wf.rename` matters: for
+ * a temporary file rename is only an in-memory `updatePath`, and the store is
+ * what re-keys its lookup and the open-tab list to the new path.
+ */
 export async function saveCurrentAs(newRel, { overwrite = false } = {}) {
   if (!overwrite && await exists(newRel)) {
     throw new Error(`There is already a workflow called "${newRel.split("/").pop()}" there.`);
@@ -225,8 +249,23 @@ export async function saveCurrentAs(newRel, { overwrite = false } = {}) {
   const s = store();
   const wf = s?.activeWorkflow;
   if (!wf) throw new Error("Nothing is open to save.");
-  if (typeof wf.saveAs !== "function") throw new Error("This ComfyUI build cannot save-as.");
-  await wf.saveAs(toStorePath(newRel));
+  const path = toStorePath(newRel);
+
+  if (wf.isTemporary) {
+    if (typeof s.renameWorkflow === "function") await s.renameWorkflow(wf, path);
+    else if (typeof wf.rename === "function") await wf.rename(path);
+    else throw new Error("This ComfyUI build cannot save an unsaved workflow into a folder.");
+    // Same call core makes between the rename and the write: it snapshots the
+    // graph the change tracker will compare against, so the workflow is not
+    // left looking modified the instant it has been saved.
+    wf.changeTracker?.prepareForSave?.();
+    if (typeof s.saveWorkflow === "function") await s.saveWorkflow(wf);
+    else if (typeof wf.save === "function") await wf.save();
+    else throw new Error("This ComfyUI build cannot save workflows.");
+  } else {
+    if (typeof wf.saveAs !== "function") throw new Error("This ComfyUI build cannot save-as.");
+    await wf.saveAs(path);
+  }
   await s.syncWorkflows?.();
 }
 
