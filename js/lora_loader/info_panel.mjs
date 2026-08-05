@@ -354,6 +354,14 @@ export async function openInfoPanel(node, id, refresh) {
   const PREVIEW_MAX = 512;   // longest side; the box shows 64px, and a 4K drop is
                              // otherwise megabytes of upload for a thumbnail
 
+  /** The gear's "Show preview thumbnails". Re-read on every render (the same idiom
+   *  as `civitaiOn`) so a gear toggle is never stale. When it is off the picture box
+   *  is not built at all - a Civitai preview appears the moment the i button is
+   *  clicked, which is the whole point of being able to turn it off while
+   *  recording, so leaving an empty square (or a live drop target) behind would
+   *  miss it. Everything below therefore has to cope with the box being absent. */
+  function thumbsOn() { return readState(node).thumbs !== false; }
+
   /** Downscale to a small jpeg in the BROWSER, so the upload is tens of KB and the
    *  server needs no image library. The server still checks the size and the magic
    *  bytes - this is for weight, not for trust. */
@@ -539,14 +547,18 @@ export async function openInfoPanel(node, id, refresh) {
 
     // ── header ───────────────────────────────────────────────────────────
     const top = el("div", "pix-ll-info-top");
-    const th = el("div", "pix-ll-info-th");
-    const turl = thumb();
-    // Strip quotes/backslashes so a stray char in a Civitai image URL can't break the
-    // CSS url() value (thumbUrl(name, bust) is already percent-encoded; civ.info.thumbnail is raw).
-    if (turl) th.style.backgroundImage = `url("${String(turl).replace(/["\\]/g, "")}")`;
-    // Pick / drop / paste your own picture, and remove it again. Wired on every
-    // render because renderBody() builds a fresh header each time.
-    if (name) wireThumb(th, !!info.custom_preview);
+    // The picture box, unless the gear has pictures switched off.
+    let th = null;
+    if (thumbsOn()) {
+      th = el("div", "pix-ll-info-th");
+      const turl = thumb();
+      // Strip quotes/backslashes so a stray char in a Civitai image URL can't break the
+      // CSS url() value (thumbUrl(name, bust) is already percent-encoded; civ.info.thumbnail is raw).
+      if (turl) th.style.backgroundImage = `url("${String(turl).replace(/["\\]/g, "")}")`;
+      // Pick / drop / paste your own picture, and remove it again. Wired on every
+      // render because renderBody() builds a fresh header each time.
+      if (name) wireThumb(th, !!info.custom_preview);
+    }
     const h = el("div", "pix-ll-info-h");
     const title = el("h3", null, (civ?.state === "found" && civ.info?.name) || info.title || "LoRA");
     const metaBits = [];
@@ -574,7 +586,7 @@ export async function openInfoPanel(node, id, refresh) {
     }
     const x = el("span", "pix-ll-info-x", "✕");
     x.addEventListener("click", closeInfoPanel);
-    top.append(th, h, x);
+    if (th) top.append(th, h, x); else top.append(h, x);
     panel.appendChild(top);
 
     // ── a problem with the picture, when there was one ───────────────────
@@ -757,6 +769,9 @@ export async function openInfoPanel(node, id, refresh) {
   // falls through untouched.
   const onPaste = (e) => {
     if (!panel.isConnected || !name) return;
+    // With pictures switched off there is no box, so a paste would set a picture
+    // the user cannot see and cannot remove. Leave the paste alone instead.
+    if (!thumbsOn()) return;
     // Never steal a paste aimed at a text box - the "add your own trigger word"
     // field is right there, and pasting a word into it has to keep working.
     const t = e.target;

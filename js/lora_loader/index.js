@@ -325,7 +325,10 @@ registerNodeHelp(CLASS, {
         "the corner removes it and brings the automatic one back. Nothing is overwritten: the picture " +
         "is kept on this computer alongside your other Pixaroma settings, never written into your " +
         "models folder, so it survives an update and works even when your models sit on a read-only " +
-        "or network drive. It follows the LoRA, so every row and every workflow using that LoRA shows it.",
+        "or network drive. It follows the LoRA, so every row and every workflow using that LoRA shows it.\n\n" +
+        "If you would rather see no pictures at all, for instance while recording, switch off Show " +
+        "preview thumbnails in the gear. The picture box then disappears from the panel entirely, and " +
+        "any pictures you have set are kept safe for when you switch it back on.",
     },
     {
       heading: "Comparing LoRAs side by side",
