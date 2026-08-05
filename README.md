@@ -357,8 +357,9 @@ Master the Pixaroma suite with our video guides and workflow deep-dives:
 
 ## 🛠 Changelog
 
-### **August 5, 2026 · v1.4.91**
-- **NEW: Longest Side Pixaroma.** Click a size and the longer edge of your picture becomes exactly that, with the other edge following so nothing is squashed. It works the same for a tall photo or a wide one, so you never have to work out whether you mean width or height. Optional shape chips (1:1, 16:9, 9:16, 2:3) crop the biggest piece of that shape out first, and a small button rounds both sides to 8, 16, 32 or 64. It shows the size it will send before you run. Reach for Image Resize Pixaroma when you need a width **and** a height.
+### **August 5, 2026 · v1.4.91–v1.4.92**
+- **NEW: Longest Side Pixaroma.** Click a size and the longer edge of your picture becomes exactly that, the other edge following so nothing is squashed. Same for a tall photo or a wide one, so you never have to decide whether you mean width or height. Optional shape chips (1:1, 16:9, 9:16, 2:3) crop that shape out first, and a small button rounds both sides to 8, 16, 32 or 64. It shows the size it will send before you run. Use Image Resize Pixaroma when you need a width **and** a height.
+- **Fixed: a loader could show a different picture than the one you picked.** After switching workflows, Load Image and Load Image Mini sometimes kept the previous picture on screen, which made the size beside it wrong too. Both now put it right. Masked pictures are handled properly everywhere, and Outpaint no longer measures the leftover preview of a bypassed node.
 
 ### **August 4, 2026 · v1.4.85–v1.4.90**
 - **Pixaroma now works properly on online ComfyUI services.** The Save Mp4 player, Note icons, fonts, sounds and several pickers were quietly broken there: around 270 addresses were built as if ComfyUI owned the whole site. Nothing changes on your own PC.
