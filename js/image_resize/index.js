@@ -4,6 +4,7 @@ import { hideJsonWidget, BRAND,
   installCanvasZoomPassthrough, installNodeAccent, registerNodeAccent, accentOf, accentRgba,
 } from "../shared/index.mjs";
 import { isVueNodes, applyAdaptiveCanvasOnly, canvasBackingScale } from "../shared/nodes2.mjs";
+import { upstreamImageDims } from "../shared/upstream_image_size.mjs";
 import { buildModePanel, previewResize, injectResizePanelCSS } from "../shared/resize_panel.mjs";
 import {
   injectCSS, buildModeChips, buildFooter, buildResampleAndUpscale,
@@ -88,16 +89,23 @@ function refit(node) {
   });
 }
 
+// The INPUT half of the Input -> Output card. Reads the size off the upstream
+// node's own preview, so the card is right before you run anything.
+//
+// Uses the SHARED reader rather than reading node.imgs directly, because two
+// upstream states make that preview a lie and this node used to believe both
+// (measured 2026-08-05, both reported a stale 480x832):
+//   - a MUTED or BYPASSED upstream, which passes its own input through, so its
+//     preview is of a picture that never reaches us;
+//   - a Pixaroma loader with its own inline resize on, whose preview is the
+//     file on disk while its OUTPUT is the resized version.
+// The shared module also owns the refusal list, which must exist exactly once
+// or it drifts when a new loader is added.
+//
+// Returning null shows no INPUT size rather than a confident wrong one. The
+// actual resize is unaffected either way: Python works from the real tensor.
 function getInputDims(node) {
-  const inp = node.inputs?.find((i) => i.name === "image");
-  if (!inp || inp.link == null) return null;
-  let l = node.graph?.links?.[inp.link];
-  if (!l && typeof node.graph?.links?.get === "function") l = node.graph.links.get(inp.link);
-  if (!l) return null;
-  const up = node.graph.getNodeById(l.origin_id);
-  const img = up?.imgs?.[0];
-  if (img?.naturalWidth) return { w: img.naturalWidth, h: img.naturalHeight };
-  return null;
+  return upstreamImageDims(node, "image");
 }
 
 function gcd(a, b) { a = Math.abs(a); b = Math.abs(b); while (b) { const t = b; b = a % b; a = t; } return a || 1; }
