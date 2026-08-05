@@ -474,9 +474,13 @@ function fill(bd, node, changed) {
       writeState(node, { allow_upscale: cb.checked });
       changed(true);
     });
+    const upTitle = "On: a picture smaller than your size is scaled up to it. "
+      + "Off: it is left at its own size. The shape is still cropped either way.";
+    cb.title = upTitle;
     const lab = document.createElement("label");
     lab.htmlFor = cb.id;
     lab.textContent = "Let small pictures grow";
+    lab.title = upTitle;
     line.append(cb, lab);
     sec.appendChild(line);
     const note = document.createElement("div");

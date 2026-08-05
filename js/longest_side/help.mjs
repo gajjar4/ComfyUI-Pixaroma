@@ -33,14 +33,16 @@ registerNodeHelp("PixaromaLongestSide", {
     {
       heading: "The shape chips",
       body:
-        "The little rectangle on each chip shows you the shape you will get.",
+        "The little rectangle on each chip shows you the shape you will get. "
+        + "The one on keep is just a neutral box, because keep leaves your "
+        + "picture's own shape alone.",
       defs: [
         ["keep", "Leave the picture's own shape alone and just scale it. This is the usual choice, and it is always on the row so there is always a way back from a crop."],
         ["1:1", "A square."],
         ["16:9", "Wide, like a TV screen."],
         ["9:16", "Tall, like a phone screen."],
         ["2:3", "The classic photo shape, standing up."],
-        ["swapping them", "The settings hold every shape on offer. Click one to put it on the row or take it off. Five fit."],
+        ["Changing the row", "The settings hold every shape on offer. Click one to put it on the row or take it off. Five fit, and keep is always one of them, so four of the five are yours to choose."],
       ],
     },
     {
@@ -59,7 +61,7 @@ registerNodeHelp("PixaromaLongestSide", {
       defs: [
         ["The small button", "Steps through Off, 8, 16, 32 and 64. Most models want sizes in steps like these, so this rounds BOTH sides to the nearest step. Each node remembers its own, and the same choice is in the settings."],
         ["The gear", "Opens the settings: the step, the sizes on the row (type any number you like), which shapes appear, where a crop is taken from, whether small pictures may grow, the resample quality, and the node's colour."],
-        ["The orange size", "What this node will send. It shows the exact numbers once you have run it, and an estimate marked with a squiggle before that, because the exact answer depends on the picture coming in."],
+        ["The orange size", "What this node will send. It reads the picture coming in, so it shows the exact numbers straight away, with no need to run anything first. When it cannot see the picture the text goes dim: a squiggle in front of a rough guess if you have picked a shape, or just the long side on its own, because the other side depends on the picture."],
       ],
     },
     {
@@ -71,5 +73,6 @@ registerNodeHelp("PixaromaLongestSide", {
       ],
     },
   ],
-  footer: "Part of the Pixaroma suite.",
+  footer: "The gear on the node, the gear in the toolbar above a selected node, "
+    + "and right-clicking the node all open the same settings.",
 });
