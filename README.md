@@ -357,7 +357,9 @@ Master the Pixaroma suite with our video guides and workflow deep-dives:
 
 ## 🛠 Changelog
 
-### **August 5, 2026 · v1.4.91–v1.4.92**
+### **August 5, 2026 · v1.4.91–v1.4.93**
+- **Your own picture for any LoRA.** The small picture in a LoRA's info panel is now yours to set: click it to choose a file, drop one onto it, or copy an image and press Ctrl+V. Good for LoRAs you trained yourself, ones that are not on Civitai, or simply when you would rather see your own example. Your picture wins over the Civitai one, and the small x on its corner brings the automatic picture back, so nothing you already had is overwritten. It is kept alongside your other Pixaroma settings instead of in your models folder, so it survives an update and works even when your models sit on a read-only or network drive. The gear switch that turns preview pictures off now works too, which is handy while recording.
+- **Fixed: saving an unsaved workflow into a folder.** In the Workflows panel, **Save open workflow here** ignored the folder and the name you chose whenever the workflow had never been saved, and quietly put it in the main workflows folder instead. That made it look as though it only worked the second time. It now saves where you asked, first time.
 - **NEW: Longest Side Pixaroma.** Click a size and the longer edge of your picture becomes exactly that, the other edge following so nothing is squashed. Same for a tall photo or a wide one, so you never have to decide whether you mean width or height. Optional shape chips (1:1, 16:9, 9:16, 2:3) crop that shape out first, and a small button rounds both sides to 8, 16, 32 or 64. It shows the size it will send before you run. Use Image Resize Pixaroma when you need a width **and** a height.
 - **Fixed: a loader could show a different picture than the one you picked.** After switching workflows, Load Image and Load Image Mini sometimes kept the previous picture on screen, which made the size beside it wrong too. Both now put it right. Masked pictures are handled properly everywhere, and Outpaint no longer measures the leftover preview of a bypassed node.
 
