@@ -20,10 +20,13 @@ import numpy as np
 import torch
 from PIL import Image
 
-# _json_safe strips NaN/Inf so the ui payload stays valid JSON. Our IS_CHANGED
-# returns nan, so the PROMPT we embed for the Save buttons carries is_changed:
-# [NaN]; without sanitizing, the frontend JSON.parse of the executed message
-# would throw and drop the whole payload (Preview Image Pattern #13).
+# _json_safe strips NaN/Inf so the ui payload stays valid JSON. The PROMPT we
+# embed for the Save buttons is the WHOLE prompt, and any node in it that
+# returns a NaN from IS_CHANGED contributes `is_changed: [NaN]`, which is not
+# valid JSON - the frontend's JSON.parse of the executed message would throw and
+# drop the entire payload (Preview Image Pattern #13). THIS node no longer has
+# such an IS_CHANGED, but Preview Image and XY Plot still do and can sit in the
+# same graph, so the sanitising stays.
 from ._save_helpers import _json_safe
 
 
@@ -101,11 +104,22 @@ class PixaromaPauseImage:
     OUTPUT_NODE = True
     CATEGORY = "👑 Pixaroma/🖼️ Image"
 
-    @classmethod
-    def IS_CHANGED(cls, **kwargs):
-        # Always re-execute so each Run re-captures the snapshot and emits a
-        # fresh preview frame, even when the upstream is fully cached.
-        return float("nan")
+    # There is deliberately NO IS_CHANGED here - see the same note in
+    # node_pause_text.py, which was the reported case (discussion #76).
+    #
+    # It used to return float("nan"). A NaN never equals itself, and a node's
+    # cache key folds in the IS_CHANGED of every ANCESTOR
+    # (comfy_execution/caching.py::get_node_signature), so everything wired
+    # AFTER this gate was invalidated on every Run. Measured live with a
+    # control: EmptyImage -> PreviewImage caches perfectly, and adding this node
+    # in the middle made both re-execute every time.
+    #
+    # Removing it is safe. A cache HIT still has its ui payload re-sent to the
+    # client (execution.py::_send_cached_ui), so the frame still shows; the
+    # snapshot file keeps a stable per-node name, so the copy on disk is still
+    # the right image for Continue to read back; and the mode rides in the
+    # hidden PauseState input, which is already part of the cache key, so
+    # switching mode or changing the upstream image still re-runs the node.
 
     def run(self, image=None, PauseState="", unique_id=None,
             prompt=None, extra_pnginfo=None):
