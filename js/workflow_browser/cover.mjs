@@ -163,6 +163,23 @@ export function drawMap(canvas, map) {
   ctx.globalAlpha = 1;
 }
 
+// A node reports what it wrote through ComfyUI's standard `images` list even
+// when the file is not an image: Save Mp4 puts its mp4 there so the clip shows
+// up in the output panel and the Assets tab. An <img> can never render that, so
+// the card showed the browser's broken-image glyph (the grid hid it behind the
+// error fallback, the detail pane did not). Everything here therefore asks what
+// the file IS, not merely what list it arrived in.
+const PICTURE_EXTS = ["png", "jpg", "jpeg", "webp", "gif", "bmp", "avif"];
+
+/** Can this filename be shown in an <img>? Extension only: the entry's `format`
+ *  field is set by the node that wrote it and plenty of nodes omit it. */
+export function isPictureName(filename) {
+  const name = String(filename || "").split("?")[0];
+  const dot = name.lastIndexOf(".");
+  if (dot < 0) return false;
+  return PICTURE_EXTS.includes(name.slice(dot + 1).toLowerCase());
+}
+
 /** Where a card's picture should come from, if anywhere. */
 export function coverFor(entry, meta) {
   const hand = meta?.covers?.[entry.rel];
@@ -175,7 +192,10 @@ export function coverFor(entry, meta) {
   // moves those out to files when the sidecar is read, but a panel still
   // holding the old copy in memory should show it rather than nothing.
   if (hand && hand.kind === "file" && hand.url) return { kind: "image", url: hand.url };
-  if (hand && hand.kind === "output" && hand.filename) {
+  // Recorded automatically, so it may name a video from before the capture
+  // learned to check. Falling back here heals those in place: no migration, no
+  // write, and nothing to explain to anyone who already has them.
+  if (hand && hand.kind === "output" && hand.filename && isPictureName(hand.filename)) {
     return { kind: "image", url: outputURL(hand) };
   }
   return { kind: "map" };
@@ -218,7 +238,8 @@ export function installOutputCoverCapture() {
       if (!Array.isArray(images) || !images.length) return;
       const rel = A.activePath();
       if (!rel) return;                      // an unsaved workflow has no file to pin it to
-      const img = images.find((i) => i && i.filename && (i.type || "output") !== "temp");
+      const img = images.find((i) => i && i.filename && (i.type || "output") !== "temp"
+                                     && isPictureName(i.filename));
       if (!img) return;
       pending = pending || {};
       pending[rel] = { kind: "output", filename: img.filename, subfolder: img.subfolder || "", type: img.type || "output" };

@@ -45,6 +45,14 @@ export function renderDetail(pane, state, H) {
     const img = el("img", "pixwb-detcov");
     img.src = c.url;
     img.alt = "";
+    // Same belt the grid has carried all along: a cover whose file has since
+    // been deleted must not leave a broken-image icon sitting in the pane.
+    // This half was missed, which is why the grid looked fine and this did not.
+    img.addEventListener("error", () => {
+      const cv = el("canvas", "pixwb-detcov");
+      img.replaceWith(cv);
+      requestAnimationFrame(() => drawMap(cv, entry.map));
+    }, { once: true });
     pane.append(img);
   } else {
     const cv = el("canvas", "pixwb-detcov");
