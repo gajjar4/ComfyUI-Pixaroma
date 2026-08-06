@@ -363,7 +363,9 @@ Master the Pixaroma suite with our video guides and workflow deep-dives:
 
 ## 🛠 Changelog
 
-### **August 6, 2026 · v1.4.97**
+### **August 6, 2026 · v1.4.97–v1.4.98**
+- **Fixed: Pause Text made your whole workflow redo itself.** With a Pause Text node in the graph, everything after it ran again on every Run, even with a fixed seed and nothing changed, so a picture you had already finished was generated from scratch a second time. Nothing showed an error, so it just felt slow, and the only way around it was to bypass the node. Thank you to the person who reported it with a video, which made it quick to pin down.
+- **Fixed: the same problem in Pause Image.** Found by checking every other node for it rather than waiting for someone to run into it. Anything wired after a Pause Image, an upscale for instance, was being redone on every Run too.
 - **Fixed: a broken picture on a workflow card.** The Workflows panel remembers what a workflow last made and puts it on the card, but it was accepting videos as well, and a video cannot be shown as a picture. So any workflow that makes video, which is anything ending in Save Mp4, showed a broken image in the panel on the right. Those cards now show the little drawn map of the graph instead, and cards already stuck that way put themselves right as soon as you update.
 - **Fixed: the cover you picked is no longer thrown away by a run.** If you chose your own picture for a workflow with Set cover, the next run of that workflow quietly replaced it with its own output, and the picture you had chosen was deleted. Your choice now stays until you use Remove cover.
 
