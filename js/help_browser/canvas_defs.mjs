@@ -168,7 +168,7 @@ export const CANVAS_FEATURES = [
       },
       {
         heading: "The pictures on the cards",
-        body: "Every workflow gets one straight away: a small map of the graph itself, drawn from where the nodes sit and what colour you gave them. Once a workflow has been run, its own last output image becomes the picture instead. You can also choose any picture yourself with Set cover.\n\nCovers you choose by hand are saved as ordinary jpg files in a pixaroma_covers folder inside ComfyUI's user folder, next to your workflows. You can open, back up or delete them like any other file, and a cover you delete simply goes back to the drawn map.",
+        body: "Every workflow gets one straight away: a small map of the graph itself, drawn from where the nodes sit and what colour you gave them. Once a workflow has been run, its own last output picture becomes the cover instead. A workflow that makes a video rather than a picture keeps the drawn map, because there is no image to show.\n\nYou can also choose any picture yourself with Set cover. A cover you chose by hand is never replaced by a later run: it stays until you use Remove cover, which puts the workflow back to its own last output or the drawn map.\n\nCovers you choose by hand are saved as ordinary jpg files in a pixaroma_covers folder inside ComfyUI's user folder, next to your workflows. You can open, back up or delete them like any other file, and a cover you delete simply goes back to the drawn map.",
       },
       {
         heading: "The buttons along the top",

@@ -18,7 +18,7 @@
 // fine - the node is still found by its name, tagline and full help text.
 
 export const KEYWORDS = {
-  "canvas:workflows": "workflow manager browse organise organize my workflows folder rename move file explorer thumbnail cover picture star favourite favorite duplicate junk tidy messy find lost which workflow used",
+  "canvas:workflows": "workflow manager browse organise organize my workflows folder rename move file explorer thumbnail cover picture star favourite favorite duplicate junk tidy messy find lost which workflow used broken image missing picture video mp4 card blank grey map",
   // ── Resize and crop: the biggest source of missed searches ──
   PixaromaImageResize: "upscale enlarge bigger smaller shrink scale megapixel resolution downscale make it bigger",
   PixaromaLongestSide: "longest side long edge longest edge biggest side largest side resize simple small resize quick resize downscale shrink smaller bigger make it 864 1024 1216 1536 2048 832 scale to size crop to square crop to ratio centre crop center crop crop to 16:9 9:16 2:3 phone shape aspect shape chips tall wide sdxl size multiple of 8 16 32 64 round size one number resize without width height",
