@@ -54,7 +54,7 @@ export const KEYWORDS = {
   PixaromaText: "string write field type note textbox",
   PixaromaShowText: "debug display print inspect see value preview text",
   PixaromaPromptReader: "metadata png extract read recover steal prompt from image exif",
-  PixaromaPauseText: "llm edit review gate check interrupt",
+  PixaromaPauseText: "llm edit review gate check interrupt cache cached runs again re-runs ksampler restarts fixed seed slow",
   PixaromaTextJoinTwo: "concat combine merge glue join",
   PixaromaTextJoinThree: "concat combine merge glue join",
   PixaromaTextJoinFour: "concat combine merge glue join",

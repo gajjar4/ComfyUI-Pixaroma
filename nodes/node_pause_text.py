@@ -76,11 +76,20 @@ class PixaromaPauseText:
     OUTPUT_NODE = True
     CATEGORY = "👑 Pixaroma/💬 Prompt & Text"
 
-    @classmethod
-    def IS_CHANGED(cls, **kwargs):
-        # Always re-execute so each Run re-captures the incoming text and emits a
-        # fresh preview, even when the upstream is fully cached.
-        return float("nan")
+    # There is deliberately NO IS_CHANGED here. It used to return float("nan").
+    #
+    # A NaN never equals itself, so ComfyUI saw this node as changed on every
+    # Run - and a node's cache key folds in the IS_CHANGED of every ANCESTOR
+    # (comfy_execution/caching.py::get_node_signature), so everything DOWNSTREAM
+    # of the gate was invalidated with it. On a text-to-image graph that meant a
+    # full sampler pass on every Run even with a fixed seed, and bypassing this
+    # node made caching work again, which is exactly how it was reported.
+    #
+    # Removing it costs nothing. A cached node still has its ui payload re-sent
+    # to the frontend (execution.py::_send_cached_ui), so the text box still
+    # refreshes; and the mode plus the edited text ride in the hidden PauseState
+    # input, which is part of `inputs` and therefore already part of the cache
+    # key, so a genuine change still re-runs the node and everything after it.
 
     @staticmethod
     def _as_text(v):
