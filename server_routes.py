@@ -3137,6 +3137,20 @@ def _wf_apply_meta_patch(request, patch):
                 if section == "covers" and isinstance(v, dict) and "file" in v \
                         and not _wf_is_cover_name(v.get("file")):
                     continue
+                # A run's own output must NEVER replace a picture the user chose
+                # by hand. The automatic capture fires on every execution and
+                # cannot see this file (it runs whether or not the panel was ever
+                # opened), so the protection belongs here, at the one write point
+                # every client goes through. Skipping before the orphan check
+                # below is deliberate: nothing changed, so the old picture is
+                # still referenced and must not be queued for deletion.
+                # "Remove cover" clears the key, which is how the user opts back
+                # in to their own output filling it - exactly what its tooltip
+                # promises.
+                if section == "covers" and isinstance(v, dict) \
+                        and v.get("kind") == "output" \
+                        and isinstance(old, dict) and old.get("kind") == "file":
+                    continue
                 current[k] = v
             # Overwriting a cover strands its old picture just as surely as
             # clearing it does. Only the clear case used to be considered, so
