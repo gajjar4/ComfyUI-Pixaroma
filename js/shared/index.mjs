@@ -47,6 +47,11 @@ export { installResizeFloor, measureRootContent } from "./resize_floor.mjs";
 
 export { installCanvasZoomPassthrough } from "./canvas_zoom.mjs";
 
+// Call after a DOM control commits a change to SERIALIZED state. Core snapshots
+// the graph on mouseup; a DOM control commits on click, one phase later, so the
+// change is otherwise never recorded and the workflow never looks modified.
+export { notifyGraphChanged } from "./graph_changed.mjs";
+
 // Node UI convention #27 - a document.body popup must track the canvas zoom and
 // grow to fit, or it reads tiny beside a zoomed-in node. Use this for EVERY new
 // picker popup rather than re-deriving the traps.

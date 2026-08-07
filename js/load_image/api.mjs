@@ -1,4 +1,5 @@
 import { pixApiUrl } from "../shared/api_url.mjs";
+import { notifyGraphChanged } from "../shared/graph_changed.mjs";
 
 // Split "Studio1/cat.png" into {subfolder:"Studio1", filename:"cat.png"}.
 // ComfyUI's input/ folder can hold subfolders; the native image_upload combo
@@ -116,6 +117,7 @@ export function updateNativePreview(node, filename) {
 //   - native preview refresh (via updateNativePreview)
 //   - dropdown label refresh (via the registered hook)
 //   - dirty canvas
+//   - telling ComfyUI's change tracker the workflow now differs from its file
 // Call this instead of touching imageWidget.value directly in new code.
 export function setSelectedImage(node, filename) {
   if (!filename) return;
@@ -139,6 +141,14 @@ export function setSelectedImage(node, filename) {
   updateNativePreview(node, filename);
   node._pixLiOnFilenameChanged?.(filename);
   node.graph?.setDirtyCanvas?.(true, true);
+  // setDirtyCanvas is only a REDRAW flag - it tells the change tracker nothing.
+  // Our pick commits on `click`, which is AFTER the `mouseup` that core
+  // snapshots on, so without this the pick is never recorded: the workflow is
+  // never marked modified, ComfyUI never offers to save it, and reopening
+  // restores the file's original image. Safe here because every caller of this
+  // function is a real user pick (dropdown / arrow / upload / paste / drop) -
+  // there is no load-path caller - and the helper re-checks isGraphLoading().
+  notifyGraphChanged();
 }
 
 // Upload an image File/Blob to ComfyUI's /upload/image route and update the
