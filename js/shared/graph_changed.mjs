@@ -61,6 +61,53 @@ function capture() {
   else if (typeof ct.checkState === "function") ct.checkState();
 }
 
+// ── The pack-wide safety net ────────────────────────────────────────────────
+//
+// Every Pixaroma node drives its state from DOM clicks, so every one of them has
+// the phase problem described above. Rather than hand-wiring a call into ~55
+// nodes' write paths - where the real hazard is accidentally firing one on the
+// LOAD path and flagging a clean workflow modified (Vue Compat #18/#19) - one
+// passive listener covers all of them and cannot be wired in wrong.
+//
+// TWO non-obvious requirements, both load-bearing:
+//
+//  1. CAPTURE phase, not bubble. Our handlers call `e.stopPropagation()` all
+//     over the place (the file dropdown's own row handler does), so a bubble
+//     listener on document would simply never fire for exactly the controls
+//     that matter.
+//  2. Capture runs BEFORE the target's handler, i.e. before the value is
+//     committed - which would snapshot the pre-change state all over again.
+//     The 120ms debounce in notifyGraphChanged() is what resolves this: the
+//     timer necessarily lands after the click handler has finished.
+//
+// This is additive and passive - it overrides nothing and calls only the same
+// function core's own mouseup handler calls, so it cannot break another pack
+// (see the "no global patches" rule). A capture that finds nothing changed is a
+// no-op: ChangeTracker compares the serialized graph and returns without
+// touching the undo queue or the modified flag.
+//
+// A `click` cannot fire during a workflow load, and notifyGraphChanged() gates
+// on isGraphLoading() anyway, so this can never false-dirty a clean workflow.
+let _netInstalled = false;
+
+export function installPixaromaChangeNet() {
+  if (_netInstalled || typeof document === "undefined") return;
+  _netInstalled = true;
+  const onUserAction = (e) => {
+    const t = e.target;
+    if (!t || typeof t.closest !== "function") return;
+    // Only our own UI. Every Pixaroma element carries a `pix-` prefixed class,
+    // including the popups we mount on document.body.
+    if (!t.closest('[class*="pix-"]')) return;
+    notifyGraphChanged();
+  };
+  // `change` covers the paths that never produce a click on our own UI: a
+  // checkbox committed by keyboard, and the hidden <input type="file"> behind
+  // the Upload button (its dialog is native, so the click lands outside us).
+  document.addEventListener("click", onUserAction, true);
+  document.addEventListener("change", onUserAction, true);
+}
+
 export function notifyGraphChanged() {
   if (isGraphLoading()) return;
   // Coalesce bursts. Holding PageUp/PageDown steps the picker many times a

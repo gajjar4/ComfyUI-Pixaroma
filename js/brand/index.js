@@ -1,4 +1,5 @@
 import { app } from "/scripts/app.js";
+import { installPixaromaChangeNet } from "../shared/graph_changed.mjs";
 
 // ── Pixaroma brand defaults ──────────────────────────────────────────────
 // Single source of truth for the dark brand colors that every Pixaroma node
@@ -20,6 +21,13 @@ import { app } from "/scripts/app.js";
 
 const TITLE_BAR_COLOR = "#1d1d1d";   // matches Resolution chip surface
 const BODY_COLOR      = "#2a2a2a";   // matches Resolution root surface
+
+// Installed from here because this file is the pack's one "applies to EVERY
+// Pixaroma node" extension and is therefore always loaded. It teaches ComfyUI
+// to notice a change made by clicking any Pixaroma control - without it the
+// change is not recorded until the user's next mouseup, so the workflow can sit
+// there looking unmodified. See graph_changed.mjs for the full mechanism.
+installPixaromaChangeNet();
 
 app.registerExtension({
   name: "Pixaroma.BrandDefaults",
