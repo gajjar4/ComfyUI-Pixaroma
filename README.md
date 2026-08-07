@@ -363,6 +363,9 @@ Master the Pixaroma suite with our video guides and workflow deep-dives:
 
 ## 🛠 Changelog
 
+### **August 7, 2026 · v1.4.99**
+- **Fixed: a change you made by clicking a Pixaroma control was not always noticed.** Picking an image, choosing a size, flipping a switch: ComfyUI did not register it straight away, so the workflow could sit there looking saved when it was not, and closing it did not offer to save your change. It caught up the moment you clicked anywhere else, so most of the time you never saw it happen, but with Auto Save turned on the change could be missed entirely and you would come back to find the workflow's original picture. Every Pixaroma control now reports a change the instant you make it, the same as ComfyUI's own nodes do, and Ctrl+Z undoes it properly. Thank you to the person who reported their picture going back to the one that ships inside the H3 workflows. Worth knowing either way: a workflow you opened from the built-in templates always reopens as it came, so save it with Ctrl+S under your own name once you have set it up the way you want.
+
 ### **August 6, 2026 · v1.4.97–v1.4.98**
 - **Fixed: Pause Text made your whole workflow redo itself.** With a Pause Text node in the graph, everything after it ran again on every Run, even with a fixed seed and nothing changed, so a picture you had already finished was generated from scratch a second time. Nothing showed an error, so it just felt slow, and the only way around it was to bypass the node. Thank you to the person who reported it with a video, which made it quick to pin down.
 - **Fixed: the same problem in Pause Image.** Found by checking every other node for it rather than waiting for someone to run into it. Anything wired after a Pause Image, an upscale for instance, was being redone on every Run too.
