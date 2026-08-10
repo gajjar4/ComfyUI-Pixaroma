@@ -52,8 +52,8 @@ class PixaromaSaveMp4:
     """Encode an IMAGE batch (and optional AUDIO) to a single H.264 mp4.
     save_mode=save writes to ComfyUI's output/ folder; save_mode=preview
     writes to ComfyUI's temp/ folder (auto-cleared on restart) so users can
-    iterate without cluttering output/. No conflict with VHS Video Combine —
-    separate class, separate category, fewer knobs, opinionated defaults."""
+    iterate without cluttering output/. Deliberately few knobs and opinionated
+    defaults; Save Video Pixaroma is the one with folders and naming."""
 
     DESCRIPTION = (
         "Save Mp4 Pixaroma - encode an IMAGE batch (and optional AUDIO) to a "
@@ -63,8 +63,9 @@ class PixaromaSaveMp4:
         "is muxed in as AAC 192k. Pairs with AudioReact Pixaroma but works "
         "with any source that produces frames + AUDIO.\n\n"
         "The workflow is embedded in the saved mp4 (its comment metadata), so "
-        "you can drag the video back into ComfyUI to restore the graph - reading "
-        "it back needs a video pack like VideoHelperSuite installed.\n\n"
+        "you can drag the video back into ComfyUI to restore the graph. Saving it "
+        "always works; reading it back needs your ComfyUI to support dropping a "
+        "video onto the canvas.\n\n"
         "ffmpeg binary is auto-located: imageio-ffmpeg's bundled exe is "
         "preferred (no system install needed - 'pip install imageio-ffmpeg'), "
         "with ffmpeg on PATH as a fallback. yuv420p requires even width and "
@@ -97,7 +98,7 @@ class PixaromaSaveMp4:
                 "audio": ("AUDIO", {"tooltip": "Optional audio track to mux into the mp4 as AAC 192k. Connect Audio React Pixaroma's audio output here."}),
             },
             # The workflow + prompt, embedded into the mp4 so dragging it back into
-            # ComfyUI restores the graph (read by VideoHelperSuite's video loader).
+            # ComfyUI restores the graph (read by the drag-a-video loader).
             "hidden": {"prompt": "PROMPT", "extra_pnginfo": "EXTRA_PNGINFO"},
         }
 

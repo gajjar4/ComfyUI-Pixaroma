@@ -1069,7 +1069,7 @@ const HELP = {
       },
       {
         heading: "Requirements",
-        body: "Save Mp4 needs a free tool called ffmpeg to turn the frames into a video. Most ComfyUI setups already have it (for example if the Video Helper Suite nodes are installed), so usually there is nothing to install. One rule: the frame width and height must both be even numbers, and the node shows a clear message instead of crashing if they are odd.\n\nOnly if you see an \"ffmpeg not found\" message, add it one of these ways:",
+        body: "Save Mp4 needs a free tool called ffmpeg to turn the frames into a video. Most ComfyUI setups already have it, because anything else that works with video brings it along, so usually there is nothing to install. One rule: the frame width and height must both be even numbers, and the node shows a clear message instead of crashing if they are odd.\n\nOnly if you see an \"ffmpeg not found\" message, add it one of these ways:",
         bullets: [
           "Easiest: in ComfyUI Manager, open its pip install option and enter `imageio-ffmpeg`.",
           "Portable ComfyUI (Windows): open a command window in your ComfyUI folder (the one that holds the `python_embeded` folder) and run `python_embeded\\python.exe -m pip install imageio-ffmpeg`.",
@@ -1078,7 +1078,7 @@ const HELP = {
       },
       {
         heading: "Workflow inside the video",
-        body: "The full workflow is saved inside the mp4 (in its comment metadata), the same way it is saved inside a PNG. So you can drag a saved mp4 back into ComfyUI later to rebuild the whole graph. Reading it back needs a video pack such as Video Helper Suite installed (it adds the drag-a-video support). The frame width and height must be even numbers.",
+        body: "The full workflow is saved inside the mp4 (in its comment metadata), the same way it is saved inside a PNG. So you can drag a saved mp4 back into ComfyUI later to rebuild the whole graph. Saving it always works; reading it back needs your ComfyUI to support dropping a VIDEO onto the canvas, which not every setup does out of the box. If dragging the file in does nothing, that support is what is missing, and the video itself is still fine. The frame width and height must be even numbers.",
       },
       {
         heading: "The buttons on the node",
@@ -1115,7 +1115,7 @@ const HELP = {
       },
       {
         heading: "Why there is no 100 percent",
-        body: "Video is always compressed. An mp4 stores what your eye will accept, not the frames themselves, which is why a few seconds of video is under a megabyte instead of the fifty or so the raw frames would take. So there is no setting on this node, or on any other video node, that saves your frames untouched.\n\nThat is why the Quality slider shows a word rather than a percentage. High is the setting where the difference stops being visible, and it is where every serious node lands: Save Mp4 Pixaroma uses it, and so does Video Helper Suite's Video Combine. ComfyUI's own Save Video node is actually a little softer than that by default. Going above High is not wrong, it just makes a bigger file for something you are unlikely to see.\n\nIf you want the picture to hold up to editing and grading afterwards, the setting that genuinely helps is MP4 HQ, because 10-bit keeps gradients smooth. That does more for you than pushing the quality slider up.",
+        body: "Video is always compressed. An mp4 stores what your eye will accept, not the frames themselves, which is why a few seconds of video is under a megabyte instead of the fifty or so the raw frames would take. So there is no setting here, or in any video tool, that saves your frames untouched.\n\nThat is why the Quality slider shows a word rather than a percentage. High is the setting where the difference stops being visible, and it is the standard choice for delivering video: Save Mp4 Pixaroma uses the same one, and it is a little sharper than what ComfyUI's own video saving defaults to. Going above High is not wrong, it just makes a bigger file for something you are unlikely to see.\n\nIf you want the picture to hold up to editing and grading afterwards, the setting that genuinely helps is MP4 HQ, because 10-bit keeps gradients smooth. That does more for you than pushing the quality slider up.",
       },
       {
         heading: "About 10-bit",
@@ -1159,17 +1159,17 @@ const HELP = {
       {
         heading: "In the settings",
         defs: [
-          ["Quality", "Shows a word beside the number: Small file, Medium, High or Maximum. It is NOT a percentage. High is the default, it is the point where you cannot see the difference, and it is the same setting Save Mp4 and Video Helper Suite use, so switching between them changes nothing. Winding it to Maximum mostly just grows the file."],
+          ["Quality", "Shows a word beside the number: Small file, Medium, High or Maximum. It is NOT a percentage. High is the default and the point where you cannot see the difference; it is also exactly what Save Mp4 Pixaroma uses, so moving a workflow between the two changes nothing. Winding it to Maximum mostly just grows the file."],
           ["Colour depth", "8 or 10 bit, for MP4 HQ only."],
           ["Trim to audio", "Ends the video exactly where the sound ends, for when the audio is the master. Off keeps every frame and the sound simply stops when it stops."],
-          ["Save workflow inside the video", "Lets you drag the file back into ComfyUI to rebuild the graph. Reading it back needs a video pack such as Video Helper Suite installed; saving it always works."],
+          ["Save workflow inside the video", "Lets you drag the file back into ComfyUI to rebuild the graph. Saving it always works; reading it back needs your ComfyUI to support dropping a video onto the canvas."],
           ["Date style, counter digits", "What the + Date chip inserts, and how many digits the counter uses."],
           ["Buttons on the node", "Hide the ones you never use. The format you are currently saving as always stays visible."],
         ],
       },
       {
         heading: "Requirements",
-        body: "This node needs a free tool called ffmpeg to turn the frames into a video. Most ComfyUI setups already have it (for example if the Video Helper Suite nodes are installed), so usually there is nothing to install. Both formats need the frame width and height to be even numbers, and the node says so clearly instead of crashing if they are odd.\n\nOnly if you see an \"ffmpeg not found\" message, add it one of these ways:",
+        body: "This node needs a free tool called ffmpeg to turn the frames into a video. Most ComfyUI setups already have it, because anything else that works with video brings it along, so usually there is nothing to install. Both formats need the frame width and height to be even numbers, and the node says so clearly instead of crashing if they are odd.\n\nOnly if you see an \"ffmpeg not found\" message, add it one of these ways:",
         bullets: [
           "Easiest: in ComfyUI Manager, open its pip install option and enter `imageio-ffmpeg`.",
           "Portable ComfyUI (Windows): open a command window in your ComfyUI folder (the one that holds the `python_embeded` folder) and run `python_embeded\\python.exe -m pip install imageio-ffmpeg`.",

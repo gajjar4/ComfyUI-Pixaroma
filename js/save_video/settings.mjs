@@ -183,8 +183,8 @@ export function openSettingsPanel(node, onChange) {
   const qWrap = section(body, "Quality",
     "Not a percentage: video is always compressed, so there is no setting that " +
     "keeps the frames untouched. High is the point where you cannot see the " +
-    "difference, and it is the same setting Save Mp4 and Video Helper Suite use. " +
-    "Going higher mostly grows the file.");
+    "difference, and it is what Save Mp4 Pixaroma uses too. Going higher mostly " +
+    "grows the file.");
   const qRow = el("div", "pix-sv-prow");
   const qSl = el("input", "pix-sv-qsl");
   qSl.type = "range";
@@ -260,7 +260,7 @@ export function openSettingsPanel(node, onChange) {
     "the last frame or two."));
   body.appendChild(switchRow(node, "embedWorkflow", "Save workflow inside the video",
     "Drag the file back into ComfyUI to rebuild the graph. Reading it back needs a " +
-    "video pack such as VideoHelperSuite installed; saving it always works."));
+    "your ComfyUI to support dropping a video onto the canvas; saving it always works."));
   body.appendChild(switchRow(node, "hideBarWhenFolded", "Hide the toolbar when folded",
     "When folded, also tuck away the format and Open/Download/Folder buttons."));
 

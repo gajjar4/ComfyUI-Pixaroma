@@ -47,9 +47,9 @@ def _escape_ffmetadata(value):
 
 def build_video_meta_json(prompt, extra_pnginfo):
     """JSON string {"workflow":..., "prompt":...} to embed in the mp4's comment
-    atom, or None if neither is available. This is the exact shape the
-    VideoHelperSuite frontend parses out of an mp4's comment when you drag the
-    video back into ComfyUI, so the workflow is restored.
+    atom, or None if neither is available. This is the exact shape a video-aware
+    ComfyUI frontend parses out of an mp4's comment when you drag the video back
+    onto the canvas, so the workflow is restored.
 
     ⚠️ The payload MUST go through `_json_safe` (2026-08-10). PROMPT carries
     `is_changed: [NaN]` for every node whose IS_CHANGED returns nan - which is
@@ -89,16 +89,16 @@ def build_video_meta_json(prompt, extra_pnginfo):
 def write_ffmetadata_comment(path, comment_json):
     """Write an FFMETADATA file with a single `comment` key. ffmpeg's mov muxer
     maps `comment` to the standard ©cmt atom (NO -movflags use_metadata_tags, so
-    it stays the ilst form the VHS reader scans for)."""
+    it stays the ilst form the drag-a-video reader scans for)."""
     with open(path, "w", encoding="utf-8") as f:
         f.write(";FFMETADATA1\n")
         f.write("comment=" + _escape_ffmetadata(comment_json) + "\n")
 
 
 def _resolve_ffmpeg(label="Save Mp4"):
-    """Locate the ffmpeg binary. Prefer imageio-ffmpeg's bundled exe (already
-    on disk if comfyui-videohelpersuite or imageio is installed), then fall
-    back to ffmpeg on PATH."""
+    """Locate the ffmpeg binary. Prefer imageio-ffmpeg's bundled exe (usually
+    already on disk, since anything that works with video pulls it in), then
+    fall back to ffmpeg on PATH."""
     try:
         import imageio_ffmpeg
         return imageio_ffmpeg.get_ffmpeg_exe()
