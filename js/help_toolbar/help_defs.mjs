@@ -936,13 +936,31 @@ const HELP = {
         heading: "Format and settings",
         bullets: [
           "`PNG` is lossless, keeps transparency, and embeds the workflow: drag a saved PNG back into ComfyUI to reload everything with the exact seed that made it.",
-          "`WebP` is the middle road and usually the best pick: files land several times smaller than PNG (a 1024 x 1024 picture went from about 1.1 MB to under 200 KB in testing), it still keeps transparency, and it still reloads the workflow when you drag it back into ComfyUI. Turn on `WebP lossless` in the settings if you want no quality loss at all and still a smaller file than PNG.",
+          "`WebP` is the middle road and usually the best pick: far smaller than PNG, still keeps transparency, and it still reloads the workflow when you drag it back into ComfyUI. See the size table below for what it costs.",
           "`JPG` makes small, universally accepted files with a quality setting, but it has no transparency and ComfyUI cannot reload a workflow from a JPG. Pick PNG or WebP when reloading matters.",
           "`Mode` switches between `Save` (files are written on every run) and `Preview` (the images show on the node but nothing goes to your folder; frames use ComfyUI's temporary folder, cleared on restart). So the node can also replace a preview node while you iterate.",
           "`Copy`, `Open`, and `Folder` sit in the button row: Copy puts the shown image on your clipboard, Open shows it in a new browser tab, Folder opens the save location in your file explorer (the window can appear on the taskbar instead of in front; that is a Windows limitation). Right-clicking the preview image gives the same `Open image`, `Copy image`, and `Save image` (download) options.",
           "The `gear` next to the fold triangle opens the settings (right-clicking the node still works too): date style (the order the + Date chip inserts, e.g. dd-MM-yyyy), counter digits (how many zeros %counter% uses), JPG / WebP quality, WebP lossless, workflow embedding, Civitai generation info, and whether folders in a wired name are kept. `Reset node size` in the right-click menu returns the node to its default size.",
           "`Buttons on the node`, in the settings, hides the ones you never use. Handy if Open Folder does nothing helpful on your system, or if you only ever save in one or two formats and want the others out of the way. The last remaining format cannot be switched off, and when only one is left the format pills disappear entirely, since there is nothing left to choose.",
           "If ComfyUI itself was started with `--disable-metadata`, nothing is written into your images: no workflow, no prompt, no Civitai info, whatever the settings above say. That is a ComfyUI-wide switch you would have added yourself, and it is off unless you did.",
+        ],
+      },
+      {
+        heading: "Which format, and what WebP lossless is for",
+        body: "The three buttons on the node pick the FORMAT. `WebP lossless`, in the settings, is a separate thing: WebP can be written two different ways, and that switch chooses which. It does nothing at all unless WebP is the format you picked.\n\nReal numbers from one 1024 x 1024 render, so the trade-off is concrete:",
+        table: {
+          headers: ["Setting", "File size", "Next to the PNG", "Quality"],
+          rows: [
+            ["PNG", "1,103 KB", "-", "perfect, keeps transparency"],
+            ["WebP, lossless ON", "784 KB", "71%", "perfect, pixel for pixel identical"],
+            ["WebP, lossless OFF, quality 100", "188 KB", "17%", "no visible change"],
+            ["WebP, lossless OFF, quality 90", "74 KB", "7%", "no visible change on a photo"],
+          ],
+        },
+        bullets: [
+          "Leave `WebP lossless` OFF for pictures you post, share or just keep: a fifth of the size and you cannot see the difference.",
+          "Turn it ON when the file has to be exact: a master you will edit, upscale or re-run later, or flat colour and line art, where lossy compression shows around hard edges. You still save about a quarter over PNG.",
+          "The quality slider is the thing lossless replaces, so it is ignored while that switch is on. With it off, a lower number means a smaller file.",
         ],
       },
       {

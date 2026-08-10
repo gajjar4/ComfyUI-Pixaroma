@@ -267,7 +267,10 @@ export function openSettingsPanel(node, onChange) {
   qRow.appendChild(qSl);
   qRow.appendChild(qVal);
   qWrap.appendChild(qRow);
-  qWrap.appendChild(el("div", "pix-si-psub", "Used when the format is JPG or WebP. PNG is always lossless"));
+  qWrap.appendChild(
+    el("div", "pix-si-psub",
+       "Used when the format is JPG, or WebP with lossless off. PNG is always lossless. Lower means a smaller file")
+  );
   body.appendChild(qWrap);
 
   body.appendChild(
@@ -275,7 +278,7 @@ export function openSettingsPanel(node, onChange) {
       node,
       "webpLossless",
       "WebP lossless",
-      "Perfect quality with no compression damage, still smaller than PNG. The quality slider is ignored"
+      "Only used when you pick WebP on the node - WebP can be saved two ways. Off: the quality slider decides, and a picture lands around a fifth of the PNG size with no visible change. On: it comes back pixel for pixel identical, at about three quarters of the PNG. Leave it off for pictures you post, turn it on for a master you will edit again"
     )
   );
 
