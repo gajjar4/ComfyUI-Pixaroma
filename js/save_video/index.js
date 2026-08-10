@@ -55,8 +55,11 @@ const PLAYER_MIN = 150;
 //
 // TWO states LIE and must not be measured at all, both inherited from Save
 // Image, which measured them and paid for it:
-//  - root not laid out or unmounted -> every offsetHeight reads 0. addDOMWidget
-//    defaults hideOnZoom:true, so the element is unmounted on any zoom-out.
+//  - root not laid out or unmounted -> every offsetHeight reads 0. That happens
+//    before the widget is first attached, and in an inactive workflow tab (whose
+//    nodes stay in the DOM at display:none). NOTE: this node sets
+//    hideOnZoom:false, so a zoom-out is NOT one of those cases any more - do not
+//    read this comment as a reason the guard is unnecessary.
 //  - root with NO REAL WIDTH -> the button row wraps and the sum explodes. This
 //    is the only mechanism found that can reach ~1800, and it is exactly what
 //    was measured here before this guard existed: a round trip through

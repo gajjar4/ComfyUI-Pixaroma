@@ -259,8 +259,8 @@ export function openSettingsPanel(node, onChange) {
     "Off keeps every frame and the sound simply stops when it stops. On can drop " +
     "the last frame or two."));
   body.appendChild(switchRow(node, "embedWorkflow", "Save workflow inside the video",
-    "Drag the file back into ComfyUI to rebuild the graph. Reading it back needs a " +
-    "your ComfyUI to support dropping a video onto the canvas; saving it always works."));
+    "Drag the file back into ComfyUI to rebuild the graph. Saving it always works; " +
+    "reading it back needs your ComfyUI to support dropping a video onto the canvas."));
   body.appendChild(switchRow(node, "hideBarWhenFolded", "Hide the toolbar when folded",
     "When folded, also tuck away the format and Open/Download/Folder buttons."));
 
