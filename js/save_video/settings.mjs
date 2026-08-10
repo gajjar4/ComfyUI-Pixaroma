@@ -15,6 +15,7 @@ let _panelNode = null;
 let _onChange = null;
 let _stopFollow = null;
 let _userMoved = false; // has the user dragged the panel somewhere deliberately?
+let _cpHandle = null;   // an open Pixaroma colour picker, so close can take it too
 
 function stopFollowing() {
   _stopFollow?.();
@@ -39,6 +40,12 @@ function escClose(e) {
 
 export function closeSettingsPanel() {
   stopFollowing();
+  // take any open colour picker down with us, or Escape leaves it stranded on
+  // document.body with no panel behind it
+  try {
+    _cpHandle?.close?.();
+  } catch {}
+  _cpHandle = null;
   if (_panel) {
     try {
       _panel.remove();
@@ -288,10 +295,16 @@ export function openSettingsPanel(node, onChange) {
   bWrap.appendChild(bGrid);
 
   // ── accent colour (convention #19) ──
+  // Pass NO title/label/hint: `title` is what the helper puts in the "New <X>
+  // nodes" BUTTON, not the row label, and it already reads "Save Video" from
+  // the registerNodeSettings registry. Passing title:"Button colour" here
+  // produced a button reading "New Button colour nodes" (caught in testing).
+  // The row label and hint already default to exactly what Save Image shows.
   body.appendChild(createAccentSection(node, {
-    title: "Button colour",
-    sub: "This node only. Save it as a default below.",
     onChange: () => _onChange?.(),
+    // keep the picker's handle so closing this panel takes it down too -
+    // Escape closes the panel, and without this the picker would be stranded
+    onPickerOpen: (h) => { _cpHandle = h; },
   }));
 
   panel.appendChild(body);
