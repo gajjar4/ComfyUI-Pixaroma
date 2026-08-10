@@ -49,8 +49,27 @@ def build_video_meta_json(prompt, extra_pnginfo):
     """JSON string {"workflow":..., "prompt":...} to embed in the mp4's comment
     atom, or None if neither is available. This is the exact shape the
     VideoHelperSuite frontend parses out of an mp4's comment when you drag the
-    video back into ComfyUI, so the workflow is restored."""
+    video back into ComfyUI, so the workflow is restored.
+
+    ⚠️ The payload MUST go through `_json_safe` (2026-08-10). PROMPT carries
+    `is_changed: [NaN]` for every node whose IS_CHANGED returns nan - which is
+    Preview Image, Save Image, Notify and BOTH save-video nodes - and
+    `json.dumps` writes that as the bare token `NaN`, which is NOT valid JSON.
+    Python's `json.loads` happens to accept it, so the file looks fine from
+    Python; a browser's `JSON.parse` REFUSES it, which is the one consumer that
+    matters. MEASURED on two real saved videos: the comment held a bare `NaN`
+    and JSON.parse threw, so the whole drag-back-to-restore promise was dead
+    while the file itself played perfectly.
+
+    Do NOT "fix" this with `allow_nan=False`: that raises, the except below
+    returns None, and the workflow would be dropped entirely instead.
+
+    _save_helpers is imported lazily so this module stays free of a PIL import
+    at module scope (that file imports PngInfo).
+    """
     import json
+
+    from ._save_helpers import _json_safe
 
     meta = {}
     if isinstance(extra_pnginfo, dict):
@@ -62,7 +81,7 @@ def build_video_meta_json(prompt, extra_pnginfo):
     if not meta:
         return None
     try:
-        return json.dumps(meta)
+        return json.dumps(_json_safe(meta))
     except Exception:
         return None
 

@@ -3,7 +3,6 @@
 // header, closes on outside click / Esc). Holds the settings that would
 // clutter the node face: JPG quality, workflow embedding, save-on-every-run.
 
-import { app } from "/scripts/app.js";
 import { readState, writeState } from "./state.mjs";
 import { injectCSS, el } from "./ui.mjs";
 import { createAccentSection } from "../shared/node_settings.mjs";

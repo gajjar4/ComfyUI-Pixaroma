@@ -208,6 +208,16 @@ export function buildPlayer(node) {
   }
   video.addEventListener("loadedmetadata", () => {
     node._pixSvFailed = false; // proven good
+    // Mirror showClipMissing rather than only half-undoing it. applyVideoEntry
+    // is otherwise the ONLY thing that can un-hide the element, so any future
+    // route to "failed, then succeeded without a fresh apply" would leave a
+    // loaded video hidden behind a stale message. Display-only, driven by a
+    // success event, so it cannot touch serialized state.
+    video.style.display = "block";
+    if (ui.vph?.isConnected) {
+      ui.vph.textContent = PLACEHOLDER_DEFAULT;
+      ui.vph.style.display = "none";
+    }
     refreshBar(node);
   });
   // The ONLY unambiguous signal that a load failed. A pre-flight HEAD cannot
@@ -247,6 +257,11 @@ export function buildPlayer(node) {
   scrub.addEventListener("mousedown", (e) => {
     if (node._pixSvFailed || !video.src) return;
     e.stopPropagation();
+    // Without this, dragging along the bar starts a native text selection and
+    // the filename, hints and "Will save as" line highlight blue behind the
+    // player, staying selected after the release. Save Mp4 has it; the line was
+    // dropped in the port.
+    e.preventDefault();
     dragging = true;
     seekTo(e.clientX);
     window.addEventListener("mousemove", onMove);

@@ -195,7 +195,9 @@ function updatePreview(node) {
       .replace(/%frames%/g, String(last.frames))
       .replace(/%duration%/g, formatDuration(last.frames, fpsOf(node)));
   }
-  s = s.replace(/%batch_num%/g, "0");
+  // NO %batch_num% here: that token is a Save Image thing (one file per frame).
+  // A video is ONE file, and node_save_video.py never resolves it - expanding it
+  // in the preview only would promise a name the node will not write.
   // Shared mirror of the Python sanitizer, with this node's own fallback.
   s = sanitizePrefixMirror(s);
   if (!s) s = "Video_%counter%";
@@ -321,15 +323,30 @@ function setFoldDisplay(node, folded) {
 // genuine user action, and even then is gated on isGraphLoading (Vue Compat #18).
 function applyFold(node, allowResize) {
   const ui = node._pixSvUI;
-  if (!ui?.inner?.isConnected) return;
+  // `if (!ui)`, NOT `!ui.inner.isConnected`. On the LOAD path this runs from a
+  // microtask while the DOM widget is not mounted yet, so an isConnected guard
+  // made the fold restore a silent no-op with no retry: a node saved FOLDED came
+  // back UNFOLDED at its folded height, so `overflow:hidden` clipped the player
+  // and the info line, and the first click of the fold triangle then did nothing
+  // (state and display already disagreed). REPRODUCED: 457px of content in a
+  // 360px box. Setting style.display on a detached element is fine - it persists
+  // when the element mounts.
+  if (!ui) return;
   const st = readState(node);
   const folded = !!st.folded;
-  const before = settingsBlockH(ui);
   const wasHidden = ui.secFolder.style.display === "none";
+  const wasBarHidden = ui.secBtns.style.display === "none";
+  const willBarHide = folded && !!st.hideBarWhenFolded;
+  // Measure BEFORE the display flip, and only when we may actually resize - on
+  // the load path the widget is unmounted and the measurement is meaningless.
+  const before = allowResize ? settingsBlockH(ui) : 0;
   setFoldDisplay(node, folded);
   ui.foldBtn.classList.toggle("folded", folded);
   ui.foldBtn.title = folded ? "Open the node back up" : "Fold the node down to just the video";
-  const changing = wasHidden !== folded;
+  // Count the TOOLBAR flip too, or toggling "hide the toolbar when folded" on an
+  // already-folded node re-shows the button row without giving it any height,
+  // and the bottom of the player is clipped.
+  const changing = wasHidden !== folded || wasBarHidden !== willBarHide;
   if (allowResize && changing && !isGraphLoading()) {
     const after = settingsBlockH(ui);
     const delta = before - after;
@@ -589,15 +606,32 @@ function wireEvents(node, ui) {
     }
   });
 
-  ui.btnOpen.addEventListener("click", () => {
+  // Both buttons refuse a clip the player has already reported as unreachable.
+  // Without this they contradicted the message sitting right above them: Open
+  // put a raw 404 page in a new tab and Download produced an empty file, on a
+  // node that had just said "cannot reach that video any more".
+  const clipOrWarn = () => {
     const entry = node.properties?.[LAST_RUN_PROP];
-    if (!entry?.filename) return flashStatus(node, "Run the workflow first");
+    if (!entry?.filename) {
+      flashStatus(node, "Run the workflow first");
+      return null;
+    }
+    if (node._pixSvFailed) {
+      flashStatus(node, "That video is not reachable any more - run again to make a new one", 3200);
+      return null;
+    }
+    return entry;
+  };
+
+  ui.btnOpen.addEventListener("click", () => {
+    const entry = clipOrWarn();
+    if (!entry) return;
     window.open(buildVideoUrl(entry), "_blank");
   });
 
   ui.btnDownload.addEventListener("click", () => {
-    const entry = node.properties?.[LAST_RUN_PROP];
-    if (!entry?.filename) return flashStatus(node, "Run the workflow first");
+    const entry = clipOrWarn();
+    if (!entry) return;
     const a = document.createElement("a");
     a.href = buildVideoUrl(entry);
     a.download = entry.filename.split("/").pop();
@@ -622,15 +656,41 @@ function wireEvents(node, ui) {
 }
 
 // ── state injection ──────────────────────────────────────────────────────────
+// Walk the LIVE graph, descending into subgraphs. The serialized
+// `result.workflow.nodes` holds only TOP-LEVEL nodes - a node inside a subgraph
+// lives under workflow.definitions.subgraphs[] and its prompt key is
+// "<containerId>:<innerId>". Reading the flat list therefore injected NOTHING
+// for a node in a subgraph, so Python fell back to DEFAULT_STATE: the video
+// went to output/ instead of the user's folder, in 8-bit instead of HQ, and -
+// worst - saveOnRun defaults to true, so it was WRITTEN TO DISK even with
+// Preview mode showing on the face. Same shape as Save Image's collectNodes.
+function collectNodes(graph, out) {
+  if (!graph) return;
+  const nodes = graph._nodes || graph.nodes || [];
+  for (const n of nodes) {
+    if (n?.comfyClass === COMFY_CLASS) out.push(n);
+    const inner = n?.subgraph || n?.graph || n?._graph;
+    if (inner && inner !== graph) collectNodes(inner, out);
+  }
+}
+
+function matchNode(nodes, promptId) {
+  let n = nodes.find((x) => String(x.id) === String(promptId));
+  if (n) return n;
+  const tail = String(promptId).split(":").pop();
+  return nodes.find((x) => String(x.id) === tail) || null;
+}
+
 function injectState(result) {
-  const wf = result?.workflow;
   const out = result?.output;
   if (!out) return;
-  const nodes = wf?.nodes || [];
-  for (const n of nodes) {
-    if (n?.type !== COMFY_CLASS) continue;
-    const id = String(n.id);
-    if (!out[id]) continue;
+  const svNodes = [];
+  collectNodes(app.graph?.rootGraph || app.graph, svNodes);
+  if (!svNodes.length) return;
+  for (const id of Object.keys(out)) {
+    if (out[id]?.class_type !== COMFY_CLASS) continue;
+    const n = matchNode(svNodes, id);
+    if (!n) continue;
     out[id].inputs = out[id].inputs || {};
     let raw = n.properties?.[STATE_PROP];
     if (typeof raw !== "string" || !raw) raw = JSON.stringify(DEFAULT_STATE);
@@ -771,6 +831,22 @@ app.registerExtension({
       return r;
     };
 
+    // The live "Will save as" line reads the WIRED name, so it has to refresh
+    // when that wire changes - otherwise a pattern using %input% keeps showing
+    // the old name until something else happens to redraw it. Runtime-only
+    // (updatePreview writes no serialized state), so it is safe against the
+    // configure replay that fires this for every slot on load.
+    const origConnChange = nodeType.prototype.onConnectionsChange;
+    nodeType.prototype.onConnectionsChange = function (type, index, connected, link, ioSlot) {
+      const r = origConnChange?.apply(this, arguments);
+      if (ioSlot?.name === "name" || this.inputs?.[index]?.name === "name") {
+        queueMicrotask(() => {
+          if (this._pixSvUI) updatePreview(this);
+        });
+      }
+      return r;
+    };
+
     const origRemoved = nodeType.prototype.onRemoved;
     nodeType.prototype.onRemoved = function () {
       try {
@@ -779,6 +855,9 @@ app.registerExtension({
         this._pixSvEndDrag?.(); // release any window listeners the scrub added
         clearTimeout(this._pixSvCntTimer);
         clearTimeout(this._pixSvFlashTimer);
+        // so the `!node._pixSvUI` bails elsewhere can actually fire for a
+        // removed node instead of writing into a detached DOM tree
+        this._pixSvUI = null;
       } catch {}
       return origRemoved?.apply(this, arguments);
     };
@@ -820,6 +899,13 @@ function setupNode(node) {
     // sub-pixel jitter cannot creep node.size bigger on every load.
     getMinHeight: () => floorOf(ui),
     serialize: false,
+    // Every other media widget in the pack sets this (Save Mp4, Load Video,
+    // Load Video Frame, Compare, Preview), and so does core's own VIDEO widget.
+    // With the default true, once the canvas drops below the low-quality zoom
+    // threshold the widget paints a grey placeholder rectangle instead of the
+    // player, so this node alone would go blank-grey at low zoom while every
+    // sibling player keeps showing its picture.
+    hideOnZoom: false,
   });
   applyAdaptiveCanvasOnly(widget);
   node._pixSvWidget = widget;

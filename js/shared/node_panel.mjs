@@ -103,14 +103,27 @@ export function followNode(panel, node, { isCurrent, isUserMoved }) {
   };
 }
 
-// Drag the panel by its header. `onUserMove` fires once, on the first grab, so
-// the caller can latch "the user placed this deliberately" and stop following.
-// `ignoreSelector` keeps a click on the close button from starting a drag.
+// Drag the panel by its header. `onUserMove` fires ONCE per drag, on the first
+// real MOVEMENT, so the caller can latch "the user placed this deliberately"
+// and stop following the node. `ignoreSelector` keeps a click on the close
+// button from starting a drag.
+//
+// ⚠️ It fires on MOVEMENT, not on pointerdown. Save Image latched on pointerdown,
+// which meant a single CLICK on the panel header - or a right-click, or a press
+// and release with no movement - permanently stopped the panel following its
+// node for the rest of that panel's life, with nothing on screen explaining why.
+// A click is not a deliberate placement. Dropdown and LoRA Loader always latched
+// on movement; this brings the third implementation into line.
+const DRAG_THRESHOLD = 3; // px, so a shaky click is still a click
+
 export function makeDraggable(panel, handle, { onUserMove, ignoreSelector } = {}) {
   handle.addEventListener("pointerdown", (e) => {
     if (ignoreSelector && e.target.closest(ignoreSelector)) return;
+    if (e.button !== 0) return; // left button only; a right-click is not a drag
     e.preventDefault();
-    onUserMove?.();
+    const startX = e.clientX;
+    const startY = e.clientY;
+    let latched = false;
     const r = panel.getBoundingClientRect();
     const ox = e.clientX - r.left;
     const oy = e.clientY - r.top;
@@ -125,6 +138,13 @@ export function makeDraggable(panel, handle, { onUserMove, ignoreSelector } = {}
     const move = (ev) => {
       if (!panel.isConnected) { up(); return; }
       if (!(ev.buttons & 1)) { up(); return; } // we missed the release
+      if (!latched) {
+        // only a real movement counts as "the user placed this deliberately"
+        if (Math.abs(ev.clientX - startX) < DRAG_THRESHOLD &&
+            Math.abs(ev.clientY - startY) < DRAG_THRESHOLD) return;
+        latched = true;
+        onUserMove?.();
+      }
       panel.style.left =
         Math.max(0, Math.min(window.innerWidth - panel.offsetWidth, ev.clientX - ox)) + "px";
       panel.style.top =

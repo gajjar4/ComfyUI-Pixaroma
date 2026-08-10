@@ -312,7 +312,13 @@ class PixaromaSaveVideo:
         crf = quality_to_crf(state.get("quality", 75), fmt_id)
         # 10-bit only where the format actually supports it; MP4 (H.264) has no
         # pix10 entry, so it stays 8-bit whatever the setting says.
-        want10 = int(state.get("bitDepth", 10) or 8) >= 10
+        # guarded like its neighbours below: a hand-edited state blob can hold a
+        # string or a dict here, and an unguarded int() would raise a raw
+        # traceback instead of degrading
+        try:
+            want10 = int(state.get("bitDepth", 10) or 8) >= 10
+        except Exception:
+            want10 = True
         pix_fmt = fmt["pix10"] if (want10 and fmt["pix10"]) else fmt["pix8"]
         embed = bool(state.get("embedWorkflow", True))
         trim_to_audio = bool(state.get("trimToAudio", False))
@@ -348,7 +354,15 @@ class PixaromaSaveVideo:
         # the user's folder, keeping the SAME name so the "Will save as" line
         # stays honest. /view serves temp, so the player needs no token here.
         if not save_on:
-            folder_abs = folder_paths.get_temp_directory()
+            # realpath, to match how the output branch resolves its root. The
+            # relpath at the end of this function realpaths the root it compares
+            # against, so a RAW temp dir here disagrees with it whenever
+            # <base>/temp is a junction or symlink - which is the exact
+            # split-across-drives setup the path guard exists to support. Same
+            # drive it yields a subfolder full of "..", which /view refuses and
+            # the player shows blank; different drive os.path.relpath RAISES,
+            # killing a run whose file had already been written.
+            folder_abs = os.path.realpath(folder_paths.get_temp_directory())
             inside_output = False
             file_type = "temp"
         else:
