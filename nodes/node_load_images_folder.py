@@ -227,8 +227,25 @@ class PixaromaLoadImagesFolder:
                 stem = os.path.splitext(rel)[0].replace("\\", "/")
                 if keep_folders:
                     # hand over the REAL relative path so a Save node can
-                    # rebuild the same folder tree ("sub/cat")
-                    name = stem
+                    # rebuild the same folder tree ("sub/cat").
+                    #
+                    # Derived from the RESOLVED `path`, not from the raw `rel`.
+                    # `rel` comes out of the hidden state, which /prompt lets
+                    # anyone set, and the containment check above tests the
+                    # resolved location - not the literal string. So an entry
+                    # like "keep/../keep/cat.png" points at a file genuinely
+                    # inside the folder, passes, and would then have emitted the
+                    # traversal-SHAPED name "keep/../keep/cat" on an output whose
+                    # whole purpose is to be used as a path by another node.
+                    # Save Image refuses a ".." segment, and so does core's
+                    # SaveImage, so nothing was exploitable - but this output is
+                    # meant for arbitrary consumers, so it should not hand out a
+                    # string shaped like an escape. relpath of an already
+                    # contained path can never contain "..", and is identical to
+                    # the old value for every ordinary selection (verified).
+                    name = os.path.splitext(
+                        os.path.relpath(path, real_folder)
+                    )[0].replace("\\", "/")
                 else:
                     # keep names unique across subfolders so a Save node can't
                     # overwrite: "sub/cat.png" -> "sub_cat"

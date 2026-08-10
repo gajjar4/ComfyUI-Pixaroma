@@ -285,7 +285,7 @@ def _build_jpeg_exif(prompt=None, workflow=None, parameters=None, max_bytes=None
 class PixaromaSaveImage:
     DESCRIPTION = (
         "Save Image Pixaroma - save images to any folder on your computer, not just ComfyUI's output folder. "
-        "Type or paste a path, or click Browse to pick a folder with the normal Windows dialog; leave the field "
+        "Type or paste a path, or click Browse to pick a folder with your system's own folder dialog; leave the field "
         "empty to use the output folder. The filename field supports tokens and shows a live 'Will save as' "
         "preview of the exact file that will be written. Tokens: %input% (the wired name input, e.g. the filename "
         "from Load Image Pixaroma), %date:yyyy-MM-dd% (and any date/time format), %counter% (auto-incrementing, "
@@ -305,9 +305,9 @@ class PixaromaSaveImage:
         "Saved images show in a large preview on the node: one image fills the area, a batch shows as a grid. "
         "Click a picture in the grid to view it big, click it or hover for the arrows to flip through, and the "
         "X returns to the grid. Copy puts the shown image on the clipboard, Open shows it in a new browser tab. "
-        "Resize the node to make the preview bigger. The Mode toggle switches Save (files are written on every "
-        "run) and Preview (images show on the node, nothing goes to your folder), so it can double as a preview "
-        "node. Open Folder shows the save location in your file explorer; the window can appear on the taskbar."
+        "Resize the node to make the preview bigger. The Save and Preview pills switch between writing files on "
+        "every run and only showing images on the node with nothing written to your folder, so it can double as a "
+        "preview node. Folder shows the save location in your file explorer; the window can appear on the taskbar."
     )
 
     @classmethod

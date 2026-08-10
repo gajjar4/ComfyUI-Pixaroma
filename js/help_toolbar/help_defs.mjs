@@ -888,7 +888,7 @@ const HELP = {
       },
       {
         heading: "Examples: what to type, and what you get",
-        body: "Every one of these was run and the result copied from the node's own `Will save as` line, with a Text Pixaroma holding `bunny` wired into `name`. Type the middle column into the Filename box, or click the chip named in it.",
+        body: "Every one of these was run and the result copied from the node's own `Will save as` line, with a Text Pixaroma holding `bunny` wired into `name`, starting each time from a Filename box holding `image_%counter%`.\n\nThat starting point matters for the two chip rows: `+ Input folder` and `+ Date folder` put a folder in FRONT of whatever is already in the box, they do not replace it. So clicking `+ Date folder` on a node still holding its shipped default (which already contains the date) gives you `2026-08-10/image_2026-08-10_001.png`, with the date twice. Clear the box or trim the name first if that is not what you want.",
         table: {
           headers: ["What you want", "Filename box", "What lands on disk"],
           rows: [
@@ -938,10 +938,10 @@ const HELP = {
           "`PNG` is lossless, keeps transparency, and embeds the workflow: drag a saved PNG back into ComfyUI to reload everything with the exact seed that made it.",
           "`WebP` is the middle road and usually the best pick: far smaller than PNG, still keeps transparency, and it still reloads the workflow when you drag it back into ComfyUI. See the size table below for what it costs.",
           "`JPG` makes small, universally accepted files with a quality setting, but it has no transparency and ComfyUI cannot reload a workflow from a JPG. Pick PNG or WebP when reloading matters.",
-          "`Mode` switches between `Save` (files are written on every run) and `Preview` (the images show on the node but nothing goes to your folder; frames use ComfyUI's temporary folder, cleared on restart). So the node can also replace a preview node while you iterate.",
+          "The `Save` / `Preview` pair of pills switches between writing files on every run and only showing the images on the node, with nothing written to your folder (those frames go to ComfyUI's temporary folder, cleared on restart). So the node can also replace a preview node while you iterate.",
           "`Copy`, `Open`, and `Folder` sit in the button row: Copy puts the shown image on your clipboard, Open shows it in a new browser tab, Folder opens the save location in your file explorer (the window can appear on the taskbar instead of in front; that is a Windows limitation). Right-clicking the preview image gives the same `Open image`, `Copy image`, and `Save image` (download) options.",
           "The `gear` next to the fold triangle opens the settings (right-clicking the node still works too): date style (the order the + Date chip inserts, e.g. dd-MM-yyyy), counter digits (how many zeros %counter% uses), JPG / WebP quality, WebP lossless, workflow embedding, Civitai generation info, and whether folders in a wired name are kept. `Reset node size` in the right-click menu returns the node to its default size.",
-          "`Buttons on the node`, in the settings, hides the ones you never use. Handy if Open Folder does nothing helpful on your system, or if you only ever save in one or two formats and want the others out of the way. The last remaining format cannot be switched off, and when only one is left the format pills disappear entirely, since there is nothing left to choose.",
+          "`Buttons on the node`, in the settings, hides the ones you never use. Handy if `Folder` does nothing helpful on your system, or if you only ever save in one or two formats and want the others out of the way. The last remaining format cannot be switched off, and when only one is left the format pills disappear entirely, since there is nothing left to choose.",
           "If ComfyUI itself was started with `--disable-metadata`, nothing is written into your images: no workflow, no prompt, no Civitai info, whatever the settings above say. That is a ComfyUI-wide switch you would have added yourself, and it is off unless you did.",
         ],
       },

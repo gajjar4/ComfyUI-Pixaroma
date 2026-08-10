@@ -628,6 +628,18 @@ function updatePreview(node) {
   // each adds surface to this hot path: the Windows reserved-device-name
   // suffix (a segment resolving to exactly CON/NUL/COM1/...), control
   // characters inside a wired name, and the 256/100 char length caps.
+  //
+  // And one more, found in review round 3: the .trim() below is NOT a perfect
+  // stand-in for Python's str.strip(), because the two languages disagree on
+  // what counts as whitespace. JS trims U+FEFF and Python does not; Python
+  // strips U+0085 and \x1c-\x1f and JS does not. Since the trim now gates the
+  // reject tests, those characters at a pattern's very edge can flip the
+  // accept/reject decision in EITHER direction - e.g. "﻿.." previews the
+  // fallback while the node really writes a file named "﻿.png". Closing
+  // it means hand-rolling Python's isspace() class in a function that runs on
+  // every keystroke, which is more new surface than the bug is worth. Contained
+  // either way: this only affects the NAME inside an already-approved folder,
+  // never which folder is written to.
   // The leading .trim() mirrors _safe_prefix's `s.strip()`, and it has to come
   // BEFORE the two reject tests below, exactly as it does in Python. Without it
   // a single leading space smuggled a rejected pattern past both checks: " ..",

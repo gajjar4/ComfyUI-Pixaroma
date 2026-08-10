@@ -352,9 +352,16 @@ export function openPickGallery(node, anchorEl, ctx) {
     });
   });
   keepfEl.addEventListener("click", () => {
-    // no re-listing needed: this only changes the SHAPE of the filename output
-    state.keepFolders = !state.keepFolders;
-    writeState(node, state);
+    // no re-listing needed: this only changes the SHAPE of the filename output.
+    // Re-read before writing, like commit() does and for the same reason: the
+    // local `state` was snapshotted when the gallery opened, so writing the
+    // whole object back would silently revert any edit made to the node body
+    // (the folder field, reachable by keyboard while the gallery is up) since
+    // then. Only the key this control owns is carried over.
+    const fresh = readState(node);
+    fresh.keepFolders = !state.keepFolders;
+    writeState(node, fresh);
+    state.keepFolders = fresh.keepFolders;
     syncKeepFolders();
     ctx.onChange?.(node);
   });
