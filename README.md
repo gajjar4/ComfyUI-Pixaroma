@@ -363,6 +363,13 @@ Master the Pixaroma suite with our video guides and workflow deep-dives:
 
 ## 🛠 Changelog
 
+### **August 10, 2026 · v1.4.103**
+- **New node: Save Video Pixaroma.** Everything Save Image does with folders and filenames, but for video. Save an mp4 anywhere on your computer instead of just the output folder, build the filename from tokens with a live line showing the exact file before you run, and watch the result play right on the node. Three inputs: the frames, an optional soundtrack, and a name you can wire in.
+- **Two quality settings, and the bit depth is picked for you.** **MP4** is the normal one and plays on everything. **MP4 HQ** saves in H.265 at 10-bit, which keeps skies and fades smooth instead of banding into visible steps, at roughly half the file size. Use MP4 for anything you are sending to someone, and MP4 HQ for your own masters or footage you are going to edit. There is a plain 8 or 10 bit choice in the settings for MP4 HQ if you want it.
+- **Quality is a normal 1 to 100 slider** instead of the backwards number video tools usually make you learn. The default matches Save Mp4 exactly, so nothing changes if you switch between the two nodes.
+- **Three new filename pieces: the frame rate, the length and the frame count**, so you can name a file `Video_24fps_81f_3-4s_001.mp4` without typing any of it by hand.
+- **Save Mp4 is unchanged** and is still there. That one is the quick one you drop in and run; Save Video is the one with folders, naming and settings.
+
 ### **August 10, 2026 · v1.4.100–v1.4.102**
 - **Fixed: the Save Mp4 preview sometimes showed a black screen with a play button that did nothing.** The preview remembers your last clip so it comes back when you switch workflows, but it was remembering the file name rather than checking the file was still there. Two everyday things make it disappear: preview mode writes to a temporary folder that ComfyUI empties every time it restarts, and a saved file can be moved, renamed or deleted later. Either way you were left with a black box and a play button that looked fine and did nothing, with no explanation anywhere. It now tells you what happened and greys out the controls, so you know to just run it again. Thank you to the person who reported it, and for noticing it happened around switching workflows, which is exactly where it turned out to be.
 - **Fixed: the video timeline could stick to your cursor.** If the mouse release got lost while you were dragging along the timeline, for example dragging off the edge of the window or right-clicking part way through, the timeline stayed grabbed. After that, simply moving the mouse anywhere on the page kept scrubbing the video until you clicked again.
