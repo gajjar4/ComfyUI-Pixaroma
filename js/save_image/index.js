@@ -28,6 +28,7 @@ import {
   resolveDateTokens,
   expandNativeTokens,
   cleanInputName,
+  sanitizePrefixMirror,
   FORMATS,
   formatDef,
   visibleFormats,
@@ -610,70 +611,11 @@ function updatePreview(node) {
     s = s.replace(/%width%/g, String(dims.w)).replace(/%height%/g, String(dims.h));
   }
   s = s.replace(/%batch_num%/g, "0");
-  // Display mirror of the Python sanitizer - keep in lockstep with
-  // _safe_prefix + _sanitize_segment in nodes/_save_helpers.py.
-  //
-  // This line is the one thing the node tells users to trust, so every gap
-  // between the two is a lie about where their file goes. A first pass at this
-  // mirror covered only some of the rules, and a review found the rest by
-  // running both sides on the same inputs. MEASURED disagreements, all fixed
-  // here (Python left, old preview right):
-  //     "/myfolder/name_%counter%"  image_001.png    myfolder\name_001.png
-  //     "../up/name_%counter%"      image_001.png    ..\up\name_001.png
-  //     "shot_%counter%."           shot_001.png     shot_001..png
-  //     "_%counter%"                001.png          _001.png
-  //     "%input%" unwired           image_001.png    .png
-  //
-  // Deliberately NOT mirrored, because the trigger is vanishingly narrow and
-  // each adds surface to this hot path: the Windows reserved-device-name
-  // suffix (a segment resolving to exactly CON/NUL/COM1/...), control
-  // characters inside a wired name, and the 256/100 char length caps.
-  //
-  // And one more, found in review round 3: the .trim() below is NOT a perfect
-  // stand-in for Python's str.strip(), because the two languages disagree on
-  // what counts as whitespace. JS trims U+FEFF and Python does not; Python
-  // strips U+0085 and \x1c-\x1f and JS does not. Since the trim now gates the
-  // reject tests, those characters at a pattern's very edge can flip the
-  // accept/reject decision in EITHER direction - e.g. "﻿.." previews the
-  // fallback while the node really writes a file named "﻿.png". Closing
-  // it means hand-rolling Python's isspace() class in a function that runs on
-  // every keystroke, which is more new surface than the bug is worth. Contained
-  // either way: this only affects the NAME inside an already-approved folder,
-  // never which folder is written to.
-  // The leading .trim() mirrors _safe_prefix's `s.strip()`, and it has to come
-  // BEFORE the two reject tests below, exactly as it does in Python. Without it
-  // a single leading space smuggled a rejected pattern past both checks: " ..",
-  // once split, is not === "..", and " /x" does not startsWith("/"), so the
-  // per-segment loop quietly tidied the space away and the preview promised a
-  // path the node would never write. MEASURED before the fix:
-  //     " /secret"     node writes image_001.png   preview said secret.png
-  //     " ../secret"   node writes image_001.png   preview said secret.png
-  // Found in the second review round - the first round's fix was correct about
-  // WHAT to reject and wrong about WHEN, which no amount of testing the
-  // untrimmed inputs would have shown.
-  s = s.trim().replace(/\\/g, "/").replace(/[<>:"|?*]/g, "_").replace(/_{2,}/g, "_");
-  // _safe_prefix refuses the WHOLE pattern for these two, rather than tidying
-  // them - the node then falls back to "image_%counter%".
-  const segs = s.split("/");
-  if (s.startsWith("/") || segs.some((p) => p === "..")) {
-    s = "";
-  } else {
-    s = segs
-      // loop until stable: edge spaces, edge underscores and trailing dots can
-      // shadow each other, exactly as the Python comment describes ("test._"
-      // needs two passes)
-      .map((seg) => {
-        let prev = null;
-        let cur = seg;
-        while (prev !== cur) {
-          prev = cur;
-          cur = cur.trim().replace(/^_+|_+$/g, "").replace(/[. ]+$/, "");
-        }
-        return cur;
-      })
-      .filter(Boolean) // Python drops empty segments (trailing / doubled slashes)
-      .join("/");
-  }
+  // Display mirror of the Python sanitizer, shared with Save Video Pixaroma -
+  // the rules, and the two review rounds behind them, live in
+  // js/shared/filename_mirror.mjs. It returns "" wherever _safe_prefix returns
+  // None, and the fallback below is this node's own.
+  s = sanitizePrefixMirror(s);
   if (!s) s = "image_%counter%"; // _safe_prefix returned None -> node's fallback
   const ext = formatDef(st.format).ext;
   const digits = Math.max(1, Math.min(8, parseInt(st.counterDigits, 10) || 3));

@@ -60,6 +60,17 @@ export { placeZoomedPopup, applyPopupZoom, popupZoom } from "./popup_zoom.mjs";
 // A read-only numbered gutter for a WRAPPING "one value per line" textarea.
 export { attachLineNumbers } from "./line_numbers.mjs";
 
+// Browser mirrors of the Python filename pipeline, for any node with a live
+// "Will save as" line. ONE copy on purpose - it took three review rounds to
+// agree with _save_helpers.py and a second copy would drift.
+export {
+  resolveDateTokens,
+  expandNativeTokens,
+  cleanInputName,
+  normalizePath,
+  sanitizePrefixMirror,
+} from "./filename_mirror.mjs";
+
 // Build every API/asset URL through this. A root-relative "/view?..." works on
 // localhost and returns 401 on a hosted ComfyUI. See api_url.mjs.
 export { pixApiUrl, pixAsset } from "./api_url.mjs";
