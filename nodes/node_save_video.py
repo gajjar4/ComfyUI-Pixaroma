@@ -66,7 +66,7 @@ DEFAULT_STATE = {
     # JS-only: which optional buttons the face shows. Absent/true = shown, so an
     # older saved workflow keeps every button.
     "showOpen": True,
-    "showCopy": True,
+    "showDownload": True,
     "showFolder": True,
     "showMp4": True,
     "showMp4Hq": True,

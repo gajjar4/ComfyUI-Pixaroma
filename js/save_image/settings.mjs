@@ -4,138 +4,45 @@
 // clutter the node face: JPG quality, workflow embedding, save-on-every-run.
 
 import { app } from "/scripts/app.js";
-import { isVueNodes } from "../shared/nodes2.mjs";
 import { readState, writeState } from "./state.mjs";
 import { injectCSS, el } from "./ui.mjs";
 import { createAccentSection } from "../shared/node_settings.mjs";
+import {
+  followNode,
+  placeBeside,
+  getNodeScreenRect,
+  makeDraggable as _makeDraggable,
+} from "../shared/node_panel.mjs";
+
+// keep the old call shape (panel, handle) so the call site below is untouched
+const makeDraggable = (panel, handle) =>
+  _makeDraggable(panel, handle, {
+    onUserMove: () => { _userMoved = true; },
+    ignoreSelector: ".pix-si-px",
+  });
 
 let _panel = null;
 let _panelNode = null;
 let _onChange = null;
-let _followRaf = null;  // the canvas-follow loop, see startFollowing()
 let _userMoved = false; // has the user dragged the panel somewhere deliberately?
 
-// Screen-pixel rect of the node (DOM in Nodes 2.0, geometry math in legacy)
-// so the panel opens BESIDE the node instead of over it.
-function getNodeScreenRect(node) {
-  if (isVueNodes() && node && node.id != null) {
-    const elx = document.querySelector('[data-node-id="' + node.id + '"]');
-    if (elx) return elx.getBoundingClientRect();
-  }
-  const c = app.canvas;
-  const ds = c && c.ds;
-  const canvasEl = c && c.canvas;
-  if (!ds || !canvasEl || !node || !node.pos || !node.size) return null;
-  const cr = canvasEl.getBoundingClientRect();
-  const titleH = (window.LiteGraph && window.LiteGraph.NODE_TITLE_HEIGHT) || 30;
-  const scale = ds.scale || 1;
-  const off = ds.offset || [0, 0];
-  const left = cr.left + (node.pos[0] + off[0]) * scale;
-  const top = cr.top + (node.pos[1] - titleH + off[1]) * scale;
-  const width = node.size[0] * scale;
-  const height = (node.size[1] + titleH) * scale;
-  return { left, top, right: left + width, bottom: top + height, width, height };
-}
+// The panel's placement, its follow-the-node loop and its drag all moved to
+// js/shared/node_panel.mjs on 2026-08-10 so Save Video uses the same copy. The
+// two bug fixes they carry (the lost-pointerup guard and the subgraph-safe
+// getNodeById) are documented there; this file keeps only its own singleton
+// state and its own rows.
+let _stopFollow = null;
 
-function placeBeside(panel, rect) {
-  const vw = window.innerWidth;
-  const vh = window.innerHeight;
-  const mw = panel.offsetWidth;
-  const mh = panel.offsetHeight;
-  const gap = 12;
-  const pad = 8;
-  if (!rect) {
-    panel.style.left = Math.max(pad, (vw - mw) / 2) + "px";
-    panel.style.top = Math.max(pad, (vh - mh) / 2) + "px";
-    return;
-  }
-  let left = rect.right + gap;
-  if (left + mw > vw - pad) left = rect.left - gap - mw;
-  if (left < pad) left = Math.max(pad, vw - mw - pad);
-  let top = rect.top;
-  if (top + mh > vh - pad) top = vh - mh - pad;
-  if (top < pad) top = pad;
-  panel.style.left = left + "px";
-  panel.style.top = top + "px";
-}
-
-// Follow the node as the canvas is zoomed or panned (node UI convention #29).
-// LiteGraph emits nothing for a transform change, so this is a rAF loop that
-// compares the transform and returns immediately when nothing moved - the idle
-// cost is a comparison, and it only runs while a panel is open.
 function startFollowing(panel, node) {
-  let lastScale = null, lastX = null, lastY = null;
-  const tick = () => {
-    if (!_panel || _panel !== panel || !panel.isConnected) { _followRaf = null; return; }
-    // also stop if the NODE is gone. The checks above are all about the panel,
-    // so a graph replace that skipped this node's onRemoved would otherwise
-    // leave this polling every frame against a node no longer in the graph.
-    //
-    // `node.graph || app.graph`, NOT app.graph: app.graph only holds TOP-LEVEL
-    // nodes, so for a Save Image inside a subgraph the identity test failed on
-    // the very first tick and silently switched the follow off while the panel
-    // and the node were both plainly on screen. Same trap already documented in
-    // js/find_replace/index.js, same idiom already used in js/save_image/index.js
-    // when it resolves the wired name. A removed node has its `graph` nulled, so
-    // this still catches the case the check exists for.
-    if ((node.graph || app.graph)?.getNodeById?.(node.id) !== node) { _followRaf = null; return; }
-    _followRaf = requestAnimationFrame(tick);
-    if (_userMoved) return; // dragged on purpose: leave it exactly there
-    const ds = app.canvas?.ds;
-    if (!ds) return;
-    const sc = ds.scale || 1;
-    const ox = ds.offset?.[0] ?? 0, oy = ds.offset?.[1] ?? 0;
-    if (sc === lastScale && ox === lastX && oy === lastY) return;
-    lastScale = sc; lastX = ox; lastY = oy;
-    placeBeside(panel, getNodeScreenRect(node));
-  };
-  _followRaf = requestAnimationFrame(tick);
+  _stopFollow = followNode(panel, node, {
+    isCurrent: () => _panel === panel,
+    isUserMoved: () => _userMoved,
+  });
 }
 
 function stopFollowing() {
-  if (_followRaf != null) cancelAnimationFrame(_followRaf);
-  _followRaf = null;
-}
-
-function makeDraggable(panel, handle) {
-  handle.addEventListener("pointerdown", (e) => {
-    if (e.target.closest(".pix-si-px")) return;
-    e.preventDefault();
-    _userMoved = true; // stop following: the user placed it deliberately
-    const r = panel.getBoundingClientRect();
-    const ox = e.clientX - r.left;
-    const oy = e.clientY - r.top;
-    // Both defences against a LOST pointerup, which this pack has already been
-    // bitten by once on the Help window's resize handle: the pointer leaves the
-    // viewport, or something else takes capture mid-drag, the release is never
-    // seen, and the panel follows the cursor forever with no way to put it
-    // down. Synthetic events never reproduce it, so it only ever shows up as a
-    // human bug report. It matters more here than it used to: `_userMoved` is
-    // latched above, so a stuck drag also permanently disables the follow loop
-    // for this panel.
-    try { handle.setPointerCapture(e.pointerId); } catch { /* not fatal */ }
-    let done = false;
-    const move = (ev) => {
-      if (!panel.isConnected) { up(); return; }
-      // the primary button is no longer held: we missed the release
-      if (!(ev.buttons & 1)) { up(); return; }
-      panel.style.left = Math.max(0, Math.min(window.innerWidth - panel.offsetWidth, ev.clientX - ox)) + "px";
-      panel.style.top = Math.max(0, Math.min(window.innerHeight - panel.offsetHeight, ev.clientY - oy)) + "px";
-    };
-    const up = () => {
-      if (done) return; // idempotent: the guard above can call this too
-      done = true;
-      try { handle.releasePointerCapture(e.pointerId); } catch { /* already gone */ }
-      window.removeEventListener("pointermove", move, true);
-      window.removeEventListener("pointerup", up, true);
-      window.removeEventListener("pointercancel", up, true);
-      handle.removeEventListener("lostpointercapture", up);
-    };
-    window.addEventListener("pointermove", move, true);
-    window.addEventListener("pointerup", up, true);
-    window.addEventListener("pointercancel", up, true);
-    handle.addEventListener("lostpointercapture", up);
-  });
+  _stopFollow?.();
+  _stopFollow = null;
 }
 
 function outsideClose(e) {
