@@ -1062,6 +1062,7 @@ const HELP = {
           "Wire an IMAGE batch into `video_frames` and the frame rate into `fps` (from AudioReact, connect its `video_frames` and `fps`).",
           "Optionally connect an `audio` output to add a soundtrack.",
           "Set `save_mode` to `preview` (temp, auto-cleared on restart) or `save` (kept in output).",
+          "The preview remembers the last clip, so it comes back when you switch workflows. If that file has since been deleted, moved, or cleared from temp by a restart, the node tells you instead of showing a black player: just run again.",
           "Set `filename_prefix` to name the file; a 5-digit counter is added automatically. You can print another node's value into the name with a token like `%Seed Pixaroma.seed%`.",
           "Enable `trim_to_audio` to end the video at the audio length.",
         ],

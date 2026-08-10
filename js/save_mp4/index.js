@@ -70,6 +70,10 @@ const PREVIEW_MIN_H = 180;
 const DEFAULT_H = 420;
 // Shared mask-image icon set (borrowed from AudioReact's transport bar).
 const UI_ICON = "icons/ui/";
+// The placeholder's normal text (nothing rendered yet). A constant because the
+// same element doubles as the "that clip is gone" message below, so a later
+// successful run has to be able to put this back.
+const PLACEHOLDER_DEFAULT = "(no video yet — run the workflow)";
 
 // Vue can tear down a node's DOM widget and rebuild it (e.g. when the
 // user switches workflow tabs and back). The cached node._pixaromaVideo
@@ -120,9 +124,15 @@ function refreshBar(node) {
   const v = node._pixaromaVideo;
   const bar = node._pixMp4Bar;
   if (!v || !bar) return;
-  const hasSrc = !!v.src;
-  bar.classList.toggle("is-disabled", !hasSrc);
-  const playing = hasSrc && !v.paused && !v.ended;
+  // A src whose file FAILED to load is not a clip. Asking only `!!v.src` is what
+  // left the bar looking live and clickable over a black rectangle when the
+  // persisted clip's file had been deleted (see showClipMissing). The flag is a
+  // runtime field, set by the <video>'s own error event and cleared whenever a
+  // fresh load starts or succeeds, so a load that is merely still in flight is
+  // never mistaken for a failed one.
+  const hasClip = !!v.src && !node._pixMp4Failed;
+  bar.classList.toggle("is-disabled", !hasClip);
+  const playing = hasClip && !v.paused && !v.ended;
   node._pixMp4PlayIco?.style.setProperty(
     "--ico",
     `url(${pixAsset(UI_ICON + (playing ? "pause" : "play") + ".svg")})`
@@ -144,13 +154,53 @@ function applyVideoEntry(node, entry) {
   const video = getLiveVideo(node);
   if (!video || !entry || !entry.filename) return false;
   node._pixMp4Name = entry.filename.split("/").pop();
+  node._pixMp4Failed = false; // a fresh load: not failed until its error event says so
   video.src = buildViewUrl(entry);
   video.style.display = "block";
-  if (node._pixaromaPlaceholder?.isConnected) node._pixaromaPlaceholder.style.display = "none";
+  if (node._pixaromaPlaceholder?.isConnected) {
+    // Put the normal text back — this element doubles as the "clip is gone"
+    // message, and a later successful run has to clear that.
+    node._pixaromaPlaceholder.textContent = PLACEHOLDER_DEFAULT;
+    node._pixaromaPlaceholder.style.display = "none";
+  }
   video.load();
   refreshBar(node);
   requestAnimationFrame(() => { try { window.dispatchEvent(new Event("resize")); } catch (_e) {} });
   return true;
+}
+
+// The clip's file is not on disk any more, so the <video> got a 404 and has
+// nothing to show. Two routine ways that happens, and BOTH are normal use, not
+// user error: save_mode=preview writes to ComfyUI's temp/, which is WIPED on
+// every restart, and a save_mode=save file can be moved, renamed or deleted
+// afterwards. The persisted entry (Pattern #7) still names it, so restorePreview
+// happily points the player at a file that is gone.
+//
+// Without this the node showed a BLACK RECTANGLE with a fully-enabled control
+// bar: applyVideoEntry had already hidden the placeholder, refreshBar only asked
+// `!!v.src` (true), and the play button's play() rejection ("NotSupportedError:
+// The element has no supported sources") was swallowed by its .catch(). Nothing
+// anywhere said why. Reported as "sometimes only a black screen when I try to
+// play, after switching workflows" — a workflow switch is simply when the stale
+// entry gets re-applied.
+//
+// DISPLAY ONLY. This runs on the workflow LOAD path, so it must NEVER write
+// node.properties / node.size / a widget value: clearing the persisted entry
+// here would flag an untouched workflow "modified" on every open (Vue Compat
+// #18). Leaving the entry in place is also what lets the message name the cause.
+function showClipMissing(node) {
+  node._pixMp4Failed = true;
+  const video = getLiveVideo(node) || node._pixaromaVideo;
+  if (video) video.style.display = "none";
+  const ph = node._pixaromaPlaceholder;
+  if (ph?.isConnected) {
+    ph.textContent =
+      node.properties?.pixMp4Video?.type === "temp"
+        ? "Preview clip is gone. ComfyUI clears temp/ on restart, so run again to make a new one."
+        : "Clip not found. The file may have been moved, renamed or deleted. Run again to make a new one.";
+    ph.style.display = "flex";
+  }
+  refreshBar(node); // greys the bar, so the play button no longer looks live
 }
 
 // Which entry in a node's ui payload is our clip?
@@ -384,6 +434,15 @@ app.registerExtension({
         a.click();
         a.remove();
       });
+      // The file behind the clip is gone (or will not decode): say so instead of
+      // leaving a dead black player with a live-looking play button. This is the
+      // ONLY unambiguous signal - a load that is still in flight looks identical
+      // to a failed one from the outside. See showClipMissing.
+      video.addEventListener("error", () => showClipMissing(node));
+      // A load that got as far as metadata succeeded, so it is not a failure any
+      // more (covers a re-run after the previous clip had gone missing).
+      video.addEventListener("loadedmetadata", () => { node._pixMp4Failed = false; });
+
       // Keep the bar in sync with playback.
       ["play", "pause", "ended", "timeupdate", "loadedmetadata", "durationchange"].forEach(
         (ev) => video.addEventListener(ev, () => refreshBar(node))
