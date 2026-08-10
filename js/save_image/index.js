@@ -341,11 +341,27 @@ function flashStatus(node, kind, text, ms = 2600) {
   node._pixSiFlashT = setTimeout(() => updateInfoLine(node), ms);
 }
 
+// ⚠️ The `t=` cache-buster is NOT optional, and the comment that used to say
+// "no cache-buster needed since names are never reused" was wrong (user report,
+// 2026-08-10). Filenames ARE reused: %counter% picks max-found + 1, so DELETING
+// the newest file frees its number and the next run writes that exact name
+// again. The /view URL is then byte-identical to one the browser already has,
+// so it serves the OLD picture from cache while the correct new file sits on
+// disk. REPRODUCED end to end: saved a red 001, deleted it, generated a blue
+// one that really did write 001 (blue on disk, verified) - and the node showed
+// RED. Save Mp4 and Save Video already busted their URLs; this node did not.
+//
+// The stamp is per RUN, not per render (`f.bust`, set once in the executed
+// handler), so switching workflow tabs or flipping grid/expanded re-uses the
+// same URL and stays cache-fast; only a NEW run fetches again. An entry with no
+// stamp (an older saved workflow) keeps the plain URL: its file has not changed
+// since it was written, so its cache entry is correct.
 function buildViewUrl(f) {
   return pixApiUrl(
     "/view?filename=" + encodeURIComponent(f.filename) +
     "&type=" + encodeURIComponent(f.type || "output") +
-    "&subfolder=" + encodeURIComponent(f.subfolder || "")
+    "&subfolder=" + encodeURIComponent(f.subfolder || "") +
+    (f.bust ? "&t=" + encodeURIComponent(f.bust) : "")
   );
 }
 
@@ -1088,6 +1104,15 @@ function installExecutedListener() {
     if (!Array.isArray(frames) || !frames.length) return;
     const status = frames[0]._pixaroma_status || null;
 
+    // One stamp for THIS run, stamped onto every entry before anything builds a
+    // URL from them, so a filename reused after a delete cannot serve the old
+    // picture out of the browser cache (see buildViewUrl). Per run rather than
+    // per render, so re-renders stay cache-fast.
+    const bust = String(Date.now());
+    for (const f of frames) {
+      if (f && typeof f === "object") f.bust = bust;
+    }
+
     node._pixSiFrames = entriesToFrames(frames);
     node._pixSiSel = 0;
     node._pixSiExpanded = false; // batches land on the grid first
@@ -1119,6 +1144,9 @@ function installExecutedListener() {
             type: f.type || "",
             token: f.token || "",
             path: f.path || "",
+            // carried so a tab-switch restore rebuilds the SAME url this run
+            // used - stable (no needless refetch) and still unique per run
+            bust: f.bust || "",
           }));
         if (!node.properties) node.properties = {};
         node.properties.pixSiLastRun = {
