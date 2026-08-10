@@ -1,3 +1,4 @@
+import { app } from "/scripts/app.js";
 import { pixApiUrl } from "../shared/api_url.mjs";
 import { notifyGraphChanged } from "../shared/graph_changed.mjs";
 
@@ -109,6 +110,54 @@ export function updateNativePreview(node, filename) {
   img.src = pixApiUrl(`/view?filename=${encodeURIComponent(name)}&type=${encodeURIComponent(type)}&subfolder=${encodeURIComponent(subfolder)}&t=${Date.now()}`);
 }
 
+/**
+ * Point ComfyUI's OWN per-node picture store at the file we just picked.
+ *
+ * MEASURED 2026-08-10, from a Load Image Mini report ("still the wrong image")
+ * with a screen recording: pick a new file, switch workflow tab, come back, and
+ * the picker names the new file while the preview and the INPUT size card show
+ * the OLD one.
+ *
+ * ComfyUI keeps a picture per node id in `app.nodeOutputs`. On a workflow
+ * restore it replays that entry as a preview load AT THE SAME TIME as the load
+ * the restored widget value triggers - two async fetches writing the same
+ * `node.imgs`, so the one that finishes LAST wins. Core's native image combo
+ * writes this store on every commit (its callback is
+ * `node.imgs = undefined; setNodeOutputs(node, widget.value); ...`), so for a
+ * native LoadImage both loads name the same file and the race cannot be seen.
+ * Our DOM picker wrote only the widget, so the store kept naming the PREVIOUS
+ * file and the two loads genuinely disagreed. Measured on real picks: the stale
+ * load landed 3ms AFTER the correct one in one run and 3ms BEFORE it in
+ * another - which is why the report was intermittent and why a quick retest
+ * "looked fixed".
+ *
+ * Losing that race is not cosmetic: `node.imgs` also feeds the INPUT size card
+ * and is what Mask Editor and Clipspace read, so the node reports the wrong
+ * dimensions for the file it names, and a mask would be taken against the wrong
+ * picture.
+ *
+ * Same shape as `notifyGraphChanged` below: a native widget quietly updates a
+ * piece of core state that a DOM control has to update by hand. Keeping the
+ * store in step removes the stale load at its source rather than trying to win
+ * a race (verified: with this, core's two loads name the same file, exactly as
+ * they do for its own LoadImage).
+ */
+function syncCoreImageStore(node, filename) {
+  try {
+    const store = app?.nodeOutputs;
+    if (!store || node?.id == null) return;
+    // Same normalising as the /view URL builder: the annotation names the
+    // FOLDER, and must not be left inside the filename.
+    const { name, type } = splitTypeAnnotation(filename);
+    const { subfolder, filename: bare } = splitFilenameSubfolder(name);
+    store[node.id] = { images: [{ filename: bare, subfolder, type }], animated: [false] };
+  } catch (e) {
+    // Degrade to the old behaviour (core may replay a stale preview on the next
+    // restore) rather than breaking the pick itself.
+    console.warn("[Pixaroma] could not sync ComfyUI's preview store", e);
+  }
+}
+
 // Single source of truth for picking an image (dropdown click, arrow nav,
 // upload, drag-drop, paste). Centralises:
 //   - widget.value write
@@ -138,6 +187,9 @@ export function setSelectedImage(node, filename) {
   // property is non-configurable, and every caller of this fn is a real pick
   // (dropdown / arrow / upload / paste), never a clipspace copy (issue #51).
   if (!/clipspace/i.test(filename)) node._pixLiOrigName = filename;
+  // Before the preview fetch, so core's store already names the new file if
+  // anything reads it while the image is in flight.
+  syncCoreImageStore(node, filename);
   updateNativePreview(node, filename);
   node._pixLiOnFilenameChanged?.(filename);
   node.graph?.setDirtyCanvas?.(true, true);
