@@ -70,7 +70,15 @@ function startFollowing(panel, node) {
     // also stop if the NODE is gone. The checks above are all about the panel,
     // so a graph replace that skipped this node's onRemoved would otherwise
     // leave this polling every frame against a node no longer in the graph.
-    if (app.graph?.getNodeById?.(node.id) !== node) { _followRaf = null; return; }
+    //
+    // `node.graph || app.graph`, NOT app.graph: app.graph only holds TOP-LEVEL
+    // nodes, so for a Save Image inside a subgraph the identity test failed on
+    // the very first tick and silently switched the follow off while the panel
+    // and the node were both plainly on screen. Same trap already documented in
+    // js/find_replace/index.js, same idiom already used in js/save_image/index.js
+    // when it resolves the wired name. A removed node has its `graph` nulled, so
+    // this still catches the case the check exists for.
+    if ((node.graph || app.graph)?.getNodeById?.(node.id) !== node) { _followRaf = null; return; }
     _followRaf = requestAnimationFrame(tick);
     if (_userMoved) return; // dragged on purpose: leave it exactly there
     const ds = app.canvas?.ds;

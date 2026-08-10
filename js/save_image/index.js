@@ -628,7 +628,18 @@ function updatePreview(node) {
   // each adds surface to this hot path: the Windows reserved-device-name
   // suffix (a segment resolving to exactly CON/NUL/COM1/...), control
   // characters inside a wired name, and the 256/100 char length caps.
-  s = s.replace(/\\/g, "/").replace(/[<>:"|?*]/g, "_").replace(/_{2,}/g, "_");
+  // The leading .trim() mirrors _safe_prefix's `s.strip()`, and it has to come
+  // BEFORE the two reject tests below, exactly as it does in Python. Without it
+  // a single leading space smuggled a rejected pattern past both checks: " ..",
+  // once split, is not === "..", and " /x" does not startsWith("/"), so the
+  // per-segment loop quietly tidied the space away and the preview promised a
+  // path the node would never write. MEASURED before the fix:
+  //     " /secret"     node writes image_001.png   preview said secret.png
+  //     " ../secret"   node writes image_001.png   preview said secret.png
+  // Found in the second review round - the first round's fix was correct about
+  // WHAT to reject and wrong about WHEN, which no amount of testing the
+  // untrimmed inputs would have shown.
+  s = s.trim().replace(/\\/g, "/").replace(/[<>:"|?*]/g, "_").replace(/_{2,}/g, "_");
   // _safe_prefix refuses the WHOLE pattern for these two, rather than tidying
   // them - the node then falls back to "image_%counter%".
   const segs = s.split("/");
