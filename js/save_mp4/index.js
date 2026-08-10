@@ -332,7 +332,7 @@ app.registerExtension({
       // a time (placeholder until the first clip loads, video thereafter).
       const placeholder = document.createElement("div");
       placeholder.className = "pix-mp4-placeholder";
-      placeholder.textContent = "(no video yet — run the workflow)";
+      placeholder.textContent = PLACEHOLDER_DEFAULT; // same string applyVideoEntry restores
       placeholder.style.cssText =
         "position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#888;font-size:12px;text-align:center;padding:16px;box-sizing:border-box;background:#1a1a1a;";
       media.appendChild(placeholder);
@@ -469,7 +469,18 @@ app.registerExtension({
         e.preventDefault();
         e.stopPropagation();
       });
-      const onMove = (e) => { if (dragging) seekFrom(e); };
+      // The buttons-are-up guard. Without it a LOST mouseup (the cursor left the
+      // window, a right-click's context menu ate the release, another element
+      // took pointer capture) leaves `dragging` true forever, and from then on
+      // every mouse move anywhere on the page seeks the clip under a bare
+      // cursor - measured 0.506s -> 4.119s -> 2.054s with no button held. Same
+      // guard js/align/index.js relies on. NOTE the lost-release half cannot be
+      // reproduced with synthetic events, only with a real mouse, which is
+      // exactly why a drag like this looks fine in testing.
+      const onMove = (e) => {
+        if (!(e.buttons & 1)) { dragging = false; return; }
+        if (dragging) seekFrom(e);
+      };
       const onUp = () => { dragging = false; };
       window.addEventListener("mousemove", onMove);
       window.addEventListener("mouseup", onUp);
