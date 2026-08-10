@@ -116,6 +116,8 @@ from .nodes.node_run_log import NODE_CLASS_MAPPINGS as _MAPS_RUN_LOG
 from .nodes.node_run_log import NODE_DISPLAY_NAME_MAPPINGS as _NAMES_RUN_LOG
 from .nodes.node_save_image import NODE_CLASS_MAPPINGS as _MAPS_SAVE_IMAGE
 from .nodes.node_save_image import NODE_DISPLAY_NAME_MAPPINGS as _NAMES_SAVE_IMAGE
+from .nodes.node_save_video import NODE_CLASS_MAPPINGS as _MAPS_SAVE_VIDEO
+from .nodes.node_save_video import NODE_DISPLAY_NAME_MAPPINGS as _NAMES_SAVE_VIDEO
 from .nodes.node_krea_lora_convert import NODE_CLASS_MAPPINGS as _MAPS_KREA_LORA_CONVERT
 from .nodes.node_krea_lora_convert import NODE_DISPLAY_NAME_MAPPINGS as _NAMES_KREA_LORA_CONVERT
 from .nodes.node_lora_loader import NODE_CLASS_MAPPINGS as _MAPS_LORA_LOADER
@@ -203,6 +205,7 @@ NODE_CLASS_MAPPINGS = {
     **_MAPS_RUN_TIMER,
     **_MAPS_RUN_LOG,
     **_MAPS_SAVE_IMAGE,
+    **_MAPS_SAVE_VIDEO,
     **_MAPS_KREA_LORA_CONVERT,
     **_MAPS_LORA_LOADER,
     **_MAPS_SIZES,
@@ -274,6 +277,7 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     **_NAMES_RUN_TIMER,
     **_NAMES_RUN_LOG,
     **_NAMES_SAVE_IMAGE,
+    **_NAMES_SAVE_VIDEO,
     **_NAMES_KREA_LORA_CONVERT,
     **_NAMES_LORA_LOADER,
     **_NAMES_SIZES,

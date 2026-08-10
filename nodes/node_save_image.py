@@ -33,6 +33,7 @@ from ._save_helpers import (
     _next_counter,
     _resolve_save_folder,
     _safe_prefix,
+    strip_stale_preview,
 )
 
 # Keys MUST match js/save_image/state.mjs::DEFAULT_STATE.
@@ -143,60 +144,14 @@ _EXIF_MAX = 64000  # JPEG APP1 segment tops out ~65 KB; Pillow raises
 
 
 def _strip_stale_preview(extra):
-    """Return a copy of extra_pnginfo with every Pixaroma Save Image node's
-    remembered preview (`pixSiLastRun`) removed.
+    """This node's binding of the shared helper: drop every Save Image node's
+    remembered preview (`pixSiLastRun`) from the EMBEDDED workflow copy.
 
-    WHY (reported 2026-08-10): ComfyUI freezes the workflow into the picture at
-    QUEUE time, which is BEFORE that picture exists. So `pixSiLastRun` - the
-    node's memory of what the last run produced - is still the PREVIOUS run's
-    file. Measured on a real pair: the workflow inside image_..._001.webp names
-    image_..._001.png, the run before it. Drag that file into ComfyUI and the
-    node confidently shows a different picture and says "saved 1 image" about a
-    file you did not open. It corrects itself on the next Run, which is exactly
-    what made it look like a glitch rather than a bug.
-
-    Core's own SaveImage shows NOTHING in that situation, so leaving ours to
-    show the wrong thing is worse than core. Removing the key just means the
-    node comes up empty ("Run the workflow to ...") until the first run.
-
-    Only the EMBEDDED copy loses it. The browser keeps its own
-    `node.properties.pixSiLastRun`, which is what a workflow-tab switch
-    restores from, and the saved .json workflow is written from the browser too
-    - so both of those are untouched and keep working exactly as before.
-
-    ⚠️ MUST COPY, NEVER MUTATE. ComfyUI hands the SAME extra_pnginfo object to
-    every node in a run (`extra_data.get('extra_pnginfo')` in execution.py), so
-    stripping in place would silently edit what a SECOND Save Image node - or
-    Preview Image - embeds in its own file. That bug would look identical in
-    review and only show up for someone with two save nodes.
+    The reasoning, and the copy-never-mutate rule that goes with it, live in
+    _save_helpers.strip_stale_preview - shared with Save Video Pixaroma since
+    2026-08-10 so the two cannot drift.
     """
-    if not isinstance(extra, dict):
-        return extra
-    wf = extra.get("workflow")
-    if not isinstance(wf, dict) or not isinstance(wf.get("nodes"), list):
-        return extra
-    hit = False
-    new_nodes = []
-    for n in wf["nodes"]:
-        if (
-            isinstance(n, dict)
-            and n.get("type") == "PixaromaSaveImage"
-            and isinstance(n.get("properties"), dict)
-            and "pixSiLastRun" in n["properties"]
-        ):
-            n = dict(n)
-            n["properties"] = {k: v for k, v in n["properties"].items() if k != "pixSiLastRun"}
-            hit = True
-        new_nodes.append(n)
-    if not hit:
-        return extra
-    # shallow copies all the way down to the list we changed - enough to leave
-    # the caller's object untouched, without deep-copying a whole graph per save
-    new_wf = dict(wf)
-    new_wf["nodes"] = new_nodes
-    new_extra = dict(extra)
-    new_extra["workflow"] = new_wf
-    return new_extra
+    return strip_stale_preview(extra, "PixaromaSaveImage", "pixSiLastRun")
 
 
 def _build_jpeg_exif(prompt=None, workflow=None, parameters=None, max_bytes=None):

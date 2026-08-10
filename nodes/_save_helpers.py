@@ -284,6 +284,67 @@ def _next_counter(dir_path, name_template):
     return mx + 1
 
 
+# ---- stale-preview stripping ----
+
+def strip_stale_preview(extra, node_type, prop_key):
+    """Return a copy of extra_pnginfo with `prop_key` removed from every
+    `node_type` node's properties.
+
+    WHY (reported 2026-08-10 against Save Image): ComfyUI freezes the workflow
+    into the file at QUEUE time, which is BEFORE that file exists. So the node's
+    memory of its last result is still the PREVIOUS run's. Measured on a real
+    pair: the workflow inside image_..._001.webp names image_..._001.png, the run
+    before it. Drag that file into ComfyUI and the node confidently shows a
+    different picture. It corrects itself on the next Run, which is exactly what
+    made it look like a glitch rather than a bug.
+
+    Core's own SaveImage shows NOTHING in that situation, so leaving ours to show
+    the wrong thing is worse than core. Removing the key just means the node comes
+    up empty until the first run.
+
+    Only the EMBEDDED copy loses it. The browser keeps its own
+    node.properties[prop_key], which is what a workflow-tab switch restores from,
+    and the saved .json workflow is written from the browser too - so both of
+    those are untouched and keep working exactly as before.
+
+    ⚠️ MUST COPY, NEVER MUTATE. ComfyUI hands the SAME extra_pnginfo object to
+    every node in a run (`extra_data.get('extra_pnginfo')` in execution.py), so
+    stripping in place would silently edit what a SECOND save node embeds in its
+    own file. That bug would look identical in review and only show up for
+    someone with two save nodes.
+
+    Parameterised (2026-08-10) so Save Image and Save Video share ONE copy rather
+    than each carrying its own near-identical version.
+    """
+    if not isinstance(extra, dict):
+        return extra
+    wf = extra.get("workflow")
+    if not isinstance(wf, dict) or not isinstance(wf.get("nodes"), list):
+        return extra
+    hit = False
+    new_nodes = []
+    for n in wf["nodes"]:
+        if (
+            isinstance(n, dict)
+            and n.get("type") == node_type
+            and isinstance(n.get("properties"), dict)
+            and prop_key in n["properties"]
+        ):
+            n = dict(n)
+            n["properties"] = {k: v for k, v in n["properties"].items() if k != prop_key}
+            hit = True
+        new_nodes.append(n)
+    if not hit:
+        return extra
+    # shallow copies all the way down to the list we changed - enough to leave
+    # the caller's object untouched, without deep-copying a whole graph per save
+    new_wf = dict(wf)
+    new_wf["nodes"] = new_nodes
+    new_extra = dict(extra)
+    new_extra["workflow"] = new_wf
+    return new_extra
+
+
 # ---- workflow metadata embedding ----
 
 def _build_pnginfo(prompt=None, workflow=None, extra_pnginfo=None, parameters=None):
