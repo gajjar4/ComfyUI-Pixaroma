@@ -209,6 +209,22 @@ class PixaromaSaveMp4:
         fps_int = max(1, int(round(float(fps))))
 
         frames = video_frames
+        # rgb24 promises ffmpeg exactly 3 bytes per pixel, and the raw stdin
+        # stream carries NO frame delimiters, so a tensor with any other channel
+        # count misaligns every frame boundary from the first frame on. Measured
+        # 2026-08-10: a 4-channel batch encoded with NO exception and NO decode
+        # error, just a wrong video (21670 bytes against the correct 16739);
+        # 1-channel the same at 6578. Silent corruption is worse than a crash
+        # because nothing tells the user, so refuse it the same way the
+        # even-dimensions check below does. This sits BEFORE the O_EXCL output
+        # claim, so a refusal cannot orphan a 0-byte file.
+        if frames.ndim != 4 or frames.shape[3] != 3:
+            raise ValueError(
+                f"[Pixaroma] Save Mp4 — video_frames must be a batch of RGB "
+                f"images shaped [batch, height, width, 3], got "
+                f"{tuple(frames.shape)}. If it carries transparency (RGBA), "
+                f"convert it to RGB before this node."
+            )
         n_frames, H, W, _ = frames.shape
 
         # yuv420p requires even dimensions; surface a clear error rather than
@@ -263,26 +279,41 @@ class PixaromaSaveMp4:
 
         # If audio is supplied, write it to a temp wav alongside so ffmpeg can
         # mux both inputs in a single pass.
+        # The WHOLE block is inside the try, not just the write - the shape
+        # checks and the makedirs are part of "preparing audio" too, and they
+        # were the hole. Nothing guarantees `audio` is the standard
+        # {"waveform", "sample_rate"} dict: it is an OPTIONAL input, and an
+        # any-type passthrough node (ours or anyone's) can hand over a list, a
+        # bare tensor or a string. `audio.get(...)` then raised AttributeError
+        # straight out of save() - AFTER out_path was claimed with O_EXCL, so
+        # the run died AND left a 0-byte mp4 orphaned in output/ forever,
+        # because the cleanup `finally` further down only wraps the encode.
+        # Reproduced with a list, a tensor and a string (2026-08-10). House
+        # style is to degrade to video-only, never to crash the workflow.
+        # Deliberately NO isinstance(audio, dict) gate: a legitimate mapping
+        # that is not literally a dict still works, and anything else lands in
+        # the except below and degrades with its reason printed.
         temp_audio_path = None
-        if audio is not None and audio.get("waveform") is not None and audio["waveform"].numel() > 0:
-            temp_audio_path = os.path.join(
-                folder_paths.get_temp_directory(),
-                f"pixaroma_save_mp4_{uuid.uuid4().hex}.wav",
-            )
-            os.makedirs(os.path.dirname(temp_audio_path), exist_ok=True)
-            try:
+        try:
+            if audio is not None and audio.get("waveform") is not None \
+                    and audio["waveform"].numel() > 0:
+                temp_audio_path = os.path.join(
+                    folder_paths.get_temp_directory(),
+                    f"pixaroma_save_mp4_{uuid.uuid4().hex}.wav",
+                )
+                os.makedirs(os.path.dirname(temp_audio_path), exist_ok=True)
                 _write_wav_pcm16(temp_audio_path, audio["waveform"], audio["sample_rate"])
-            except Exception as e:
-                # Don't leak the partial WAV, and don't fail the whole save just
-                # because audio prep failed - drop the audio and encode video only.
-                print(f"[Pixaroma] Save Mp4 — could not prepare audio ({e}); "
-                      f"encoding without it.")
-                if os.path.exists(temp_audio_path):
-                    try:
-                        os.remove(temp_audio_path)
-                    except OSError:
-                        pass
-                temp_audio_path = None
+        except Exception as e:
+            # Don't leak the partial WAV, and don't fail the whole save just
+            # because audio prep failed - drop the audio and encode video only.
+            print(f"[Pixaroma] Save Mp4 — could not prepare audio ({e}); "
+                  f"encoding without it.")
+            if temp_audio_path is not None and os.path.exists(temp_audio_path):
+                try:
+                    os.remove(temp_audio_path)
+                except OSError:
+                    pass
+            temp_audio_path = None
 
         # Embed the workflow (+ prompt) as the mp4's comment atom, so dragging the
         # video back into ComfyUI restores the graph. Via an FFMETADATA file (not a
