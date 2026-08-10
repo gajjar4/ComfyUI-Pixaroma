@@ -610,8 +610,21 @@ function updatePreview(node) {
     s = s.replace(/%width%/g, String(dims.w)).replace(/%height%/g, String(dims.h));
   }
   s = s.replace(/%batch_num%/g, "0");
-  // light display mirror of the Python sanitizer
+  // Light display mirror of the Python sanitizer (_safe_prefix +
+  // _sanitize_segment). The edge-trim and the fallback below were added
+  // 2026-08-10 after MEASURING the Python for the same inputs - an unwired
+  // %input% is the easy way to hit both, and the preview disagreed with the
+  // file that a Run actually wrote:
+  //     "_%counter%"  Python -> "001.png"    preview said "_001.png"
+  //     "%input%"     Python -> "image_001"  preview said just ".png"
+  // The one line users are told to trust must not be the line that lies.
   s = s.replace(/\\/g, "/").replace(/[<>:"|?*]/g, "_").replace(/_{2,}/g, "_");
+  s = s
+    .split("/")
+    .map((seg) => seg.trim().replace(/^_+|_+$/g, ""))
+    .filter(Boolean) // Python drops empty segments (trailing / doubled slashes)
+    .join("/");
+  if (!s) s = "image_%counter%"; // _safe_prefix returned None -> node's fallback
   const ext = formatDef(st.format).ext;
   const digits = Math.max(1, Math.min(8, parseInt(st.counterDigits, 10) || 3));
   let rel;

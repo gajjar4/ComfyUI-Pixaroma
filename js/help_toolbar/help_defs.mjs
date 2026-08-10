@@ -887,6 +887,40 @@ const HELP = {
         body: "Saves every image it receives to the folder you choose: type or paste any path, click `Browse` to pick one with the normal system dialog, or leave the field empty to use ComfyUI's output folder. The `Will save as` line always shows the exact file the next run will create, so complex naming patterns are never a surprise.\n\nBatches are handled automatically: every frame is saved with the counter increasing, and files never overwrite existing ones. Type `/` in the name to create subfolders, so `%date:yyyy-MM-dd%/image_%counter%` makes a folder per day.\n\nThe saved images show in a big preview on the node, so you do not need a separate preview node: one image fills the area, a batch shows as a grid. Click a picture in the grid to view it big, click it (or hover for the `◀ ▶` arrows) to flip through, and `✕` returns to the grid. Very large batches preview the first 16 images (every frame still saves). Resize the node to make the preview bigger.",
       },
       {
+        heading: "Examples: what to type, and what you get",
+        body: "Every one of these was run and the result copied from the node's own `Will save as` line, with a Text Pixaroma holding `bunny` wired into `name`. Type the middle column into the Filename box, or click the chip named in it.",
+        table: {
+          headers: ["What you want", "Filename box", "What lands on disk"],
+          rows: [
+            ["Just a numbered file", "image_%counter%", "image_001.png"],
+            ["Keep the original picture's name", "%input%", "bunny.png"],
+            ["Original name, numbered so nothing clashes", "%input%_%counter%", "bunny_001.png"],
+            ["A folder for each picture you feed in", "click + Input folder", "bunny\\image_001.png"],
+            ["A folder for each day", "click + Date folder", "2026-08-10\\image_001.png"],
+            ["The date in the name instead", "%date:yyyy-MM-dd%_%counter%", "2026-08-10_001.png"],
+            ["Group by size", "%width%x%height%_%counter%", "1024x1024_001.png"],
+            ["A folder per picture, then per day", "%input%/%date:yyyy-MM-dd%/shot_%counter%", "bunny\\2026-08-10\\shot_001.png"],
+          ],
+        },
+      },
+      {
+        heading: "The name input, in plain English",
+        body: "The `name` dot is optional. Wire any text into it and `%input%` in the Filename box becomes that text: wire the `filename` output of Load Image Pixaroma and your results keep the original picture's name, or wire a Text Pixaroma and they all get the word you typed.\n\nThe part that trips everyone up is that `%input%` on its own is just TEXT. What decides whether you get a folder is the slash, exactly like typing one yourself:",
+        defs: [
+          ["%input%_%counter%", "bunny_001.png - the wired text is part of the FILE NAME."],
+          ["%input%/image_%counter%", "bunny\\image_001.png - the slash after it makes it a FOLDER. This is all the `+ Input folder` chip does: it puts `%input%/` at the front for you."],
+        ],
+      },
+      {
+        heading: "When the wired text already contains folders",
+        body: "Only relevant if what you wire in looks like `portraits/cat` rather than `cat` - which happens with Load Images from Folder when `Include subfolders` is on.\n\nBy default those folders are squashed into the name, so two pictures called cat.png from different folders cannot overwrite each other:",
+        defs: [
+          ["default", "portraits/cat becomes portraits_cat_001.png - one flat folder, safe."],
+          ["Keep folders from the wired name (settings)", "portraits\\cat_001.png - your source folders are rebuilt in the save folder. Switch on `Keep folder structure in the name` in Load Images from Folder too, or it never sends the folders in the first place."],
+          ["Nothing wired at all", "`%input%` simply vanishes, and the leftovers are tidied up: `%input%_%counter%` gives 001.png (the stray underscore is trimmed) and `%input%` on its own falls back to image_001.png rather than a file with no name. Nothing breaks, so it is safe to leave the token in a pattern you sometimes wire up and sometimes do not."],
+        ],
+      },
+      {
         heading: "Filename tokens (click the chips to insert them)",
         defs: [
           ["%input%", "The wired name input, e.g. the filename from Load Image Pixaroma, so results keep the original name. To put every picture in a folder named after that text, click the `+ Input folder` chip: it puts `%input%/` in front, and the slash is what makes the folder. Separately, if the wired text ALREADY contains folders (portraits/cat), those are normally squashed to portraits_cat, and `Keep folders from the wired name` in the settings keeps them instead."],
