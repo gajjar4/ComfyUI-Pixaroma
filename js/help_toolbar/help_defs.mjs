@@ -1114,6 +1114,10 @@ const HELP = {
         ],
       },
       {
+        heading: "Why there is no 100 percent",
+        body: "Video is always compressed. An mp4 stores what your eye will accept, not the frames themselves, which is why a few seconds of video is under a megabyte instead of the fifty or so the raw frames would take. So there is no setting on this node, or on any other video node, that saves your frames untouched.\n\nThat is why the Quality slider shows a word rather than a percentage. High is the setting where the difference stops being visible, and it is where every serious node lands: Save Mp4 Pixaroma uses it, and so does Video Helper Suite's Video Combine. ComfyUI's own Save Video node is actually a little softer than that by default. Going above High is not wrong, it just makes a bigger file for something you are unlikely to see.\n\nIf you want the picture to hold up to editing and grading afterwards, the setting that genuinely helps is MP4 HQ, because 10-bit keeps gradients smooth. That does more for you than pushing the quality slider up.",
+      },
+      {
         heading: "About 10-bit",
         body: "ComfyUI works in far more than 8 bits internally, so saving to 8-bit throws real information away. Where you notice it is banding: a sky or a fade that should be smooth comes out in visible steps. 10-bit keeps that smoothness, and it helps again if you are going to grade the footage afterwards. It does NOT make the picture sharper, which is what people usually expect.\n\nColour depth lives in the settings and only applies to MP4 HQ. MP4 stays 8-bit on purpose: 10-bit H.264 exists but almost nothing can play it, so offering it would just hand you a file that will not open.",
       },
@@ -1155,7 +1159,7 @@ const HELP = {
       {
         heading: "In the settings",
         defs: [
-          ["Quality", "1 to 100. Higher keeps more detail and makes a bigger file. 75 is the default and matches what Save Mp4 uses, so switching between the two nodes changes nothing."],
+          ["Quality", "Shows a word beside the number: Small file, Medium, High or Maximum. It is NOT a percentage. High is the default, it is the point where you cannot see the difference, and it is the same setting Save Mp4 and Video Helper Suite use, so switching between them changes nothing. Winding it to Maximum mostly just grows the file."],
           ["Colour depth", "8 or 10 bit, for MP4 HQ only."],
           ["Trim to audio", "Ends the video exactly where the sound ends, for when the audio is the master. Off keeps every frame and the sound simply stops when it stops."],
           ["Save workflow inside the video", "Lets you drag the file back into ComfyUI to rebuild the graph. Reading it back needs a video pack such as Video Helper Suite installed; saving it always works."],

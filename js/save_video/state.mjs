@@ -95,6 +95,22 @@ export function qualityToCrf(quality, fmtId) {
   return Math.floor(f.crfBest + ((100 - q) / 99) * span + 0.5);
 }
 
+// A WORD for the quality number, because "75" next to the word "Quality" reads
+// as a percentage and is not one - the person this node was built for read it as
+// "losing 25%". It is a position on a dial that maps to CRF, and no mp4 is ever
+// uncompressed. The bands line up with the CRF ranges people actually name:
+//   Maximum   q90-100  -> crf 14-16   bigger files, no visible gain for most work
+//   High      q65-89   -> crf 17-20   contains the default 75 -> crf 19
+//   Medium    q35-64   -> crf 21-26
+//   Small file q1-34   -> crf 27-32
+export function qualityLabel(q) {
+  const v = Math.max(1, Math.min(100, parseInt(q, 10) || 75));
+  if (v >= 90) return "Maximum";
+  if (v >= 65) return "High";
+  if (v >= 35) return "Medium";
+  return "Small file";
+}
+
 // JS mirror of node_save_video.py::format_duration. Whole seconds print plain,
 // anything else gets one decimal with a HYPHEN, because a dot in the middle of
 // a filename reads like a file extension.

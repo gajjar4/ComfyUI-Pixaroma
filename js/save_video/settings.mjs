@@ -5,7 +5,9 @@
 // follow loop and drag come from js/shared/node_panel.mjs, which carries the
 // two bug fixes they earned; this file owns only its singleton state and rows.
 
-import { readState, writeState, FORMATS, formatDef, visibleFormats, qualityToCrf } from "./state.mjs";
+import {
+  readState, writeState, FORMATS, formatDef, visibleFormats, qualityToCrf, qualityLabel,
+} from "./state.mjs";
 import { injectCSS, el } from "./ui.mjs";
 import { createAccentSection } from "../shared/node_settings.mjs";
 import { followNode, placeBeside, getNodeScreenRect, makeDraggable } from "../shared/node_panel.mjs";
@@ -179,8 +181,10 @@ export function openSettingsPanel(node, onChange) {
   // someone who knows the term can still see what it maps to; qualityToCrf is a
   // mirror of the Python, so the number shown is the number used.
   const qWrap = section(body, "Quality",
-    "Higher keeps more detail and makes a bigger file. 75 is the default and " +
-    "matches what Save Mp4 uses.");
+    "Not a percentage: video is always compressed, so there is no setting that " +
+    "keeps the frames untouched. High is the point where you cannot see the " +
+    "difference, and it is the same setting Save Mp4 and Video Helper Suite use. " +
+    "Going higher mostly grows the file.");
   const qRow = el("div", "pix-sv-prow");
   const qSl = el("input", "pix-sv-qsl");
   qSl.type = "range";
@@ -191,7 +195,11 @@ export function openSettingsPanel(node, onChange) {
   const qVal = el("span", "pix-sv-qval", "");
   const showQ = () => {
     const st = readState(node);
-    qVal.textContent = `${qSl.value}  (crf ${qualityToCrf(qSl.value, st.format)})`;
+    // the WORD is the readout; the encoder's own number stays available on hover
+    // for anyone who knows what CRF means, without teaching a backwards scale
+    qVal.textContent = `${qSl.value} · ${qualityLabel(qSl.value)}`;
+    qVal.title = `Encoder setting: CRF ${qualityToCrf(qSl.value, st.format)} (lower is higher quality)`;
+    qSl.title = qVal.title;
   };
   showQ();
   qSl.oninput = () => {
