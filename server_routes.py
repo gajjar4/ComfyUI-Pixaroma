@@ -2162,6 +2162,35 @@ async def api_save_image_file(request):
     return web.FileResponse(path, headers={"Content-Type": ct} if ct else None)
 
 
+@PromptServer.instance.routes.get("/pixaroma/api/save_video/file")
+async def api_save_video_file(request):
+    """Serve a VIDEO this server session just saved, looked up by an opaque
+    token (exact-path registry in node_save_video, filled ONLY by the save node
+    itself). No path arrives from the client, so there is no traversal surface.
+    Powers the node's player for files saved outside ComfyUI's folders, which
+    /view cannot reach. Read-only; tokens die with the server process.
+
+    Two things this route MUST get right, both measured rather than assumed:
+
+    * RANGE REQUESTS. A <video> element seeks by asking for a byte range, so
+      without a 206 the scrub bar cannot move. aiohttp's FileResponse handles
+      Range itself, and passing an explicit Content-Type header does not
+      disturb it - verified with a real partial request.
+    * CONTENT-TYPE. Stated here rather than left to the platform's mimetype
+      table: the sibling image route was MEASURED answering
+      application/octet-stream for a .webp on this box even though this
+      Python's mimetypes module knows the extension, and octet-stream makes a
+      browser download the file instead of playing it.
+    """
+    from .nodes.node_save_video import resolve_serve_token
+    path = resolve_serve_token(request.query.get("t", ""))
+    if not path or not os.path.isfile(path):
+        return web.Response(status=404, text="unknown or expired video token")
+    _CT = {".mp4": "video/mp4", ".mov": "video/quicktime", ".webm": "video/webm"}
+    ct = _CT.get(os.path.splitext(path)[1].lower(), "video/mp4")
+    return web.FileResponse(path, headers={"Content-Type": ct})
+
+
 @PromptServer.instance.routes.get("/pixaroma/api/save_image/next_counter")
 async def api_save_image_next_counter(request):
     """Next %counter% value for the node's live 'Will save as' preview.
