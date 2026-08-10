@@ -301,8 +301,8 @@ export function openSettingsPanel(node, onChange) {
     switchRow(
       node,
       "inputSubfolders",
-      "Wired name can make folders",
-      "Normally a name wired in gets its folders flattened (portraits/cat becomes portraits_cat). Turn this on to keep them, so the folders of the images you loaded are rebuilt inside your save folder. Pair it with 'Keep the folder structure in the name' on Load Images from Folder"
+      "Keep folders from the wired name",
+      "Only does anything when the text wired in ALREADY contains folders, like portraits/cat: normally that is flattened to portraits_cat, and this keeps it, so a folder of subfolders comes back arranged the same way. Pair it with 'Keep folder structure in the name' on Load Images from Folder. To put every picture in a folder named after the wired text instead, use the + Input folder chip on the node"
     )
   );
 

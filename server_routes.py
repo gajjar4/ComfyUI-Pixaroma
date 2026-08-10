@@ -2150,7 +2150,16 @@ async def api_save_image_file(request):
     path = resolve_serve_token(request.query.get("t", ""))
     if not path or not os.path.isfile(path):
         return web.Response(status=404, text="unknown or expired preview token")
-    return web.FileResponse(path)
+    # State the image type ourselves instead of leaving it to the platform's
+    # mimetype table. MEASURED 2026-08-10 on this box: the same route answered
+    # image/png for a .png and application/octet-stream for a .webp, even
+    # though this Python's own mimetypes module knows .webp perfectly well. The
+    # <img> preview survives either way because browsers sniff images, but the
+    # node's "Open" button does window.open on this URL, and octet-stream makes
+    # the browser DOWNLOAD the file instead of showing it.
+    _CT = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp"}
+    ct = _CT.get(os.path.splitext(path)[1].lower())
+    return web.FileResponse(path, headers={"Content-Type": ct} if ct else None)
 
 
 @PromptServer.instance.routes.get("/pixaroma/api/save_image/next_counter")

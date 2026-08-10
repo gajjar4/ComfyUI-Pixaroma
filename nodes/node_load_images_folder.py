@@ -37,7 +37,7 @@ DEFAULT_STATE = {
     # relative path ("sub/cat.png" -> "sub_cat") so a Save node cannot overwrite
     # two same-named files from different folders. Turn this on to keep the real
     # path instead ("sub/cat"), which lets Save Image Pixaroma rebuild the same
-    # folder tree - it has a matching "Wired name can make folders" option, and
+    # folder tree - it has a matching "Keep folders from the wired name", and
     # only rebuilds folders when BOTH are on, so this stays safe by default.
     "keepFolders": False,
     "sort": "name",

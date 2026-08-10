@@ -120,7 +120,7 @@ export function expandNativeTokens(s) {
 
 // Mirror of the Python cleanup for a wired `name` value: strip a known media
 // extension ("cat.png" -> "cat") and then either neutralize the path
-// separators (default) or keep them, when "Wired name can make folders" is on
+// separators (default) or keep them, when "Keep folders from the wired name" is on
 // — same branch as node_save_image.py::save, so the "Will save as" line shows
 // the folders a run would really create.
 export function cleanInputName(v, keepFolders = false) {

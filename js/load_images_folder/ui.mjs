@@ -202,7 +202,7 @@ export function openPickGallery(node, anchorEl, ctx) {
     `<div class="pix-lif-gal-body"><div class="pix-lif-grid"></div></div>` +
     `<div class="pix-lif-gal-foot">` +
     `<div class="pix-lif-subf" title="Also include images inside sub-folders"><span class="box"></span> Include subfolders</div>` +
-    `<div class="pix-lif-subf pix-lif-keepf" title="Normally an image inside a sub-folder comes out as portraits_cat, so two files with the same name cannot clash. Turn this on to keep the real path (portraits/cat) and let Save Image Pixaroma rebuild the same folders - switch on 'Wired name can make folders' there too."><span class="box"></span> Keep folder structure in the name</div>` +
+    `<div class="pix-lif-subf pix-lif-keepf" title="Normally an image inside a sub-folder comes out as portraits_cat, so two files with the same name cannot clash. Turn this on to keep the real path (portraits/cat) and let Save Image Pixaroma rebuild the same folders - switch on 'Keep folders from the wired name' there too."><span class="box"></span> Keep folder structure in the name</div>` +
     `<div class="pix-lif-tbtn" data-act="sort" title="Change the sort order">Sort: Name ↑</div>` +
     `<div class="pix-lif-done" data-act="done" title="Apply this selection and close">Done</div>` +
     `</div>`;

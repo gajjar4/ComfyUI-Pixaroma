@@ -142,6 +142,63 @@ _EXIF_MAX = 64000  # JPEG APP1 segment tops out ~65 KB; Pillow raises
                    # "EXIF data is too long" past it (verified empirically)
 
 
+def _strip_stale_preview(extra):
+    """Return a copy of extra_pnginfo with every Pixaroma Save Image node's
+    remembered preview (`pixSiLastRun`) removed.
+
+    WHY (reported 2026-08-10): ComfyUI freezes the workflow into the picture at
+    QUEUE time, which is BEFORE that picture exists. So `pixSiLastRun` - the
+    node's memory of what the last run produced - is still the PREVIOUS run's
+    file. Measured on a real pair: the workflow inside image_..._001.webp names
+    image_..._001.png, the run before it. Drag that file into ComfyUI and the
+    node confidently shows a different picture and says "saved 1 image" about a
+    file you did not open. It corrects itself on the next Run, which is exactly
+    what made it look like a glitch rather than a bug.
+
+    Core's own SaveImage shows NOTHING in that situation, so leaving ours to
+    show the wrong thing is worse than core. Removing the key just means the
+    node comes up empty ("Run the workflow to ...") until the first run.
+
+    Only the EMBEDDED copy loses it. The browser keeps its own
+    `node.properties.pixSiLastRun`, which is what a workflow-tab switch
+    restores from, and the saved .json workflow is written from the browser too
+    - so both of those are untouched and keep working exactly as before.
+
+    ⚠️ MUST COPY, NEVER MUTATE. ComfyUI hands the SAME extra_pnginfo object to
+    every node in a run (`extra_data.get('extra_pnginfo')` in execution.py), so
+    stripping in place would silently edit what a SECOND Save Image node - or
+    Preview Image - embeds in its own file. That bug would look identical in
+    review and only show up for someone with two save nodes.
+    """
+    if not isinstance(extra, dict):
+        return extra
+    wf = extra.get("workflow")
+    if not isinstance(wf, dict) or not isinstance(wf.get("nodes"), list):
+        return extra
+    hit = False
+    new_nodes = []
+    for n in wf["nodes"]:
+        if (
+            isinstance(n, dict)
+            and n.get("type") == "PixaromaSaveImage"
+            and isinstance(n.get("properties"), dict)
+            and "pixSiLastRun" in n["properties"]
+        ):
+            n = dict(n)
+            n["properties"] = {k: v for k, v in n["properties"].items() if k != "pixSiLastRun"}
+            hit = True
+        new_nodes.append(n)
+    if not hit:
+        return extra
+    # shallow copies all the way down to the list we changed - enough to leave
+    # the caller's object untouched, without deep-copying a whole graph per save
+    new_wf = dict(wf)
+    new_wf["nodes"] = new_nodes
+    new_extra = dict(extra)
+    new_extra["workflow"] = new_wf
+    return new_extra
+
+
 def _build_jpeg_exif(prompt=None, workflow=None, parameters=None, max_bytes=None):
     """EXIF bytes embedding workflow + prompt, using the community convention
     ComfyUI reads for WebP (0x010E ImageDescription = 'Workflow:<json>',
@@ -238,7 +295,7 @@ class PixaromaSaveImage:
         "in to reload the workflow), or JPG (small and universal, no transparency, and ComfyUI cannot reload "
         "a workflow from it). Open the settings with the gear on the node or by right-clicking it: date style, "
         "counter digits, quality, WebP lossless, workflow embedding, Civitai generation info, which buttons the "
-        "node shows, and whether a wired name may create folders. Batches save every frame with the counter "
+        "node shows, and whether folders in a wired name are kept. Batches save every frame with the counter "
         "increasing.\n\n"
         "Add Civitai generation info (right-click) also writes the settings in the format Civitai reads, "
         "so an image posted there shows the checkpoint, the LoRAs and their strengths, plus steps, seed, "
@@ -260,7 +317,7 @@ class PixaromaSaveImage:
                 "images": ("IMAGE", {"tooltip": "Image (or batch) to save. Every frame in a batch is written, with the counter increasing per file."}),
             },
             "optional": {
-                "name": ("STRING", {"forceInput": True, "tooltip": "Optional text used by the %input% token in the filename, e.g. wire the filename output of Load Image Pixaroma here to keep the original name. Any folders in the wired text become underscores unless you turn on 'Wired name can make folders' in the settings, which rebuilds the source's folders inside your save folder."}),
+                "name": ("STRING", {"forceInput": True, "tooltip": "Optional text used by the %input% token in the filename, e.g. wire the filename output of Load Image Pixaroma here to keep the original name. To save into a folder named after this text, click the + Input folder chip. If the text already contains folders they become underscores, unless you turn on 'Keep folders from the wired name' in the settings."}),
             },
             "hidden": {
                 "SaveImageState": "STRING",
@@ -349,7 +406,9 @@ class PixaromaSaveImage:
         if not save_on:
             temp_dir = folder_paths.get_temp_directory()
             os.makedirs(temp_dir, exist_ok=True)
-            pnginfo = _build_pnginfo(prompt=prompt, extra_pnginfo=extra_pnginfo)
+            # same cleaning as the real save below: a preview frame embeds a
+            # workflow too, so it must not carry the previous run's preview
+            pnginfo = _build_pnginfo(prompt=prompt, extra_pnginfo=_strip_stale_preview(extra_pnginfo))
             entries = []
             for i, tensor in enumerate(images):
                 if i >= _PREVIEW_MAX:
@@ -377,7 +436,7 @@ class PixaromaSaveImage:
             input_name = name if isinstance(name, str) else str(name)
             input_name = _MEDIA_EXT_RE.sub("", input_name.strip())
             if state.get("inputSubfolders"):
-                # "Wired name can make folders" is ON: keep the separators so a
+                # "Keep folders from the wired name" is ON: keep the separators so a
                 # source path like "portraits/cat" rebuilds that folder inside
                 # the save folder (the point of the option - Load Images from
                 # Folder can hand over the real relative path).
@@ -415,16 +474,21 @@ class PixaromaSaveImage:
             except Exception as e:
                 print("[Save Image Pixaroma] Civitai metadata skipped: %s" % e)
 
+        # The picture must not carry the PREVIOUS run's preview - see
+        # _strip_stale_preview. Done once here so the PNG, the JPG/WebP EXIF and
+        # the Civitai reader below all embed the same cleaned copy.
+        embed_extra = _strip_stale_preview(extra_pnginfo)
+
         pnginfo = None
         exif_bytes = None
         if fmt == "png" and (embed or a1111):
             pnginfo = _build_pnginfo(
                 prompt=prompt if embed else None,
-                extra_pnginfo=extra_pnginfo if embed else None,
+                extra_pnginfo=embed_extra if embed else None,
                 parameters=a1111,
             )
         elif fmt in ("jpg", "webp") and (embed or a1111):
-            wf = extra_pnginfo.get("workflow") if isinstance(extra_pnginfo, dict) else None
+            wf = embed_extra.get("workflow") if isinstance(embed_extra, dict) else None
             exif_bytes = _build_jpeg_exif(
                 prompt=prompt if embed else None,
                 workflow=wf if embed else None,

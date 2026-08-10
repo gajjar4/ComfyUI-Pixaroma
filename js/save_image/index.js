@@ -55,6 +55,11 @@ const CHIPS = [
   { label: "+ Batch #", tok: "%batch_num%", title: "Insert the frame's position inside a batch (0, 1, 2 ...)" },
   { label: "+ Model", dyn: "model", title: "Insert the model's name: finds the model loader in this workflow automatically" },
   { label: "+ Date folder", dyn: "datefolder", title: "Put a folder per day in front of the name, e.g. 2026-07-03/image" },
+  // The one-click version of "put each picture in a folder named after what is
+  // wired in". This is PATTERN text, so the slash makes a folder on its own and
+  // it does not need the "Keep folders from the wired name" setting - that
+  // setting is a different job (keeping folders the wired text ALREADY has).
+  { label: "+ Input folder", dyn: "inputfolder", title: "Put a folder named after the wired name input in front, e.g. bunny/image" },
 ];
 
 // Find a model loader anywhere in the graph (subgraphs too) and build a
@@ -662,19 +667,33 @@ function applyButtonVisibility(node, st) {
   show(ui.btnCopy, st.showCopy !== false);
   show(ui.btnFolder, st.showFolder !== false);
   const vis = visibleFormats(st);
-  for (const f of FORMATS) show(ui.fmtBtns[f.id], vis.some((v) => v.id === f.id));
+  // The ACTIVE format's button is always shown, even if it was hidden. A state
+  // where the active format has no button leaves the face with no lit pill and
+  // no way to tell what you are saving as - and the auto-switch below cannot
+  // rescue it during a workflow LOAD, because writing state there would flag a
+  // clean workflow modified (Vue Compat #18). Showing the button costs nothing,
+  // needs no write, and self-corrects: pick another format and it disappears.
+  const activeId = formatDef(st.format).id;
+  for (const f of FORMATS) show(ui.fmtBtns[f.id], f.id === activeId || vis.some((v) => v.id === f.id));
   // A single remaining format is not a choice, so the pill would just be a
   // label the user can click to no effect - hide the whole group instead. The
-  // format still applies; it is shown in the "Will save as" extension.
-  show(ui.segFmt, vis.length > 1);
+  // format still applies; it is shown in the "Will save as" extension. Counts
+  // the ACTUAL buttons on screen, so a forced-visible active format keeps the
+  // group up rather than leaving one lonely pill in a hidden container.
+  const onScreen = FORMATS.filter((f) => f.id === activeId || vis.some((v) => v.id === f.id));
+  show(ui.segFmt, onScreen.length > 1);
   // The active format was just hidden: fall back to the first visible one, or
   // the node would keep writing a format with no button to change it.
-  if (!vis.some((v) => v.id === formatDef(st.format).id) && !isGraphLoading()) {
+  if (!vis.some((v) => v.id === activeId) && !isGraphLoading()) {
     const next = vis[0].id;
     const cur = readState(node);
     cur.format = next;
     writeState(node, cur);
     st.format = next;
+    // the extension in "Will save as" just changed, so refresh it. Only from
+    // this branch: it cannot run during a load (guarded above), and it is the
+    // one place inside this DOM-only function where the format really moved.
+    queueMicrotask(() => updatePreview(node));
   }
 }
 
@@ -775,11 +794,11 @@ function wireEvents(node, ui) {
     chip.addEventListener("click", () => {
       // + Date inserts the user's preferred order (right-click settings)
       const style = readState(node).dateStyle || DEFAULT_STATE.dateStyle;
-      if (c.dyn === "datefolder") {
+      if (c.dyn === "datefolder" || c.dyn === "inputfolder") {
         // a folder goes in FRONT of the name, not at the cursor
         const st = readState(node);
         const cur = st.pattern || "";
-        const prefix = "%date:" + style + "%/";
+        const prefix = c.dyn === "inputfolder" ? "%input%/" : "%date:" + style + "%/";
         if (!cur.startsWith(prefix)) {
           st.pattern = prefix + cur;
           writeState(node, st);
