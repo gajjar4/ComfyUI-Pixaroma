@@ -42,7 +42,14 @@ export const FORMATS = [
 ];
 
 export function formatDef(id) {
-  return FORMATS.find((f) => f.id === id) || FORMATS[0];
+  // Match the Python's tolerance: node_save_image.py accepts "jpeg" as well as
+  // "jpg". Without the alias a state blob holding "jpeg" fell through to
+  // FORMATS[0], so the face lit the PNG pill and previewed a .png name while a
+  // Run really wrote a .jpg - silent, and wrong in the direction that loses
+  // transparency. Cheaper to accept the alias than to hunt for who wrote it.
+  const key = String(id ?? "").toLowerCase();
+  const norm = key === "jpeg" ? "jpg" : key;
+  return FORMATS.find((f) => f.id === norm) || FORMATS[0];
 }
 
 // Which formats the user left switched on, never empty: hiding the last one

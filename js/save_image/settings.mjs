@@ -67,6 +67,10 @@ function startFollowing(panel, node) {
   let lastScale = null, lastX = null, lastY = null;
   const tick = () => {
     if (!_panel || _panel !== panel || !panel.isConnected) { _followRaf = null; return; }
+    // also stop if the NODE is gone. The checks above are all about the panel,
+    // so a graph replace that skipped this node's onRemoved would otherwise
+    // leave this polling every frame against a node no longer in the graph.
+    if (app.graph?.getNodeById?.(node.id) !== node) { _followRaf = null; return; }
     _followRaf = requestAnimationFrame(tick);
     if (_userMoved) return; // dragged on purpose: leave it exactly there
     const ds = app.canvas?.ds;
@@ -93,20 +97,36 @@ function makeDraggable(panel, handle) {
     const r = panel.getBoundingClientRect();
     const ox = e.clientX - r.left;
     const oy = e.clientY - r.top;
+    // Both defences against a LOST pointerup, which this pack has already been
+    // bitten by once on the Help window's resize handle: the pointer leaves the
+    // viewport, or something else takes capture mid-drag, the release is never
+    // seen, and the panel follows the cursor forever with no way to put it
+    // down. Synthetic events never reproduce it, so it only ever shows up as a
+    // human bug report. It matters more here than it used to: `_userMoved` is
+    // latched above, so a stuck drag also permanently disables the follow loop
+    // for this panel.
+    try { handle.setPointerCapture(e.pointerId); } catch { /* not fatal */ }
+    let done = false;
     const move = (ev) => {
-      if (!panel.isConnected) {
-        up();
-        return;
-      }
+      if (!panel.isConnected) { up(); return; }
+      // the primary button is no longer held: we missed the release
+      if (!(ev.buttons & 1)) { up(); return; }
       panel.style.left = Math.max(0, Math.min(window.innerWidth - panel.offsetWidth, ev.clientX - ox)) + "px";
       panel.style.top = Math.max(0, Math.min(window.innerHeight - panel.offsetHeight, ev.clientY - oy)) + "px";
     };
     const up = () => {
+      if (done) return; // idempotent: the guard above can call this too
+      done = true;
+      try { handle.releasePointerCapture(e.pointerId); } catch { /* already gone */ }
       window.removeEventListener("pointermove", move, true);
       window.removeEventListener("pointerup", up, true);
+      window.removeEventListener("pointercancel", up, true);
+      handle.removeEventListener("lostpointercapture", up);
     };
     window.addEventListener("pointermove", move, true);
     window.addEventListener("pointerup", up, true);
+    window.addEventListener("pointercancel", up, true);
+    handle.addEventListener("lostpointercapture", up);
   });
 }
 

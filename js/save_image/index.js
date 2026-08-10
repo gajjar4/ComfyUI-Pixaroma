@@ -610,20 +610,47 @@ function updatePreview(node) {
     s = s.replace(/%width%/g, String(dims.w)).replace(/%height%/g, String(dims.h));
   }
   s = s.replace(/%batch_num%/g, "0");
-  // Light display mirror of the Python sanitizer (_safe_prefix +
-  // _sanitize_segment). The edge-trim and the fallback below were added
-  // 2026-08-10 after MEASURING the Python for the same inputs - an unwired
-  // %input% is the easy way to hit both, and the preview disagreed with the
-  // file that a Run actually wrote:
-  //     "_%counter%"  Python -> "001.png"    preview said "_001.png"
-  //     "%input%"     Python -> "image_001"  preview said just ".png"
-  // The one line users are told to trust must not be the line that lies.
+  // Display mirror of the Python sanitizer - keep in lockstep with
+  // _safe_prefix + _sanitize_segment in nodes/_save_helpers.py.
+  //
+  // This line is the one thing the node tells users to trust, so every gap
+  // between the two is a lie about where their file goes. A first pass at this
+  // mirror covered only some of the rules, and a review found the rest by
+  // running both sides on the same inputs. MEASURED disagreements, all fixed
+  // here (Python left, old preview right):
+  //     "/myfolder/name_%counter%"  image_001.png    myfolder\name_001.png
+  //     "../up/name_%counter%"      image_001.png    ..\up\name_001.png
+  //     "shot_%counter%."           shot_001.png     shot_001..png
+  //     "_%counter%"                001.png          _001.png
+  //     "%input%" unwired           image_001.png    .png
+  //
+  // Deliberately NOT mirrored, because the trigger is vanishingly narrow and
+  // each adds surface to this hot path: the Windows reserved-device-name
+  // suffix (a segment resolving to exactly CON/NUL/COM1/...), control
+  // characters inside a wired name, and the 256/100 char length caps.
   s = s.replace(/\\/g, "/").replace(/[<>:"|?*]/g, "_").replace(/_{2,}/g, "_");
-  s = s
-    .split("/")
-    .map((seg) => seg.trim().replace(/^_+|_+$/g, ""))
-    .filter(Boolean) // Python drops empty segments (trailing / doubled slashes)
-    .join("/");
+  // _safe_prefix refuses the WHOLE pattern for these two, rather than tidying
+  // them - the node then falls back to "image_%counter%".
+  const segs = s.split("/");
+  if (s.startsWith("/") || segs.some((p) => p === "..")) {
+    s = "";
+  } else {
+    s = segs
+      // loop until stable: edge spaces, edge underscores and trailing dots can
+      // shadow each other, exactly as the Python comment describes ("test._"
+      // needs two passes)
+      .map((seg) => {
+        let prev = null;
+        let cur = seg;
+        while (prev !== cur) {
+          prev = cur;
+          cur = cur.trim().replace(/^_+|_+$/g, "").replace(/[. ]+$/, "");
+        }
+        return cur;
+      })
+      .filter(Boolean) // Python drops empty segments (trailing / doubled slashes)
+      .join("/");
+  }
   if (!s) s = "image_%counter%"; // _safe_prefix returned None -> node's fallback
   const ext = formatDef(st.format).ext;
   const digits = Math.max(1, Math.min(8, parseInt(st.counterDigits, 10) || 3));
@@ -680,24 +707,13 @@ function applyButtonVisibility(node, st) {
   show(ui.btnCopy, st.showCopy !== false);
   show(ui.btnFolder, st.showFolder !== false);
   const vis = visibleFormats(st);
-  // The ACTIVE format's button is always shown, even if it was hidden. A state
-  // where the active format has no button leaves the face with no lit pill and
-  // no way to tell what you are saving as - and the auto-switch below cannot
-  // rescue it during a workflow LOAD, because writing state there would flag a
-  // clean workflow modified (Vue Compat #18). Showing the button costs nothing,
-  // needs no write, and self-corrects: pick another format and it disappears.
-  const activeId = formatDef(st.format).id;
-  for (const f of FORMATS) show(ui.fmtBtns[f.id], f.id === activeId || vis.some((v) => v.id === f.id));
-  // A single remaining format is not a choice, so the pill would just be a
-  // label the user can click to no effect - hide the whole group instead. The
-  // format still applies; it is shown in the "Will save as" extension. Counts
-  // the ACTUAL buttons on screen, so a forced-visible active format keeps the
-  // group up rather than leaving one lonely pill in a hidden container.
-  const onScreen = FORMATS.filter((f) => f.id === activeId || vis.some((v) => v.id === f.id));
-  show(ui.segFmt, onScreen.length > 1);
-  // The active format was just hidden: fall back to the first visible one, or
-  // the node would keep writing a format with no button to change it.
-  if (!vis.some((v) => v.id === activeId) && !isGraphLoading()) {
+  // FIRST correct the state, THEN paint from it. The active format was just
+  // hidden, so fall back to the first visible one - otherwise the node keeps
+  // writing a format with no button to change it. Doing this before the paint
+  // matters: computing `activeId` first left the just-hidden format's button on
+  // screen, unlit, until some later action happened to re-run syncFace (found
+  // in review; close the panel right after the click and it stayed indefinitely).
+  if (!vis.some((v) => v.id === formatDef(st.format).id) && !isGraphLoading()) {
     const next = vis[0].id;
     const cur = readState(node);
     cur.format = next;
@@ -708,6 +724,21 @@ function applyButtonVisibility(node, st) {
     // one place inside this DOM-only function where the format really moved.
     queueMicrotask(() => updatePreview(node));
   }
+  // The ACTIVE format's button is always shown, even if it was hidden. That
+  // state is unreachable through the UI now that the correction above runs
+  // first, but a LOAD can still deliver it (the correction is rightly skipped
+  // during a load, since writing state there would flag a clean workflow
+  // modified - Vue Compat #18), and a face with no lit pill gives no way to
+  // tell what you are saving as. Showing the button needs no write.
+  const activeId = formatDef(st.format).id;
+  for (const f of FORMATS) show(ui.fmtBtns[f.id], f.id === activeId || vis.some((v) => v.id === f.id));
+  // A single remaining format is not a choice, so the pill would just be a
+  // label the user can click to no effect - hide the whole group instead. The
+  // format still applies; it is shown in the "Will save as" extension. Counts
+  // the ACTUAL buttons on screen, so a forced-visible active format keeps the
+  // group up rather than leaving one lonely pill in a hidden container.
+  const onScreen = FORMATS.filter((f) => f.id === activeId || vis.some((v) => v.id === f.id));
+  show(ui.segFmt, onScreen.length > 1);
 }
 
 // ── face sync (DOM only; safe on the load path) ──────────────────────────────
@@ -1298,14 +1329,23 @@ app.registerExtension({
     const origDraw = nodeType.prototype.onDrawForeground;
     nodeType.prototype.onDrawForeground = function () {
       const r = origDraw?.apply(this, arguments);
-      // legacy-only min-width self-heal (Nodes 2.0 size lives in the Vue layout)
-      if (!isVueNodes() && this.size[0] < MIN_W) this.size[0] = MIN_W;
+      // legacy-only min-width self-heal (Nodes 2.0 size lives in the Vue layout).
+      // The isGraphLoading() gate is NOT optional: node.size is serialized, and
+      // a draw hook runs on the very first frame of a LOAD - earlier than any
+      // other clamp. MEASURED: a node saved 320 wide in Nodes 2.0 (which has no
+      // live width clamp, so that width is legitimate) came back rewritten to
+      // 474 the moment it was opened in Classic, throwing away a deliberate
+      // size and putting the workflow one tick away from a false "modified".
+      if (!isVueNodes() && !isGraphLoading() && this.size[0] < MIN_W) this.size[0] = MIN_W;
       return r;
     };
     const origResize = nodeType.prototype.onResize;
     nodeType.prototype.onResize = function () {
-      // fill model: free vertical resize (the preview grows); width floor only
-      if (!isVueNodes() && this.size[0] < MIN_W) this.size[0] = MIN_W;
+      // fill model: free vertical resize (the preview grows); width floor only.
+      // Gated like the draw clamp above: onResize is NOT only a user drag - the
+      // frontend calls setSize from fit-to-content, node creation and workflow
+      // restore too.
+      if (!isVueNodes() && !isGraphLoading() && this.size[0] < MIN_W) this.size[0] = MIN_W;
       return origResize?.apply(this, arguments);
     };
 
