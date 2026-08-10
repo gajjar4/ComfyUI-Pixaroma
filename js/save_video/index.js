@@ -355,24 +355,42 @@ function pickEntry(output) {
   return imgs.find((e) => /^video\//.test(e?.format || "") || /\.mp4$/i.test(e?.filename || "")) || null;
 }
 
+// Rebuild the runtime fields the face reads from a run's status. Split out of
+// commitEntry because restoreLastRun needs the SAME work after a rebuild:
+// node._xxx fields are torn down by a workflow-tab switch while
+// node.properties survives, so without this the video came back and its caption
+// did not. Worse than cosmetic - `_pixSvLastDims` is also what resolves
+// %frames%, %duration%, %width% and %height% in the live filename line, so
+// losing it made those tokens go back to being spelled out on a node that had
+// definitely run. Found by measuring the face after a rebuild, 2026-08-10.
+//
+// READ-ONLY with respect to serialized state, so it is safe on the load path.
+function applyStatus(node, st) {
+  if (!st) return;
+  node._pixSvLastDims = { w: st.w, h: st.h, frames: st.frames };
+  node._pixSvFolderShown = st.folder || "";
+  const bits = [`${st.w}x${st.h}`, `${st.frames} frames`, `${st.duration}s`];
+  if (st.depth) bits.push(st.depth);
+  bits.push(st.saved_to_disk ? "saved" : "preview only, not written to your folder");
+  node._pixSvSummary = bits.join(" · ");
+  if (st.note) node._pixSvSummary += ` · ${st.note}`;
+}
+
 function commitEntry(node, entry) {
   if (!node || !entry?.filename) return;
   node.properties = node.properties || {};
+  const st = entry._pixaroma_status;
   node.properties[LAST_RUN_PROP] = {
     filename: entry.filename,
     subfolder: entry.subfolder || "",
     type: entry.type || "output",
     token: entry.token || "",
+    // persisted so the caption and the resolved tokens survive a tab switch,
+    // exactly as Save Image keeps its status inside pixSiLastRun
+    status: st || null,
   };
-  const st = entry._pixaroma_status;
   if (st) {
-    node._pixSvLastDims = { w: st.w, h: st.h, frames: st.frames };
-    node._pixSvFolderShown = st.folder || "";
-    const bits = [`${st.w}x${st.h}`, `${st.frames} frames`, `${st.duration}s`];
-    if (st.depth) bits.push(st.depth);
-    bits.push(st.saved_to_disk ? "saved" : "preview only, not written to your folder");
-    node._pixSvSummary = bits.join(" · ");
-    if (st.note) node._pixSvSummary += ` · ${st.note}`;
+    applyStatus(node, st);
     node._pixSvCntKey = null; // let the counter advance after a run
     updateInfoLine(node);
     updatePreview(node);
@@ -392,8 +410,14 @@ function restoreLastRun(node, tries = 0) {
   if (getLive(node)) {
     node._pixSvRestoring = false;
     const entry = node.properties?.[LAST_RUN_PROP];
-    if (entry?.filename) applyVideoEntry(node, entry);
-    else refreshBar(node);
+    if (entry?.filename) {
+      // the caption and the resolved %frames% / %duration% / %width% / %height%
+      // come back with the clip, not just the picture
+      applyStatus(node, entry.status);
+      updateInfoLine(node);
+      updatePreview(node);
+      applyVideoEntry(node, entry);
+    } else refreshBar(node);
     return;
   }
   if (tries > 60) {
