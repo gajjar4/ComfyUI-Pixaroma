@@ -1,17 +1,20 @@
 import os
-import sys
-import json
 import uuid
-import wave
-import shutil
-import subprocess
-import threading
-
-import numpy as np
-import torch
 
 import folder_paths
-import comfy.model_management
+
+# The encoder itself lives in _video_encode_helpers so Save Mp4 and Save Video
+# share ONE copy (extracted 2026-08-10). Its invariants are recorded in
+# .claude/patterns/save-mp4.md - read that before changing either file.
+from ._video_encode_helpers import (
+    build_video_meta_json,
+    claim_counter_path,
+    encode_frames,
+    validate_rgb_frames,
+    write_ffmetadata_comment,
+    _resolve_ffmpeg,
+    _write_wav_pcm16,
+)
 
 # Honour ComfyUI's global --disable-metadata flag (same as SaveImage). Wrapped so
 # the node still imports on a build that lacks it.
@@ -19,78 +22,6 @@ try:
     from comfy.cli_args import args as _comfy_cli_args
 except Exception:
     _comfy_cli_args = None
-
-
-def _escape_ffmetadata(value):
-    """Escape a value for an ffmpeg FFMETADATA file: backslash-escape = ; # \\
-    and newline (per the ffmetadata spec). Done in one pass so the backslashes we
-    add are never themselves re-escaped."""
-    out = []
-    for ch in value:
-        if ch in ("=", ";", "#", "\\"):
-            out.append("\\")
-            out.append(ch)
-        elif ch == "\n":
-            out.append("\\\n")
-        else:
-            out.append(ch)
-    return "".join(out)
-
-
-def _build_video_meta_json(prompt, extra_pnginfo):
-    """JSON string {"workflow":..., "prompt":...} to embed in the mp4's comment
-    atom, or None if neither is available. This is the exact shape the
-    VideoHelperSuite frontend parses out of an mp4's comment when you drag the
-    video back into ComfyUI, so the workflow is restored."""
-    meta = {}
-    if isinstance(extra_pnginfo, dict):
-        wf = extra_pnginfo.get("workflow")
-        if wf is not None:
-            meta["workflow"] = wf
-    if prompt is not None:
-        meta["prompt"] = prompt
-    if not meta:
-        return None
-    try:
-        return json.dumps(meta)
-    except Exception:
-        return None
-
-
-def _write_ffmetadata_comment(path, comment_json):
-    """Write an FFMETADATA file with a single `comment` key. ffmpeg's mov muxer
-    maps `comment` to the standard ©cmt atom (NO -movflags use_metadata_tags, so
-    it stays the ilst form the VHS reader scans for)."""
-    with open(path, "w", encoding="utf-8") as f:
-        f.write(";FFMETADATA1\n")
-        f.write("comment=" + _escape_ffmetadata(comment_json) + "\n")
-
-
-def _resolve_ffmpeg():
-    """Locate the ffmpeg binary. Prefer imageio-ffmpeg's bundled exe (already
-    on disk if comfyui-videohelpersuite or imageio is installed), then fall
-    back to ffmpeg on PATH."""
-    try:
-        import imageio_ffmpeg
-        return imageio_ffmpeg.get_ffmpeg_exe()
-    except Exception:
-        pass
-    on_path = shutil.which("ffmpeg")
-    if on_path:
-        return on_path
-    raise RuntimeError(
-        "[Pixaroma] Save Mp4: ffmpeg was not found, and it is needed to make the video.\n"
-        "   Easiest fix is to install imageio-ffmpeg (a bundled ffmpeg, no system setup):\n"
-        "     Portable ComfyUI (Windows) - run this in your ComfyUI folder\n"
-        "       (the one that holds the python_embeded folder):\n"
-        "         python_embeded\\python.exe -m pip install imageio-ffmpeg\n"
-        "     Or in ComfyUI Manager, use its pip install option and enter: imageio-ffmpeg\n"
-        "     Your own Python (venv/conda): pip install imageio-ffmpeg\n"
-        "   Or install ffmpeg system-wide from https://ffmpeg.org/download.html\n"
-    )
-
-
-_COUNTER_LOCK = threading.Lock()
 
 
 def _next_mp4_counter(folder, prefix):
@@ -115,29 +46,6 @@ def _next_mp4_counter(folder, prefix):
         if n > max_n:
             max_n = n
     return max_n + 1
-
-
-def _write_wav_pcm16(path, waveform, sample_rate):
-    """Write a Comfy AUDIO waveform tensor [C, samples] (or [B, C, samples])
-    as 16-bit PCM WAV using only stdlib + numpy. Avoids torchaudio backend
-    issues on Windows."""
-    if waveform.dim() == 3:
-        waveform = waveform[0]
-    n_ch = int(waveform.shape[0])
-    if n_ch == 0:
-        raise ValueError("[Pixaroma] Save Mp4 — audio waveform has 0 channels.")
-    samples = waveform.detach().cpu().numpy()
-    # np.clip leaves NaN as NaN (NaN * 32767 -> garbage int16); scrub NaN/Inf to
-    # silence / extremes before the cast.
-    samples = np.nan_to_num(samples, nan=0.0, posinf=1.0, neginf=-1.0)
-    samples = np.clip(samples, -1.0, 1.0)
-    samples = (samples * 32767.0).astype(np.int16)
-    interleaved = samples.T.tobytes()
-    with wave.open(path, "wb") as f:
-        f.setnchannels(n_ch)
-        f.setsampwidth(2)
-        f.setframerate(int(sample_rate))
-        f.writeframes(interleaved)
 
 
 class PixaromaSaveMp4:
@@ -200,41 +108,17 @@ class PixaromaSaveMp4:
 
     def save(self, video_frames, fps, filename_prefix, save_mode, trim_to_audio, audio=None,
              prompt=None, extra_pnginfo=None):
-        if video_frames is None or video_frames.shape[0] == 0:
-            raise ValueError("[Pixaroma] Save Mp4 — input video_frames batch is empty.")
-
-        ffmpeg_path = _resolve_ffmpeg()
         crf = self._CRF
         pix_fmt = self._PIX_FMT
         fps_int = max(1, int(round(float(fps))))
 
         frames = video_frames
-        # rgb24 promises ffmpeg exactly 3 bytes per pixel, and the raw stdin
-        # stream carries NO frame delimiters, so a tensor with any other channel
-        # count misaligns every frame boundary from the first frame on. Measured
-        # 2026-08-10: a 4-channel batch encoded with NO exception and NO decode
-        # error, just a wrong video (21670 bytes against the correct 16739);
-        # 1-channel the same at 6578. Silent corruption is worse than a crash
-        # because nothing tells the user, so refuse it the same way the
-        # even-dimensions check below does. This sits BEFORE the O_EXCL output
-        # claim, so a refusal cannot orphan a 0-byte file.
-        if frames.ndim != 4 or frames.shape[3] != 3:
-            raise ValueError(
-                f"[Pixaroma] Save Mp4 — video_frames must be a batch of RGB "
-                f"images shaped [batch, height, width, 3], got "
-                f"{tuple(frames.shape)}. If it carries transparency (RGBA), "
-                f"convert it to RGB before this node."
-            )
-        n_frames, H, W, _ = frames.shape
+        # Empty batch, wrong channel count and odd dimensions all refuse here,
+        # BEFORE anything claims a file, so a refusal cannot orphan a 0-byte mp4
+        # (pattern #14). Shared with Save Video Pixaroma so the two cannot drift.
+        n_frames, H, W = validate_rgb_frames(frames, "Save Mp4", pix_fmt)
 
-        # yuv420p requires even dimensions; surface a clear error rather than
-        # the opaque "height not divisible by 2" ffmpeg crash.
-        if pix_fmt == "yuv420p" and (W % 2 != 0 or H % 2 != 0):
-            raise ValueError(
-                f"[Pixaroma] Save Mp4 — encoder requires even width and "
-                f"height, got {W}x{H}. Resize input frames to even dimensions "
-                f"(Audio React Pixaroma snaps to multiples of 8 automatically)."
-            )
+        ffmpeg_path = _resolve_ffmpeg("Save Mp4")
 
         # Resolve subfolder + base filename via folder_paths (handles
         # filename_prefix that contains a subfolder like "videos/clip"); use
@@ -256,26 +140,15 @@ class PixaromaSaveMp4:
         os.makedirs(full_folder, exist_ok=True)
         # Hold a lock around scan + claim so two save_mp4 nodes in the
         # same workflow can't both pick the same counter and overwrite
-        # each other. Touch the file inside the lock to claim it.
-        with _COUNTER_LOCK:
-            counter = _next_mp4_counter(full_folder, fname)
-            while True:
-                out_filename = f"{fname}_{counter:05d}.mp4"
-                out_path = os.path.join(full_folder, out_filename)
-                try:
-                    # O_EXCL atomically claims the name across processes too.
-                    # Re-claim on each bump so a collision can't slip through
-                    # (the scan saw N as max, but another writer just took N+1).
-                    fd = os.open(out_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
-                    os.close(fd)
-                    break
-                except FileExistsError:
-                    counter += 1
-                    if counter > 99999:
-                        raise RuntimeError(
-                            "[Pixaroma] Save Mp4 — could not find a free output "
-                            "filename."
-                        )
+        # each other. Touch the file inside the lock to claim it - passing the
+        # scan as a callable keeps it under the same lock, as the inline version
+        # had it.
+        out_path, out_filename, counter = claim_counter_path(
+            full_folder,
+            lambda n: f"{fname}_{n:05d}.mp4",
+            start=lambda: _next_mp4_counter(full_folder, fname),
+            label="Save Mp4",
+        )
 
         # If audio is supplied, write it to a temp wav alongside so ffmpeg can
         # mux both inputs in a single pass.
@@ -323,7 +196,7 @@ class PixaromaSaveMp4:
         metadata_path = None
         disable_meta = bool(getattr(_comfy_cli_args, "disable_metadata", False))
         if not disable_meta:
-            meta_json = _build_video_meta_json(prompt, extra_pnginfo)
+            meta_json = build_video_meta_json(prompt, extra_pnginfo)
             if meta_json:
                 try:
                     metadata_path = os.path.join(
@@ -331,7 +204,7 @@ class PixaromaSaveMp4:
                         f"pixaroma_save_mp4_meta_{uuid.uuid4().hex}.txt",
                     )
                     os.makedirs(os.path.dirname(metadata_path), exist_ok=True)
-                    _write_ffmetadata_comment(metadata_path, meta_json)
+                    write_ffmetadata_comment(metadata_path, meta_json)
                 except Exception as e:
                     print(f"[Pixaroma] Save Mp4 — could not prepare metadata ({e}); "
                           f"saving without it.")
@@ -380,114 +253,15 @@ class PixaromaSaveMp4:
               f"({W}x{H}, crf={crf}, {pix_fmt}"
               f"{', +audio' if temp_audio_path else ''}) -> {out_filename}")
 
-        try:
-            proc = subprocess.Popen(
-                cmd,
-                stdin=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                stdout=subprocess.DEVNULL,
-            )
-        except Exception:
-            # Popen failed (e.g. ffmpeg vanished). Don't leak the temp WAV, and
-            # remove the 0-byte output file we already claimed (O_EXCL) so
-            # output/ has no junk and the counter doesn't drift.
-            if temp_audio_path is not None and os.path.exists(temp_audio_path):
-                try:
-                    os.remove(temp_audio_path)
-                except OSError:
-                    pass
-            if metadata_path is not None and os.path.exists(metadata_path):
-                try:
-                    os.remove(metadata_path)
-                except OSError:
-                    pass
-            if os.path.exists(out_path):
-                try:
-                    os.remove(out_path)
-                except OSError:
-                    pass
-            raise
-
-        # Drain stderr in a background thread. Otherwise the OS pipe buffer
-        # (4 KB on Windows) fills if ffmpeg emits any output and the next
-        # stdin.write() blocks forever.
-        stderr_chunks = []
-
-        def _drain(pipe):
-            try:
-                for chunk in iter(lambda: pipe.read(4096), b""):
-                    stderr_chunks.append(chunk)
-            except Exception:
-                pass
-
-        drain_thread = threading.Thread(target=_drain, args=(proc.stderr,), daemon=True)
-        drain_thread.start()
-
-        broke_pipe = False
-        success = False
-        try:
-            try:
-                for i in range(n_frames):
-                    comfy.model_management.throw_exception_if_processing_interrupted()
-                    frame_u8 = (frames[i].clamp(0.0, 1.0).cpu().numpy() * 255.0
-                                ).astype(np.uint8)
-                    proc.stdin.write(frame_u8.tobytes())
-            except BrokenPipeError:
-                # ffmpeg closed its input before we fed every frame. This is the
-                # EXPECTED outcome when trim_to_audio adds -shortest and the audio
-                # is shorter than the frames: ffmpeg finalizes the mp4 at the
-                # audio's end and exits, so the remaining frame writes break the
-                # pipe. The output is already complete (trimmed to the audio).
-                # Stop feeding; a genuine ffmpeg failure still surfaces as a
-                # non-zero exit code below.
-                broke_pipe = True
-            try:
-                if not proc.stdin.closed:
-                    proc.stdin.close()
-            except OSError:
-                pass
-            proc.wait()
-            drain_thread.join()
-            if proc.returncode != 0:
-                stderr = b"".join(stderr_chunks).decode("utf-8", errors="replace")
-                raise RuntimeError(
-                    f"[Pixaroma] Save Mp4 — ffmpeg failed (exit {proc.returncode}):\n"
-                    f"{stderr}"
-                )
-            success = True  # rc 0 (incl. a -shortest broke_pipe) -> valid output
-        finally:
-            # On the exception path the explicit close above never ran. Close
-            # the pipe so the OS handle isn't leaked (Windows is sensitive to
-            # this) before killing.
-            try:
-                if proc.stdin and not proc.stdin.closed:
-                    proc.stdin.close()
-            except OSError:
-                pass
-            if proc.poll() is None:
-                proc.kill()
-                proc.wait()
-            if drain_thread.is_alive():
-                drain_thread.join(timeout=2)
-            if temp_audio_path is not None and os.path.exists(temp_audio_path):
-                try:
-                    os.remove(temp_audio_path)
-                except OSError:
-                    pass
-            if metadata_path is not None and os.path.exists(metadata_path):
-                try:
-                    os.remove(metadata_path)
-                except OSError:
-                    pass
-            # If the encode didn't finish cleanly (error / interrupt / non-zero
-            # exit), drop the claimed-but-empty or partial out file so output/
-            # has no 0-byte junk and the counter doesn't drift past it. A
-            # successful -shortest trim (success=True) keeps its valid file.
-            if not success and os.path.exists(out_path):
-                try:
-                    os.remove(out_path)
-                except OSError:
-                    pass
+        # The frame pump, the stderr drain, the BrokenPipeError tolerance and the
+        # cleanup-on-every-path live in _video_encode_helpers, shared with Save
+        # Video Pixaroma. Every invariant in there is recorded in
+        # .claude/patterns/save-mp4.md.
+        broke_pipe = encode_frames(
+            cmd, frames, out_path,
+            temp_paths=[temp_audio_path, metadata_path],
+            label="Save Mp4",
+        )
 
         if broke_pipe:
             print("[Pixaroma] Save Mp4 — video trimmed to the audio length (trim_to_audio is on).")
