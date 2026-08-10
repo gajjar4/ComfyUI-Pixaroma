@@ -69,6 +69,8 @@ export function injectCSS() {
 .pix-lif-subf { display:flex; align-items:center; gap:6px; font-size:11px; color:#bbb; cursor:pointer; user-select:none; }
 .pix-lif-subf .box { width:12px; height:12px; border:1px solid #555; border-radius:3px; }
 .pix-lif-subf.on .box { background:var(--pix-acc,#f66744); border-color:var(--pix-acc,#f66744); }
+/* still clickable while dimmed - it just has no effect until subfolders are on */
+.pix-lif-subf.dim { opacity:.45; }
 .pix-lif-done { margin-left:auto; background:var(--pix-acc,#f66744); border:1px solid var(--pix-acc,#f66744); border-radius:6px; padding:6px 16px; font-size:12px; color:#fff; cursor:pointer; }
 .pix-lif-done:hover { filter:brightness(1.08); }
 
@@ -200,6 +202,7 @@ export function openPickGallery(node, anchorEl, ctx) {
     `<div class="pix-lif-gal-body"><div class="pix-lif-grid"></div></div>` +
     `<div class="pix-lif-gal-foot">` +
     `<div class="pix-lif-subf" title="Also include images inside sub-folders"><span class="box"></span> Include subfolders</div>` +
+    `<div class="pix-lif-subf pix-lif-keepf" title="Normally an image inside a sub-folder comes out as portraits_cat, so two files with the same name cannot clash. Turn this on to keep the real path (portraits/cat) and let Save Image Pixaroma rebuild the same folders - switch on 'Wired name can make folders' there too."><span class="box"></span> Keep folder structure in the name</div>` +
     `<div class="pix-lif-tbtn" data-act="sort" title="Change the sort order">Sort: Name ↑</div>` +
     `<div class="pix-lif-done" data-act="done" title="Apply this selection and close">Done</div>` +
     `</div>`;
@@ -210,7 +213,13 @@ export function openPickGallery(node, anchorEl, ctx) {
   const ctEl = gal.querySelector(".pix-lif-ct");
   const firstInput = gal.querySelector(".pix-lif-firstn");
   const subfEl = gal.querySelector(".pix-lif-subf");
+  const keepfEl = gal.querySelector(".pix-lif-keepf");
   const sortBtn = gal.querySelector('[data-act="sort"]');
+  // "Keep folder structure" only means anything while subfolders are included
+  function syncKeepFolders() {
+    keepfEl.classList.toggle("on", !!state.keepFolders);
+    keepfEl.classList.toggle("dim", !state.recursive);
+  }
 
   let state = readState(node);
   const selSet = new Set(state.selected || []);
@@ -243,6 +252,7 @@ export function openPickGallery(node, anchorEl, ctx) {
     grid.innerHTML = "";
     sortBtn.textContent = `Sort: ${sortLabel()}`;
     subfEl.classList.toggle("on", !!state.recursive);
+    syncKeepFolders();
     const files = node._pixLifFiles || [];
     if (!files.length) {
       const empty = document.createElement("div");
@@ -341,10 +351,18 @@ export function openPickGallery(node, anchorEl, ctx) {
       renderGrid();
     });
   });
+  keepfEl.addEventListener("click", () => {
+    // no re-listing needed: this only changes the SHAPE of the filename output
+    state.keepFolders = !state.keepFolders;
+    writeState(node, state);
+    syncKeepFolders();
+    ctx.onChange?.(node);
+  });
   subfEl.addEventListener("click", async () => {
     state.recursive = !state.recursive;
     writeState(node, state);
     subfEl.classList.toggle("on", state.recursive);
+    syncKeepFolders();
     grid.innerHTML = `<div class="pix-lif-gal-empty">Loading…</div>`;
     await ctx.refreshListing(node);
     if (gal._pixClosed) return; // gallery was closed during the fetch

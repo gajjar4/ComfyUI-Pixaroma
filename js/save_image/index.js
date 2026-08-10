@@ -28,6 +28,9 @@ import {
   resolveDateTokens,
   expandNativeTokens,
   cleanInputName,
+  FORMATS,
+  formatDef,
+  visibleFormats,
 } from "./state.mjs";
 import { injectCSS, buildRoot, el } from "./ui.mjs";
 import { openSettingsPanel, closeSettingsPanelFor } from "./settings.mjs";
@@ -522,6 +525,8 @@ function openImageMenu(node, x, y) {
 // ── live "Will save as" preview ───────────────────────────────────────────────
 function resolveWiredName(node) {
   try {
+    // mirror the run-time cleanup, including whether folders survive
+    const keepFolders = !!readState(node).inputSubfolders;
     const inp = node.inputs && node.inputs.find((i) => i && i.name === "name");
     if (!inp || inp.link == null) return "";
     const graph = node.graph || app.graph;
@@ -535,14 +540,14 @@ function resolveWiredName(node) {
       let v = typeof w?.value === "string" ? w.value : "";
       v = v.replace(/\s*\[(input|output|temp)\]\s*$/i, "");
       v = v.split("/").pop().split("\\").pop();
-      return cleanInputName(v) || "name";
+      return cleanInputName(v, keepFolders) || "name";
     }
     // a plain text-ish widget on the origin (Text Pixaroma etc.) — best effort
     const tw = origin.widgets?.find(
       (x) => x && typeof x.value === "string" && x.value &&
         (x.name === "text" || x.name === "value" || x.name === "string")
     );
-    if (tw) return cleanInputName(String(tw.value).slice(0, 60)) || "name";
+    if (tw) return cleanInputName(String(tw.value).slice(0, 60), keepFolders) || "name";
     return "name"; // wired, value only known at run time
   } catch {
     return "name";
@@ -602,7 +607,7 @@ function updatePreview(node) {
   s = s.replace(/%batch_num%/g, "0");
   // light display mirror of the Python sanitizer
   s = s.replace(/\\/g, "/").replace(/[<>:"|?*]/g, "_").replace(/_{2,}/g, "_");
-  const ext = st.format === "jpg" ? ".jpg" : ".png";
+  const ext = formatDef(st.format).ext;
   const digits = Math.max(1, Math.min(8, parseInt(st.counterDigits, 10) || 3));
   let rel;
   if (
@@ -638,6 +643,41 @@ function updatePreview(node) {
   scheduleCounterFetch(node, st.folder || "", s + ext, digits);
 }
 
+// Show or hide the optional face buttons (settings panel, "Buttons on the
+// node"). Reasons people asked: Open Folder does nothing useful on some
+// systems, and someone who only ever saves PNG + WebP does not want a JPG
+// button in the way.
+//
+// DOM ONLY - it must never write state or resize, because it runs from
+// syncFace, which runs on the LOAD path (Vue Compat #18). The one thing it can
+// change is `st.format`, and only when the user has hidden the format that was
+// active; that write is guarded by isGraphLoading() so a load can never do it.
+function applyButtonVisibility(node, st) {
+  const ui = node._pixSiUI;
+  if (!ui) return;
+  const show = (elm, on) => {
+    if (elm) elm.style.display = on ? "" : "none";
+  };
+  show(ui.btnOpen, st.showOpen !== false);
+  show(ui.btnCopy, st.showCopy !== false);
+  show(ui.btnFolder, st.showFolder !== false);
+  const vis = visibleFormats(st);
+  for (const f of FORMATS) show(ui.fmtBtns[f.id], vis.some((v) => v.id === f.id));
+  // A single remaining format is not a choice, so the pill would just be a
+  // label the user can click to no effect - hide the whole group instead. The
+  // format still applies; it is shown in the "Will save as" extension.
+  show(ui.segFmt, vis.length > 1);
+  // The active format was just hidden: fall back to the first visible one, or
+  // the node would keep writing a format with no button to change it.
+  if (!vis.some((v) => v.id === formatDef(st.format).id) && !isGraphLoading()) {
+    const next = vis[0].id;
+    const cur = readState(node);
+    cur.format = next;
+    writeState(node, cur);
+    st.format = next;
+  }
+}
+
 // ── face sync (DOM only; safe on the load path) ──────────────────────────────
 function syncFace(node) {
   const ui = node._pixSiUI;
@@ -645,12 +685,16 @@ function syncFace(node) {
   const st = readState(node);
   if (document.activeElement !== ui.folderInput) ui.folderInput.value = st.folder || "";
   if (document.activeElement !== ui.patternInput) ui.patternInput.value = st.pattern || "";
-  const jpg = st.format === "jpg";
-  ui.fmtPng.classList.toggle("on", !jpg);
-  ui.fmtJpg.classList.toggle("on", jpg);
-  ui.fmtJpg.title =
+  applyButtonVisibility(node, st);
+  const active = formatDef(st.format).id;
+  for (const f of FORMATS) ui.fmtBtns[f.id].classList.toggle("on", f.id === active);
+  ui.fmtBtns.jpg.title =
     "Smaller JPG files, quality " + (st.quality ?? 100) +
-    " (right-click to change). No transparency. Workflows reload from PNG only.";
+    " (gear to change). No transparency, and ComfyUI cannot reload a workflow from a JPG.";
+  ui.fmtBtns.webp.title = st.webpLossless
+    ? "WebP, lossless. Keeps transparency, still much smaller than PNG, and it drags back into ComfyUI to reload the workflow."
+    : "WebP, quality " + (st.quality ?? 100) +
+      " (gear to change). Keeps transparency, far smaller than PNG, and it drags back into ComfyUI to reload the workflow.";
   const preview = !st.saveOnRun;
   ui.modeSave.classList.toggle("on", !preview);
   ui.modePreview.classList.toggle("on", preview);
@@ -783,8 +827,7 @@ function wireEvents(node, ui) {
     syncFace(node);
     updatePreview(node);
   };
-  ui.fmtPng.addEventListener("click", () => setFormat("png"));
-  ui.fmtJpg.addEventListener("click", () => setFormat("jpg"));
+  for (const f of FORMATS) ui.fmtBtns[f.id].addEventListener("click", () => setFormat(f.id));
 
   const setMode = (saveOn) => {
     const st = readState(node);
@@ -828,6 +871,13 @@ function wireEvents(node, ui) {
   ui.foldBtn.addEventListener("click", (e) => {
     e.stopPropagation();
     toggleFold(node);
+  });
+  // gear beside it: the SAME panel the right-click entry and the selection
+  // toolbar open, so there is one place the settings live and three ways in
+  ui.gearBtn.addEventListener("pointerdown", (e) => e.stopPropagation());
+  ui.gearBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    openSaveImagePanel(node);
   });
   // Right-click routing (user request): text fields keep the browser menu
   // (paste), the preview image gets OUR Open/Copy/Save menu (native Save

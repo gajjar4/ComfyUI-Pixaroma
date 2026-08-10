@@ -12,6 +12,8 @@ import { createAccentSection } from "../shared/node_settings.mjs";
 let _panel = null;
 let _panelNode = null;
 let _onChange = null;
+let _followRaf = null;  // the canvas-follow loop, see startFollowing()
+let _userMoved = false; // has the user dragged the panel somewhere deliberately?
 
 // Screen-pixel rect of the node (DOM in Nodes 2.0, geometry math in legacy)
 // so the panel opens BESIDE the node instead of over it.
@@ -57,10 +59,37 @@ function placeBeside(panel, rect) {
   panel.style.top = top + "px";
 }
 
+// Follow the node as the canvas is zoomed or panned (node UI convention #29).
+// LiteGraph emits nothing for a transform change, so this is a rAF loop that
+// compares the transform and returns immediately when nothing moved - the idle
+// cost is a comparison, and it only runs while a panel is open.
+function startFollowing(panel, node) {
+  let lastScale = null, lastX = null, lastY = null;
+  const tick = () => {
+    if (!_panel || _panel !== panel || !panel.isConnected) { _followRaf = null; return; }
+    _followRaf = requestAnimationFrame(tick);
+    if (_userMoved) return; // dragged on purpose: leave it exactly there
+    const ds = app.canvas?.ds;
+    if (!ds) return;
+    const sc = ds.scale || 1;
+    const ox = ds.offset?.[0] ?? 0, oy = ds.offset?.[1] ?? 0;
+    if (sc === lastScale && ox === lastX && oy === lastY) return;
+    lastScale = sc; lastX = ox; lastY = oy;
+    placeBeside(panel, getNodeScreenRect(node));
+  };
+  _followRaf = requestAnimationFrame(tick);
+}
+
+function stopFollowing() {
+  if (_followRaf != null) cancelAnimationFrame(_followRaf);
+  _followRaf = null;
+}
+
 function makeDraggable(panel, handle) {
   handle.addEventListener("pointerdown", (e) => {
     if (e.target.closest(".pix-si-px")) return;
     e.preventDefault();
+    _userMoved = true; // stop following: the user placed it deliberately
     const r = panel.getBoundingClientRect();
     const ox = e.clientX - r.left;
     const oy = e.clientY - r.top;
@@ -95,6 +124,7 @@ function escClose(e) {
 }
 
 export function closeSettingsPanel() {
+  stopFollowing();
   if (_panel) {
     try {
       _panel.remove();
@@ -103,6 +133,9 @@ export function closeSettingsPanel() {
   _panel = null;
   _panelNode = null;
   _onChange = null;
+  // Reset on CLOSE, not on open: resetting on open would make one dragged
+  // panel teach the next one to sit still where the node is not.
+  _userMoved = false;
   document.removeEventListener("pointerdown", outsideClose, true);
   document.removeEventListener("keydown", escClose, true);
 }
@@ -213,10 +246,10 @@ export function openSettingsPanel(node, onChange) {
   cWrap.appendChild(el("div", "pix-si-psub", "How many digits %counter% uses (001 = 3)"));
   body.appendChild(cWrap);
 
-  // JPG quality
+  // JPG / WebP quality (one slider - both are lossy, and nobody wants two)
   const qWrap = el("div");
   const qRow = el("div", "pix-si-prow");
-  qRow.appendChild(el("span", "pix-si-plab", "JPG quality"));
+  qRow.appendChild(el("span", "pix-si-plab", "JPG / WebP quality"));
   const qSl = el("input", "pix-si-qsl");
   qSl.type = "range";
   qSl.min = "1";
@@ -234,15 +267,24 @@ export function openSettingsPanel(node, onChange) {
   qRow.appendChild(qSl);
   qRow.appendChild(qVal);
   qWrap.appendChild(qRow);
-  qWrap.appendChild(el("div", "pix-si-psub", "Used only when the format is JPG"));
+  qWrap.appendChild(el("div", "pix-si-psub", "Used when the format is JPG or WebP. PNG is always lossless"));
   body.appendChild(qWrap);
+
+  body.appendChild(
+    switchRow(
+      node,
+      "webpLossless",
+      "WebP lossless",
+      "Perfect quality with no compression damage, still smaller than PNG. The quality slider is ignored"
+    )
+  );
 
   body.appendChild(
     switchRow(
       node,
       "embedWorkflow",
       "Save workflow inside the image",
-      "Drag the file back into ComfyUI to reload it (works with PNG)"
+      "Drag the file back into ComfyUI to reload it. Works with PNG and WebP; a JPG cannot carry it back"
     )
   );
 
@@ -258,11 +300,61 @@ export function openSettingsPanel(node, onChange) {
   body.appendChild(
     switchRow(
       node,
+      "inputSubfolders",
+      "Wired name can make folders",
+      "Normally a name wired in gets its folders flattened (portraits/cat becomes portraits_cat). Turn this on to keep them, so the folders of the images you loaded are rebuilt inside your save folder. Pair it with 'Keep the folder structure in the name' on Load Images from Folder"
+    )
+  );
+
+  body.appendChild(
+    switchRow(
+      node,
       "hideBarWhenFolded",
       "Hide the toolbar when folded",
       "When folded, also tuck away the format and Copy/Open/Folder buttons"
     )
   );
+
+  // ── which buttons the node face shows ──
+  // Asked for directly: Open Folder is not useful on every system, and someone
+  // who only saves PNG + WebP does not want a JPG button in the way.
+  const bWrap = el("div");
+  bWrap.appendChild(el("div", "pix-si-plab", "Buttons on the node"));
+  bWrap.appendChild(
+    el("div", "pix-si-psub", "Hide the ones you never use. Hiding a format does not change what is already selected")
+  );
+  const BTNS = [
+    ["showOpen", "Open"],
+    ["showCopy", "Copy"],
+    ["showFolder", "Folder"],
+    ["showPng", "PNG"],
+    ["showWebp", "WebP"],
+    ["showJpg", "JPG"],
+  ];
+  const grid = el("div", "pix-si-bgrid");
+  const chips = [];
+  for (const [key, label] of BTNS) {
+    const c = el("button", "pix-si-bchip", label);
+    c.type = "button";
+    c.classList.toggle("on", readState(node)[key] !== false);
+    c.title = "Show the " + label + " button on the node";
+    c.addEventListener("click", () => {
+      const st = readState(node);
+      const next = st[key] === false; // clicking an OFF chip turns it back on
+      // Never let the last format be switched off: the face would have no way
+      // to change format at all. Same rule the face's visibleFormats() keeps.
+      const fmtKeys = ["showPng", "showJpg", "showWebp"];
+      if (!next && fmtKeys.includes(key) && fmtKeys.filter((k) => st[k] !== false).length <= 1) return;
+      st[key] = next;
+      writeState(node, st);
+      c.classList.toggle("on", next);
+      if (_onChange) _onChange();
+    });
+    grid.appendChild(c);
+    chips.push(c);
+  }
+  bWrap.appendChild(grid);
+  body.appendChild(bWrap);
 
   // the shared colour block, so this node offers the same option as the rest
   body.appendChild(createAccentSection(node, { onChange: () => _onChange?.() }));
@@ -270,6 +362,7 @@ export function openSettingsPanel(node, onChange) {
   panel.appendChild(body);
   document.body.appendChild(panel);
   placeBeside(panel, getNodeScreenRect(node));
+  startFollowing(panel, node);
   const _p = panel;
   setTimeout(() => {
     if (_panel !== _p) return; // closed within the same tick

@@ -49,6 +49,22 @@ DEFAULT_STATE = {
     "counterDigits": 3,         # %counter% zero-padding (001 = 3)
     "folded": False,            # JS-only (node body collapsed on the canvas)
     "hideBarWhenFolded": False, # JS-only (also hide the toolbar when folded)
+    "webpLossless": False,      # WebP written lossless (quality is ignored)
+    # Let a WIRED name keep its folders instead of flattening them to '_'.
+    # OFF by default: a wired value creating folders on its own would surprise
+    # anyone whose workflow already relies on the flattened name. Containment
+    # does NOT depend on this flag - the joined pattern still goes through
+    # _safe_prefix, which refuses '..', a leading '/', and turns a drive colon
+    # into '_', so the result can only ever land under the save folder.
+    "inputSubfolders": False,
+    # JS-only: which optional buttons the node face shows. Absent/true = shown,
+    # so an older saved workflow keeps every button.
+    "showOpen": True,
+    "showCopy": True,
+    "showFolder": True,
+    "showPng": True,
+    "showJpg": True,
+    "showWebp": True,
 }
 
 # Extensions stripped off a wired `name` value so "cat.png" doesn't become
@@ -126,13 +142,23 @@ _EXIF_MAX = 64000  # JPEG APP1 segment tops out ~65 KB; Pillow raises
                    # "EXIF data is too long" past it (verified empirically)
 
 
-def _build_jpeg_exif(prompt=None, workflow=None, parameters=None):
+def _build_jpeg_exif(prompt=None, workflow=None, parameters=None, max_bytes=None):
     """EXIF bytes embedding workflow + prompt, using the community convention
-    ComfyUI already reads for WebP (0x010E ImageDescription = 'Workflow:<json>',
-    0x010F Make = 'Prompt:<json>'). Best effort: the current ComfyUI frontend
-    has NO jpeg workflow reader (verified in the bundle's
-    getWorkflowDataFromFile), so drag-back restore works from PNG only - but
-    other tools can read this, and a future frontend may add it.
+    ComfyUI reads for WebP (0x010E ImageDescription = 'Workflow:<json>',
+    0x010F Make = 'Prompt:<json>').
+
+    Used by BOTH the JPG and the WebP save paths, and the difference between
+    them is only `max_bytes`:
+
+    * JPG carries EXIF in an APP1 segment, which tops out at ~65 KB, so a real
+      workflow usually does NOT fit and the ladder below has to shed payload.
+      The current ComfyUI frontend also has no jpeg reader at all (verified in
+      the bundle's getWorkflowDataFromFile), so a JPG never drag-restores.
+    * WebP stores EXIF in its own RIFF chunk with no such limit, and the
+      frontend DOES have an `image/webp` branch calling getWebpMetadata -
+      re-verified live in the bundle 2026-08-10. So a WebP written here really
+      does reload the workflow when dragged back in, and passing a large
+      max_bytes lets the whole graph ride along.
 
     A big graph easily exceeds the ~65 KB JPEG EXIF segment limit and Pillow
     then raises AT SAVE TIME - so try workflow+prompt, fall back to workflow
@@ -168,6 +194,7 @@ def _build_jpeg_exif(prompt=None, workflow=None, parameters=None):
             pass
 
     have_params = isinstance(parameters, str) and bool(parameters.strip())
+    cap = _EXIF_MAX if max_bytes is None else int(max_bytes)
     try:
         # (workflow, prompt, include_user_comment), most complete first.
         attempts = (
@@ -191,7 +218,7 @@ def _build_jpeg_exif(prompt=None, workflow=None, parameters=None):
                 exif[0x010F] = "Prompt:" + json.dumps(_json_safe(pr))
             _user_comment(exif, include)
             data = exif.tobytes()
-            if len(data) <= _EXIF_MAX:
+            if len(data) <= cap:
                 return data
         return None
     except Exception:
@@ -206,10 +233,12 @@ class PixaromaSaveImage:
         "preview of the exact file that will be written. Tokens: %input% (the wired name input, e.g. the filename "
         "from Load Image Pixaroma), %date:yyyy-MM-dd% (and any date/time format), %counter% (auto-incrementing, "
         "never overwrites), %width%, %height%, %batch_num%, plus node references like %Seed Pixaroma.seed%. "
-        "Use / in the name to create subfolders. Format is PNG (lossless, embeds the workflow so the file can be "
-        "dragged back into ComfyUI) or JPG (smaller, quality setting in the right-click panel; ComfyUI cannot "
-        "reload workflows from JPG). Right-click the node for date style, counter digits, JPG quality, "
-        "workflow embedding, and Civitai generation info. Batches save every frame with the counter "
+        "Use / in the name to create subfolders. Three formats: PNG (lossless, keeps transparency, drags back "
+        "into ComfyUI to reload the workflow), WebP (much smaller, keeps transparency, and it also drags back "
+        "in to reload the workflow), or JPG (small and universal, no transparency, and ComfyUI cannot reload "
+        "a workflow from it). Open the settings with the gear on the node or by right-clicking it: date style, "
+        "counter digits, quality, WebP lossless, workflow embedding, Civitai generation info, which buttons the "
+        "node shows, and whether a wired name may create folders. Batches save every frame with the counter "
         "increasing.\n\n"
         "Add Civitai generation info (right-click) also writes the settings in the format Civitai reads, "
         "so an image posted there shows the checkpoint, the LoRAs and their strengths, plus steps, seed, "
@@ -231,7 +260,7 @@ class PixaromaSaveImage:
                 "images": ("IMAGE", {"tooltip": "Image (or batch) to save. Every frame in a batch is written, with the counter increasing per file."}),
             },
             "optional": {
-                "name": ("STRING", {"forceInput": True, "tooltip": "Optional text used by the %input% token in the filename, e.g. wire the filename output of Load Image Pixaroma here to keep the original name."}),
+                "name": ("STRING", {"forceInput": True, "tooltip": "Optional text used by the %input% token in the filename, e.g. wire the filename output of Load Image Pixaroma here to keep the original name. Any folders in the wired text become underscores unless you turn on 'Wired name can make folders' in the settings, which rebuilds the source's folders inside your save folder."}),
             },
             "hidden": {
                 "SaveImageState": "STRING",
@@ -264,12 +293,19 @@ class PixaromaSaveImage:
         except Exception:
             pass
 
-        fmt = "jpg" if str(state.get("format", "png")).lower() in ("jpg", "jpeg") else "png"
-        ext = ".jpg" if fmt == "jpg" else ".png"
+        raw_fmt = str(state.get("format", "png")).lower()
+        if raw_fmt in ("jpg", "jpeg"):
+            fmt = "jpg"
+        elif raw_fmt == "webp":
+            fmt = "webp"
+        else:
+            fmt = "png"
+        ext = {"jpg": ".jpg", "webp": ".webp"}.get(fmt, ".png")
         try:
             quality = max(1, min(100, int(state.get("quality", 100))))
         except Exception:
             quality = 100
+        webp_lossless = bool(state.get("webpLossless", False))
         embed = bool(state.get("embedWorkflow", True))
         civitai_on = bool(state.get("civitaiMeta", False))
         save_on = bool(state.get("saveOnRun", True))
@@ -340,9 +376,23 @@ class PixaromaSaveImage:
         if name is not None:
             input_name = name if isinstance(name, str) else str(name)
             input_name = _MEDIA_EXT_RE.sub("", input_name.strip())
-            # separators would create surprise subfolders; folders belong to
-            # the PATTERN (type / there), not to a wired name
-            input_name = input_name.replace("\\", "_").replace("/", "_")
+            if state.get("inputSubfolders"):
+                # "Wired name can make folders" is ON: keep the separators so a
+                # source path like "portraits/cat" rebuilds that folder inside
+                # the save folder (the point of the option - Load Images from
+                # Folder can hand over the real relative path).
+                #
+                # This is NOT the containment boundary. The joined pattern still
+                # goes through _safe_prefix below, which returns None for any
+                # '..' segment or a leading '/', and _sanitize_segment turns a
+                # drive colon into '_' - so "../../x", "/etc/x" and "C:/x" can
+                # only ever end up refused or as a plain subfolder. Verified in
+                # the harness; do not add a second, weaker check here.
+                input_name = input_name.replace("\\", "/")
+            else:
+                # separators would create surprise subfolders; folders belong to
+                # the PATTERN (type / there), not to a wired name
+                input_name = input_name.replace("\\", "_").replace("/", "_")
         resolved = pattern.replace("%input%", input_name)
         resolved = _expand_date_tokens(resolved)
         resolved = _expand_native_tokens(resolved)
@@ -373,12 +423,17 @@ class PixaromaSaveImage:
                 extra_pnginfo=extra_pnginfo if embed else None,
                 parameters=a1111,
             )
-        elif fmt == "jpg" and (embed or a1111):
+        elif fmt in ("jpg", "webp") and (embed or a1111):
             wf = extra_pnginfo.get("workflow") if isinstance(extra_pnginfo, dict) else None
             exif_bytes = _build_jpeg_exif(
                 prompt=prompt if embed else None,
                 workflow=wf if embed else None,
                 parameters=a1111,
+                # WebP's EXIF lives in its own RIFF chunk with no 64 KB APP1
+                # limit, so the whole workflow fits and the file really does
+                # drag back into ComfyUI. Still capped, generously, so a
+                # pathological graph cannot balloon every frame of a batch.
+                max_bytes=(8 * 1024 * 1024) if fmt == "webp" else None,
             )
 
         out_real = os.path.realpath(folder_paths.get_output_directory())
@@ -465,6 +520,25 @@ class PixaromaSaveImage:
                 if fmt == "png":
                     # RGBA is preserved - PNG keeps transparency.
                     pil.save(path, "PNG", pnginfo=pnginfo, compress_level=4)
+                elif fmt == "webp":
+                    # WebP keeps ALPHA, so unlike JPG there is nothing to
+                    # flatten - only the odd channel counts _tensor_to_pil can
+                    # hand back (L / LA) need converting, since libwebp writes
+                    # RGB and RGBA only.
+                    im = pil if pil.mode in ("RGB", "RGBA") else pil.convert(
+                        "RGBA" if pil.mode in ("LA", "PA") else "RGB"
+                    )
+                    kw = {"lossless": True} if webp_lossless else {"quality": quality}
+                    if exif_bytes:
+                        try:
+                            im.save(path, "WEBP", exif=exif_bytes, **kw)
+                        except (ValueError, OSError):
+                            # EXIF rejected by this Pillow/libwebp build - the
+                            # image matters more than the metadata (same belt
+                            # the JPEG branch wears).
+                            im.save(path, "WEBP", **kw)
+                    else:
+                        im.save(path, "WEBP", **kw)
                 else:
                     rgb = pil
                     if pil.mode == "RGBA":

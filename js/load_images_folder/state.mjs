@@ -11,6 +11,9 @@ export const DEFAULT_STATE = {
   version: 1,
   folder: "",
   recursive: false,
+  // keep "sub/cat" in the filename output instead of flattening it to
+  // "sub_cat", so Save Image Pixaroma can rebuild the same folder tree
+  keepFolders: false,
   sort: "name", // "name" | "date"
   sort_dir: "asc", // "asc" | "desc"
   selected: [], // file paths relative to folder, in display order

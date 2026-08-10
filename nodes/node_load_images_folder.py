@@ -33,6 +33,13 @@ DEFAULT_STATE = {
     "version": 1,
     "folder": "",
     "recursive": False,
+    # With "Include subfolders" on, the `filename` output normally FLATTENS the
+    # relative path ("sub/cat.png" -> "sub_cat") so a Save node cannot overwrite
+    # two same-named files from different folders. Turn this on to keep the real
+    # path instead ("sub/cat"), which lets Save Image Pixaroma rebuild the same
+    # folder tree - it has a matching "Wired name can make folders" option, and
+    # only rebuilds folders when BOTH are on, so this stays safe by default.
+    "keepFolders": False,
     "sort": "name",
     "sort_dir": "asc",
     "selected": [],
@@ -140,7 +147,7 @@ class PixaromaLoadImagesFolder:
         "Each image's mask from its alpha channel (blank if it has none).",
         "Each image's width in pixels (after any resize) - wire into an empty latent so it matches.",
         "Each image's height in pixels (after any resize).",
-        "Each image's filename without the extension - wire into Save so results keep their original names.",
+        "Each image's filename without the extension - wire into Save so results keep their original names. With subfolders included this is normally flattened (sub/cat becomes sub_cat) so two same-named files cannot collide; turn on 'Keep the folder structure in the name' to pass the real path instead and rebuild the same folders when saving.",
         "1-based position of each image in this batch (1, 2, 3 ...).",
         "How many images are in this batch - i.e. how many loaded (same for every item).",
     )
@@ -182,6 +189,7 @@ class PixaromaLoadImagesFolder:
 
         real_folder = os.path.realpath(folder)
         recursive = bool(state.get("recursive", False))
+        keep_folders = bool(state.get("keepFolders", False))
         images, masks, widths, heights, names, indices = [], [], [], [], [], []
         count = 0
         for rel in selected:
@@ -216,9 +224,15 @@ class PixaromaLoadImagesFolder:
             widths.append(fw)
             heights.append(fh)
             if recursive:
-                # keep names unique across subfolders so a Save node can't
-                # overwrite: "sub/cat.png" -> "sub_cat"
-                name = os.path.splitext(rel)[0].replace("/", "_").replace("\\", "_")
+                stem = os.path.splitext(rel)[0].replace("\\", "/")
+                if keep_folders:
+                    # hand over the REAL relative path so a Save node can
+                    # rebuild the same folder tree ("sub/cat")
+                    name = stem
+                else:
+                    # keep names unique across subfolders so a Save node can't
+                    # overwrite: "sub/cat.png" -> "sub_cat"
+                    name = stem.replace("/", "_")
             else:
                 name = os.path.splitext(os.path.basename(rel))[0]
             names.append(name)

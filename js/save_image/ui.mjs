@@ -7,7 +7,8 @@
 // ComfyUI forces the addDOMWidget ROOT to inline display:block on rebuild /
 // collapse (see the Nodes 2.0 clobber note in CLAUDE.md).
 
-import { DEFAULT_STATE } from "./state.mjs";
+import { DEFAULT_STATE, FORMATS } from "./state.mjs";
+import { pixAsset } from "../shared/api_url.mjs";
 
 export function el(tag, cls, text) {
   const e = document.createElement(tag);
@@ -37,6 +38,15 @@ export function injectCSS() {
     ".pix-si-fold i{display:block;width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;}",
     ".pix-si-fold:not(.folded) i{border-bottom:6px solid #fff;}", // ▲ = fold up
     ".pix-si-fold.folded i{border-top:6px solid #fff;}", // ▼ = open back up
+    // gear beside the fold triangle - the SAME settings the right-click entry
+    // opens, just reachable without hunting for a menu. The icon is the
+    // bundled SVG as a CSS mask, never the ⚙ emoji: an emoji is drawn by the
+    // OS, so it changes shape (and colour) per platform (convention #28).
+    ".pix-si-gear{width:24px;height:22px;border:none;border-radius:4px;background:transparent;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;padding:0;flex:0 0 auto;margin-left:4px;}",
+    ".pix-si-gear::before{content:\"\";display:block;width:14px;height:14px;background:#bbb;" +
+      "-webkit-mask:url(\"" + pixAsset("icons/note/gear.svg") + "\") center/contain no-repeat;" +
+      "mask:url(\"" + pixAsset("icons/note/gear.svg") + "\") center/contain no-repeat;}",
+    ".pix-si-gear:hover::before{background:var(--pix-acc,#f66744);}",
     ".pix-si-lab{display:block;font-size:10px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:var(--pix-acc,#f66744);margin-bottom:4px;}",
     ".pix-si-row{display:flex;gap:6px;align-items:center;}",
     ".pix-si-field{flex:1;min-width:0;background:#1d1d1d;border:1px solid #444;border-radius:4px;color:#e0e0e0;padding:5px 8px;font-size:12px;outline:none;box-sizing:border-box;font-family:inherit;width:100%;}",
@@ -99,6 +109,12 @@ export function injectCSS() {
     ".pix-si-plab{font-size:12px;color:#ddd;}",
     ".pix-si-psub{font-size:10px;color:#8f8f8f;margin-top:2px;line-height:1.4;}",
     ".pix-si-qval{font-size:12px;color:var(--pix-acc,#f66744);min-width:24px;text-align:right;}",
+    // "Buttons on the node" - on/off chips. Convention #13: idle is a bordered
+    // dark chip, hover only brightens the border, ON is a solid accent fill.
+    ".pix-si-bgrid{display:flex;flex-wrap:wrap;gap:5px;margin-top:7px;}",
+    ".pix-si-bchip{flex:1 1 58px;background:#1d1d1d;border:1px solid #444;color:#aaa;border-radius:4px;padding:4px 8px;font-size:11px;cursor:pointer;font-family:inherit;user-select:none;}",
+    ".pix-si-bchip:hover{border-color:var(--pix-acc,#f66744);color:#ddd;}",
+    ".pix-si-bchip.on{background:var(--pix-acc,#f66744);border-color:var(--pix-acc,#f66744);color:#fff;}",
     ".pix-si-qsl{flex:1;min-width:0;accent-color:var(--pix-acc,#f66744);}",
     '.pix-si-sw{width:30px;height:16px;border-radius:8px;background:#555;position:relative;display:inline-block;cursor:pointer;flex:0 0 auto;transition:background .15s;}',
     '.pix-si-sw::after{content:"";position:absolute;top:2px;left:2px;width:12px;height:12px;border-radius:50%;background:#ccc;transition:left .15s;}',
@@ -125,6 +141,10 @@ export function buildRoot() {
   foldBtn.type = "button";
   foldBtn.appendChild(el("i"));
   topbar.appendChild(foldBtn);
+  const gearBtn = el("button", "pix-si-gear");
+  gearBtn.type = "button";
+  gearBtn.title = "Settings: quality, counter digits, which buttons show, and more";
+  topbar.appendChild(gearBtn);
   inner.appendChild(topbar);
 
   // ── folder (no label - the placeholder + hint say it all) ──
@@ -171,14 +191,19 @@ export function buildRoot() {
   const secBtns = el("div");
   const btnRow = el("div", "pix-si-btnrow");
   const segFmt = el("div", "pix-si-seg");
-  const fmtPng = el("button", null, "PNG");
-  fmtPng.type = "button";
-  fmtPng.title = "Lossless PNG. Keeps transparency and embeds the workflow for drag-back reload.";
-  const fmtJpg = el("button", null, "JPG");
-  fmtJpg.type = "button";
-  fmtJpg.title = "Smaller JPG files. Quality is in the right-click settings. No transparency. Workflows reload from PNG only.";
-  segFmt.appendChild(fmtPng);
-  segFmt.appendChild(fmtJpg);
+  // One button per format, built from the FORMATS table and keyed by id so the
+  // settings panel can hide any of them without this file knowing the rules.
+  const fmtBtns = {};
+  for (const f of FORMATS) {
+    const b = el("button", null, f.label);
+    b.type = "button";
+    b.dataset.fmt = f.id;
+    segFmt.appendChild(b);
+    fmtBtns[f.id] = b;
+  }
+  fmtBtns.png.title = "Lossless PNG. Keeps transparency and embeds the workflow for drag-back reload.";
+  fmtBtns.webp.title = "WebP: much smaller than PNG, keeps transparency, and it still drags back into ComfyUI to reload the workflow.";
+  fmtBtns.jpg.title = "Smaller JPG files. Quality is in the settings. No transparency, and ComfyUI cannot reload a workflow from a JPG.";
   const segMode = el("div", "pix-si-seg");
   const modeSave = el("button", null, "Save");
   modeSave.type = "button";
@@ -239,6 +264,9 @@ export function buildRoot() {
     inner,
     topbar,
     foldBtn,
+    gearBtn,
+    segFmt,
+    fmtBtns,
     secFolder,
     secName,
     secBtns,
@@ -248,8 +276,6 @@ export function buildRoot() {
     patternInput,
     chipsWrap,
     prevPath,
-    fmtPng,
-    fmtJpg,
     modeSave,
     modePreview,
     btnCopy,

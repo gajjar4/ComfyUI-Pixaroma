@@ -19,7 +19,39 @@ export const DEFAULT_STATE = {
   counterDigits: 3, // %counter% zero-padding (001 = 3)
   folded: false, // JS-only: node body collapsed to the toolbar + preview
   hideBarWhenFolded: false, // JS-only: also tuck the toolbar away when folded
+  webpLossless: false, // WebP written lossless (the quality slider is ignored)
+  // Let a WIRED name keep its folders instead of flattening them to "_".
+  // Off by default so an existing workflow's names never change shape.
+  inputSubfolders: false,
+  // Which optional buttons the face shows. Absent = true (an older saved
+  // workflow keeps every button), and at least one FORMAT is always shown.
+  showOpen: true,
+  showCopy: true,
+  showFolder: true,
+  showPng: true,
+  showJpg: true,
+  showWebp: true,
 };
+
+// The three save formats, in face order. Single source of truth for the
+// buttons, the extension, and which visibility key each one answers to.
+export const FORMATS = [
+  { id: "png", label: "PNG", ext: ".png", key: "showPng" },
+  { id: "jpg", label: "JPG", ext: ".jpg", key: "showJpg" },
+  { id: "webp", label: "WebP", ext: ".webp", key: "showWebp" },
+];
+
+export function formatDef(id) {
+  return FORMATS.find((f) => f.id === id) || FORMATS[0];
+}
+
+// Which formats the user left switched on, never empty: hiding the last one
+// would leave the node with no way to change format at all, so the face falls
+// back to showing PNG.
+export function visibleFormats(st) {
+  const on = FORMATS.filter((f) => st[f.key] !== false);
+  return on.length ? on : [FORMATS[0]];
+}
 
 export function readState(node) {
   const v = node.properties?.[STATE_PROP];
@@ -87,11 +119,14 @@ export function expandNativeTokens(s) {
 }
 
 // Mirror of the Python cleanup for a wired `name` value: strip a known media
-// extension ("cat.png" -> "cat") and neutralize path separators.
-export function cleanInputName(v) {
+// extension ("cat.png" -> "cat") and then either neutralize the path
+// separators (default) or keep them, when "Wired name can make folders" is on
+// — same branch as node_save_image.py::save, so the "Will save as" line shows
+// the folders a run would really create.
+export function cleanInputName(v, keepFolders = false) {
   if (v == null) return "";
-  return String(v)
+  const s = String(v)
     .trim()
-    .replace(/\.(png|jpe?g|webp|gif|bmp|tiff?|avif|mp4|mov|webm|mkv|m4v)$/i, "")
-    .replace(/[\\/]/g, "_");
+    .replace(/\.(png|jpe?g|webp|gif|bmp|tiff?|avif|mp4|mov|webm|mkv|m4v)$/i, "");
+  return keepFolders ? s.replace(/\\/g, "/") : s.replace(/[\\/]/g, "_");
 }
