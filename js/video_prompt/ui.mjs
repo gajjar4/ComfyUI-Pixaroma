@@ -212,6 +212,8 @@ export function injectCSS() {
   .pix-vp-btn.pix-vp-vram.is-on{
     background:${ACC}; border-color:${ACC}; color:#fff;
   }
+  /* a wired CLIP makes it do nothing - say so visually, not just in the title */
+  .pix-vp-btn.pix-vp-vram.is-inert{ opacity:.4; }
   /* literal glyph, never a \\XXXX CSS escape - JS reads that as an illegal
      octal escape inside a template literal and the whole module fails to load */
   .pix-vp-btn.pix-vp-vram.is-on::before{ content:"✓ "; }
@@ -531,14 +533,23 @@ export function renderFace(node) {
   // Prompt: ..." on the clipboard while flashing green "Copied".
   els.copy.disabled = !els.out.value || !!last?.error;
 
-  // Free VRAM
-  els.vram.classList.toggle("is-on", st.release_model);
-  els.vram.title = st.release_model
-    ? "On: the language model is unloaded after each run, so an H3 video model "
-      + "downstream gets the memory. The prompt is already written by then, so "
-      + "nothing is lost. The next generate has to load the model again."
-    : "Off: the language model stays in memory, so generating again is instant. "
-      + "Turn this on when this node sits in front of an H3 video model.";
+  // Free VRAM. A wired CLIP makes this do NOTHING - that model belongs to the
+  // Load CLIP node and may be shared, so it is not ours to unload. The button
+  // used to keep painting its filled "on" state and promising an unload that
+  // could not happen, which the help documented and the face contradicted.
+  const clipWired = (node.inputs || []).some(
+    (i) => i && i.name === "clip" && i.link != null);
+  els.vram.classList.toggle("is-on", st.release_model && !clipWired);
+  els.vram.classList.toggle("is-inert", clipWired);
+  els.vram.title = clipWired
+    ? "Does nothing while a Load CLIP node is wired in: that model belongs to "
+      + "the loader and may be shared, so it is not this node's to unload."
+    : st.release_model
+      ? "On: the language model is unloaded as soon as the prompt is written, so "
+        + "a video model downstream gets the memory. The prompt is already "
+        + "finished by then, so nothing is lost. The next generate reloads it."
+      : "Off: the language model stays in memory, so generating again is "
+        + "instant. Turn this on when this node sits in front of a video model.";
 }
 
 /**
