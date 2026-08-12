@@ -134,6 +134,8 @@ from .nodes.node_load_audio import NODE_CLASS_MAPPINGS as _MAPS_LOAD_AUDIO
 from .nodes.node_load_audio import NODE_DISPLAY_NAME_MAPPINGS as _NAMES_LOAD_AUDIO
 from .nodes.node_h3_audio_sync import NODE_CLASS_MAPPINGS as _MAPS_H3_SYNC
 from .nodes.node_h3_audio_sync import NODE_DISPLAY_NAME_MAPPINGS as _NAMES_H3_SYNC
+from .nodes.node_h3_prompt import NODE_CLASS_MAPPINGS as _MAPS_H3_PROMPT
+from .nodes.node_h3_prompt import NODE_DISPLAY_NAME_MAPPINGS as _NAMES_H3_PROMPT
 
 # development mode for loading additional refrence nodes
 dev_mode = False
@@ -214,6 +216,7 @@ NODE_CLASS_MAPPINGS = {
     **_MAPS_DURATION,
     **_MAPS_LOAD_AUDIO,
     **_MAPS_H3_SYNC,
+    **_MAPS_H3_PROMPT,
 }
 
 # combine all node display name mappings
@@ -286,6 +289,7 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     **_NAMES_DURATION,
     **_NAMES_LOAD_AUDIO,
     **_NAMES_H3_SYNC,
+    **_NAMES_H3_PROMPT,
 }
 
 # web directory for loading js files
