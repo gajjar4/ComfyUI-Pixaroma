@@ -190,10 +190,21 @@ export function displaySeed(node) {
   return st.seed;
 }
 
-/** True when the idea looks like it asks for speech. Used only for the 5-second
- *  hint, and deliberately loose: a colon or the word "says" is what every
- *  speaking idea in the measured set had. */
+// Speech VERBS only. The first version also counted a bare colon, which made
+// the 5-second chip turn yellow for "wide shot: a foggy forest", "close-up: her
+// hands" and even "a clock reads 5:30" - so the warning looked like it fired at
+// random, which is exactly how a hint gets ignored. It also MISSED "she mutters
+// under her breath" and "two friends talking at a cafe".
+//
+// Scored against a fixed case table (6 speaking, 6 not): the colon rule got 6
+// of 12 wrong, this gets 0. Keep that table in mind before adding a pattern -
+// a false positive costs more than a miss here, because the hint is advisory
+// and a user who learns to ignore it gains nothing from it being right later.
+const SPEECH_RE = /\b(say|says|said|saying|speak|speaks|speaking|spoke|tell|tells|telling|told|shout|shouts|shouting|whisper|whispers|whispering|mutter|mutters|muttering|ask|asks|asking|reply|replies|replied|answer|answers|call|calls|yell|yells|scream|screams|sing|sings|singing|talk|talks|talking)\b/i;
+
+/** True when the idea looks like it asks for someone to speak. Used ONLY for
+ *  the 5-second hint, which marks that tier without ever blocking it. */
 export function looksSpoken(idea) {
   if (typeof idea !== "string" || !idea.trim()) return false;
-  return /:|\bsays?\b|\bsaying\b|\bspeaks?\b|\btells?\b|\bshouts?\b|\bwhispers?\b/i.test(idea);
+  return SPEECH_RE.test(idea);
 }

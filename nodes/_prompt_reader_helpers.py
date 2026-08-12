@@ -210,6 +210,7 @@ _DROPDOWN_CLASS = "PixaromaDropdown"
 # plus an OPTIONAL wired `text_in` it JOINS with. The walker reads PromptState AND
 # follows text_in, combining exactly like nodes/node_prompt.py run().
 _PROMPT_CLASS = "PixaromaPrompt"
+_H3_PROMPT_CLASS = "PixaromaH3Prompt"
 
 # Switch Source Pixaroma: N-output A/B bank switcher. The hidden
 # SwitchSourceState carries active side + row count, and the walker follows
@@ -784,6 +785,31 @@ def _walk_for_text(
         combined = _pix_prompt_join(mine, other, order, sep)
         if combined:
             captured.append(combined)
+        return
+
+    # Minimax H3 Prompt Pixaroma: return the user's IDEA.
+    #
+    # ⚠️ THE GENERATED H3 PROMPT CAN NEVER BE RECOVERED FROM A SAVED FILE, and
+    # that is not a gap we can close. ComfyUI embeds the API prompt as SUBMITTED,
+    # which is captured BEFORE execution - at that moment the language model has
+    # not run and the text does not exist. What IS in the file is the node's
+    # hidden state, which carries the idea the person typed.
+    #
+    # Returning the idea is the useful answer to "what did I ask for?", and it
+    # is the text you would re-use. Without this the walker reaches this node,
+    # finds H3PromptState is not a text key, and reports nothing at all.
+    if cls == _H3_PROMPT_CLASS:
+        raw = inputs.get("H3PromptState")
+        idea = ""
+        if isinstance(raw, str) and raw:
+            try:
+                state = json.loads(raw)
+                if isinstance(state, dict) and isinstance(state.get("idea"), str):
+                    idea = state["idea"].strip()
+            except (ValueError, TypeError):
+                idea = ""
+        if idea:
+            captured.append(idea)
         return
 
     # Single pass over inputs. For each one, classify as text-carrying
