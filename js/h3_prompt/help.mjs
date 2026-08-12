@@ -56,6 +56,7 @@ export const H3_PROMPT_HELP = {
         ["Generate", "Runs the workflow and writes the prompt."],
         ["Re-roll", "Picks a new seed and generates again. This is what to press when a result comes out flat."],
         ["Copy", "Puts the finished prompt on the clipboard."],
+        ["Free VRAM", "A switch, not a button. Off while you are only writing prompts, so generating again is instant. Turn it on when this node sits in the same workflow as your H3 video model: the language model is unloaded as soon as the prompt is written, handing the memory over to the video. Your prompt is already finished by then, so nothing is lost. On one machine this freed about 17 GB."],
         ["The seed chip", "Click the number to type one. Click the F or R beside it to switch between Fixed, which gives the same prompt every time, and Random, which gives a fresh one on every run."],
         ["The gear", "Opens the settings, where the formulas and the length instructions live."],
       ],

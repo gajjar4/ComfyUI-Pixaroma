@@ -52,8 +52,36 @@ from ._h3_prompt_helpers import (
 _CLIP_CACHE = {}
 
 
-def _release_clip():
+def _release_clip(clip=None):
+    """Actually give the VRAM back.
+
+    ⚠️ `soft_empty_cache()` ALONE DOES NOT UNLOAD ANYTHING. It empties torch's
+    allocator cache; ComfyUI's own `current_loaded_models` still holds the
+    encoder, so a 10 GB model stays resident and the "release" does nothing
+    visible. The model has to be unloaded first, and only then is emptying the
+    allocator cache worth doing.
+
+    `unload_model_and_clones` is deliberate over `unload_all_models()`: this node
+    is meant to sit in front of an H3 video model, and evicting everything would
+    throw away whatever else the workflow had already loaded and make the next
+    step reload it too.
+    """
+    if clip is None:
+        for c in _CLIP_CACHE.values():
+            clip = c
+            break
     _CLIP_CACHE.clear()
+    patcher = getattr(clip, "patcher", None)
+    if patcher is not None:
+        try:
+            comfy.model_management.unload_model_and_clones(patcher)
+        except Exception:
+            # Older builds without it: fall back to the blunt instrument rather
+            # than silently leaving the memory held.
+            try:
+                comfy.model_management.unload_all_models()
+            except Exception:
+                pass
     try:
         comfy.model_management.soft_empty_cache()
     except Exception:
@@ -286,8 +314,15 @@ class PixaromaH3Prompt:
         fps = st["fps"] if st["fps"] > 0 else 24.0
         true_seconds = round(frames / fps, 4)
 
+        # Free the encoder BEFORE the rest of the workflow runs, so an H3 video
+        # model downstream gets the memory. The prompt is already decoded into
+        # `text` by this point, so unloading cannot cost us the answer.
+        #
+        # Skipped when `clip` came in on a wire: that model belongs to a
+        # CLIPLoader the user put on the canvas and may be shared with another
+        # node, so it is not ours to evict.
         if st["release_model"] and clip is None:
-            _release_clip()
+            _release_clip(model)
 
         return {
             "ui": {

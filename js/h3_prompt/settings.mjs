@@ -575,11 +575,10 @@ function renderPanel(node, body) {
     (v) => set({ speech_hint: v }),
     "The 5 second tier reliably drops the spoken line. This marks it rather than blocking it.",
   ));
-  body.appendChild(toggleRow(
-    "Release the model after each run", st.release_model,
-    (v) => set({ release_model: v }),
-    "Frees the VRAM the text encoder holds. Leave it off unless you are short of memory: the next run has to load it again.",
-  ));
+  // "Free VRAM" deliberately does NOT appear here. It lives on the node face
+  // next to Copy, because it is a per-workflow decision the user flips while
+  // working, not a set-once preference - and two controls for one state is how
+  // they drift.
 
   // ---- backup ------------------------------------------------------------
   body.appendChild(el("div", "pix-h3p-sec", "BACKUP"));

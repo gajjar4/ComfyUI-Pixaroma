@@ -168,6 +168,14 @@ export function injectCSS() {
     background:${ACC}; border-color:${ACC}; color:#fff; padding:6px 15px;
   }
   .pix-h3-btn.pix-h3-primary:hover{ filter:brightness(1.12); }
+  /* A STATE toggle, not an action, so it reads as filled-when-on like the seed
+     mode badge and the tier chips rather than as another thing to press. */
+  .pix-h3-btn.pix-h3-vram.is-on{
+    background:${ACC}; border-color:${ACC}; color:#fff;
+  }
+  /* literal glyph, never a \\XXXX CSS escape - JS reads that as an illegal
+     octal escape inside a template literal and the whole module fails to load */
+  .pix-h3-btn.pix-h3-vram.is-on::before{ content:"✓ "; }
   /* higher specificity than :hover so the green survives a still-hovered cursor */
   .pix-h3-btn.is-flashing, .pix-h3-btn.is-flashing:hover{
     background:#3ec371; border-color:#3ec371; color:#fff;
@@ -304,6 +312,16 @@ export function buildFace(node, openPanel) {
     e.stopPropagation();
     copyText(out.value, copy);
   });
+  // On the FACE rather than buried in settings, because it is a per-workflow
+  // decision: off while you are only writing prompts, on when this node sits in
+  // front of an H3 video model that wants the memory.
+  const vram = el("button", "pix-h3-btn pix-h3-vram", "Free VRAM");
+  vram.addEventListener("click", (e) => {
+    e.stopPropagation();
+    const st = readState(node);
+    writeState(node, { release_model: !st.release_model });
+    renderFace(node);
+  });
   const spacer = el("span", "pix-h3-spacer");
   const gen = el("button", "pix-h3-btn pix-h3-primary", "Generate");
   gen.title = "Run the workflow and write the prompt";
@@ -311,7 +329,7 @@ export function buildFace(node, openPanel) {
     e.stopPropagation();
     app.queuePrompt?.(0, 1);
   });
-  actions.append(reroll, copy, spacer, gen);
+  actions.append(reroll, copy, vram, spacer, gen);
 
   root.append(banner, caption, idea, tip, controls, readhead, out, actions);
 
@@ -335,7 +353,7 @@ export function buildFace(node, openPanel) {
   node._pixH3Root = root;
   node._pixH3Els = {
     root, blabel, bhint, idea, tip, tiers, seedBtn, seedMode, out, rv,
-    copy, reroll, gen,
+    copy, reroll, gen, vram,
   };
   node._pixH3Widget = widget;
   return root;
@@ -419,6 +437,15 @@ export function renderFace(node) {
     els.rv.textContent = "";
   }
   els.copy.disabled = !els.out.value;
+
+  // Free VRAM
+  els.vram.classList.toggle("is-on", st.release_model);
+  els.vram.title = st.release_model
+    ? "On: the language model is unloaded after each run, so an H3 video model "
+      + "downstream gets the memory. The prompt is already written by then, so "
+      + "nothing is lost. The next generate has to load the model again."
+    : "Off: the language model stays in memory, so generating again is instant. "
+      + "Turn this on when this node sits in front of an H3 video model.";
 }
 
 /** Called from the executed listener in index.js. Runtime only - none of this
