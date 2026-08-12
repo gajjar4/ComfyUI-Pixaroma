@@ -1,10 +1,10 @@
-// Minimax H3 Prompt Pixaroma - talking to the server about formulas.
+// Video Prompt Pixaroma - talking to the server about formulas.
 //
 // The formulas are FILES, not settings: 8.7k to 12.3k characters each, times
 // three modes, plus four duration tiers apiece. That is far too much to sit in
 // ComfyUI's settings store, and it wants to survive a pack update, so the
-// shipped copies live in assets/h3_formulas and a user's edits go to
-// <ComfyUI user dir>/pixaroma/h3_formulas.
+// shipped copies live in assets/video_prompt_formulas and a user's edits go to
+// <ComfyUI user dir>/pixaroma/video_prompt_formulas.
 //
 // Everything here is re-fetched on every panel open (convention #18): a picker
 // backed by our own route gets nothing from ComfyUI's R refresh, so a session
@@ -12,7 +12,7 @@
 
 import { pixApiUrl } from "../shared/api_url.mjs";
 
-const BASE = "/pixaroma/api/h3_prompt";
+const BASE = "/pixaroma/api/video_prompt";
 
 async function call(route, options) {
   const res = await fetch(pixApiUrl(BASE + route), {

@@ -1,9 +1,9 @@
-// Minimax H3 Prompt Pixaroma - help. Convention #16: registering this is what
+// Video Prompt Pixaroma - help. Convention #16: registering this is what
 // makes the orange ? appear in the node selection toolbar and gives the node a
 // page in the Help browser. Written for an artist, not a programmer.
 
-export const H3_PROMPT_HELP = {
-  title: "Minimax H3 Prompt Pixaroma",
+export const VIDEO_PROMPT_HELP = {
+  title: "Video Prompt Pixaroma",
   tagline: "Write a MiniMax H3 video prompt on your own machine, in one node.",
   sections: [
     {
@@ -122,7 +122,7 @@ export const H3_PROMPT_HELP = {
   ],
 };
 
-export const H3_PROMPT_KEYWORDS = [
+export const VIDEO_PROMPT_KEYWORDS = [
   "h3", "minimax", "minimax h3", "prompt", "prompt writer", "llm", "qwen",
   "text to video", "first frame", "last frame", "fflf", "video prompt",
   "write prompt", "prompt generator", "local llm", "vision model",

@@ -1,4 +1,4 @@
-// Minimax H3 Prompt Pixaroma - wiring.
+// Video Prompt Pixaroma - wiring.
 //
 // One node in place of three workflows. core.mjs holds the state, ui.mjs the
 // face, settings.mjs the gear panel, api.mjs the formula files, help.mjs the
@@ -27,13 +27,13 @@ import {
 import {
   applyError, applyResult, buildFace, destroyFace, injectCSS, renderFace,
 } from "./ui.mjs";
-import { closeH3PanelFor, openH3Panel, refreshH3Panel } from "./settings.mjs";
-import { H3_PROMPT_HELP } from "./help.mjs";
+import { closeVideoPromptPanelFor, openVideoPromptPanel, refreshVideoPromptPanel } from "./settings.mjs";
+import { VIDEO_PROMPT_HELP } from "./help.mjs";
 
-registerNodeHelp(CLASS, H3_PROMPT_HELP);
+registerNodeHelp(CLASS, VIDEO_PROMPT_HELP);
 
 function openPanel(node) {
-  openH3Panel(node, (n) => {
+  openVideoPromptPanel(node, (n) => {
     renderFace(n);
     repaintAccent(n);
     n.setDirtyCanvas?.(true, true);
@@ -44,10 +44,10 @@ function openPanel(node) {
 // false because the node adds no right-click line of its own - the central one
 // in help_toolbar is the only entry, and setting this true would remove it.
 registerNodeSettings(CLASS, {
-  title: "Minimax H3 Prompt",
+  title: "Video Prompt",
   ownMenuItem: false,
   open: (node) => openPanel(node),
-  closeFor: (node) => closeH3PanelFor(node),
+  closeFor: (node) => closeVideoPromptPanelFor(node),
   // The face paints its banner from --pix-acc on the widget root, which the
   // shared repaint reaches, but the readout meta and the chips are re-derived
   // in renderFace - so a DEFAULT colour change needs this hook to land
@@ -56,13 +56,13 @@ registerNodeSettings(CLASS, {
 });
 
 app.registerExtension({
-  name: "Pixaroma.H3Prompt",
+  name: "Pixaroma.VideoPrompt",
 
   beforeRegisterNodeDef(nodeType, nodeData) {
     if (nodeData?.name !== CLASS) return;
     // A re-registration (hot reload) would otherwise double-wrap every hook.
-    if (nodeType.prototype._pixH3Patched) return;
-    nodeType.prototype._pixH3Patched = true;
+    if (nodeType.prototype._pixVpPatched) return;
+    nodeType.prototype._pixVpPatched = true;
 
     injectCSS();
 
@@ -104,7 +104,7 @@ app.registerExtension({
       // Wiring or pulling the clip input changes which model actually runs, so
       // an OPEN panel has to stop offering a picker that no longer matters.
       // Still writes nothing serialized, so it needs no load gate.
-      refreshH3Panel(this);
+      refreshVideoPromptPanel(this);
       return r;
     };
 
@@ -135,7 +135,7 @@ app.registerExtension({
 
     const _removed = nodeType.prototype.onRemoved;
     nodeType.prototype.onRemoved = function () {
-      closeH3PanelFor(this);
+      closeVideoPromptPanelFor(this);
       // No renderer-change handle to release - see ui.mjs on why that hook was
       // tried and reverted. Leaving a teardown for it here read as an
       // invitation to re-add it.
@@ -184,7 +184,7 @@ api.addEventListener("execution_error", (e) => {
 
 api.addEventListener("executed", (e) => {
   const detail = e?.detail;
-  const payload = detail?.output?.pixaroma_h3_prompt?.[0];
+  const payload = detail?.output?.pixaroma_video_prompt?.[0];
   if (!payload) return;
   const node = findById(detail.node);
   if (!node) return;
@@ -244,7 +244,7 @@ app.graphToPrompt = async function (...args) {
       }
     }
   } catch (e) {
-    console.error("[Pixaroma.H3Prompt] inject failed", e);
+    console.error("[Pixaroma.VideoPrompt] inject failed", e);
   }
   return result;
 };

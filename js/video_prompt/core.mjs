@@ -1,7 +1,7 @@
-// Minimax H3 Prompt Pixaroma - state.
+// Video Prompt Pixaroma - state.
 //
-// Vue Compat #9: everything lives on node.properties.h3PromptState and is
-// injected into the hidden H3PromptState input at graphToPrompt time, so the
+// Vue Compat #9: everything lives on node.properties.videoPromptState and is
+// injected into the hidden VideoPromptState input at graphToPrompt time, so the
 // node has no visible widgets and no stray input dots beyond the three real
 // ones (first_frame, last_frame, clip).
 //
@@ -16,9 +16,9 @@
 // what keeps this node clear of the configure-replay bug class (Vue Compat
 // #17 / #19) that has hit the Switch family twice.
 
-export const CLASS = "PixaromaH3Prompt";
-export const HIDDEN_INPUT = "H3PromptState";
-export const STATE_PROP = "h3PromptState";
+export const CLASS = "PixaromaVideoPrompt";
+export const HIDDEN_INPUT = "VideoPromptState";
+export const STATE_PROP = "videoPromptState";
 
 export const MODES = ["text_to_video", "first_frame", "first_last"];
 export const MODE_LABELS = {
@@ -132,7 +132,7 @@ function slotConnected(node, name) {
   return false;
 }
 
-/** Mirrors nodes/_h3_prompt_helpers.py::mode_for. Both must agree or the face
+/** Mirrors nodes/_video_prompt_helpers.py::mode_for. Both must agree or the face
  *  announces a different formula than the one that runs. */
 export function modeOf(node) {
   const first = slotConnected(node, "first_frame");
@@ -167,7 +167,7 @@ export function seedForRun(node) {
   const st = readState(node);
   if (st.seed_mode !== SEED_RANDOM) return st.seed;
   const rolled = rollSeed();
-  node._pixH3LastSeed = rolled;
+  node._pixVpLastSeed = rolled;
   return rolled;
 }
 
@@ -184,8 +184,8 @@ export function injectedState(node) {
  *  stored one in Fixed. */
 export function displaySeed(node) {
   const st = readState(node);
-  if (st.seed_mode === SEED_RANDOM && Number.isFinite(node?._pixH3LastSeed)) {
-    return node._pixH3LastSeed;
+  if (st.seed_mode === SEED_RANDOM && Number.isFinite(node?._pixVpLastSeed)) {
+    return node._pixVpLastSeed;
   }
   return st.seed;
 }

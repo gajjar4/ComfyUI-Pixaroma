@@ -1,9 +1,9 @@
-# nodes/_h3_prompt_helpers.py
-"""Pure helpers for Minimax H3 Prompt Pixaroma.
+# nodes/_video_prompt_helpers.py
+"""Pure helpers for Video Prompt Pixaroma.
 
 NO torch, NO ComfyUI imports at module scope, so the whole assembly can be
-unit-tested with a bare python (harness: D:\\Claude Tests\\_h3_prompt_test.py).
-Anything that needs a tensor lives in node_h3_prompt.py instead.
+unit-tested with a bare python (harness: D:\\Claude Tests\\_video_prompt_test.py).
+Anything that needs a tensor lives in node_video_prompt.py instead.
 
 WHAT THIS REPLACES
 ------------------
@@ -45,7 +45,7 @@ MODE_LABELS = {
 }
 
 _PACK_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-_SHIPPED_DIR = os.path.join(_PACK_DIR, "assets", "h3_formulas")
+_SHIPPED_DIR = os.path.join(_PACK_DIR, "assets", "video_prompt_formulas")
 
 _DEFAULT_MODEL = "qwen3-vl-8b-heretic-1.3.0_fp8_e4m3fn.safetensors"
 
@@ -153,7 +153,7 @@ def mode_for(has_first: bool, has_last: bool) -> str:
 # Where the editable copies live
 # ---------------------------------------------------------------------------
 def user_dir() -> str:
-    """<ComfyUI user dir>/pixaroma/h3_formulas.
+    """<ComfyUI user dir>/pixaroma/video_prompt_formulas.
 
     NOT inside the plugin folder. The plugin is a git working tree, so an edited
     formula there is one `git add -A` from being published, and a Manager
@@ -172,7 +172,7 @@ def user_dir() -> str:
         base = None
     if not base:
         base = os.path.join(os.path.expanduser("~"), ".pixaroma")
-    return os.path.join(base, "pixaroma", "h3_formulas")
+    return os.path.join(base, "pixaroma", "video_prompt_formulas")
 
 
 def _shipped(mode: str, suffix: str) -> str:

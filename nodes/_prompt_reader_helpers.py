@@ -210,7 +210,7 @@ _DROPDOWN_CLASS = "PixaromaDropdown"
 # plus an OPTIONAL wired `text_in` it JOINS with. The walker reads PromptState AND
 # follows text_in, combining exactly like nodes/node_prompt.py run().
 _PROMPT_CLASS = "PixaromaPrompt"
-_H3_PROMPT_CLASS = "PixaromaH3Prompt"
+_VIDEO_PROMPT_CLASS = "PixaromaVideoPrompt"
 
 # Switch Source Pixaroma: N-output A/B bank switcher. The hidden
 # SwitchSourceState carries active side + row count, and the walker follows
@@ -787,7 +787,7 @@ def _walk_for_text(
             captured.append(combined)
         return
 
-    # Minimax H3 Prompt Pixaroma: return the user's IDEA.
+    # Video Prompt Pixaroma: return the user's IDEA.
     #
     # ⚠️ THE GENERATED H3 PROMPT CAN NEVER BE RECOVERED FROM A SAVED FILE, and
     # that is not a gap we can close. ComfyUI embeds the API prompt as SUBMITTED,
@@ -797,9 +797,9 @@ def _walk_for_text(
     #
     # Returning the idea is the useful answer to "what did I ask for?", and it
     # is the text you would re-use. Without this the walker reaches this node,
-    # finds H3PromptState is not a text key, and reports nothing at all.
-    if cls == _H3_PROMPT_CLASS:
-        raw = inputs.get("H3PromptState")
+    # finds VideoPromptState is not a text key, and reports nothing at all.
+    if cls == _VIDEO_PROMPT_CLASS:
+        raw = inputs.get("VideoPromptState")
         idea = ""
         if isinstance(raw, str) and raw:
             try:

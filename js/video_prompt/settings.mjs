@@ -1,4 +1,4 @@
-// Minimax H3 Prompt Pixaroma - the floating settings panel.
+// Video Prompt Pixaroma - the floating settings panel.
 //
 // One singleton panel, opened from the gear on the node face, the gear in the
 // node selection toolbar, or the right-click entry. It follows its node as the
@@ -42,120 +42,120 @@ function injectCSS() {
     font:12px 'Segoe UI', sans-serif; color:#ddd; overflow:hidden;
   }
   .pix-h3p *{ box-sizing:border-box; }
-  .pix-h3p-head{
+  .pix-vpp-head{
     display:flex; align-items:center; justify-content:space-between;
     padding:9px 12px; background:#333; border-bottom:1px solid #444;
     cursor:move; user-select:none; flex:none;
   }
-  .pix-h3p-head span{ font-size:12px; color:#fff; }
-  .pix-h3p-x{
+  .pix-vpp-head span{ font-size:12px; color:#fff; }
+  .pix-vpp-x{
     background:none; border:none; color:#999; cursor:pointer;
     font-size:15px; line-height:1; padding:0 2px;
   }
-  .pix-h3p-x:hover{ color:#fff; }
-  .pix-h3p-body{ padding:12px; overflow-y:auto; flex:1 1 auto; }
-  .pix-h3p-sec{
+  .pix-vpp-x:hover{ color:#fff; }
+  .pix-vpp-body{ padding:12px; overflow-y:auto; flex:1 1 auto; }
+  .pix-vpp-sec{
     color:var(--pix-acc,#f66744); font-size:10px; letter-spacing:.5px;
     margin:0 0 7px;
   }
-  .pix-h3p-sec:not(:first-child){ margin-top:14px; }
-  .pix-h3p-row{
+  .pix-vpp-sec:not(:first-child){ margin-top:14px; }
+  .pix-vpp-row{
     display:flex; align-items:center; gap:8px;
     background:#1d1d1d; border:1px solid #444; border-radius:4px;
     padding:7px 9px; margin-bottom:5px;
   }
-  .pix-h3p-row.is-edited{ border-color:var(--pix-acc,#f66744); }
-  .pix-h3p-row .name{ flex:1 1 auto; min-width:0; color:#ddd; font-size:11px;
+  .pix-vpp-row.is-edited{ border-color:var(--pix-acc,#f66744); }
+  .pix-vpp-row .name{ flex:1 1 auto; min-width:0; color:#ddd; font-size:11px;
     overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-  .pix-h3p-row .cnt{ flex:none; color:#777; font-size:10px; }
-  .pix-h3p-row.is-edited .cnt{ color:var(--pix-acc,#f66744); }
-  .pix-h3p-icon{
+  .pix-vpp-row .cnt{ flex:none; color:#777; font-size:10px; }
+  .pix-vpp-row.is-edited .cnt{ color:var(--pix-acc,#f66744); }
+  .pix-vpp-icon{
     flex:none; width:15px; height:15px; padding:0; background:none;
     border:none; cursor:pointer; color:#aaa; font-size:12px; line-height:1;
   }
-  .pix-h3p-icon:hover{ color:var(--pix-acc,#f66744); }
-  .pix-h3p-icon:disabled{ color:#555; cursor:default; }
+  .pix-vpp-icon:hover{ color:var(--pix-acc,#f66744); }
+  .pix-vpp-icon:disabled{ color:#555; cursor:default; }
 
-  .pix-h3p-pick{
+  .pix-vpp-pick{
     display:flex; align-items:center; justify-content:space-between; gap:8px;
     background:#1d1d1d; border:1px solid #444; border-radius:4px;
     padding:7px 9px; margin-bottom:6px; cursor:pointer;
   }
-  .pix-h3p-pick:hover{ border-color:var(--pix-acc,#f66744); }
-  .pix-h3p-pick .v{ flex:1 1 auto; min-width:0; color:#ccc; font-size:11px;
+  .pix-vpp-pick:hover{ border-color:var(--pix-acc,#f66744); }
+  .pix-vpp-pick .v{ flex:1 1 auto; min-width:0; color:#ccc; font-size:11px;
     overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-  .pix-h3p-pick .c{ flex:none; color:var(--pix-acc,#f66744); font-size:9px; }
-  .pix-h3p-missing{ color:#e08b6a; font-size:10px; margin:-2px 0 8px; }
+  .pix-vpp-pick .c{ flex:none; color:var(--pix-acc,#f66744); font-size:9px; }
+  .pix-vpp-missing{ color:#e08b6a; font-size:10px; margin:-2px 0 8px; }
 
-  .pix-h3p-nums{ display:flex; gap:6px; margin-bottom:6px; }
-  .pix-h3p-num{
+  .pix-vpp-nums{ display:flex; gap:6px; margin-bottom:6px; }
+  .pix-vpp-num{
     flex:1 1 0; min-width:0; display:flex; align-items:center; gap:6px;
     background:#1d1d1d; border:1px solid #444; border-radius:4px; padding:5px 8px;
   }
-  .pix-h3p-num label{ flex:none; color:var(--pix-acc,#f66744); font-size:10px; }
-  .pix-h3p-num input{
+  .pix-vpp-num label{ flex:none; color:var(--pix-acc,#f66744); font-size:10px; }
+  .pix-vpp-num input{
     flex:1 1 auto; min-width:0; background:none; border:none; outline:none;
     color:#ccc; font:11px 'Segoe UI', sans-serif; text-align:right;
   }
-  .pix-h3p-num:focus-within{ border-color:var(--pix-acc,#f66744); }
+  .pix-vpp-num:focus-within{ border-color:var(--pix-acc,#f66744); }
 
-  .pix-h3p-adv{ color:#888; font-size:10px; cursor:pointer; user-select:none;
+  .pix-vpp-adv{ color:#888; font-size:10px; cursor:pointer; user-select:none;
     margin-bottom:8px; }
-  .pix-h3p-adv:hover{ color:#ccc; }
+  .pix-vpp-adv:hover{ color:#ccc; }
 
-  .pix-h3p-tiers{ display:flex; gap:5px; flex-wrap:wrap; margin-bottom:6px; }
-  .pix-h3p-tier{
+  .pix-vpp-tiers{ display:flex; gap:5px; flex-wrap:wrap; margin-bottom:6px; }
+  .pix-vpp-tier{
     flex:1 1 60px; min-width:0; text-align:center; cursor:pointer;
     background:#1d1d1d; border:1px solid #444; border-radius:4px; padding:6px 4px;
     color:#ddd; font:11px 'Segoe UI', sans-serif;
   }
-  .pix-h3p-tier:hover{ border-color:var(--pix-acc,#f66744); }
-  .pix-h3p-tier small{ display:block; color:#777; font-size:9px; margin-top:2px; }
+  .pix-vpp-tier:hover{ border-color:var(--pix-acc,#f66744); }
+  .pix-vpp-tier small{ display:block; color:#777; font-size:9px; margin-top:2px; }
 
-  .pix-h3p-toggle{ display:flex; align-items:center; gap:8px; margin-bottom:6px;
+  .pix-vpp-toggle{ display:flex; align-items:center; gap:8px; margin-bottom:6px;
     cursor:pointer; user-select:none; }
-  .pix-h3p-sw{ flex:none; width:26px; height:14px; border-radius:7px;
+  .pix-vpp-sw{ flex:none; width:26px; height:14px; border-radius:7px;
     background:#444; position:relative; transition:background .12s; }
-  .pix-h3p-sw i{ position:absolute; top:2px; left:2px; width:10px; height:10px;
+  .pix-vpp-sw i{ position:absolute; top:2px; left:2px; width:10px; height:10px;
     border-radius:50%; background:#888; transition:left .12s, background .12s; }
-  .pix-h3p-toggle.is-on .pix-h3p-sw{ background:var(--pix-acc,#f66744); }
-  .pix-h3p-toggle.is-on .pix-h3p-sw i{ left:14px; background:#fff; }
-  .pix-h3p-toggle span{ color:#ccc; font-size:11px; }
+  .pix-vpp-toggle.is-on .pix-vpp-sw{ background:var(--pix-acc,#f66744); }
+  .pix-vpp-toggle.is-on .pix-vpp-sw i{ left:14px; background:#fff; }
+  .pix-vpp-toggle span{ color:#ccc; font-size:11px; }
 
-  .pix-h3p-btns{ display:flex; gap:5px; flex-wrap:wrap; }
-  .pix-h3p-btn{
+  .pix-vpp-btns{ display:flex; gap:5px; flex-wrap:wrap; }
+  .pix-vpp-btn{
     flex:1 1 auto; text-align:center; cursor:pointer;
     background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.15);
     border-radius:4px; padding:6px 8px; color:rgba(255,255,255,0.7);
     font:11px 'Segoe UI', sans-serif;
   }
-  .pix-h3p-btn:hover{ background:var(--pix-acc,#f66744);
+  .pix-vpp-btn:hover{ background:var(--pix-acc,#f66744);
     border-color:var(--pix-acc,#f66744); color:#fff; }
 
-  .pix-h3p-pop{
+  .pix-vpp-pop{
     position:fixed; z-index:1400; max-height:320px; overflow-y:auto;
     background:#1d1d1d; border:1px solid #555; border-radius:4px;
     box-shadow:0 6px 18px rgba(0,0,0,.5); padding:4px;
   }
-  .pix-h3p-pop .pix-h3p-poplist div{ padding:5px 9px; border-radius:3px; color:#ccc;
+  .pix-vpp-pop .pix-vpp-poplist div{ padding:5px 9px; border-radius:3px; color:#ccc;
     font:11px 'Segoe UI', sans-serif; cursor:pointer;
     white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-  .pix-h3p-pop .pix-h3p-poplist div:hover{ background:#2a2a2a; }
-  .pix-h3p-pop .pix-h3p-poplist div.is-on{ color:var(--pix-acc,#f66744); }
-  .pix-h3p-popfilter{
+  .pix-vpp-pop .pix-vpp-poplist div:hover{ background:#2a2a2a; }
+  .pix-vpp-pop .pix-vpp-poplist div.is-on{ color:var(--pix-acc,#f66744); }
+  .pix-vpp-popfilter{
     display:block; width:100%; box-sizing:border-box; margin:0 0 4px;
     background:#141414; color:#ddd; border:1px solid #444; border-radius:3px;
     padding:5px 8px; font:11px 'Segoe UI', sans-serif; outline:none;
   }
-  .pix-h3p-popfilter:focus{ border-color:var(--pix-acc,#f66744); }
+  .pix-vpp-popfilter:focus{ border-color:var(--pix-acc,#f66744); }
 
   /* the model row when a CLIP is wired: it is not the thing in charge */
-  .pix-h3p-pick.is-locked{ opacity:.45; cursor:default; }
-  .pix-h3p-pick.is-locked:hover{ border-color:#444; }
-  .pix-h3p-note{ color:#e0a33a; font-size:10px; margin:-2px 0 8px; line-height:1.35; }
+  .pix-vpp-pick.is-locked{ opacity:.45; cursor:default; }
+  .pix-vpp-pick.is-locked:hover{ border-color:#444; }
+  .pix-vpp-note{ color:#e0a33a; font-size:10px; margin:-2px 0 8px; line-height:1.35; }
 
   /* Fullscreen formula editor */
-  .pix-h3e-back{
+  .pix-vpe-back{
     position:fixed; inset:0; z-index:1500; background:rgba(0,0,0,.72);
     display:flex; align-items:center; justify-content:center; padding:3vh 3vw;
   }
@@ -164,18 +164,18 @@ function injectCSS() {
     background:#2b2b2b; border:1px solid #555; border-radius:8px; overflow:hidden;
     font:12px 'Segoe UI', sans-serif;
   }
-  .pix-h3e-head{ display:flex; align-items:center; gap:10px;
+  .pix-vpe-head{ display:flex; align-items:center; gap:10px;
     padding:10px 14px; background:#333; border-bottom:1px solid #444; flex:none; }
-  .pix-h3e-head b{ color:#fff; font-weight:400; font-size:13px; }
-  .pix-h3e-head .cnt{ color:#777; font-size:11px; }
-  .pix-h3e-head .sp{ flex:1 1 auto; }
+  .pix-vpe-head b{ color:#fff; font-weight:400; font-size:13px; }
+  .pix-vpe-head .cnt{ color:#777; font-size:11px; }
+  .pix-vpe-head .sp{ flex:1 1 auto; }
   .pix-h3e textarea{
     flex:1 1 auto; margin:12px 14px; background:#1d1d1d; color:#ddd;
     border:1px solid #333; border-radius:4px; padding:10px 12px;
     font:12px/1.5 monospace; resize:none; outline:none;
   }
   .pix-h3e textarea:focus{ border-color:var(--pix-acc,#f66744); }
-  .pix-h3e-foot{ display:flex; gap:6px; justify-content:flex-end;
+  .pix-vpe-foot{ display:flex; gap:6px; justify-content:flex-end;
     padding:0 14px 12px; flex:none; }
   `;
   document.head.appendChild(style);
@@ -198,12 +198,12 @@ function closePop() {
 }
 function openPop(anchor, values, current, onPick) {
   closePop();
-  const pop = el("div", "pix-h3p-pop");
+  const pop = el("div", "pix-vpp-pop");
 
   // A text_encoders folder is a junk drawer - this box has 30-odd files in it -
   // so scrolling to find one is miserable. Filter above about a screenful.
   let filter = null;
-  const list = el("div", "pix-h3p-poplist");
+  const list = el("div", "pix-vpp-poplist");
   const paint = (q) => {
     list.replaceChildren();
     const needle = (q || "").trim().toLowerCase();
@@ -234,7 +234,7 @@ function openPop(anchor, values, current, onPick) {
   if (values.length > 8) {
     filter = document.createElement("input");
     filter.type = "text";
-    filter.className = "pix-h3p-popfilter";
+    filter.className = "pix-vpp-popfilter";
     filter.placeholder = "Filter, e.g. vl 8b";
     filter.addEventListener("input", () => paint(filter.value));
     // Never let a keystroke reach the canvas: ComfyUI binds single letters to
@@ -276,19 +276,19 @@ function closeEditor() {
 
 function openEditor(title, text, onSave) {
   closeEditor();
-  const back = el("div", "pix-h3e-back");
+  const back = el("div", "pix-vpe-back");
   const box = el("div", "pix-h3e");
-  const head = el("div", "pix-h3e-head");
+  const head = el("div", "pix-vpe-head");
   const name = el("b", null, title);
   const cnt = el("span", "cnt", "");
   head.append(name, cnt, el("span", "sp"));
   const ta = el("textarea");
   ta.value = text || "";
   ta.spellcheck = false;
-  const foot = el("div", "pix-h3e-foot");
-  const cancel = el("button", "pix-h3p-btn", "Cancel");
+  const foot = el("div", "pix-vpe-foot");
+  const cancel = el("button", "pix-vpp-btn", "Cancel");
   cancel.style.flex = "0 0 auto";
-  const save = el("button", "pix-h3p-btn", "Save");
+  const save = el("button", "pix-vpp-btn", "Save");
   save.style.flex = "0 0 auto";
   foot.append(cancel, save);
   box.append(head, ta, foot);
@@ -327,7 +327,7 @@ function openEditor(title, text, onSave) {
 // ---------------------------------------------------------------------------
 // Panel
 // ---------------------------------------------------------------------------
-export function closeH3PanelFor(node) {
+export function closeVideoPromptPanelFor(node) {
   if (node && PANEL_NODE !== node) return;
   closePop();
   closeEditor();
@@ -358,9 +358,9 @@ function outsideClose(e) {
   // The dropdown is position:fixed on <body>, so a click ELSEWHERE INSIDE the
   // panel used to leave it floating over a row that renderPanel had already
   // destroyed - anchored to nothing. Close it before the inside-the-panel
-  // early return. The .pix-h3p-pick exemption keeps the anchor's own toggle
+  // early return. The .pix-vpp-pick exemption keeps the anchor's own toggle
   // behaviour, since openPop already closes any previous one.
-  if (POP && !POP.contains(e.target) && !e.target?.closest?.(".pix-h3p-pick")) {
+  if (POP && !POP.contains(e.target) && !e.target?.closest?.(".pix-vpp-pick")) {
     closePop();
   }
   // contains(), like Save Video, rather than a class selector: it cannot be
@@ -370,41 +370,41 @@ function outsideClose(e) {
   // their own handlers. Without the exemptions, picking a colour or an option
   // dismisses the panel underneath (node-settings-accent invariant 3).
   //
-  // .pix-h3-gear is exempt for a different reason: it is what OPENS the panel,
+  // .pix-vp-gear is exempt for a different reason: it is what OPENS the panel,
   // and this fires on pointerdown while the button acts on click. Without it
   // the gear closed the panel and the click immediately reopened it, so a
   // second press looked like a no-op.
-  if (e.target?.closest?.(".pix-h3p-pop, .pix-h3e-back, .pix-h3-gear, .pix-cp-popup, .pix-cp-modal-backdrop, .pix-nset-pop")) {
+  if (e.target?.closest?.(".pix-vpp-pop, .pix-vpe-back, .pix-vp-gear, .pix-cp-popup, .pix-cp-modal-backdrop, .pix-nset-pop")) {
     return;
   }
-  closeH3PanelFor(null);
+  closeVideoPromptPanelFor(null);
 }
 
 function escClose(e) {
   if (e.key !== "Escape" || !PANEL) return;
   if (EDITOR) return;                 // the editor handles its own Escape
   e.stopPropagation();
-  closeH3PanelFor(null);
+  closeVideoPromptPanelFor(null);
 }
 
 function changed(node) {
   ON_CHANGE?.(node);
 }
 
-export async function openH3Panel(node, onChange) {
+export async function openVideoPromptPanel(node, onChange) {
   injectCSS();
-  if (PANEL && PANEL_NODE === node) { closeH3PanelFor(node); return; }
-  closeH3PanelFor(null);
+  if (PANEL && PANEL_NODE === node) { closeVideoPromptPanelFor(node); return; }
+  closeVideoPromptPanelFor(null);
   PANEL_NODE = node;
   ON_CHANGE = onChange;
 
   const panel = el("div", "pix-h3p");
-  const head = el("div", "pix-h3p-head");
-  head.append(el("span", null, "Minimax H3 Prompt settings"));
-  const x = el("button", "pix-h3p-x", "✕");
-  x.addEventListener("click", () => closeH3PanelFor(null));
+  const head = el("div", "pix-vpp-head");
+  head.append(el("span", null, "Video Prompt settings"));
+  const x = el("button", "pix-vpp-x", "✕");
+  x.addEventListener("click", () => closeVideoPromptPanelFor(null));
   head.appendChild(x);
-  const body = el("div", "pix-h3p-body");
+  const body = el("div", "pix-vpp-body");
   panel.append(head, body);
   document.body.appendChild(panel);
   PANEL = panel;
@@ -417,7 +417,7 @@ export async function openH3Panel(node, onChange) {
   // Save Video both pass their own close-button selector for the same reason.
   makeDraggable(panel, head, {
     onUserMove: () => { USER_MOVED = true; },
-    ignoreSelector: ".pix-h3p-x",
+    ignoreSelector: ".pix-vpp-x",
   });
   followNode(panel, node, {
     isCurrent: () => PANEL === panel && PANEL_NODE === node,
@@ -453,7 +453,7 @@ export async function openH3Panel(node, onChange) {
 // the order restarted at the top of the document. Nothing in the panel is
 // derived from these six numbers, so a re-render buys nothing.
 function numField(node, label, key, onQuiet, opts) {
-  const wrap = el("div", "pix-h3p-num");
+  const wrap = el("div", "pix-vpp-num");
   wrap.append(el("label", null, label));
   const input = document.createElement("input");
   input.type = "text";
@@ -474,8 +474,8 @@ function numField(node, label, key, onQuiet, opts) {
 }
 
 function toggleRow(label, on, onFlip, title) {
-  const row = el("div", "pix-h3p-toggle" + (on ? " is-on" : ""));
-  const sw = el("span", "pix-h3p-sw");
+  const row = el("div", "pix-vpp-toggle" + (on ? " is-on" : ""));
+  const sw = el("span", "pix-vpp-sw");
   sw.appendChild(document.createElement("i"));
   row.append(sw, el("span", null, label));
   if (title) row.title = title;
@@ -493,20 +493,20 @@ function renderPanel(node, body) {
   };
 
   if (!DATA.ok) {
-    const err = el("div", "pix-h3p-missing",
+    const err = el("div", "pix-vpp-missing",
       "Could not reach the server, so the formulas cannot be shown. " +
       "The node will still run with whatever is on disk.");
     body.appendChild(err);
   }
 
   // ---- model -------------------------------------------------------------
-  body.appendChild(el("div", "pix-h3p-sec", "MODEL"));
+  body.appendChild(el("div", "pix-vpp-sec", "MODEL"));
   const models = Array.isArray(DATA.models) ? DATA.models : [];
   // A wired CLIP WINS at run time, so leaving this row live would let the panel
   // name one model while a different one is actually doing the work.
   const clipWired = (node.inputs || []).some(
     (i) => i && i.name === "clip" && i.link != null);
-  const pick = el("div", "pix-h3p-pick" + (clipWired ? " is-locked" : ""));
+  const pick = el("div", "pix-vpp-pick" + (clipWired ? " is-locked" : ""));
   pick.append(el("span", "v", clipWired ? "using the wired CLIP" : st.model),
               el("span", "c", clipWired ? "" : "▼"));
   pick.title = clipWired
@@ -521,12 +521,12 @@ function renderPanel(node, body) {
   }
   body.appendChild(pick);
   if (clipWired) {
-    body.appendChild(el("div", "pix-h3p-note",
+    body.appendChild(el("div", "pix-vpp-note",
       "A Load CLIP node is wired in, so that model is used and this setting is "
       + "ignored. It must be a vision language model, and Load CLIP's type does "
       + "not matter. Unplug the wire to choose here again."));
   } else if (models.length && !models.includes(st.model)) {
-    body.appendChild(el("div", "pix-h3p-note",
+    body.appendChild(el("div", "pix-vpp-note",
       "\"" + st.model + "\" is not in your text_encoders folder, so the node "
       + "picks the best vision model it can find. Choose one here to be sure."));
   }
@@ -534,7 +534,7 @@ function renderPanel(node, body) {
   // quiet = write state, tell the host, but do NOT rebuild the panel
   const quiet = (patch) => { writeState(node, patch); changed(node); };
 
-  const nums = el("div", "pix-h3p-nums");
+  const nums = el("div", "pix-vpp-nums");
   nums.append(
     numField(node, "TEMP", "temperature", (v) => quiet({ temperature: v }),
       { title: "0.3 is what these formulas were measured at. Higher makes the model paste the formula's own example words." }),
@@ -543,20 +543,20 @@ function renderPanel(node, body) {
   );
   body.appendChild(nums);
 
-  const adv = el("div", "pix-h3p-adv",
-    (node._pixH3AdvOpen ? "▼" : "▶") + " Advanced sampling");
+  const adv = el("div", "pix-vpp-adv",
+    (node._pixVpAdvOpen ? "▼" : "▶") + " Advanced sampling");
   adv.addEventListener("click", () => {
-    node._pixH3AdvOpen = !node._pixH3AdvOpen;
+    node._pixVpAdvOpen = !node._pixVpAdvOpen;
     renderPanel(node, body);
   });
   body.appendChild(adv);
-  if (node._pixH3AdvOpen) {
-    const a = el("div", "pix-h3p-nums");
+  if (node._pixVpAdvOpen) {
+    const a = el("div", "pix-vpp-nums");
     a.append(
       numField(node, "TOP K", "top_k", (v) => quiet({ top_k: v }), { int: true }),
       numField(node, "TOP P", "top_p", (v) => quiet({ top_p: v })),
     );
-    const b = el("div", "pix-h3p-nums");
+    const b = el("div", "pix-vpp-nums");
     b.append(
       numField(node, "MIN P", "min_p", (v) => quiet({ min_p: v })),
       numField(node, "REP", "repetition_penalty", (v) => quiet({ repetition_penalty: v })),
@@ -565,16 +565,16 @@ function renderPanel(node, body) {
   }
 
   // ---- formulas ----------------------------------------------------------
-  body.appendChild(el("div", "pix-h3p-sec", "FORMULAS"));
+  body.appendChild(el("div", "pix-vpp-sec", "FORMULAS"));
   for (const mode of MODES) {
     const info = DATA.modes?.[mode] || {};
-    const row = el("div", "pix-h3p-row" + (info.edited ? " is-edited" : ""));
+    const row = el("div", "pix-vpp-row" + (info.edited ? " is-edited" : ""));
     row.append(el("span", "name", MODE_LABELS[mode] || mode));
     const chars = Number(info.chars) || 0;
     row.append(el("span", "cnt",
       chars.toLocaleString() + (info.edited ? " · edited" : "")));
 
-    const edit = el("button", "pix-h3p-icon", "✎");
+    const edit = el("button", "pix-vpp-icon", "✎");
     edit.title = "Edit this formula";
     edit.disabled = !DATA.ok;
     edit.addEventListener("click", (e) => {
@@ -589,7 +589,7 @@ function renderPanel(node, body) {
       });
     });
 
-    const reset = el("button", "pix-h3p-icon", "↺");
+    const reset = el("button", "pix-vpp-icon", "↺");
     reset.title = info.edited
       ? "Put the shipped formula back"
       : "This is the shipped formula";
@@ -612,27 +612,27 @@ function renderPanel(node, body) {
   }
 
   // ---- duration tiers ----------------------------------------------------
-  body.appendChild(el("div", "pix-h3p-sec", "DURATION TIERS"));
-  const activeMode = MODES.includes(node._pixH3TierMode)
-    ? node._pixH3TierMode
+  body.appendChild(el("div", "pix-vpp-sec", "DURATION TIERS"));
+  const activeMode = MODES.includes(node._pixVpTierMode)
+    ? node._pixVpTierMode
     : MODES[0];
-  const modeRow = el("div", "pix-h3p-pick");
+  const modeRow = el("div", "pix-vpp-pick");
   modeRow.append(el("span", "v", MODE_LABELS[activeMode]), el("span", "c", "▼"));
   modeRow.title = "Which mode's tiers to edit";
   modeRow.addEventListener("click", (e) => {
     e.stopPropagation();
     openPop(modeRow, MODES.map((m) => MODE_LABELS[m]), MODE_LABELS[activeMode],
       (label) => {
-        node._pixH3TierMode = MODES.find((m) => MODE_LABELS[m] === label) || MODES[0];
+        node._pixVpTierMode = MODES.find((m) => MODE_LABELS[m] === label) || MODES[0];
         renderPanel(node, body);
       });
   });
   body.appendChild(modeRow);
 
   const tiers = DATA.modes?.[activeMode]?.durations || [];
-  const tierBox = el("div", "pix-h3p-tiers");
+  const tierBox = el("div", "pix-vpp-tiers");
   tiers.forEach((tier, i) => {
-    const chip = el("button", "pix-h3p-tier");
+    const chip = el("button", "pix-vpp-tier");
     chip.append(document.createTextNode(tier.name));
     // The WORD TARGET, not a line count. The checklist items inside a tier are
     // semicolon-separated inside one long sentence, so counting sentences gave
@@ -658,12 +658,12 @@ function renderPanel(node, body) {
     tierBox.appendChild(chip);
   });
   if (!tiers.length) {
-    tierBox.appendChild(el("div", "pix-h3p-missing", "No tiers on disk."));
+    tierBox.appendChild(el("div", "pix-vpp-missing", "No tiers on disk."));
   }
   body.appendChild(tierBox);
 
   // ---- behaviour ---------------------------------------------------------
-  body.appendChild(el("div", "pix-h3p-sec", "BEHAVIOUR"));
+  body.appendChild(el("div", "pix-vpp-sec", "BEHAVIOUR"));
   body.appendChild(toggleRow(
     "Hint when 5s meets a speaking idea", st.speech_hint,
     (v) => set({ speech_hint: v }),
@@ -675,9 +675,9 @@ function renderPanel(node, body) {
   // they drift.
 
   // ---- backup ------------------------------------------------------------
-  body.appendChild(el("div", "pix-h3p-sec", "BACKUP"));
-  const btns = el("div", "pix-h3p-btns");
-  const exportBtn = el("button", "pix-h3p-btn", "Export");
+  body.appendChild(el("div", "pix-vpp-sec", "BACKUP"));
+  const btns = el("div", "pix-vpp-btns");
+  const exportBtn = el("button", "pix-vpp-btn", "Export");
   exportBtn.title = "Save every formula and tier to one file";
   exportBtn.addEventListener("click", (e) => {
     e.stopPropagation();
@@ -698,7 +698,7 @@ function renderPanel(node, body) {
     setTimeout(() => URL.revokeObjectURL(a.href), 4000);
   });
 
-  const importBtn = el("button", "pix-h3p-btn", "Import");
+  const importBtn = el("button", "pix-vpp-btn", "Import");
   importBtn.title = "Load formulas from a file";
   importBtn.addEventListener("click", (e) => {
     e.stopPropagation();
@@ -740,7 +740,7 @@ function renderPanel(node, body) {
     input.click();
   });
 
-  const resetAll = el("button", "pix-h3p-btn", "Reset all");
+  const resetAll = el("button", "pix-vpp-btn", "Reset all");
   resetAll.title = "Put every shipped formula and tier back";
   resetAll.addEventListener("click", async (e) => {
     e.stopPropagation();
@@ -787,8 +787,8 @@ export function panelIsOpenFor(node) {
  * stopped mattering, or keeps claiming a wire is present after it was pulled.
  * No-op when the panel is closed or belongs to another node.
  */
-export function refreshH3Panel(node) {
+export function refreshVideoPromptPanel(node) {
   if (!panelIsOpenFor(node)) return;
-  const body = PANEL.querySelector(".pix-h3p-body");
+  const body = PANEL.querySelector(".pix-vpp-body");
   if (body) renderPanel(node, body);
 }

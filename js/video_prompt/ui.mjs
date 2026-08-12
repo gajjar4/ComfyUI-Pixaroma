@@ -1,4 +1,4 @@
-// Minimax H3 Prompt Pixaroma - the node face.
+// Video Prompt Pixaroma - the node face.
 //
 // ONE DOM widget in both renderers, so there is no per-renderer UI to rebuild
 // on a live renderer flip (the failure that hit Switch and Mute Switch). The
@@ -22,8 +22,8 @@ import {
   readState, rollSeed, writeState,
 } from "./core.mjs";
 
-const ROOT_CLASS = "pix-h3-root";
-const WIDGET_TYPE = "pixaroma_h3_prompt";   // namespaced so Nodes 2.0 does not
+const ROOT_CLASS = "pix-vp-root";
+const WIDGET_TYPE = "pixaroma_video_prompt";   // namespaced so Nodes 2.0 does not
                                             // match a registered Vue widget and
                                             // orphan our element
 export const WIDGET_MIN_H = 330;
@@ -61,7 +61,7 @@ function primeTiers(node) {
       // Repaint every face already on the canvas, not just the one that asked.
       if (changed) {
         for (const n of window.app?.graph?._nodes || []) {
-          if (n?._pixH3Els) renderFace(n);
+          if (n?._pixVpEls) renderFace(n);
         }
       }
     })
@@ -92,7 +92,7 @@ export function injectCSS() {
      would sit on top of the node's own colour. */
   .${ROOT_CLASS} *{ box-sizing:border-box; }
 
-  .pix-h3-banner{
+  .pix-vp-banner{
     display:flex; align-items:center; gap:7px; flex:none;
     padding:6px 9px; border-radius:4px;
     background:color-mix(in srgb, ${ACC} 10%, transparent);
@@ -103,112 +103,112 @@ export function injectCSS() {
      other end of the same row - so the row appeared to have two settings
      buttons. The mode is written in words; it does not need a picture, and
      there is no icon in the bundled set that would mean "mode" anyway. */
-  .pix-h3-blabel{ color:#eee; font-size:11px; }
-  .pix-h3-bhint{ margin-left:auto; color:#888; font-size:10px; }
-  .pix-h3-gear{
+  .pix-vp-blabel{ color:#eee; font-size:11px; }
+  .pix-vp-bhint{ margin-left:auto; color:#888; font-size:10px; }
+  .pix-vp-gear{
     flex:none; width:14px; height:14px; padding:0; margin:0 0 0 2px;
     background:none; border:none; cursor:pointer; line-height:0;
   }
-  .pix-h3-gear::before{
+  .pix-vp-gear::before{
     content:""; display:block; width:100%; height:100%; background:#aaa;
     -webkit-mask:url("${pixAsset("icons/note/gear.svg")}") center/contain no-repeat;
     mask:url("${pixAsset("icons/note/gear.svg")}") center/contain no-repeat;
   }
-  .pix-h3-gear:hover::before{ background:${ACC}; }
+  .pix-vp-gear:hover::before{ background:${ACC}; }
 
-  .pix-h3-caption{ flex:none; color:${ACC}; font-size:10px; letter-spacing:.4px; }
+  .pix-vp-caption{ flex:none; color:${ACC}; font-size:10px; letter-spacing:.4px; }
 
-  .pix-h3-idea, .pix-h3-out{
+  .pix-vp-idea, .pix-vp-out{
     width:100%; background:#1d1d1d; color:#e0e0e0;
     border:1px solid #333; border-radius:4px; padding:6px 8px;
     font:12px monospace; resize:none; outline:none;
   }
-  .pix-h3-idea{ flex:none; height:52px; min-height:52px; }
-  .pix-h3-idea:focus{ border-color:${ACC}; }
-  .pix-h3-out{
+  .pix-vp-idea{ flex:none; height:52px; min-height:52px; }
+  .pix-vp-idea:focus{ border-color:${ACC}; }
+  .pix-vp-out{
     flex:1 1 auto; min-height:64px; line-height:1.45;
     font-size:11px; color:#bbb; cursor:text;
   }
-  .pix-h3-out:focus{ border-color:${ACC}; }
+  .pix-vp-out:focus{ border-color:${ACC}; }
 
-  .pix-h3-tip{
+  .pix-vp-tip{
     flex:none; display:flex; align-items:center; gap:5px;
     color:#777; font-size:10px; line-height:1.3;
   }
-  .pix-h3-tip b{ color:${ACC}; font-weight:400; }
+  .pix-vp-tip b{ color:${ACC}; font-weight:400; }
 
-  .pix-h3-controls{ display:flex; align-items:center; gap:6px; flex:none; }
-  .pix-h3-tiers{ display:flex; gap:4px; flex:1 1 auto; min-width:0; }
-  .pix-h3-chip{
+  .pix-vp-controls{ display:flex; align-items:center; gap:6px; flex:none; }
+  .pix-vp-tiers{ display:flex; gap:4px; flex:1 1 auto; min-width:0; }
+  .pix-vp-chip{
     flex:1 1 0; min-width:0; text-align:center; cursor:pointer;
     background:#1d1d1d; border:1px solid #444; border-radius:4px;
     padding:5px 2px; color:#888; font-size:11px; font-family:inherit;
     white-space:nowrap; overflow:hidden;
   }
-  .pix-h3-chip:hover{ border-color:${ACC}; color:#ddd; }
-  .pix-h3-chip.is-on{ background:${ACC}; border-color:${ACC}; color:#fff; }
+  .pix-vp-chip:hover{ border-color:${ACC}; color:#ddd; }
+  .pix-vp-chip.is-on{ background:${ACC}; border-color:${ACC}; color:#fff; }
   /* The 5s tier cannot reliably write a talking prompt (measured 0/6), so it is
      marked when the idea asks for speech. Marked, never blocked - it is a guess
      about the user's text. */
-  .pix-h3-chip.is-warn{ border-color:#c9a227; color:#c9a227; }
-  .pix-h3-chip.is-warn.is-on{ background:#c9a227; border-color:#c9a227; color:#1d1d1d; }
+  .pix-vp-chip.is-warn{ border-color:#c9a227; color:#c9a227; }
+  .pix-vp-chip.is-warn.is-on{ background:#c9a227; border-color:#c9a227; color:#1d1d1d; }
 
-  .pix-h3-seedwrap{
+  .pix-vp-seedwrap{
     display:flex; align-items:center; flex:none;
     background:#1d1d1d; border:1px solid #444; border-radius:4px; overflow:hidden;
   }
-  .pix-h3-seed{
+  .pix-vp-seed{
     background:none; border:none; cursor:pointer; padding:5px 7px;
     color:#ccc; font:10px monospace; max-width:92px; overflow:hidden;
     text-overflow:ellipsis; white-space:nowrap;
   }
-  .pix-h3-seed:hover{ color:${ACC}; }
-  .pix-h3-seedmode{
+  .pix-vp-seed:hover{ color:${ACC}; }
+  .pix-vp-seedmode{
     background:none; border:none; border-left:1px solid #444; cursor:pointer;
     padding:5px 6px; color:#888; font:10px 'Segoe UI', sans-serif;
   }
-  .pix-h3-seedmode:hover{ color:${ACC}; }
-  .pix-h3-seedmode.is-on{ background:${ACC}; color:#fff; }
+  .pix-vp-seedmode:hover{ color:${ACC}; }
+  .pix-vp-seedmode.is-on{ background:${ACC}; color:#fff; }
 
-  .pix-h3-readhead{
+  .pix-vp-readhead{
     display:flex; align-items:center; justify-content:space-between; flex:none;
   }
-  .pix-h3-readhead .k{ color:${ACC}; font-size:10px; letter-spacing:.4px; }
-  .pix-h3-readhead .v{ color:#777; font-size:10px; }
+  .pix-vp-readhead .k{ color:${ACC}; font-size:10px; letter-spacing:.4px; }
+  .pix-vp-readhead .v{ color:#777; font-size:10px; }
   /* A failure reads as a message, not as a prompt. Amber rather than red: it is
      almost always a setup step the user has not done yet, not a crash. */
-  .pix-h3-readhead .v.is-error{ color:#e0a33a; }
-  .pix-h3-out.is-error{ color:#e0a33a; border-color:#7a5a20; }
+  .pix-vp-readhead .v.is-error{ color:#e0a33a; }
+  .pix-vp-out.is-error{ color:#e0a33a; border-color:#7a5a20; }
 
   /* wrap: the Nodes 2.0 body is narrower than Classic's, so a three-button row
      sized for Classic spills out of the right edge without this. */
-  .pix-h3-actions{ display:flex; align-items:center; gap:6px; flex:none; flex-wrap:wrap; }
-  .pix-h3-spacer{ flex:1 1 auto; min-width:0; }
-  .pix-h3-btn{
+  .pix-vp-actions{ display:flex; align-items:center; gap:6px; flex:none; flex-wrap:wrap; }
+  .pix-vp-spacer{ flex:1 1 auto; min-width:0; }
+  .pix-vp-btn{
     box-sizing:border-box; cursor:pointer; user-select:none;
     background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.15);
     border-radius:4px; padding:6px 12px;
     color:rgba(255,255,255,0.7); font:11px 'Segoe UI', sans-serif;
   }
-  .pix-h3-btn:hover{ background:${ACC}; border-color:${ACC}; color:#fff; }
-  .pix-h3-btn:disabled, .pix-h3-btn:disabled:hover{
+  .pix-vp-btn:hover{ background:${ACC}; border-color:${ACC}; color:#fff; }
+  .pix-vp-btn:disabled, .pix-vp-btn:disabled:hover{
     background:rgba(255,255,255,0.02); border-color:rgba(255,255,255,0.08);
     color:rgba(255,255,255,0.28); cursor:default;
   }
-  .pix-h3-btn.pix-h3-primary{
+  .pix-vp-btn.pix-vp-primary{
     background:${ACC}; border-color:${ACC}; color:#fff; padding:6px 15px;
   }
-  .pix-h3-btn.pix-h3-primary:hover{ filter:brightness(1.12); }
+  .pix-vp-btn.pix-vp-primary:hover{ filter:brightness(1.12); }
   /* A STATE toggle, not an action, so it reads as filled-when-on like the seed
      mode badge and the tier chips rather than as another thing to press. */
-  .pix-h3-btn.pix-h3-vram.is-on{
+  .pix-vp-btn.pix-vp-vram.is-on{
     background:${ACC}; border-color:${ACC}; color:#fff;
   }
   /* literal glyph, never a \\XXXX CSS escape - JS reads that as an illegal
      octal escape inside a template literal and the whole module fails to load */
-  .pix-h3-btn.pix-h3-vram.is-on::before{ content:"✓ "; }
+  .pix-vp-btn.pix-vp-vram.is-on::before{ content:"✓ "; }
   /* higher specificity than :hover so the green survives a still-hovered cursor */
-  .pix-h3-btn.is-flashing, .pix-h3-btn.is-flashing:hover{
+  .pix-vp-btn.is-flashing, .pix-vp-btn.is-flashing:hover{
     background:#3ec371; border-color:#3ec371; color:#fff;
   }
   `;
@@ -264,21 +264,21 @@ async function copyText(text, button) {
     ta.remove();
     flash(button, "Copied");
   } catch (e) {
-    console.error("[Pixaroma.H3Prompt] copy failed", e);
+    console.error("[Pixaroma.VideoPrompt] copy failed", e);
   }
 }
 
 export function buildFace(node, openPanel) {
-  if (node._pixH3Root) return node._pixH3Root;
+  if (node._pixVpRoot) return node._pixVpRoot;
 
   const root = el("div", ROOT_CLASS);
 
   // banner
-  const banner = el("div", "pix-h3-banner");
-  const blabel = el("span", "pix-h3-blabel", "Text to video");
-  const bhint = el("span", "pix-h3-bhint", "");
-  const gear = el("button", "pix-h3-gear");
-  gear.title = "Minimax H3 Prompt settings";
+  const banner = el("div", "pix-vp-banner");
+  const blabel = el("span", "pix-vp-blabel", "Text to video");
+  const bhint = el("span", "pix-vp-bhint", "");
+  const gear = el("button", "pix-vp-gear");
+  gear.title = "Video Prompt settings";
   gear.addEventListener("click", (e) => {
     e.stopPropagation();
     openPanel?.(node);
@@ -286,22 +286,22 @@ export function buildFace(node, openPanel) {
   banner.append(blabel, bhint, gear);
 
   // idea
-  const caption = el("div", "pix-h3-caption", "YOUR IDEA");
-  const idea = el("textarea", "pix-h3-idea");
+  const caption = el("div", "pix-vp-caption", "YOUR IDEA");
+  const idea = el("textarea", "pix-vp-idea");
   idea.placeholder = "she smiles and says: come and see this";
   idea.addEventListener("input", () => {
     writeState(node, { idea: idea.value });
     renderFace(node);
   });
 
-  const tip = el("div", "pix-h3-tip");
+  const tip = el("div", "pix-vp-tip");
   tip.innerHTML = "<b>Tip</b> put spoken words at the end of your idea";
 
   // tiers + seed
-  const controls = el("div", "pix-h3-controls");
-  const tiers = el("div", "pix-h3-tiers");
-  const seedWrap = el("div", "pix-h3-seedwrap");
-  const seedBtn = el("button", "pix-h3-seed", "0");
+  const controls = el("div", "pix-vp-controls");
+  const tiers = el("div", "pix-vp-tiers");
+  const seedWrap = el("div", "pix-vp-seedwrap");
+  const seedBtn = el("button", "pix-vp-seed", "0");
   seedBtn.title = "Click to type a seed";
   seedBtn.addEventListener("click", (e) => {
     e.stopPropagation();
@@ -313,7 +313,7 @@ export function buildFace(node, openPanel) {
     writeState(node, { seed: n });
     renderFace(node);
   });
-  const seedMode = el("button", "pix-h3-seedmode", "F");
+  const seedMode = el("button", "pix-vp-seedmode", "F");
   seedMode.addEventListener("click", (e) => {
     e.stopPropagation();
     const st = readState(node);
@@ -326,17 +326,17 @@ export function buildFace(node, openPanel) {
   controls.append(tiers, seedWrap);
 
   // readout
-  const readhead = el("div", "pix-h3-readhead");
+  const readhead = el("div", "pix-vp-readhead");
   const rk = el("span", "k", "PROMPT");
   const rv = el("span", "v", "");
   readhead.append(rk, rv);
-  const out = el("textarea", "pix-h3-out");
+  const out = el("textarea", "pix-vp-out");
   out.readOnly = true;
   out.placeholder = "press Generate to write the prompt";
 
   // actions
-  const actions = el("div", "pix-h3-actions");
-  const reroll = el("button", "pix-h3-btn", "Re-roll");
+  const actions = el("div", "pix-vp-actions");
+  const reroll = el("button", "pix-vp-btn", "Re-roll");
   reroll.title = "New seed, then generate";
   reroll.addEventListener("click", (e) => {
     e.stopPropagation();
@@ -344,7 +344,7 @@ export function buildFace(node, openPanel) {
     renderFace(node);
     app.queuePrompt?.(0, 1);
   });
-  const copy = el("button", "pix-h3-btn", "Copy");
+  const copy = el("button", "pix-vp-btn", "Copy");
   copy.title = "Copy the finished prompt to the clipboard";
   copy.addEventListener("click", (e) => {
     e.stopPropagation();
@@ -353,15 +353,15 @@ export function buildFace(node, openPanel) {
   // On the FACE rather than buried in settings, because it is a per-workflow
   // decision: off while you are only writing prompts, on when this node sits in
   // front of an H3 video model that wants the memory.
-  const vram = el("button", "pix-h3-btn pix-h3-vram", "Free VRAM");
+  const vram = el("button", "pix-vp-btn pix-vp-vram", "Free VRAM");
   vram.addEventListener("click", (e) => {
     e.stopPropagation();
     const st = readState(node);
     writeState(node, { release_model: !st.release_model });
     renderFace(node);
   });
-  const spacer = el("span", "pix-h3-spacer");
-  const gen = el("button", "pix-h3-btn pix-h3-primary", "Generate");
+  const spacer = el("span", "pix-vp-spacer");
+  const gen = el("button", "pix-vp-btn pix-vp-primary", "Generate");
   gen.title = "Run the workflow and write the prompt";
   gen.addEventListener("click", (e) => {
     e.stopPropagation();
@@ -391,14 +391,14 @@ export function buildFace(node, openPanel) {
   // Pins a min-height ONLY while a resize handle is dragged, so the fixed rows
   // cannot be squashed out of the frame, and nothing ever writes a
   // content-derived size on the load path.
-  node._pixH3FloorOff = installResizeFloor(root, () => WIDGET_MIN_H);
+  node._pixVpFloorOff = installResizeFloor(root, () => WIDGET_MIN_H);
 
-  node._pixH3Root = root;
-  node._pixH3Els = {
+  node._pixVpRoot = root;
+  node._pixVpEls = {
     root, blabel, bhint, idea, tip, tiers, seedBtn, seedMode, out, rv,
     copy, reroll, gen, vram,
   };
-  node._pixH3Widget = widget;
+  node._pixVpWidget = widget;
   primeTiers(node);
   return root;
 }
@@ -407,7 +407,7 @@ export function buildFace(node, openPanel) {
 // Render
 // ---------------------------------------------------------------------------
 export function renderFace(node) {
-  const els = node?._pixH3Els;
+  const els = node?._pixVpEls;
   // Guard on the ELEMENTS, never on root.isConnected: on the very first render
   // the widget root has not been parented yet, and an isConnected gate skips
   // that render and then never runs again, leaving the node blank forever.
@@ -432,7 +432,7 @@ export function renderFace(node) {
   names.forEach((name, i) => {
     let chip = els.tiers.children[i];
     if (!chip) {
-      chip = el("button", "pix-h3-chip");
+      chip = el("button", "pix-vp-chip");
       chip.addEventListener("click", (e) => {
         e.stopPropagation();
         const list = tiersFor(modeOf(node));
@@ -476,7 +476,7 @@ export function renderFace(node) {
     : "New seed, then generate";
 
   // readout
-  const last = node._pixH3Last;
+  const last = node._pixVpLast;
   if (last && typeof last.text === "string") {
     if (els.out.value !== last.text) els.out.value = last.text;
     const bits = [];
@@ -513,39 +513,39 @@ export function renderFace(node) {
 export function applyError(node, message) {
   const text = String(message || "").trim() ||
     "The node failed, but ComfyUI did not say why. Check the console.";
-  node._pixH3Last = { text, words: 0, error: true };
+  node._pixVpLast = { text, words: 0, error: true };
   renderFace(node);
 }
 
 /** Called from the executed listener in index.js. Runtime only - none of this
  *  reaches node.properties, so a run can never dirty a clean workflow. */
 export function applyResult(node, payload, elapsed) {
-  node._pixH3Last = {
+  node._pixVpLast = {
     text: typeof payload?.text === "string" ? payload.text : "",
     words: Number(payload?.words) || 0,
     seed: payload?.seed,
     elapsed: elapsed != null ? elapsed : undefined,
   };
   if (Number.isFinite(Number(payload?.seed))) {
-    node._pixH3LastSeed = Number(payload.seed);
+    node._pixVpLastSeed = Number(payload.seed);
   }
   renderFace(node);
 }
 
 export function destroyFace(node) {
-  try { node._pixH3FloorOff?.(); } catch (e) { /* already gone */ }
-  node._pixH3FloorOff = null;
+  try { node._pixVpFloorOff?.(); } catch (e) { /* already gone */ }
+  node._pixVpFloorOff = null;
   // Drop the widget from node.widgets too, not just our own reference. Without
   // this a rebuild (which is what a renderer flip does) appends a SECOND widget
   // and the node grows a duplicate body every time the renderer is toggled.
-  if (Array.isArray(node.widgets) && node._pixH3Widget) {
-    const i = node.widgets.indexOf(node._pixH3Widget);
+  if (Array.isArray(node.widgets) && node._pixVpWidget) {
+    const i = node.widgets.indexOf(node._pixVpWidget);
     if (i !== -1) node.widgets.splice(i, 1);
   }
-  node._pixH3Root?.remove();
-  node._pixH3Root = null;
-  node._pixH3Els = null;
-  node._pixH3Widget = null;
+  node._pixVpRoot?.remove();
+  node._pixVpRoot = null;
+  node._pixVpEls = null;
+  node._pixVpWidget = null;
 }
 
 // ⚠️ DO NOT ADD a rebuild-on-renderer-change hook here. It was tried and

@@ -1,4 +1,4 @@
-"""Minimax H3 Prompt Pixaroma - write an H3 prompt with a local model, in one node.
+"""Video Prompt Pixaroma - write an H3 prompt with a local model, in one node.
 
 Replaces three workflows (text to video, first frame, first and last) of about
 ten nodes each. Everything they wired by hand happens inside here: the text
@@ -10,9 +10,9 @@ is no mode on node.properties to go stale, and the connection handler in the JS
 writes no serialized state - which is what keeps this clear of the configure
 replay that has bitten the Switch family twice (Vue Compat #17 / #19).
 
-All the text assembly is pure and lives in _h3_prompt_helpers.py so it can be
+All the text assembly is pure and lives in _video_prompt_helpers.py so it can be
 tested with a bare python and no model on disk
-(harness: D:\\Claude Tests\\_h3_prompt_test.py).
+(harness: D:\\Claude Tests\\_video_prompt_test.py).
 
 The three calls that do the generating are exactly the ones core's own
 TextGenerate node makes (comfy_extras/nodes_textgen.py): clip.tokenize, then
@@ -28,7 +28,7 @@ import comfy.utils
 import folder_paths
 
 from ._duration_helpers import frames_from_seconds
-from ._h3_prompt_helpers import (
+from ._video_prompt_helpers import (
     FIRST_LAST,
     MODE_LABELS,
     TEXT_TO_VIDEO,
@@ -122,16 +122,16 @@ def _resolve_model(wanted: str):
     if chosen is None:
         if available:
             raise RuntimeError(
-                "[Pixaroma] Minimax H3 Prompt: none of the files in your "
+                "[Pixaroma] Video Prompt: none of the files in your "
                 "text_encoders folder look like a vision language model.\n"
                 + _NEEDED
             )
         raise RuntimeError(
-            "[Pixaroma] Minimax H3 Prompt: your text_encoders folder is empty.\n"
+            "[Pixaroma] Video Prompt: your text_encoders folder is empty.\n"
             + _NEEDED
         )
     if auto:
-        print("[Pixaroma] Minimax H3 Prompt: \"%s\" is not in text_encoders, "
+        print("[Pixaroma] Video Prompt: \"%s\" is not in text_encoders, "
               "using \"%s\" instead. Pick one from the gear to silence this."
               % (wanted, chosen))
     return chosen
@@ -146,7 +146,7 @@ def _load_clip(name: str, clip_type: str):
         path = folder_paths.get_full_path_or_raise("text_encoders", name)
     except Exception:
         raise RuntimeError(
-            "[Pixaroma] Minimax H3 Prompt: the text encoder \"%s\" was not found "
+            "[Pixaroma] Video Prompt: the text encoder \"%s\" was not found "
             "in your text_encoders folder.\n" % name + _NEEDED
         )
     # Same getattr-with-fallback CLIPLoader itself uses, so an unknown type name
@@ -170,7 +170,7 @@ def _load_clip(name: str, clip_type: str):
         # traceback, or a genuine corrupt-file or OOM failure would become
         # undiagnosable.
         raise RuntimeError(
-            "[Pixaroma] Minimax H3 Prompt: \"%s\" could not be loaded as a "
+            "[Pixaroma] Video Prompt: \"%s\" could not be loaded as a "
             "language model.\n" % name + _NEEDED
         ) from e
     # NOTE: do NOT test `hasattr(clip, "generate")` here. ComfyUI's CLIP wrapper
@@ -265,7 +265,7 @@ def _first_image(*candidates):
     return None
 
 
-class PixaromaH3Prompt:
+class PixaromaVideoPrompt:
     DESCRIPTION = (
         "Writes a MiniMax H3 video prompt for you, on your own machine, using a small "
         "language model you already have. It replaces three separate workflows and about "
@@ -322,7 +322,7 @@ class PixaromaH3Prompt:
                     },
                 ),
             },
-            "hidden": {"H3PromptState": ("STRING", {"default": "{}"})},
+            "hidden": {"VideoPromptState": ("STRING", {"default": "{}"})},
         }
 
     RETURN_TYPES = ("STRING", "INT", "FLOAT")
@@ -345,7 +345,7 @@ class PixaromaH3Prompt:
     def IS_CHANGED(cls, **kwargs):
         """Make an edited FORMULA reach the next Run.
 
-        H3PromptState covers the idea, the length and the seed, because it is a
+        VideoPromptState covers the idea, the length and the seed, because it is a
         real input. The formulas are NOT - they are read from disk at execution
         time, so nothing about editing one changes the cache key.
 
@@ -360,14 +360,14 @@ class PixaromaH3Prompt:
         """
         return formulas_fingerprint()
 
-    def run(self, first_frame=None, last_frame=None, clip=None, H3PromptState="{}"):
-        st = parse_state(H3PromptState)
+    def run(self, first_frame=None, last_frame=None, clip=None, VideoPromptState="{}"):
+        st = parse_state(VideoPromptState)
         # Coerce BEFORE mode_for, or a junk input silently selects the wrong
         # formula (see _img).
         first_frame = _img(first_frame)
         last_frame = _img(last_frame)
         mode = mode_for(first_frame is not None, last_frame is not None)
-        prompt, asked_seconds, tier_name = assemble(H3PromptState, mode)
+        prompt, asked_seconds, tier_name = assemble(VideoPromptState, mode)
 
         # Test the FORMULA, not the assembled prompt. The assembled prompt also
         # contains the idea and the length block, so with any idea typed a
@@ -377,7 +377,7 @@ class PixaromaH3Prompt:
         # message was unreachable in exactly the case that needed it.
         if not load_formula(mode).strip():
             raise RuntimeError(
-                "[Pixaroma] Minimax H3 Prompt: there is no formula to run for "
+                "[Pixaroma] Video Prompt: there is no formula to run for "
                 "\"%s\". Open the gear on the node and press Reset on that formula "
                 "to put the shipped one back." % MODE_LABELS.get(mode, mode)
             )
@@ -389,13 +389,13 @@ class PixaromaH3Prompt:
         # first frame.
         if mode == TEXT_TO_VIDEO and not st["idea"].strip():
             raise RuntimeError(
-                "[Pixaroma] Minimax H3 Prompt: type an idea on the node first. "
+                "[Pixaroma] Video Prompt: type an idea on the node first. "
                 "With no picture wired and no idea, there is nothing to write about."
             )
 
         if asked_seconds <= 0:
             raise RuntimeError(
-                "[Pixaroma] Minimax H3 Prompt: the duration \"%s\" has no number "
+                "[Pixaroma] Video Prompt: the duration \"%s\" has no number "
                 "of seconds in its name, so the frame count cannot be worked out. "
                 "Rename it to something like \"8 seconds\" in the node's settings."
                 % (tier_name or "(unnamed)")
@@ -458,7 +458,7 @@ class PixaromaH3Prompt:
             # is translated. An OOM, a shape error or anything else must keep
             # its own message, or a real bug becomes undiagnosable.
             raise RuntimeError(
-                "[Pixaroma] Minimax H3 Prompt: \"%s\" cannot write text - it is "
+                "[Pixaroma] Video Prompt: \"%s\" cannot write text - it is "
                 "not a language model.\n" % model_name + _NEEDED
             ) from e
         text = model.decode(generated)
@@ -482,7 +482,7 @@ class PixaromaH3Prompt:
 
         return {
             "ui": {
-                "pixaroma_h3_prompt": [
+                "pixaroma_video_prompt": [
                     {
                         "text": text,
                         "words": word_count(text),
@@ -500,5 +500,5 @@ class PixaromaH3Prompt:
         }
 
 
-NODE_CLASS_MAPPINGS = {"PixaromaH3Prompt": PixaromaH3Prompt}
-NODE_DISPLAY_NAME_MAPPINGS = {"PixaromaH3Prompt": "Minimax H3 Prompt Pixaroma"}
+NODE_CLASS_MAPPINGS = {"PixaromaVideoPrompt": PixaromaVideoPrompt}
+NODE_DISPLAY_NAME_MAPPINGS = {"PixaromaVideoPrompt": "Video Prompt Pixaroma"}
