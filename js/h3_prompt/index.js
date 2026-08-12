@@ -19,6 +19,11 @@ import { isVueNodes } from "../shared/nodes2.mjs";
 import {
   CLASS, DEFAULT_H, DEFAULT_W, HIDDEN_INPUT, MIN_H, MIN_W, injectedState,
 } from "./core.mjs";
+// NO onRendererChange here, deliberately - see ui.mjs's note on destroyFace.
+// This node has ONE DOM widget in both renderers, so a live renderer flip has
+// nothing to swap and ComfyUI re-parents the element itself. Measured against
+// Show Text and Save Video as controls: all three stay connected and correctly
+// sized across a flip in both directions.
 import {
   applyResult, buildFace, destroyFace, injectCSS, renderFace,
 } from "./ui.mjs";
@@ -76,6 +81,7 @@ app.registerExtension({
       // Vue Compat #8: nodeCreated fires BEFORE configure, so reading the state
       // now would render the defaults and then flash to the saved values.
       queueMicrotask(() => renderFace(this));
+
     };
 
     const _configure = nodeType.prototype.onConfigure;
@@ -126,6 +132,8 @@ app.registerExtension({
     const _removed = nodeType.prototype.onRemoved;
     nodeType.prototype.onRemoved = function () {
       closeH3PanelFor(this);
+      try { this._pixH3RendererOff?.(); } catch (e) { /* already gone */ }
+      this._pixH3RendererOff = null;
       destroyFace(this);
       return _removed?.apply(this, arguments);
     };

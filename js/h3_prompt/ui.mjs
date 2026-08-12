@@ -466,8 +466,28 @@ export function applyResult(node, payload, elapsed) {
 export function destroyFace(node) {
   try { node._pixH3FloorOff?.(); } catch (e) { /* already gone */ }
   node._pixH3FloorOff = null;
+  // Drop the widget from node.widgets too, not just our own reference. Without
+  // this a rebuild (which is what a renderer flip does) appends a SECOND widget
+  // and the node grows a duplicate body every time the renderer is toggled.
+  if (Array.isArray(node.widgets) && node._pixH3Widget) {
+    const i = node.widgets.indexOf(node._pixH3Widget);
+    if (i !== -1) node.widgets.splice(i, 1);
+  }
   node._pixH3Root?.remove();
   node._pixH3Root = null;
   node._pixH3Els = null;
   node._pixH3Widget = null;
 }
+
+// ⚠️ DO NOT ADD a rebuild-on-renderer-change hook here. It was tried and
+// REVERTED 2026-08-12: this node has ONE DOM widget in both renderers, so a
+// live flip has nothing to swap and ComfyUI re-parents the element itself.
+//
+// The rebuild actively made things worse - ComfyUI owns the .dom-widget wrapper
+// around our root, so building a second one leaked a root per flip (1 -> 2 -> 4
+// -> 6 across three round trips, five left behind after deleting the node).
+//
+// The phantom that prompted it was a test artifact. The control is what settled
+// it: flip the renderer with Show Text and Save Video on the canvas too, and
+// compare. All three behave identically - connected and correctly sized in both
+// directions. RUN THAT CONTROL FIRST next time.
