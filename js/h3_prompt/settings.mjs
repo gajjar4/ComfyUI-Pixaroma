@@ -289,20 +289,27 @@ export function closeH3PanelFor(node) {
   USER_MOVED = false;
 }
 
+// POINTERDOWN, not mousedown. Every other settings panel in this pack uses
+// pointerdown, and that is not a style preference: LiteGraph calls
+// preventDefault() on the canvas pointerdown, which suppresses the
+// compatibility mouse events, so a mousedown listener NEVER FIRES for a click
+// on the canvas. This panel shipped with mousedown for one commit and clicking
+// the canvas did not close it, while clicking DOM elsewhere did - which is what
+// made it look like a panel bug rather than an event-type bug.
 function outsideClose(e) {
   if (!PANEL) return;
-  // The colour picker and the shared option popup live on <body> too, and this
-  // guard is capture-phase so it runs first. Without these exemptions picking a
-  // colour dismisses the panel underneath it (node-settings-accent invariant 3).
+  // contains(), like Save Video, rather than a class selector: it cannot be
+  // fooled by a child that happens not to match.
+  if (PANEL.contains(e.target)) return;
+  // These live on <body> too and this guard is capture-phase, so it runs before
+  // their own handlers. Without the exemptions, picking a colour or an option
+  // dismisses the panel underneath (node-settings-accent invariant 3).
   //
   // .pix-h3-gear is exempt for a different reason: it is what OPENS the panel,
-  // and this handler runs on mousedown while the button acts on click. Without
-  // the exemption the gear closed the panel and then immediately reopened it,
-  // so clicking it a second time appeared to do nothing at all. Exempting it
-  // here is exact - the gear's own handler decides - whereas suppressing the
-  // reopen on a timer would guess, and would swallow a legitimate open when
-  // somebody clicked the canvas and then the gear in quick succession.
-  if (e.target?.closest?.(".pix-h3p, .pix-h3p-pop, .pix-h3e-back, .pix-h3-gear, .pix-cp-popup, .pix-cp-modal-backdrop, .pix-nset-pop")) {
+  // and this fires on pointerdown while the button acts on click. Without it
+  // the gear closed the panel and the click immediately reopened it, so a
+  // second press looked like a no-op.
+  if (e.target?.closest?.(".pix-h3p-pop, .pix-h3e-back, .pix-h3-gear, .pix-cp-popup, .pix-cp-modal-backdrop, .pix-nset-pop")) {
     return;
   }
   closeH3PanelFor(null);
@@ -311,6 +318,7 @@ function outsideClose(e) {
 function escClose(e) {
   if (e.key !== "Escape" || !PANEL) return;
   if (EDITOR) return;                 // the editor handles its own Escape
+  e.stopPropagation();
   closeH3PanelFor(null);
 }
 
@@ -350,13 +358,14 @@ export async function openH3Panel(node, onChange) {
     isCurrent: () => PANEL === panel && PANEL_NODE === node,
     isUserMoved: () => USER_MOVED,
   });
+  // deferred so the click that OPENED the panel does not immediately close it
   setTimeout(() => {
-    document.addEventListener("mousedown", outsideClose, true);
-    window.addEventListener("keydown", escClose, true);
+    document.addEventListener("pointerdown", outsideClose, true);
+    document.addEventListener("keydown", escClose, true);
   }, 0);
   panel._pixCleanup = () => {
-    document.removeEventListener("mousedown", outsideClose, true);
-    window.removeEventListener("keydown", escClose, true);
+    document.removeEventListener("pointerdown", outsideClose, true);
+    document.removeEventListener("keydown", escClose, true);
   };
 
   body.textContent = "Loading...";
