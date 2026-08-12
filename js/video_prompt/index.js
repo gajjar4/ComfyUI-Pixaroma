@@ -163,6 +163,10 @@ function findById(id) {
   return findNode(buildIndex(), id);
 }
 
+// A run that is interrupted leaves its start time behind, and the next CACHED
+// run (which fires no "executing") would then print an absurd elapsed time.
+api.addEventListener("execution_start", () => STARTED.clear());
+
 api.addEventListener("executing", (e) => {
   const id = e?.detail?.node ?? e?.detail;
   if (id == null) return;

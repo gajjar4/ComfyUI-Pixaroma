@@ -244,18 +244,37 @@ def _stitch_right(image1, image2):
 
 
 def _img(x):
-    """An IMAGE input, or None if it is not actually an image.
+    """An IMAGE input as plain RGB, or None if it is not actually an image.
 
-    An `optional` input is NOT type-guaranteed: any ANY-type passthrough (our
-    own Switch Pixaroma included) can put a list or a string on `first_frame`.
-    `x is not None` would then be True, so the MODE would flip to first-frame
-    and the wrong formula would run - which is the worse half of the bug, ahead
-    of the AttributeError that follows in the stitch.
+    Two jobs, both load-bearing:
 
-    Duck-typed on `ndim` rather than isinstance(torch.Tensor) so a tensor
-    subclass still works.
+    1. An `optional` input is NOT type-guaranteed: any ANY-type passthrough
+       (our own Switch Pixaroma included) can put a list or a string on
+       `first_frame`. `x is not None` would then be True, so the MODE would
+       flip to first-frame and the WRONG FORMULA would run - worse than the
+       exception that follows. Duck-typed on `ndim` rather than
+       isinstance(torch.Tensor) so a tensor subclass still works.
+
+    2. ⚠️ DROP THE ALPHA. Qwen3-VL's image preprocessing normalises exactly
+       three channels and then reshapes patches using the real channel count,
+       so a 4-channel RGBA image produces a 2048-wide patch against a
+       1536-wide vision tower and dies in a torch matmul. Remove Background
+       Pixaroma returns genuine RGBA, so this is one wire away, not exotic.
+
+       Doing it HERE rather than in the stitch covers the single-image path
+       too, and it happens BEFORE the model loads - the first attempt at this
+       padded to 4 channels instead, which turned an instant failure into one
+       that cost a 10 GB load first. Stripping is also what the rest of the
+       pack does (Image Resize, Longest Side, Pause Image).
     """
-    return x if getattr(x, "ndim", 0) == 4 else None
+    if getattr(x, "ndim", 0) != 4:
+        return None
+    try:
+        if int(x.shape[-1]) > 3:
+            return x[..., :3].contiguous()
+    except (TypeError, ValueError, IndexError):
+        return None
+    return x
 
 
 def _first_image(*candidates):
@@ -394,11 +413,20 @@ class PixaromaVideoPrompt:
             )
 
         if asked_seconds <= 0:
+            # Two different causes, two different fixes. The panel has no rename
+            # control, so telling somebody to rename a tier that does not exist
+            # is the wrong instruction twice over.
+            if tier_name:
+                raise RuntimeError(
+                    "[Pixaroma] Video Prompt: the duration \"%s\" has no number of "
+                    "seconds in its name, so the frame count cannot be worked out. "
+                    "Give it a name with a number in it, like \"8 seconds\"."
+                    % tier_name
+                )
             raise RuntimeError(
-                "[Pixaroma] Video Prompt: the duration \"%s\" has no number "
-                "of seconds in its name, so the frame count cannot be worked out. "
-                "Rename it to something like \"8 seconds\" in the node's settings."
-                % (tier_name or "(unnamed)")
+                "[Pixaroma] Video Prompt: there are no duration tiers on disk for "
+                "\"%s\". Open the gear on the node and press Reset on that formula "
+                "to put the shipped ones back." % MODE_LABELS.get(mode, mode)
             )
 
         if mode == FIRST_LAST:
@@ -454,9 +482,16 @@ class PixaromaVideoPrompt:
                 seed=st["seed"],
             )
         except AttributeError as e:
-            # Narrow on purpose: only the "this model cannot write text" shape
-            # is translated. An OOM, a shape error or anything else must keep
-            # its own message, or a real bug becomes undiagnosable.
+            # NARROW on the message, not just the type. This block wraps a
+            # multi-minute generation that touches ModelPatcher, model
+            # management and torch internals, so any AttributeError from a
+            # version skew or a real bug in that chain would otherwise be
+            # reported as "pick a different model" - sending someone to
+            # re-download 10 GB they already have, with the true traceback
+            # hidden. The measured wrong-model failure is exactly
+            # "'T5GemmaModel' object has no attribute 'generate'".
+            if "generate" not in str(e):
+                raise
             raise RuntimeError(
                 "[Pixaroma] Video Prompt: \"%s\" cannot write text - it is "
                 "not a language model.\n" % model_name + _NEEDED

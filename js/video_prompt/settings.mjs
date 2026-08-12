@@ -142,6 +142,11 @@ function injectCSS() {
     white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .pix-vpp-pop .pix-vpp-poplist div:hover{ background:#2a2a2a; }
   .pix-vpp-pop .pix-vpp-poplist div.is-on{ color:var(--pix-acc,#f66744); }
+  /* cannot see a picture - dimmed, still selectable */
+  .pix-vpp-pop .pix-vpp-poplist div.is-blind{ color:#6d6d6d; }
+  .pix-vpp-pop .pix-vpp-poplist div.is-blind::after{
+    content:" (no vision)"; font-size:10px; color:#5a5a5a;
+  }
   .pix-vpp-popfilter{
     display:block; width:100%; box-sizing:border-box; margin:0 0 4px;
     background:#141414; color:#ddd; border:1px solid #444; border-radius:3px;
@@ -191,6 +196,12 @@ function el(tag, cls, text) {
 // ---------------------------------------------------------------------------
 // A small dark dropdown. Never a native <select> - convention #14.
 // ---------------------------------------------------------------------------
+/** Mirror of _score_model()'s vision test in _video_prompt_helpers.py. Kept
+ *  deliberately simple and identical: a filename with "vl" in it. */
+function looksVision(name) {
+  return /vl/i.test(String(name || ""));
+}
+
 let POP = null;
 function closePop() {
   POP?.remove();
@@ -220,8 +231,17 @@ function openPop(anchor, values, current, onPick) {
       list.appendChild(none);
     }
     for (const v of hits) {
-      const row = el("div", v === current ? "is-on" : null, v);
-      row.title = v;
+      // Mark the ones that cannot see a picture. The list is the raw
+      // text_encoders folder, so t5xxl and clip_l sit next to the real
+      // choices - and picking one is SILENT: every tokenizer ends in
+      // **kwargs, so image= is accepted and ignored, .generate exists, and
+      // the node writes a lovely first-frame prompt for a picture the model
+      // never saw. Marked, never blocked: a renamed VL file is legitimate.
+      const vision = looksVision(v);
+      const row = el("div", (v === current ? "is-on" : "") +
+                            (vision ? "" : " is-blind"), v);
+      row.title = vision ? v : v + "  -  does not look like a vision model, "
+        + "so it cannot see your pictures";
       row.addEventListener("click", (e) => {
         e.stopPropagation();
         closePop();
@@ -300,7 +320,10 @@ function openEditor(title, text, onSave) {
   count();
   ta.addEventListener("input", count);
 
-  const done = () => { closeEditor(); };
+  // Close THIS editor, not whatever is current. A slow Save that resolves after
+  // the user has opened a different formula would otherwise close that one and
+  // throw away their typing.
+  const done = () => { if (EDITOR === back) closeEditor(); };
   cancel.addEventListener("click", done);
   back.addEventListener("mousedown", (e) => { if (e.target === back) done(); });
   save.addEventListener("click", async () => {
@@ -337,6 +360,17 @@ export function closeVideoPromptPanelFor(node) {
   // a node deletion closes the panel with no click, so removing them only on a
   // user-driven close orphans one pair per open.
   try { PANEL?._pixCleanup?.(); } catch (e) { /* already gone */ }
+  // COMMIT a half-typed number before the panel goes. The numeric fields commit
+  // on change/blur, and Chrome fires NEITHER when a focused element is removed
+  // from the document - and outsideClose runs on capture-phase pointerdown,
+  // before the browser moves focus. So typing 0.9 into TOP P and clicking the
+  // canvas silently threw the value away.
+  try {
+    const active = document.activeElement;
+    if (active && PANEL && PANEL.contains(active) && typeof active.blur === "function") {
+      active.blur();
+    }
+  } catch (e) { /* not fatal */ }
   PANEL?.remove();
   PANEL = null;
   PANEL_NODE = null;
@@ -383,6 +417,15 @@ function outsideClose(e) {
 function escClose(e) {
   if (e.key !== "Escape" || !PANEL) return;
   if (EDITOR) return;                 // the editor handles its own Escape
+  // Close the DROPDOWN first if one is open. This handler is on document with
+  // capture, so it runs before the event reaches the filter input inside the
+  // popup - the filter's own Escape branch could never fire, and pressing
+  // Escape while filtering models dismissed the entire settings panel.
+  if (POP) {
+    e.stopPropagation();
+    closePop();
+    return;
+  }
   e.stopPropagation();
   closeVideoPromptPanelFor(null);
 }
@@ -529,6 +572,13 @@ function renderPanel(node, body) {
     body.appendChild(el("div", "pix-vpp-note",
       "\"" + st.model + "\" is not in your text_encoders folder, so the node "
       + "picks the best vision model it can find. Choose one here to be sure."));
+  } else if (!clipWired && !looksVision(st.model)) {
+    // The silent failure this warns about: a text-only model accepts the image
+    // argument and ignores it, so the first-frame modes describe nothing.
+    body.appendChild(el("div", "pix-vpp-note",
+      "That does not look like a vision model, so it cannot see your pictures. "
+      + "The first frame modes will write about nothing. Pick a Qwen3-VL build "
+      + "unless you know this one can see."));
   }
 
   // quiet = write state, tell the host, but do NOT rebuild the panel

@@ -465,11 +465,19 @@ def parse_state(raw):
     if not isinstance(out["clip_type"], str) or not out["clip_type"].strip():
         out["clip_type"] = "minimax"
     # Clamps. /prompt is UNAUTHENTICATED and the browser is not the only caller,
-    # so every sampling value is clamped here too, mirroring core.mjs. Without
-    # this a hand-written API call with "temperature": 0 divides the logits by
-    # zero and dies in torch.multinomial several minutes into a model load.
+    # so every sampling value is clamped here too, mirroring core.mjs. The
+    # ranges are byte-for-byte core's own TextGenerate schema.
+    #
+    # (An earlier comment here claimed temperature 0 divides by zero and dies in
+    # torch.multinomial. That is WRONG - comfy/text_encoders/llama.py's
+    # sample_token returns argmax at exactly 0.0, i.e. greedy decoding. The
+    # clamp stays because it matches core's declared minimum, not because 0
+    # crashes. Recorded so nobody "hardens" the wrong thing later.)
+    #
     # max_length matters most: the abliterated models do not emit a stop token
-    # reliably, so an absurd value is a multi-minute run.
+    # reliably, so an absurd value is a multi-minute run. fps is floored at 1
+    # rather than 0.01 because a sub-1-fps video is not a thing, and 0.01 would
+    # turn 5 frames into a reported 500 seconds on the `seconds` output.
     out["max_length"] = max(1, min(32768, out["max_length"]))
     out["seed"] = max(0, min(0xFFFFFFFFFFFFFFFF, out["seed"]))
     out["temperature"] = max(0.01, min(2.0, out["temperature"]))
@@ -478,7 +486,7 @@ def parse_state(raw):
     out["top_k"] = max(0, min(1000, out["top_k"]))
     out["repetition_penalty"] = max(0.0, min(5.0, out["repetition_penalty"]))
     out["presence_penalty"] = max(0.0, min(5.0, out["presence_penalty"]))
-    out["fps"] = max(0.01, min(1000.0, out["fps"]))
+    out["fps"] = max(1.0, min(1000.0, out["fps"]))
     return out
 
 

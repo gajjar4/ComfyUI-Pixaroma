@@ -52,7 +52,12 @@ function primeTiers(node) {
   _tierFetch = import("./api.mjs")
     .then((api) => api.fetchAll())
     .then((data) => {
-      if (!data?.ok) return;
+      // RETRY on failure, or one bad first fetch reinstates the exact bug this
+      // was added to fix, for the whole page session. fetchAll never rejects
+      // (it returns {ok:false}), so the catch below is dead for that path.
+      // Reloading the browser while ComfyUI is still starting does this
+      // routinely on Desktop.
+      if (!data?.ok) { _tierFetch = null; return; }
       let changed = false;
       for (const mode of Object.keys(data.modes || {})) {
         const names = (data.modes[mode]?.durations || []).map((t) => t.name);
@@ -65,7 +70,7 @@ function primeTiers(node) {
         }
       }
     })
-    .catch(() => { /* the face keeps the fallback names; not worth a toast */ });
+    .catch(() => { _tierFetch = null; });   // let the next node try again
 }
 
 /** "8 seconds" -> "8s". Falls back to the whole name so a hand-renamed tier
@@ -179,6 +184,9 @@ export function injectCSS() {
      almost always a setup step the user has not done yet, not a crash. */
   .pix-vp-readhead .v.is-error{ color:#e0a33a; }
   .pix-vp-out.is-error{ color:#e0a33a; border-color:#7a5a20; }
+  /* the shown prompt no longer matches the idea/tier/seed on the node */
+  .pix-vp-readhead .v.is-stale{ color:#9a8f5a; }
+  .pix-vp-out.is-stale{ opacity:.6; }
 
   /* wrap: the Nodes 2.0 body is narrower than Classic's, so a three-button row
      sized for Classic spills out of the right edge without this. */
@@ -362,7 +370,13 @@ export function buildFace(node, openPanel) {
   });
   const spacer = el("span", "pix-vp-spacer");
   const gen = el("button", "pix-vp-btn pix-vp-primary", "Generate");
-  gen.title = "Run the workflow and write the prompt";
+  // Honest about what it does. This node is meant to sit in front of a video
+  // model, so "Generate" rendering a whole video is an expensive surprise -
+  // and Re-roll, whose entire purpose is to be pressed repeatedly, would do it
+  // again each time.
+  gen.title = "Queues the whole workflow, the same as pressing Run. "
+    + "Mute the video part while you are writing prompts, or every press "
+    + "renders a video too.";
   gen.addEventListener("click", (e) => {
     e.stopPropagation();
     app.queuePrompt?.(0, 1);
@@ -471,24 +485,46 @@ export function renderFace(node) {
   // Chrome, so its tooltip never shows and the user gets a dead control with no
   // explanation. In Random mode a plain Run already rolls a fresh seed, which
   // is exactly what this button promises, so leaving it enabled is honest.
-  els.reroll.title = random
+  els.reroll.title = (random
     ? "Generate again with a new seed (Random mode already rolls one each run)"
-    : "New seed, then generate";
+    : "New seed, then generate")
+    + ". Queues the whole workflow, so mute the video part while writing prompts.";
 
   // readout
   const last = node._pixVpLast;
+  let stale = false;
   if (last && typeof last.text === "string") {
     if (els.out.value !== last.text) els.out.value = last.text;
-    const bits = [];
-    if (last.words) bits.push(last.words + " words");
-    if (last.elapsed) bits.push(last.elapsed + "s");
-    els.rv.textContent = last.error ? "did not run" : bits.join(" · ");
+    if (last.error) {
+      els.rv.textContent = "did not run";
+    } else {
+      // Lead with what the RUN reported, not what the node currently shows.
+      // If they disagree - a muted image loader, a renamed tier - this line is
+      // the only place it is visible.
+      const bits = [];
+      if (last.ranMode) bits.push(last.ranMode);
+      if (last.ranTier) bits.push(last.ranTier);
+      if (last.ranFrames) bits.push(last.ranFrames + "f");
+      if (last.words) bits.push(last.words + " words");
+      if (last.elapsed) bits.push(last.elapsed + "s");
+      stale = (last.forIdea !== undefined && last.forIdea !== st.idea)
+        || (last.forTier !== undefined && last.forTier !== st.tier_name)
+        || (last.forSeed != null && st.seed_mode !== SEED_RANDOM && last.forSeed !== st.seed);
+      if (stale) bits.push("changed since this ran");
+      els.rv.textContent = bits.join(" · ");
+    }
   } else {
     els.rv.textContent = "";
   }
+  // Dimmed, not disabled: copying the previous prompt on purpose is legitimate.
+  els.out.classList.toggle("is-stale", stale && !last?.error);
+  els.rv.classList.toggle("is-stale", stale && !last?.error);
   els.out.classList.toggle("is-error", !!last?.error);
   els.rv.classList.toggle("is-error", !!last?.error);
-  els.copy.disabled = !els.out.value;
+  // Never offer to copy a FAILURE. The message lives in the same readout, so
+  // without the error check Copy stayed enabled and put "[Pixaroma] Video
+  // Prompt: ..." on the clipboard while flashing green "Copied".
+  els.copy.disabled = !els.out.value || !!last?.error;
 
   // Free VRAM
   els.vram.classList.toggle("is-on", st.release_model);
@@ -517,14 +553,38 @@ export function applyError(node, message) {
   renderFace(node);
 }
 
-/** Called from the executed listener in index.js. Runtime only - none of this
- *  reaches node.properties, so a run can never dirty a clean workflow. */
+/**
+ * Called from the executed listener in index.js. Runtime only - none of this
+ * reaches node.properties, so a run can never dirty a clean workflow.
+ *
+ * ⚠️ KEEP mode_label / tier / frames. The node already reports what it ACTUALLY
+ * did, and throwing that away hid the worst bug in this node: mute or bypass
+ * the image loader and the banner still reads "First frame, 1 image wired"
+ * while the TEXT-TO-VIDEO formula runs with no picture at all. graphToPrompt
+ * drops an input whose origin node is muted, so Python sees first_frame=None,
+ * but the face only ever looked at the wire. The result is a confident,
+ * well-formed prompt for a scene the model never saw, with no error.
+ *
+ * Showing the reported mode in the readout meta makes that self-evident, and
+ * it also makes a renamed tier and a stale readout diagnosable in the same
+ * line. The idea/tier/seed are stamped so renderFace can say when the result
+ * no longer matches what is on the node.
+ */
 export function applyResult(node, payload, elapsed) {
+  const st = readState(node);
   node._pixVpLast = {
     text: typeof payload?.text === "string" ? payload.text : "",
     words: Number(payload?.words) || 0,
     seed: payload?.seed,
     elapsed: elapsed != null ? elapsed : undefined,
+    // what the RUN actually used, straight from Python
+    ranMode: typeof payload?.mode_label === "string" ? payload.mode_label : "",
+    ranTier: typeof payload?.tier === "string" ? payload.tier : "",
+    ranFrames: Number(payload?.frames) || 0,
+    // what the node held at the moment the result arrived, to spot drift later
+    forIdea: st.idea,
+    forTier: st.tier_name,
+    forSeed: st.seed_mode === SEED_RANDOM ? null : st.seed,
   };
   if (Number.isFinite(Number(payload?.seed))) {
     node._pixVpLastSeed = Number(payload.seed);
