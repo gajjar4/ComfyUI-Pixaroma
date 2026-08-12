@@ -43,7 +43,7 @@ export const SEED_RANDOM = "random";
 export const DEFAULT_STATE = {
   // --- what Python reads --------------------------------------------------
   idea: "",
-  tier_index: 1, // 8 seconds: 5s cannot reliably write a talking prompt
+  tier_index: 1, // 8 seconds: the surest for a talking idea (6/6 against 5s's 5/6)
   tier_name: "8 seconds",
   seed: 0,
   model: "qwen3-vl-8b-heretic-1.3.0_fp8_e4m3fn.safetensors",

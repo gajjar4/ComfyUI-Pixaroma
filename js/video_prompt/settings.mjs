@@ -770,7 +770,7 @@ function renderPanel(node, body) {
   body.appendChild(toggleRow(
     "Hint when 5s meets a speaking idea", st.speech_hint,
     (v) => set({ speech_hint: v }),
-    "The 5 second tier reliably drops the spoken line. This marks it rather than blocking it.",
+    "5 seconds is the tightest fit for a speaking idea. This marks it rather than blocking it.",
   ));
   // "Free VRAM" deliberately does NOT appear here. It lives on the node face
   // next to Copy, because it is a per-workflow decision the user flips while

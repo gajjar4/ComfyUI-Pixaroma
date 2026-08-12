@@ -152,9 +152,10 @@ export function injectCSS() {
   }
   .pix-vp-chip:hover{ border-color:${ACC}; color:#ddd; }
   .pix-vp-chip.is-on{ background:${ACC}; border-color:${ACC}; color:#fff; }
-  /* The 5s tier cannot reliably write a talking prompt (measured 0/6), so it is
-     marked when the idea asks for speech. Marked, never blocked - it is a guess
-     about the user's text. */
+  /* 5s is the tightest fit for a speaking idea, so it is marked when the idea
+     asks for speech. It measured 0/6 until the tier's checklist was trimmed to
+     five items, and 5/6 after; 8s and 10s are 6/6. Marked, never blocked - it
+     is a guess about the user's text, and a dropped line costs one re-roll. */
   .pix-vp-chip.is-warn{ border-color:#c9a227; color:#c9a227; }
   .pix-vp-chip.is-warn.is-on{ background:#c9a227; border-color:#c9a227; color:#1d1d1d; }
 

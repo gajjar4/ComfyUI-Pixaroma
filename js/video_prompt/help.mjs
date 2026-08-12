@@ -56,10 +56,12 @@ export const VIDEO_PROMPT_HELP = {
         "The length buttons do far more than set a number. Each one carries its own " +
         "instructions about how much to write and how many things should happen, and " +
         "that is the single setting that changes the result most.\n\n" +
-        "One thing worth knowing: at 5 seconds the model reliably drops spoken lines. " +
-        "If your idea has someone talking, use 8 seconds or more. The node marks the " +
-        "5 second button when it notices speech in your idea, but it still lets you " +
-        "pick it.",
+        "One thing worth knowing: 5 seconds is the tightest fit for a speaking idea. " +
+        "It writes the spoken line most of the time now, where it used to drop it " +
+        "every time, but 8 seconds and 10 seconds are still the surest. The node " +
+        "marks the 5 second button when it notices speech in your idea, as a nudge " +
+        "rather than a warning, and never stops you picking it. If a line does come " +
+        "back missing, Re-roll is usually enough.",
     },
     {
       heading: "The buttons on the node",
@@ -115,7 +117,7 @@ export const VIDEO_PROMPT_HELP = {
         ["Duration tiers", "The length instructions, per mode. Pick which mode you are editing at the top of that section."],
         ["Video model", "What the frames output has to satisfy. MiniMax H3, Wan, Hunyuan, LTX, or no snapping at all, with the numbers editable underneath for anything not listed."],
         ["Add the length instructions", "On by default. Turn it off to use your own wording without our length guidance being appended. The durations still set the frames and seconds outputs either way. In first and last frame mode the alignment line is kept even with this off, because the formula tells the model to copy it and it has to name your chosen duration."],
-        ["Hint when 5s meets a speaking idea", "Turns the 5 second warning off if you find it in the way."],
+        ["Hint when 5s meets a speaking idea", "Turns the 5 second nudge off if you find it in the way. 8 and 10 seconds are still the surest for talking."],
         ["Export, Import, Reset all", "Export writes every formula and tier to one file. Import reads one back, which is how you move your wording to another machine or take somebody else's. Reset all puts every shipped formula and tier back."],
       ],
     },
