@@ -83,6 +83,53 @@ def valid_mode(mode) -> bool:
     return isinstance(mode, str) and mode in MODES
 
 
+# ---------------------------------------------------------------------------
+# Choosing a model when the user has not
+# ---------------------------------------------------------------------------
+# The shipped default names ONE file. Anybody who does not happen to have that
+# exact file - which is nearly everybody - would drop the node, type an idea,
+# press Run and get a failure, having never opened the settings. So when the
+# named file is absent we pick the best VISION model on disk instead.
+#
+# Vision is not optional: the first-frame modes have to see the picture, and a
+# text-only model silently ignores it.
+def _score_model(name: str) -> int:
+    """Higher is better. 0 means 'not a vision LLM, do not use'."""
+    n = name.lower()
+    if "vl" not in n:                     # qwen3-VL, Qwen3-VL-Instruct, ...
+        return 0
+    # A tuned/uncensored build follows these formulas more closely, and 8B beats
+    # 4B on every measure we have. Beyond that, leave the order alone.
+    score = 10
+    if "qwen3-vl" in n or "qwen3vl" in n:
+        score += 40
+    if "8b" in n:
+        score += 20
+    elif "4b" in n:
+        score += 10
+    if "heretic" in n or "abliterated" in n:
+        score += 5
+    return score
+
+
+def pick_model(available, wanted):
+    """(chosen, auto) - `auto` is True when we substituted for a missing file.
+
+    Returns (None, False) when nothing on disk looks like a vision LLM, so the
+    caller can say what to download rather than failing deep inside a loader.
+    """
+    names = [n for n in (available or []) if isinstance(n, str)]
+    if isinstance(wanted, str) and wanted in names:
+        return wanted, False
+    scored = [(s, n) for s, n in ((_score_model(n), n) for n in names) if s > 0]
+    if not scored:
+        return None, False
+    # Sort by score, then by name, so the choice is STABLE run to run - an
+    # unstable pick would change the output for no visible reason.
+    scored.sort(key=lambda p: (-p[0], p[1].lower()))
+    return scored[0][1], True
+
+
 def mode_for(has_first: bool, has_last: bool) -> str:
     """Which formula to run, derived purely from which images arrived.
 

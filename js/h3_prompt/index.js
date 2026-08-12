@@ -25,7 +25,7 @@ import {
 // Show Text and Save Video as controls: all three stay connected and correctly
 // sized across a flip in both directions.
 import {
-  applyResult, buildFace, destroyFace, injectCSS, renderFace,
+  applyError, applyResult, buildFace, destroyFace, injectCSS, renderFace,
 } from "./ui.mjs";
 import { closeH3PanelFor, openH3Panel } from "./settings.mjs";
 import { H3_PROMPT_HELP } from "./help.mjs";
@@ -163,6 +163,19 @@ api.addEventListener("executing", (e) => {
   const id = e?.detail?.node ?? e?.detail;
   if (id == null) return;
   if (findById(id)) STARTED.set(String(id), Date.now());
+});
+
+// ComfyUI's toast for a node failure says only "This node threw an error during
+// execution", with the actual message behind a View details click. Somebody who
+// picked a model that cannot write text would learn nothing from that, so put
+// the message where they are already looking: the node's own readout.
+api.addEventListener("execution_error", (e) => {
+  const d = e?.detail;
+  if (!d) return;
+  const node = findById(d.node_id ?? d.node);
+  if (!node) return;
+  STARTED.delete(String(d.node_id ?? d.node));
+  applyError(node, d.exception_message);
 });
 
 api.addEventListener("executed", (e) => {

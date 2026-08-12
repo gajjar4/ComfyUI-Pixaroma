@@ -175,6 +175,10 @@ export function injectCSS() {
   }
   .pix-h3-readhead .k{ color:${ACC}; font-size:10px; letter-spacing:.4px; }
   .pix-h3-readhead .v{ color:#777; font-size:10px; }
+  /* A failure reads as a message, not as a prompt. Amber rather than red: it is
+     almost always a setup step the user has not done yet, not a crash. */
+  .pix-h3-readhead .v.is-error{ color:#e0a33a; }
+  .pix-h3-out.is-error{ color:#e0a33a; border-color:#7a5a20; }
 
   /* wrap: the Nodes 2.0 body is narrower than Classic's, so a three-button row
      sized for Classic spills out of the right edge without this. */
@@ -479,10 +483,12 @@ export function renderFace(node) {
     const bits = [];
     if (last.words) bits.push(last.words + " words");
     if (last.elapsed) bits.push(last.elapsed + "s");
-    els.rv.textContent = bits.join(" · ");
+    els.rv.textContent = last.error ? "did not run" : bits.join(" · ");
   } else {
     els.rv.textContent = "";
   }
+  els.out.classList.toggle("is-error", !!last?.error);
+  els.rv.classList.toggle("is-error", !!last?.error);
   els.copy.disabled = !els.out.value;
 
   // Free VRAM
@@ -493,6 +499,23 @@ export function renderFace(node) {
       + "nothing is lost. The next generate has to load the model again."
     : "Off: the language model stays in memory, so generating again is instant. "
       + "Turn this on when this node sits in front of an H3 video model.";
+}
+
+/**
+ * Show a failure IN THE READOUT.
+ *
+ * ComfyUI's error toast says only "This node threw an error during execution",
+ * with the real message hidden behind a View details click - so a user who
+ * picked the wrong model saw nothing that told them what to do. The readout is
+ * where they are already looking.
+ *
+ * Runtime only, like applyResult: nothing here reaches node.properties.
+ */
+export function applyError(node, message) {
+  const text = String(message || "").trim() ||
+    "The node failed, but ComfyUI did not say why. Check the console.";
+  node._pixH3Last = { text, words: 0, error: true };
+  renderFace(node);
 }
 
 /** Called from the executed listener in index.js. Runtime only - none of this

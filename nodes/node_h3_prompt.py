@@ -37,6 +37,7 @@ from ._h3_prompt_helpers import (
     load_formula,
     mode_for,
     parse_state,
+    pick_model,
     word_count,
 )
 
@@ -91,6 +92,46 @@ def _release_clip(clip=None):
         pass
 
 
+_NEEDED = (
+    "  This node needs a VISION language model (a Qwen3-VL build) in your\n"
+    "  ComfyUI/models/text_encoders folder, because it has to SEE the picture.\n"
+    "  The one these formulas were written and measured against is\n"
+    "  qwen3-vl-8b-heretic-1.3.0_fp8_e4m3fn.safetensors (10 GB, for 12 GB+ cards).\n"
+    "  For an 8 GB card use a Qwen3-VL 4B build instead.\n"
+    "  Pick it afterwards from the gear on the node."
+)
+
+
+def _resolve_model(wanted: str):
+    """The model to actually load, substituting when the named one is absent.
+
+    Nobody opens the settings before their first Run. The shipped default names
+    one specific file, so without this every user who does not happen to own
+    that file gets a failure on a node they have not misconfigured.
+    """
+    try:
+        available = list(folder_paths.get_filename_list("text_encoders"))
+    except Exception:
+        available = []
+    chosen, auto = pick_model(available, wanted)
+    if chosen is None:
+        if available:
+            raise RuntimeError(
+                "[Pixaroma] Minimax H3 Prompt: none of the files in your "
+                "text_encoders folder look like a vision language model.\n"
+                + _NEEDED
+            )
+        raise RuntimeError(
+            "[Pixaroma] Minimax H3 Prompt: your text_encoders folder is empty.\n"
+            + _NEEDED
+        )
+    if auto:
+        print("[Pixaroma] Minimax H3 Prompt: \"%s\" is not in text_encoders, "
+              "using \"%s\" instead. Pick one from the gear to silence this."
+              % (wanted, chosen))
+    return chosen
+
+
 def _load_clip(name: str, clip_type: str):
     key = (name, clip_type)
     cached = _CLIP_CACHE.get(key)
@@ -101,11 +142,7 @@ def _load_clip(name: str, clip_type: str):
     except Exception:
         raise RuntimeError(
             "[Pixaroma] Minimax H3 Prompt: the text encoder \"%s\" was not found "
-            "in your text_encoders folder.\n"
-            "  Open the gear on the node and pick a model from the list.\n"
-            "  The one these formulas were written for is "
-            "qwen3-vl-8b-heretic-1.3.0_fp8_e4m3fn.safetensors (a VISION model is "
-            "required, because the first-frame modes show it a picture)." % name
+            "in your text_encoders folder.\n" % name + _NEEDED
         )
     # Same getattr-with-fallback CLIPLoader itself uses, so an unknown type name
     # degrades instead of raising. The type is largely inert for these models -
@@ -124,24 +161,18 @@ def _load_clip(name: str, clip_type: str):
         )
     except Exception as e:
         # The model combo lists EVERY file in text_encoders, so picking a T5 or
-        # a CLIP-L is an easy first-run mistake. `raise ... from e` keeps the
-        # original traceback, or a genuine corrupt-file or OOM failure would
-        # become undiagnosable.
+        # a CLIP-L is an easy mistake. `raise ... from e` keeps the original
+        # traceback, or a genuine corrupt-file or OOM failure would become
+        # undiagnosable.
         raise RuntimeError(
             "[Pixaroma] Minimax H3 Prompt: \"%s\" could not be loaded as a "
-            "language model.\n"
-            "  This node needs a VISION language model (a Qwen3-VL build), not "
-            "a text encoder like T5 or CLIP-L.\n"
-            "  Pick one from the gear on the node." % name
+            "language model.\n" % name + _NEEDED
         ) from e
-    # A file can load and still be the wrong KIND of model. Catching it here
-    # beats an AttributeError from inside the tokenizer after a 10 GB load.
-    if not hasattr(clip, "generate"):
-        raise RuntimeError(
-            "[Pixaroma] Minimax H3 Prompt: \"%s\" loaded, but it cannot generate "
-            "text. This node needs a VISION language model (a Qwen3-VL build). "
-            "Pick one from the gear on the node." % name
-        )
+    # NOTE: do NOT test `hasattr(clip, "generate")` here. ComfyUI's CLIP wrapper
+    # ALWAYS has .generate - it delegates to the inner model - so the check
+    # passes for a T5 and the real failure surfaces later as
+    # "'T5GemmaModel' object has no attribute 'generate'". Measured 2026-08-12.
+    # The honest place to catch it is around the generate CALL; see run().
     _CLIP_CACHE[key] = clip
     return clip
 
@@ -370,7 +401,12 @@ class PixaromaH3Prompt:
         else:
             image = _first_image(first_frame, last_frame)
 
-        model = clip if clip is not None else _load_clip(st["model"], st["clip_type"])
+        if clip is not None:
+            model = clip
+            model_name = "the wired CLIP"
+        else:
+            model_name = _resolve_model(st["model"])
+            model = _load_clip(model_name, st["clip_type"])
 
         # BYTE-IDENTICAL to core's TextGenerate.execute, including video and
         # audio. Do NOT wrap this in a try/except TypeError "for safety": every
@@ -385,28 +421,41 @@ class PixaromaH3Prompt:
         # `image` is singular on purpose. Qwen3VLTokenizer takes `images` as a
         # list but reads a singular `image` out of kwargs and splits it by batch
         # (comfy/text_encoders/qwen3vl.py, tokenize_with_weights).
-        tokens = model.tokenize(
-            prompt,
-            image=image,
-            skip_template=not st["use_default_template"],
-            min_length=1,
-            thinking=st["thinking"],
-            video=None,
-            audio=None,
-        )
-
-        generated = model.generate(
-            tokens,
-            do_sample=True,
-            max_length=st["max_length"],
-            temperature=st["temperature"],
-            top_k=st["top_k"],
-            top_p=st["top_p"],
-            min_p=st["min_p"],
-            repetition_penalty=st["repetition_penalty"],
-            presence_penalty=st["presence_penalty"],
-            seed=st["seed"],
-        )
+        # The WRONG-MODEL guard lives here, around the call, because it cannot
+        # live at load time: ComfyUI's CLIP wrapper always exposes .generate and
+        # only the INNER model lacks it, so a T5 loads happily and then fails
+        # with "'T5GemmaModel' object has no attribute 'generate'" - a message
+        # that tells the user nothing about what to do.
+        try:
+            tokens = model.tokenize(
+                prompt,
+                image=image,
+                skip_template=not st["use_default_template"],
+                min_length=1,
+                thinking=st["thinking"],
+                video=None,
+                audio=None,
+            )
+            generated = model.generate(
+                tokens,
+                do_sample=True,
+                max_length=st["max_length"],
+                temperature=st["temperature"],
+                top_k=st["top_k"],
+                top_p=st["top_p"],
+                min_p=st["min_p"],
+                repetition_penalty=st["repetition_penalty"],
+                presence_penalty=st["presence_penalty"],
+                seed=st["seed"],
+            )
+        except AttributeError as e:
+            # Narrow on purpose: only the "this model cannot write text" shape
+            # is translated. An OOM, a shape error or anything else must keep
+            # its own message, or a real bug becomes undiagnosable.
+            raise RuntimeError(
+                "[Pixaroma] Minimax H3 Prompt: \"%s\" cannot write text - it is "
+                "not a language model.\n" % model_name + _NEEDED
+            ) from e
         text = model.decode(generated)
         text = text.strip() if isinstance(text, str) else ""
 
