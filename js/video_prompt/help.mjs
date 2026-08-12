@@ -114,7 +114,7 @@ export const VIDEO_PROMPT_HELP = {
         ["Formulas", "One for each of the three cases. The pencil edits it, the arrow puts the shipped one back. The number is its length in characters, which is worth watching: these get worse past about 12,000."],
         ["Duration tiers", "The length instructions, per mode. Pick which mode you are editing at the top of that section."],
         ["Video model", "What the frames output has to satisfy. MiniMax H3, Wan, Hunyuan, LTX, or no snapping at all, with the numbers editable underneath for anything not listed."],
-        ["Add the length instructions", "On by default. Turn it off to use your own wording without ours being appended. The durations still set the frames and seconds outputs either way."],
+        ["Add the length instructions", "On by default. Turn it off to use your own wording without our length guidance being appended. The durations still set the frames and seconds outputs either way. In first and last frame mode the alignment line is kept even with this off, because the formula tells the model to copy it and it has to name your chosen duration."],
         ["Hint when 5s meets a speaking idea", "Turns the 5 second warning off if you find it in the way."],
         ["Export, Import, Reset all", "Export writes every formula and tier to one file. Import reads one back, which is how you move your wording to another machine or take somebody else's. Reset all puts every shipped formula and tier back."],
       ],
