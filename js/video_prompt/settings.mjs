@@ -637,6 +637,13 @@ function renderPanel(node, body) {
         const ok = await saveFormula(mode, text);
         if (!ok) return false;
         DATA = await fetchAll();
+        // `body` was captured when the button was clicked. If the panel was
+        // closed (or closed and reopened) while that request was in flight,
+        // this repaint would land on a detached tree and the panel actually on
+        // screen would keep showing the pre-save state. The save itself DID
+        // succeed, so still report true. Same guard on all five async writes
+        // below; the initial open has its own at the top of openVideoPromptPanel.
+        if (!panelIsOpenFor(node)) return true;
         renderPanel(node, body);
         changed(node);
         return true;
@@ -657,6 +664,7 @@ function renderPanel(node, body) {
       for (const m of MODES) {
         cacheTiers(m, (DATA.modes?.[m]?.durations || []).map((t) => t.name));
       }
+      if (!panelIsOpenFor(node)) return;
       renderPanel(node, body);
       changed(node);
     });
@@ -704,6 +712,7 @@ function renderPanel(node, body) {
           const ok = await saveDurations(activeMode, next);
           if (!ok) return false;
           DATA = await fetchAll();
+          if (!panelIsOpenFor(node)) return true;
           renderPanel(node, body);
           changed(node);
           return true;
@@ -858,6 +867,7 @@ function renderPanel(node, body) {
       for (const m of MODES) {
         cacheTiers(m, (DATA.modes?.[m]?.durations || []).map((t) => t.name));
       }
+      if (!panelIsOpenFor(node)) return;
       renderPanel(node, body);
       changed(node);
     });
@@ -875,6 +885,7 @@ function renderPanel(node, body) {
     for (const m of MODES) {
       cacheTiers(m, (DATA.modes?.[m]?.durations || []).map((t) => t.name));
     }
+    if (!panelIsOpenFor(node)) return;
     renderPanel(node, body);
     changed(node);
   });

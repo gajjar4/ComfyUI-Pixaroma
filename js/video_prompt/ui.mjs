@@ -516,6 +516,11 @@ export function renderFace(node) {
       if (last.elapsed) bits.push(last.elapsed + "s");
       stale = (last.forIdea !== undefined && last.forIdea !== st.idea)
         || (last.forTier !== undefined && last.forTier !== st.tier_name)
+        // The length switch changes the prompt as much as the tier does, and it
+        // lives in the panel, so it is the easiest of the four to change and
+        // then forget. Undefined on results from before this was stamped, so
+        // an old readout simply keeps its previous behaviour.
+        || (last.forLengthBlock !== undefined && last.forLengthBlock !== st.length_block)
         || (last.forSeed != null && st.seed_mode !== SEED_RANDOM && last.forSeed !== st.seed);
       if (stale) bits.push("changed since this ran");
       els.rv.textContent = bits.join(" · ");
@@ -600,6 +605,7 @@ export function applyResult(node, payload, elapsed) {
     // what the node held at the moment the result arrived, to spot drift later
     forIdea: st.idea,
     forTier: st.tier_name,
+    forLengthBlock: st.length_block,
     forSeed: st.seed_mode === SEED_RANDOM ? null : st.seed,
   };
   if (Number.isFinite(Number(payload?.seed))) {
