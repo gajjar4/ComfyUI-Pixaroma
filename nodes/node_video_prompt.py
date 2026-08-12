@@ -272,7 +272,13 @@ def _img(x):
     try:
         if int(x.shape[-1]) > 3:
             return x[..., :3].contiguous()
-    except (TypeError, ValueError, IndexError):
+    except (AttributeError, TypeError, ValueError, IndexError):
+        # AttributeError is in the list because .contiguous() is torch-only:
+        # an ANY-type passthrough that hands over a numpy RGBA batch has ndim 4
+        # and a .shape, so it reaches the slice and then dies on a method it
+        # does not have. Measured: "'numpy.ndarray' object has no attribute
+        # 'contiguous'", raised out of run() ahead of every friendly message
+        # this node has. Refusing it is the whole point of this function.
         return None
     return x
 
