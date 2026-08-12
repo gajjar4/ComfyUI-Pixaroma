@@ -294,7 +294,15 @@ function outsideClose(e) {
   // The colour picker and the shared option popup live on <body> too, and this
   // guard is capture-phase so it runs first. Without these exemptions picking a
   // colour dismisses the panel underneath it (node-settings-accent invariant 3).
-  if (e.target?.closest?.(".pix-h3p, .pix-h3p-pop, .pix-h3e-back, .pix-cp-popup, .pix-cp-modal-backdrop, .pix-nset-pop")) {
+  //
+  // .pix-h3-gear is exempt for a different reason: it is what OPENS the panel,
+  // and this handler runs on mousedown while the button acts on click. Without
+  // the exemption the gear closed the panel and then immediately reopened it,
+  // so clicking it a second time appeared to do nothing at all. Exempting it
+  // here is exact - the gear's own handler decides - whereas suppressing the
+  // reopen on a timer would guess, and would swallow a legitimate open when
+  // somebody clicked the canvas and then the gear in quick succession.
+  if (e.target?.closest?.(".pix-h3p, .pix-h3p-pop, .pix-h3e-back, .pix-h3-gear, .pix-cp-popup, .pix-cp-modal-backdrop, .pix-nset-pop")) {
     return;
   }
   closeH3PanelFor(null);
