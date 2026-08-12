@@ -132,8 +132,9 @@ app.registerExtension({
     const _removed = nodeType.prototype.onRemoved;
     nodeType.prototype.onRemoved = function () {
       closeH3PanelFor(this);
-      try { this._pixH3RendererOff?.(); } catch (e) { /* already gone */ }
-      this._pixH3RendererOff = null;
+      // No renderer-change handle to release - see ui.mjs on why that hook was
+      // tried and reverted. Leaving a teardown for it here read as an
+      // invitation to re-add it.
       destroyFace(this);
       return _removed?.apply(this, arguments);
     };
@@ -150,22 +151,12 @@ app.registerExtension({
 // - so the elapsed seconds beside the readout is the more useful of the two.
 const STARTED = new Map();   // node id -> ms
 
-function nodesOfClass() {
-  const out = [];
-  for (const n of app.graph?._nodes || app.graph?.nodes || []) {
-    if (n && (n.comfyClass === CLASS || n.type === CLASS)) out.push(n);
-  }
-  return out;
-}
-
+// Reuses the SAME index the graphToPrompt hook builds, which recurses into
+// subgraphs and guards cycles. A top-level-only scan meant a node inside a
+// subgraph generated correctly but its readout stayed empty forever, and a
+// tail-id match could write one node's result into another's readout.
 function findById(id) {
-  const s = String(id);
-  for (const n of nodesOfClass()) {
-    if (String(n.id) === s) return n;
-    // A node inside a subgraph arrives with a composite id like "5:12".
-    if (s.includes(":") && s.slice(s.lastIndexOf(":") + 1) === String(n.id)) return n;
-  }
-  return null;
+  return findNode(buildIndex(), id);
 }
 
 api.addEventListener("executing", (e) => {

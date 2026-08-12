@@ -31,7 +31,10 @@ from ._duration_helpers import frames_from_seconds
 from ._h3_prompt_helpers import (
     FIRST_LAST,
     MODE_LABELS,
+    TEXT_TO_VIDEO,
     assemble,
+    formulas_fingerprint,
+    load_formula,
     mode_for,
     parse_state,
     word_count,
@@ -112,12 +115,33 @@ def _load_clip(name: str, clip_type: str):
         comfy.sd.CLIPType, str(clip_type).upper(), comfy.sd.CLIPType.STABLE_DIFFUSION
     )
     _release_clip()
-    clip = comfy.sd.load_clip(
-        ckpt_paths=[path],
-        embedding_directory=folder_paths.get_folder_paths("embeddings"),
-        clip_type=clip_type_enum,
-        model_options={},
-    )
+    try:
+        clip = comfy.sd.load_clip(
+            ckpt_paths=[path],
+            embedding_directory=folder_paths.get_folder_paths("embeddings"),
+            clip_type=clip_type_enum,
+            model_options={},
+        )
+    except Exception as e:
+        # The model combo lists EVERY file in text_encoders, so picking a T5 or
+        # a CLIP-L is an easy first-run mistake. `raise ... from e` keeps the
+        # original traceback, or a genuine corrupt-file or OOM failure would
+        # become undiagnosable.
+        raise RuntimeError(
+            "[Pixaroma] Minimax H3 Prompt: \"%s\" could not be loaded as a "
+            "language model.\n"
+            "  This node needs a VISION language model (a Qwen3-VL build), not "
+            "a text encoder like T5 or CLIP-L.\n"
+            "  Pick one from the gear on the node." % name
+        ) from e
+    # A file can load and still be the wrong KIND of model. Catching it here
+    # beats an AttributeError from inside the tokenizer after a 10 GB load.
+    if not hasattr(clip, "generate"):
+        raise RuntimeError(
+            "[Pixaroma] Minimax H3 Prompt: \"%s\" loaded, but it cannot generate "
+            "text. This node needs a VISION language model (a Qwen3-VL build). "
+            "Pick one from the gear on the node." % name
+        )
     _CLIP_CACHE[key] = clip
     return clip
 
@@ -151,6 +175,26 @@ def _stitch_right(image1, image2):
             image2 = torch.cat(
                 [image2, image2[-1:].repeat(n - image2.shape[0], 1, 1, 1)]
             )
+    # Channel equalisation, copied from core (nodes_images.py). Without it an
+    # RGB first frame plus an RGBA last frame - easy to produce by wiring
+    # anything alpha-aware into ONE input - raises out of torch.cat AFTER the
+    # 10 GB encoder has loaded, with a traceback naming torch rather than us.
+    # Flagged independently by two reviewers.
+    c1, c2 = int(image1.shape[-1]), int(image2.shape[-1])
+    if c1 != c2:
+        target_c = max(c1, c2)
+        if c1 < target_c:
+            image1 = torch.cat([
+                image1,
+                torch.ones((*image1.shape[:-1], target_c - c1),
+                           device=image1.device, dtype=image1.dtype),
+            ], dim=-1)
+        if c2 < target_c:
+            image2 = torch.cat([
+                image2,
+                torch.ones((*image2.shape[:-1], target_c - c2),
+                           device=image2.device, dtype=image2.dtype),
+            ], dim=-1)
     h1 = int(image1.shape[1])
     h2, w2 = int(image2.shape[1]), int(image2.shape[2])
     if h1 < 1 or h2 < 1 or w2 < 1:
@@ -161,6 +205,21 @@ def _stitch_right(image1, image2):
         image2.movedim(-1, 1), target_w, target_h, "lanczos", "disabled"
     ).movedim(1, -1)
     return torch.cat([image1, image2], dim=2)
+
+
+def _img(x):
+    """An IMAGE input, or None if it is not actually an image.
+
+    An `optional` input is NOT type-guaranteed: any ANY-type passthrough (our
+    own Switch Pixaroma included) can put a list or a string on `first_frame`.
+    `x is not None` would then be True, so the MODE would flip to first-frame
+    and the wrong formula would run - which is the worse half of the bug, ahead
+    of the AttributeError that follows in the stitch.
+
+    Duck-typed on `ndim` rather than isinstance(torch.Tensor) so a tensor
+    subclass still works.
+    """
+    return x if getattr(x, "ndim", 0) == 4 else None
 
 
 def _first_image(*candidates):
@@ -246,21 +305,64 @@ class PixaromaH3Prompt:
     CATEGORY = "👑 Pixaroma/💬 Prompt & Text"
     OUTPUT_NODE = True
 
-    # NO IS_CHANGED on purpose. H3PromptState is a real input, so the idea, the
-    # length and the seed are already part of the cache signature - exactly as
-    # Duration Pixaroma does it. That is also what makes a Fixed seed cache and
-    # a Random one re-run, with no nonce (Seed Pixaroma, issue #11).
+    @classmethod
+    def IS_CHANGED(cls, **kwargs):
+        """Make an edited FORMULA reach the next Run.
+
+        H3PromptState covers the idea, the length and the seed, because it is a
+        real input. The formulas are NOT - they are read from disk at execution
+        time, so nothing about editing one changes the cache key.
+
+        Measured before this existed: edit the active tier, press Run, and the
+        run finished in 1.0s from cache with byte-identical text and the edit
+        silently ignored. The settings panel appeared completely broken.
+
+        Returns a fingerprint that is STABLE when nothing changed, so an
+        unchanged node still caches and does not reload a 10 GB model on every
+        queue. ComfyUI prepends this to the signature and then appends every
+        input, so it can only make the key finer, never coarser.
+        """
+        return formulas_fingerprint()
 
     def run(self, first_frame=None, last_frame=None, clip=None, H3PromptState="{}"):
         st = parse_state(H3PromptState)
+        # Coerce BEFORE mode_for, or a junk input silently selects the wrong
+        # formula (see _img).
+        first_frame = _img(first_frame)
+        last_frame = _img(last_frame)
         mode = mode_for(first_frame is not None, last_frame is not None)
         prompt, asked_seconds, tier_name = assemble(H3PromptState, mode)
 
-        if not prompt.strip():
+        # Test the FORMULA, not the assembled prompt. The assembled prompt also
+        # contains the idea and the length block, so with any idea typed a
+        # missing formula file - or an override saved as "" - produced a prompt
+        # that was just the idea plus the length block: no rules, no error, and
+        # confident free-form prose that is not an H3 prompt at all. The helpful
+        # message was unreachable in exactly the case that needed it.
+        if not load_formula(mode).strip():
             raise RuntimeError(
                 "[Pixaroma] Minimax H3 Prompt: there is no formula to run for "
                 "\"%s\". Open the gear on the node and press Reset on that formula "
                 "to put the shipped one back." % MODE_LABELS.get(mode, mode)
+            )
+
+        # An empty idea in TEXT mode puts the LENGTH block directly under the
+        # formula's trailing "IDEA:", so the model reads the length instructions
+        # as the idea and writes confident nonsense. Refused only in text mode:
+        # "look at this picture and invent something" is a legitimate use of a
+        # first frame.
+        if mode == TEXT_TO_VIDEO and not st["idea"].strip():
+            raise RuntimeError(
+                "[Pixaroma] Minimax H3 Prompt: type an idea on the node first. "
+                "With no picture wired and no idea, there is nothing to write about."
+            )
+
+        if asked_seconds <= 0:
+            raise RuntimeError(
+                "[Pixaroma] Minimax H3 Prompt: the duration \"%s\" has no number "
+                "of seconds in its name, so the frame count cannot be worked out. "
+                "Rename it to something like \"8 seconds\" in the node's settings."
+                % (tier_name or "(unnamed)")
             )
 
         if mode == FIRST_LAST:

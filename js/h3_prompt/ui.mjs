@@ -41,6 +41,33 @@ function tiersFor(mode) {
   return TIER_CACHE.get(mode) || FALLBACK_TIERS;
 }
 
+// The cache used to be filled ONLY by opening the settings panel, so a user who
+// had edited or renamed their tiers saw the SHIPPED names on the face until
+// they opened the gear - and clicking the third chip then wrote a tier_name
+// that did not exist on disk. Fetch once per page instead, the first time any
+// face is built, so the chips are right from the start.
+let _tierFetch = null;
+function primeTiers(node) {
+  if (_tierFetch) return;
+  _tierFetch = import("./api.mjs")
+    .then((api) => api.fetchAll())
+    .then((data) => {
+      if (!data?.ok) return;
+      let changed = false;
+      for (const mode of Object.keys(data.modes || {})) {
+        const names = (data.modes[mode]?.durations || []).map((t) => t.name);
+        if (names.length) { cacheTiers(mode, names); changed = true; }
+      }
+      // Repaint every face already on the canvas, not just the one that asked.
+      if (changed) {
+        for (const n of window.app?.graph?._nodes || []) {
+          if (n?._pixH3Els) renderFace(n);
+        }
+      }
+    })
+    .catch(() => { /* the face keeps the fallback names; not worth a toast */ });
+}
+
 /** "8 seconds" -> "8s". Falls back to the whole name so a hand-renamed tier
  *  still shows something meaningful rather than an empty chip. */
 function shortTier(name) {
@@ -196,12 +223,19 @@ function el(tag, cls, text) {
 
 function flash(button, label) {
   if (!button) return;
-  const original = button.textContent;
+  // Cache the ORIGINAL once and cancel any pending restore. Clicking Copy twice
+  // inside the 700ms window used to capture "Copied" as the original, so the
+  // button read "Copied" for the rest of the session - and not even green, so
+  // it just looked broken. Nothing in renderFace rewrites button labels.
+  clearTimeout(button._pixFlashT);
+  if (button._pixFlashOrig == null) button._pixFlashOrig = button.textContent;
   button.classList.add("is-flashing");
   if (label) button.textContent = label;
-  setTimeout(() => {
+  button._pixFlashT = setTimeout(() => {
     button.classList.remove("is-flashing");
-    if (label) button.textContent = original;
+    if (button._pixFlashOrig != null) button.textContent = button._pixFlashOrig;
+    button._pixFlashOrig = null;
+    button._pixFlashT = null;
   }, 700);
 }
 
@@ -308,6 +342,7 @@ export function buildFace(node, openPanel) {
     app.queuePrompt?.(0, 1);
   });
   const copy = el("button", "pix-h3-btn", "Copy");
+  copy.title = "Copy the finished prompt to the clipboard";
   copy.addEventListener("click", (e) => {
     e.stopPropagation();
     copyText(out.value, copy);
@@ -338,6 +373,11 @@ export function buildFace(node, openPanel) {
     hideOnZoom: false,
     getMinHeight: () => WIDGET_MIN_H,
   });
+  // BOTH flags. options.serialize keeps the widget out of the PROMPT;
+  // widget.serialize (top level) is what LGraphNode.serialize checks, and
+  // without it the node writes a meaningless widgets_values: [""] into every
+  // saved workflow. Twelve other DOM-widget nodes in this pack set both.
+  widget.serialize = false;
   // Adaptive, not a literal true: canvasOnly:true keeps it out of the legacy
   // Parameters tab but would also exclude it from the Nodes 2.0 body entirely.
   applyAdaptiveCanvasOnly(widget);
@@ -356,6 +396,7 @@ export function buildFace(node, openPanel) {
     copy, reroll, gen, vram,
   };
   node._pixH3Widget = widget;
+  primeTiers(node);
   return root;
 }
 
@@ -423,7 +464,13 @@ export function renderFace(node) {
   els.seedMode.title = random
     ? "Random: a new seed every run. Click for Fixed."
     : "Fixed: the same seed every run, so the result is repeatable. Click for Random.";
-  els.reroll.disabled = random;
+  // NOT disabled in Random mode. A disabled button receives no hover events in
+  // Chrome, so its tooltip never shows and the user gets a dead control with no
+  // explanation. In Random mode a plain Run already rolls a fresh seed, which
+  // is exactly what this button promises, so leaving it enabled is honest.
+  els.reroll.title = random
+    ? "Generate again with a new seed (Random mode already rolls one each run)"
+    : "New seed, then generate";
 
   // readout
   const last = node._pixH3Last;

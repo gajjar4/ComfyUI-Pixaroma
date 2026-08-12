@@ -3737,6 +3737,7 @@ async def api_load_audio_list(request):
 _H3_MAX_FORMULA = 400_000      # ~30x the largest shipped formula
 _H3_MAX_TIERS = 24
 _H3_MAX_TIER_VALUE = 40_000
+_H3_MAX_TIER_NAME = 200
 
 
 def _h3_no_store():
@@ -3822,7 +3823,15 @@ async def api_h3_prompt_save_durations(request):
         return web.json_response({"ok": False, "error": "too many tiers"},
                                  status=413, headers=_h3_no_store())
     for item in tiers:
-        if isinstance(item, dict) and len(str(item.get("value", ""))) > _H3_MAX_TIER_VALUE:
+        if not isinstance(item, dict):
+            continue
+        # The NAME was uncapped while the value was capped, so one unauthenticated
+        # POST could write ~20 MB of tier names (aiohttp's client_max_size) into
+        # the user dir, repeatably, each then rendering as a chip label.
+        if len(str(item.get("name", ""))) > _H3_MAX_TIER_NAME:
+            return web.json_response({"ok": False, "error": "tier name too long"},
+                                     status=413, headers=_h3_no_store())
+        if len(str(item.get("value", ""))) > _H3_MAX_TIER_VALUE:
             return web.json_response({"ok": False, "error": "tier too large"},
                                      status=413, headers=_h3_no_store())
     ok = _h3.save_durations(mode, tiers)

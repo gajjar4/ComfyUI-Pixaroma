@@ -204,6 +204,42 @@ def reset_formula(mode: str) -> bool:
     return ok
 
 
+def formulas_fingerprint() -> str:
+    """A value that changes whenever any formula or tier file changes.
+
+    ⚠️ WITHOUT THIS THE SETTINGS PANEL APPEARS BROKEN. The formulas are read
+    from DISK at execution time, so they are not part of the node's inputs and
+    therefore not part of ComfyUI's cache key. Measured 2026-08-12: edit the
+    active tier, press Run, and the run completes in 1.0s from cache with the
+    identical text - the edit silently ignored. Only Random-seed users escaped,
+    because their state changed anyway.
+
+    mtime_ns + size, not a content hash: it has to be STABLE when nothing
+    changed, or the node would re-run a 20-second model load on every queue.
+    Both the override AND the shipped file are stamped, because deleting an
+    override (Reset) changes which one is read.
+
+    All six files, not just the active mode's: IS_CHANGED cannot know the mode,
+    which is derived from the image wires. The cost is that editing one mode's
+    formula also re-runs a node using another - which is the correct outcome
+    anyway, since you edited a formula to see what it does.
+    """
+    parts = []
+    for mode in MODES:
+        for suffix in (".txt", ".durations.json"):
+            for tag, path in (("u", _override(mode, suffix)),
+                              ("s", _shipped(mode, suffix))):
+                try:
+                    st = os.stat(path)
+                    parts.append("%s%s%s:%d:%d" % (tag, mode, suffix,
+                                                   st.st_mtime_ns, st.st_size))
+                except OSError:
+                    # Absent is a state too: an override appearing or vanishing
+                    # must change the fingerprint.
+                    parts.append("%s%s%s:-" % (tag, mode, suffix))
+    return "|".join(parts)
+
+
 def _coerce_tiers(obj):
     """Keep only well-formed {name, value} entries.
 
@@ -337,7 +373,7 @@ def parse_state(raw):
     out.update(
         {
             "idea": "",
-            "tier_index": 0,
+            "tier_index": 1,
             "tier_name": "",
             "seed": 0,
             "release_model": False,
@@ -353,7 +389,10 @@ def parse_state(raw):
     out["idea"] = out["idea"] if isinstance(out["idea"], str) else ""
     out["tier_name"] = out["tier_name"] if isinstance(out["tier_name"], str) else ""
     for key, cast, default in (
-        ("tier_index", int, 0),
+        # 1, matching the browser's default of "8 seconds". It was 0 here, so a
+        # hand-built API call with no state blob silently picked 5 seconds - the
+        # one tier that cannot write a talking prompt.
+        ("tier_index", int, 1),
         ("seed", int, 0),
         ("max_length", int, 512),
         ("top_k", int, 64),
@@ -378,10 +417,21 @@ def parse_state(raw):
         out["model"] = _DEFAULT_MODEL
     if not isinstance(out["clip_type"], str) or not out["clip_type"].strip():
         out["clip_type"] = "minimax"
-    # Clamps. max_length is the one that matters: the abliterated models do not
-    # emit a stop token reliably, so an absurd value here is a multi-minute run.
+    # Clamps. /prompt is UNAUTHENTICATED and the browser is not the only caller,
+    # so every sampling value is clamped here too, mirroring core.mjs. Without
+    # this a hand-written API call with "temperature": 0 divides the logits by
+    # zero and dies in torch.multinomial several minutes into a model load.
+    # max_length matters most: the abliterated models do not emit a stop token
+    # reliably, so an absurd value is a multi-minute run.
     out["max_length"] = max(1, min(32768, out["max_length"]))
     out["seed"] = max(0, min(0xFFFFFFFFFFFFFFFF, out["seed"]))
+    out["temperature"] = max(0.01, min(2.0, out["temperature"]))
+    out["top_p"] = max(0.0, min(1.0, out["top_p"]))
+    out["min_p"] = max(0.0, min(1.0, out["min_p"]))
+    out["top_k"] = max(0, min(1000, out["top_k"]))
+    out["repetition_penalty"] = max(0.0, min(5.0, out["repetition_penalty"]))
+    out["presence_penalty"] = max(0.0, min(5.0, out["presence_penalty"]))
+    out["fps"] = max(0.01, min(1000.0, out["fps"]))
     return out
 
 

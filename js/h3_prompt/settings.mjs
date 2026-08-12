@@ -25,6 +25,7 @@ let PANEL_NODE = null;
 let USER_MOVED = false;
 let ON_CHANGE = null;
 let DATA = { modes: {}, models: [] };
+let CP_HANDLE = null;   // an open Pixaroma colour picker, so close takes it too
 
 let _cssDone = false;
 function injectCSS() {
@@ -217,6 +218,13 @@ function openPop(anchor, values, current, onPick) {
 // ---------------------------------------------------------------------------
 let EDITOR = null;
 function closeEditor() {
+  // Release the Escape listener HERE, not in the key handler. It used to remove
+  // itself only on the Escape path, so closing with Cancel / Save / a backdrop
+  // click / deleting the node left it bound - and because it is window+capture
+  // and calls stopPropagation, each leaked one SWALLOWED the next Escape press
+  // for the whole app. The symptom looked intermittent: "Escape sometimes needs
+  // two presses".
+  try { EDITOR?._pixEscOff?.(); } catch (e) { /* already gone */ }
   EDITOR?.remove();
   EDITOR = null;
 }
@@ -251,18 +259,20 @@ function openEditor(title, text, onSave) {
   cancel.addEventListener("click", done);
   back.addEventListener("mousedown", (e) => { if (e.target === back) done(); });
   save.addEventListener("click", async () => {
+    if (save.disabled) return;          // no double-submit of a 12k formula
+    save.disabled = true;
     save.textContent = "Saving...";
     const ok = await onSave(ta.value);
-    if (!ok) { save.textContent = "Save failed"; return; }
+    if (!ok) { save.textContent = "Save failed"; save.disabled = false; return; }
     done();
   });
   const esc = (e) => {
-    if (e.key !== "Escape") return;
+    if (e.key !== "Escape" || EDITOR !== back) return;
     e.stopPropagation();
     done();
-    window.removeEventListener("keydown", esc, true);
   };
   window.addEventListener("keydown", esc, true);
+  back._pixEscOff = () => window.removeEventListener("keydown", esc, true);
 
   document.body.appendChild(back);
   EDITOR = back;
@@ -276,6 +286,8 @@ export function closeH3PanelFor(node) {
   if (node && PANEL_NODE !== node) return;
   closePop();
   closeEditor();
+  try { CP_HANDLE?.close?.(); } catch (e) { /* already gone */ }
+  CP_HANDLE = null;
   // The document/window listeners are the leak that matters: a workflow load or
   // a node deletion closes the panel with no click, so removing them only on a
   // user-driven close orphans one pair per open.
@@ -298,6 +310,14 @@ export function closeH3PanelFor(node) {
 // made it look like a panel bug rather than an event-type bug.
 function outsideClose(e) {
   if (!PANEL) return;
+  // The dropdown is position:fixed on <body>, so a click ELSEWHERE INSIDE the
+  // panel used to leave it floating over a row that renderPanel had already
+  // destroyed - anchored to nothing. Close it before the inside-the-panel
+  // early return. The .pix-h3p-pick exemption keeps the anchor's own toggle
+  // behaviour, since openPop already closes any previous one.
+  if (POP && !POP.contains(e.target) && !e.target?.closest?.(".pix-h3p-pick")) {
+    closePop();
+  }
   // contains(), like Save Video, rather than a class selector: it cannot be
   // fooled by a child that happens not to match.
   if (PANEL.contains(e.target)) return;
@@ -380,17 +400,27 @@ export async function openH3Panel(node, onChange) {
   changed(node);
 }
 
-function numField(label, value, onCommit, opts) {
+// QUIET commit: writes state WITHOUT re-rendering the panel.
+//
+// Committing through the usual set() rebuilt the whole body, which destroyed
+// the field the user was moving to - click from TOP K into TOP P and the click
+// had no live target left, so the second field never focused. Tab was worse:
+// the order restarted at the top of the document. Nothing in the panel is
+// derived from these six numbers, so a re-render buys nothing.
+function numField(node, label, key, onQuiet, opts) {
   const wrap = el("div", "pix-h3p-num");
   wrap.append(el("label", null, label));
   const input = document.createElement("input");
   input.type = "text";
-  input.value = String(value);
+  input.value = String(readState(node)[key]);
   input.title = opts?.title || "";
   const commit = () => {
-    const n = Number(input.value);
-    if (!Number.isFinite(n)) { input.value = String(value); return; }
-    onCommit(n);
+    const raw = Number(input.value);
+    if (!Number.isFinite(raw)) { input.value = String(readState(node)[key]); return; }
+    onQuiet(opts?.int ? Math.trunc(raw) : raw);
+    // Show what was actually stored, so a clamped value is visible immediately
+    // rather than only after the panel is next opened.
+    input.value = String(readState(node)[key]);
   };
   input.addEventListener("change", commit);
   input.addEventListener("blur", commit);
@@ -440,12 +470,15 @@ function renderPanel(node, body) {
       "That file is not in your text_encoders folder. Pick one from the list."));
   }
 
+  // quiet = write state, tell the host, but do NOT rebuild the panel
+  const quiet = (patch) => { writeState(node, patch); changed(node); };
+
   const nums = el("div", "pix-h3p-nums");
   nums.append(
-    numField("TEMP", st.temperature, (v) => set({ temperature: v }),
+    numField(node, "TEMP", "temperature", (v) => quiet({ temperature: v }),
       { title: "0.3 is what these formulas were measured at. Higher makes the model paste the formula's own example words." }),
-    numField("MAX LEN", st.max_length, (v) => set({ max_length: Math.trunc(v) }),
-      { title: "Token budget for the answer. 512 is enough for every tier." }),
+    numField(node, "MAX LEN", "max_length", (v) => quiet({ max_length: v }),
+      { int: true, title: "Token budget for the answer. 512 is enough for every tier." }),
   );
   body.appendChild(nums);
 
@@ -459,13 +492,13 @@ function renderPanel(node, body) {
   if (node._pixH3AdvOpen) {
     const a = el("div", "pix-h3p-nums");
     a.append(
-      numField("TOP K", st.top_k, (v) => set({ top_k: Math.trunc(v) })),
-      numField("TOP P", st.top_p, (v) => set({ top_p: v })),
+      numField(node, "TOP K", "top_k", (v) => quiet({ top_k: v }), { int: true }),
+      numField(node, "TOP P", "top_p", (v) => quiet({ top_p: v })),
     );
     const b = el("div", "pix-h3p-nums");
     b.append(
-      numField("MIN P", st.min_p, (v) => set({ min_p: v })),
-      numField("REP", st.repetition_penalty, (v) => set({ repetition_penalty: v })),
+      numField(node, "MIN P", "min_p", (v) => quiet({ min_p: v })),
+      numField(node, "REP", "repetition_penalty", (v) => quiet({ repetition_penalty: v })),
     );
     body.append(a, b);
   }
@@ -670,6 +703,11 @@ function renderPanel(node, body) {
       repaintAccent(node);
       changed(node);
     },
+    // So a PROGRAMMATIC close reaches the picker. The user-driven paths already
+    // self-close, but deleting the node or loading a workflow closes the panel
+    // with no gesture and would strand the picker on document.body, anchored to
+    // a swatch that no longer exists. Same handle Save Video keeps.
+    onPickerOpen: (h) => { CP_HANDLE = h; },
   });
   if (accent) body.appendChild(accent);
 }
