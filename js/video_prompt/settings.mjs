@@ -16,6 +16,10 @@ import {
 import {
   followNode, getNodeScreenRect, makeDraggable, placeBeside,
 } from "../shared/node_panel.mjs";
+// Duration Pixaroma's recipe list, shared rather than copied: it is pure data
+// with no imports and no side effects, and one list means the two nodes cannot
+// drift on what "Wan" means.
+import { RECIPES, matchRecipe, recipeByName } from "../duration/recipes.mjs";
 import { MODES, MODE_LABELS, readState, writeState } from "./core.mjs";
 import { fetchAll, resetMode, saveDurations, saveFormula } from "./api.mjs";
 import { cacheTiers } from "./ui.mjs";
@@ -34,14 +38,14 @@ function injectCSS() {
   const style = document.createElement("style");
   style.id = "pixaroma-h3-panel-css";
   style.textContent = `
-  .pix-h3p{
+  .pix-vpp{
     position:fixed; z-index:1300; width:370px; max-height:82vh;
     display:flex; flex-direction:column;
     background:#2b2b2b; border:1px solid #555; border-radius:8px;
     box-shadow:0 8px 26px rgba(0,0,0,.45);
     font:12px 'Segoe UI', sans-serif; color:#ddd; overflow:hidden;
   }
-  .pix-h3p *{ box-sizing:border-box; }
+  .pix-vpp *{ box-sizing:border-box; }
   .pix-vpp-head{
     display:flex; align-items:center; justify-content:space-between;
     padding:9px 12px; background:#333; border-bottom:1px solid #444;
@@ -164,7 +168,7 @@ function injectCSS() {
     position:fixed; inset:0; z-index:1500; background:rgba(0,0,0,.72);
     display:flex; align-items:center; justify-content:center; padding:3vh 3vw;
   }
-  .pix-h3e{
+  .pix-vpe{
     display:flex; flex-direction:column; width:min(1100px,94vw); height:94vh;
     background:#2b2b2b; border:1px solid #555; border-radius:8px; overflow:hidden;
     font:12px 'Segoe UI', sans-serif;
@@ -174,12 +178,12 @@ function injectCSS() {
   .pix-vpe-head b{ color:#fff; font-weight:400; font-size:13px; }
   .pix-vpe-head .cnt{ color:#777; font-size:11px; }
   .pix-vpe-head .sp{ flex:1 1 auto; }
-  .pix-h3e textarea{
+  .pix-vpe textarea{
     flex:1 1 auto; margin:12px 14px; background:#1d1d1d; color:#ddd;
     border:1px solid #333; border-radius:4px; padding:10px 12px;
     font:12px/1.5 monospace; resize:none; outline:none;
   }
-  .pix-h3e textarea:focus{ border-color:var(--pix-acc,#f66744); }
+  .pix-vpe textarea:focus{ border-color:var(--pix-acc,#f66744); }
   .pix-vpe-foot{ display:flex; gap:6px; justify-content:flex-end;
     padding:0 14px 12px; flex:none; }
   `;
@@ -297,7 +301,7 @@ function closeEditor() {
 function openEditor(title, text, onSave) {
   closeEditor();
   const back = el("div", "pix-vpe-back");
-  const box = el("div", "pix-h3e");
+  const box = el("div", "pix-vpe");
   const head = el("div", "pix-vpe-head");
   const name = el("b", null, title);
   const cnt = el("span", "cnt", "");
@@ -441,7 +445,7 @@ export async function openVideoPromptPanel(node, onChange) {
   PANEL_NODE = node;
   ON_CHANGE = onChange;
 
-  const panel = el("div", "pix-h3p");
+  const panel = el("div", "pix-vpp");
   const head = el("div", "pix-vpp-head");
   head.append(el("span", null, "Video Prompt settings"));
   const x = el("button", "pix-vpp-x", "✕");
@@ -712,8 +716,48 @@ function renderPanel(node, body) {
   }
   body.appendChild(tierBox);
 
+  // ---- video model -------------------------------------------------------
+  // What the `frames` output has to satisfy. Defaults are MiniMax H3; this is
+  // what lets somebody point the node at Wan or LTX with their own formula and
+  // still get a frame count that model will accept.
+  body.appendChild(el("div", "pix-vpp-sec", "VIDEO MODEL"));
+  // matchRecipe returns null for hand-tuned numbers, which is a normal state -
+  // say so rather than rendering the word "null".
+  const current = matchRecipe({
+    fps: st.fps, step: st.step, plus: st.plus, minFrames: st.min_frames,
+  }) || "Custom";
+  const rPick = el("div", "pix-vpp-pick");
+  rPick.append(el("span", "v", current), el("span", "c", "▼"));
+  rPick.title = "Which model the frames output has to suit";
+  rPick.addEventListener("click", (e) => {
+    e.stopPropagation();
+    openPop(rPick, RECIPES.map((r) => r.name), current, (name) => {
+      const r = recipeByName(name);
+      if (!r) return;
+      set({ fps: r.fps, step: r.step, plus: r.plus, min_frames: r.minFrames });
+    });
+  });
+  body.appendChild(rPick);
+  const rNums = el("div", "pix-vpp-nums");
+  rNums.append(
+    numField(node, "FPS", "fps", (v) => quiet({ fps: v }),
+      { title: "Frames per second of the video model." }),
+    numField(node, "STEP", "step", (v) => quiet({ step: v }),
+      { int: true, title: "Frame counts must land on step x n + plus. 1 means no snapping." }),
+    numField(node, "PLUS", "plus", (v) => quiet({ plus: v }),
+      { int: true, title: "The plus in step x n + plus. MiniMax H3 is 17n + 5." }),
+  );
+  body.appendChild(rNums);
+
   // ---- behaviour ---------------------------------------------------------
   body.appendChild(el("div", "pix-vpp-sec", "BEHAVIOUR"));
+  body.appendChild(toggleRow(
+    "Add the length instructions to the prompt", st.length_block,
+    (v) => set({ length_block: v }),
+    "On: each duration also tells the model how much to write, which is how the "
+    + "shipped formulas were measured. Turn it off when you are using your own "
+    + "wording. The durations still set the frames and seconds outputs either way.",
+  ));
   body.appendChild(toggleRow(
     "Hint when 5s meets a speaking idea", st.speech_hint,
     (v) => set({ speech_hint: v }),

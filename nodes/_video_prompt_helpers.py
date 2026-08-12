@@ -75,7 +75,9 @@ DEFAULT_VIDEO = {
     "fps": 24.0,
     "step": 17,
     "plus": 5,
-    "min_frames": 0,
+    # 5, matching Duration Pixaroma's MiniMax H3 recipe, so the settings
+    # picker recognises the defaults instead of reporting "Custom".
+    "min_frames": 5,
 }
 
 
@@ -424,6 +426,9 @@ def parse_state(raw):
             "tier_name": "",
             "seed": 0,
             "release_model": False,
+            # ON by default: the shipped formulas are written to be paired with
+            # a length block. Off is for somebody running their own wording.
+            "length_block": True,
         }
     )
     # Only keys we already know about: an unknown key in a hand-edited blob must
@@ -451,7 +456,7 @@ def parse_state(raw):
         ("fps", float, 24.0),
         ("step", int, 17),
         ("plus", int, 5),
-        ("min_frames", int, 0),
+        ("min_frames", int, 5),
     ):
         try:
             out[key] = cast(out[key])
@@ -460,6 +465,7 @@ def parse_state(raw):
     out["thinking"] = out["thinking"] is True
     out["use_default_template"] = out["use_default_template"] is not False
     out["release_model"] = out["release_model"] is True
+    out["length_block"] = out["length_block"] is not False
     if not isinstance(out["model"], str) or not out["model"].strip():
         out["model"] = _DEFAULT_MODEL
     if not isinstance(out["clip_type"], str) or not out["clip_type"].strip():
@@ -496,11 +502,17 @@ def assemble(state, mode: str):
     Returns (prompt, seconds, tier_name). Kept separate from the node so the
     harness can diff a generated prompt against the tested workflows without
     ComfyUI, torch or a model on disk.
+
+    `length_block` off means the tier's TEXT is not appended, so somebody
+    running their own wording is not handed our H3 length instructions. The
+    tier still sets the DURATION: the seconds come from its NAME, so `frames`
+    and `seconds` keep working and the chips simply become "how long is this
+    video" rather than "how much to write".
     """
     st = parse_state(state)
     tiers = load_durations(mode)
     tier = pick_tier(tiers, st["tier_index"], st["tier_name"])
-    length_block = tier.get("value", "") if tier else ""
     tier_name = tier.get("name", "") if tier else ""
+    length_block = (tier.get("value", "") if tier else "") if st["length_block"] else ""
     prompt = build_prompt(load_formula(mode), st["idea"], length_block)
     return prompt, seconds_from_tier(tier_name), tier_name

@@ -58,10 +58,17 @@ export const DEFAULT_STATE = {
   thinking: false,
   use_default_template: true,
   release_model: false,
+  // Off means the tier's TEXT is not appended, for somebody running their own
+  // wording. The tier still sets the DURATION - the seconds come from its
+  // name - so frames and seconds keep working either way.
+  length_block: true,
+  // The frame shape of the video model this feeds. Defaults are MiniMax H3;
+  // the settings panel offers Duration Pixaroma's recipe list so the frames
+  // output is right for Wan, Hunyuan, LTX or no snapping at all.
   fps: 24,
   step: 17,
   plus: 5,
-  min_frames: 0,
+  min_frames: 5,
   // --- face only, never sent (see PROMPT_KEYS) ----------------------------
   seed_mode: SEED_FIXED,
   speech_hint: true,
@@ -74,7 +81,8 @@ const PROMPT_KEYS = [
   "idea", "tier_index", "tier_name", "seed", "model", "clip_type",
   "temperature", "max_length", "top_k", "top_p", "min_p",
   "repetition_penalty", "presence_penalty", "thinking",
-  "use_default_template", "release_model", "fps", "step", "plus", "min_frames",
+  "use_default_template", "release_model", "length_block",
+  "fps", "step", "plus", "min_frames",
 ];
 
 function num(value, fallback, lo, hi) {
@@ -102,13 +110,16 @@ export function readState(node) {
   st.min_p = num(st.min_p, 0.05, 0, 1);
   st.repetition_penalty = num(st.repetition_penalty, 1.05, 0, 5);
   st.presence_penalty = num(st.presence_penalty, 0, 0, 5);
-  st.fps = num(st.fps, 24, 0.01, 1000);
+  // floor 1, matching Python. A sub-1-fps video is not a thing, and 0.01 would
+  // report 5 frames as 500 seconds on the seconds output.
+  st.fps = num(st.fps, 24, 1, 1000);
   st.step = Math.trunc(num(st.step, 17, 0, 100000));
   st.plus = Math.trunc(num(st.plus, 5, 0, 100000));
-  st.min_frames = Math.trunc(num(st.min_frames, 0, 0, 1000000));
+  st.min_frames = Math.trunc(num(st.min_frames, 5, 0, 1000000));
   st.thinking = st.thinking === true;
   st.use_default_template = st.use_default_template !== false;
   st.release_model = st.release_model === true;
+  st.length_block = st.length_block !== false;
   st.speech_hint = st.speech_hint !== false;
   return st;
 }

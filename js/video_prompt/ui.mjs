@@ -460,9 +460,14 @@ export function renderFace(node) {
     const warn = warnSpeech && /^\s*5\b/.test(name);
     chip.classList.toggle("is-on", on);
     chip.classList.toggle("is-warn", warn);
+    // The chips do TWO jobs, and one of them can be switched off, so say which
+    // are live rather than leaving the user to guess.
+    const jobs = st.length_block
+      ? name + " - sets how long the video is, and how much the model writes"
+      : name + " - sets how long the video is (the length instructions are off)";
     chip.title = warn
       ? name + " - talking ideas come out better at 8 seconds or more"
-      : name;
+      : jobs;
   });
 
   // tip line doubles as the speech warning, so there is no extra row to make
