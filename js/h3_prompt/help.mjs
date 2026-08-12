@@ -82,12 +82,40 @@ export const H3_PROMPT_HELP = {
     {
       heading: "What you need installed",
       body:
-        "A vision language model in your text_encoders folder, because the " +
-        "first-frame modes have to actually see the picture. The formulas were " +
-        "written and measured against qwen3-vl-8b-heretic. A 4B model works on a " +
-        "smaller card but its output needs trimming.\n\n" +
-        "Pick your model in the settings. If the one named there is missing, the node " +
-        "says so and tells you where to choose another.",
+        "One vision language model, in your ComfyUI/models/text_encoders folder. " +
+        "It has to be a VISION model, because the first-frame modes need to " +
+        "actually see the picture. A text-only model will load and then quietly " +
+        "ignore your images.\n\n" +
+        "You do not have to choose one. If the model named in the settings is not " +
+        "on your machine, the node picks the best vision model it can find and " +
+        "tells you in the console which one it used.",
+      defs: [
+        ["The one everything was measured against",
+         "`qwen3-vl-8b-heretic-1.3.0_fp8_e4m3fn.safetensors`, about 9.4 GB. Every formula and every duration in this node was written and tested against it. Best choice for a 12 GB card or better."],
+        ["For an 8 GB card",
+         "A Qwen3-VL 4B build instead. It works, and it follows the formulas less closely, so expect to trim its output or re-roll more often."],
+        ["If you would rather not use an uncensored build",
+         "Comfy-Org publishes plain Qwen3-VL text encoders. They follow the formulas fine; they just refuse more often on anything spicy."],
+      ],
+      links: [
+        ["Qwen3-VL 8B Heretic (the tested one)", "https://huggingface.co/DreamFast/Qwen3-VL-8B-Heretic-1.3.0"],
+        ["Qwen3-VL 4B Heretic for ComfyUI", "https://huggingface.co/DreamFast/Qwen3-VL-4b-Heretic-ComfyUI"],
+        ["Qwen3-VL text encoders from Comfy-Org", "https://huggingface.co/Comfy-Org/Qwen3-VL/tree/main/text_encoders"],
+      ],
+    },
+    {
+      heading: "Using a Load CLIP node instead",
+      body:
+        "The clip input is optional. Wire a Load CLIP node into it and that model " +
+        "is used instead of the one in the settings, which is handy when several " +
+        "of these nodes should share one loaded model.\n\n" +
+        "When a wire is present the settings show \"using the wired CLIP\" and the " +
+        "picker is greyed out, so the panel can never claim one model while " +
+        "another is doing the work. Load CLIP's own type dropdown does not matter " +
+        "here; what matters is that the file is a vision model.\n\n" +
+        "One thing to know: with a wire in place the Free VRAM switch does nothing. " +
+        "That model belongs to your Load CLIP node and may be shared, so it is not " +
+        "this node's to unload.",
     },
   ],
 };

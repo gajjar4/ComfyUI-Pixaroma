@@ -27,7 +27,7 @@ import {
 import {
   applyError, applyResult, buildFace, destroyFace, injectCSS, renderFace,
 } from "./ui.mjs";
-import { closeH3PanelFor, openH3Panel } from "./settings.mjs";
+import { closeH3PanelFor, openH3Panel, refreshH3Panel } from "./settings.mjs";
 import { H3_PROMPT_HELP } from "./help.mjs";
 
 registerNodeHelp(CLASS, H3_PROMPT_HELP);
@@ -101,6 +101,10 @@ app.registerExtension({
     nodeType.prototype.onConnectionsChange = function () {
       const r = _conn?.apply(this, arguments);
       renderFace(this);
+      // Wiring or pulling the clip input changes which model actually runs, so
+      // an OPEN panel has to stop offering a picker that no longer matters.
+      // Still writes nothing serialized, so it needs no load gate.
+      refreshH3Panel(this);
       return r;
     };
 

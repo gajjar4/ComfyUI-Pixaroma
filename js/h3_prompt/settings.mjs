@@ -137,11 +137,22 @@ function injectCSS() {
     background:#1d1d1d; border:1px solid #555; border-radius:4px;
     box-shadow:0 6px 18px rgba(0,0,0,.5); padding:4px;
   }
-  .pix-h3p-pop div{ padding:5px 9px; border-radius:3px; color:#ccc;
+  .pix-h3p-pop .pix-h3p-poplist div{ padding:5px 9px; border-radius:3px; color:#ccc;
     font:11px 'Segoe UI', sans-serif; cursor:pointer;
     white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-  .pix-h3p-pop div:hover{ background:#2a2a2a; }
-  .pix-h3p-pop div.is-on{ color:var(--pix-acc,#f66744); }
+  .pix-h3p-pop .pix-h3p-poplist div:hover{ background:#2a2a2a; }
+  .pix-h3p-pop .pix-h3p-poplist div.is-on{ color:var(--pix-acc,#f66744); }
+  .pix-h3p-popfilter{
+    display:block; width:100%; box-sizing:border-box; margin:0 0 4px;
+    background:#141414; color:#ddd; border:1px solid #444; border-radius:3px;
+    padding:5px 8px; font:11px 'Segoe UI', sans-serif; outline:none;
+  }
+  .pix-h3p-popfilter:focus{ border-color:var(--pix-acc,#f66744); }
+
+  /* the model row when a CLIP is wired: it is not the thing in charge */
+  .pix-h3p-pick.is-locked{ opacity:.45; cursor:default; }
+  .pix-h3p-pick.is-locked:hover{ border-color:#444; }
+  .pix-h3p-note{ color:#e0a33a; font-size:10px; margin:-2px 0 8px; line-height:1.35; }
 
   /* Fullscreen formula editor */
   .pix-h3e-back{
@@ -188,22 +199,56 @@ function closePop() {
 function openPop(anchor, values, current, onPick) {
   closePop();
   const pop = el("div", "pix-h3p-pop");
-  if (!values.length) {
-    const empty = el("div", null, "No text encoders found");
-    empty.style.color = "#888";
-    pop.appendChild(empty);
-  }
-  for (const v of values) {
-    const row = el("div", v === current ? "is-on" : null, v);
-    row.title = v;
-    row.addEventListener("click", (e) => {
-      e.stopPropagation();
-      closePop();
-      onPick(v);
+
+  // A text_encoders folder is a junk drawer - this box has 30-odd files in it -
+  // so scrolling to find one is miserable. Filter above about a screenful.
+  let filter = null;
+  const list = el("div", "pix-h3p-poplist");
+  const paint = (q) => {
+    list.replaceChildren();
+    const needle = (q || "").trim().toLowerCase();
+    // Every space-separated word must appear, so "vl 8b" finds the 8B VL build
+    // without caring what order the filename puts them in.
+    const words = needle ? needle.split(/\s+/) : [];
+    const hits = values.filter((v) => {
+      const n = v.toLowerCase();
+      return words.every((w) => n.includes(w));
     });
-    pop.appendChild(row);
+    if (!hits.length) {
+      const none = el("div", null, values.length ? "Nothing matches" : "No text encoders found");
+      none.style.color = "#888";
+      list.appendChild(none);
+    }
+    for (const v of hits) {
+      const row = el("div", v === current ? "is-on" : null, v);
+      row.title = v;
+      row.addEventListener("click", (e) => {
+        e.stopPropagation();
+        closePop();
+        onPick(v);
+      });
+      list.appendChild(row);
+    }
+  };
+
+  if (values.length > 8) {
+    filter = document.createElement("input");
+    filter.type = "text";
+    filter.className = "pix-h3p-popfilter";
+    filter.placeholder = "Filter, e.g. vl 8b";
+    filter.addEventListener("input", () => paint(filter.value));
+    // Never let a keystroke reach the canvas: ComfyUI binds single letters to
+    // commands, so typing "b" here would otherwise also toggle bypass.
+    filter.addEventListener("keydown", (e) => {
+      e.stopPropagation();
+      if (e.key === "Escape") { e.preventDefault(); closePop(); }
+    });
+    pop.appendChild(filter);
   }
+  pop.appendChild(list);
+  paint("");
   document.body.appendChild(pop);
+  if (filter) setTimeout(() => filter.focus(), 0);
   const r = anchor.getBoundingClientRect();
   pop.style.left = Math.max(6, Math.min(window.innerWidth - pop.offsetWidth - 6, r.left)) + "px";
   pop.style.width = Math.max(r.width, 200) + "px";
@@ -457,17 +502,33 @@ function renderPanel(node, body) {
   // ---- model -------------------------------------------------------------
   body.appendChild(el("div", "pix-h3p-sec", "MODEL"));
   const models = Array.isArray(DATA.models) ? DATA.models : [];
-  const pick = el("div", "pix-h3p-pick");
-  pick.append(el("span", "v", st.model), el("span", "c", "▼"));
-  pick.title = st.model;
-  pick.addEventListener("click", (e) => {
-    e.stopPropagation();
-    openPop(pick, models, st.model, (v) => set({ model: v }));
-  });
+  // A wired CLIP WINS at run time, so leaving this row live would let the panel
+  // name one model while a different one is actually doing the work.
+  const clipWired = (node.inputs || []).some(
+    (i) => i && i.name === "clip" && i.link != null);
+  const pick = el("div", "pix-h3p-pick" + (clipWired ? " is-locked" : ""));
+  pick.append(el("span", "v", clipWired ? "using the wired CLIP" : st.model),
+              el("span", "c", clipWired ? "" : "▼"));
+  pick.title = clipWired
+    ? "A Load CLIP node is wired into this node's clip input, and that model is "
+      + "used instead of this setting. Unplug it to choose here."
+    : st.model;
+  if (!clipWired) {
+    pick.addEventListener("click", (e) => {
+      e.stopPropagation();
+      openPop(pick, models, st.model, (v) => set({ model: v }));
+    });
+  }
   body.appendChild(pick);
-  if (models.length && !models.includes(st.model)) {
-    body.appendChild(el("div", "pix-h3p-missing",
-      "That file is not in your text_encoders folder. Pick one from the list."));
+  if (clipWired) {
+    body.appendChild(el("div", "pix-h3p-note",
+      "A Load CLIP node is wired in, so that model is used and this setting is "
+      + "ignored. It must be a vision language model, and Load CLIP's type does "
+      + "not matter. Unplug the wire to choose here again."));
+  } else if (models.length && !models.includes(st.model)) {
+    body.appendChild(el("div", "pix-h3p-note",
+      "\"" + st.model + "\" is not in your text_encoders folder, so the node "
+      + "picks the best vision model it can find. Choose one here to be sure."));
   }
 
   // quiet = write state, tell the host, but do NOT rebuild the panel
@@ -716,4 +777,18 @@ function renderPanel(node, body) {
  *  a repaint has anything to refresh. */
 export function panelIsOpenFor(node) {
   return !!PANEL && PANEL_NODE === node;
+}
+
+/**
+ * Repaint an OPEN panel for this node.
+ *
+ * Wiring or unplugging the clip input changes which model is really in charge,
+ * and the panel has to say so - otherwise it keeps offering a picker that has
+ * stopped mattering, or keeps claiming a wire is present after it was pulled.
+ * No-op when the panel is closed or belongs to another node.
+ */
+export function refreshH3Panel(node) {
+  if (!panelIsOpenFor(node)) return;
+  const body = PANEL.querySelector(".pix-h3p-body");
+  if (body) renderPanel(node, body);
 }
