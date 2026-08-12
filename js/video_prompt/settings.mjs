@@ -637,14 +637,15 @@ function renderPanel(node, body) {
         const ok = await saveFormula(mode, text);
         if (!ok) return false;
         DATA = await fetchAll();
-        // `body` was captured when the button was clicked. If the panel was
-        // closed (or closed and reopened) while that request was in flight,
-        // this repaint would land on a detached tree and the panel actually on
-        // screen would keep showing the pre-save state. The save itself DID
-        // succeed, so still report true. Same guard on all five async writes
-        // below; the initial open has its own at the top of openVideoPromptPanel.
-        if (!panelIsOpenFor(node)) return true;
-        renderPanel(node, body);
+        // NEVER repaint the closure-captured `body` after an await. Each open
+        // builds a FRESH body, so closing the panel and reopening it for the
+        // SAME node while a request is in flight leaves this closure holding a
+        // detached tree - and a "is a panel open for this node" test still
+        // passes, because it is. Measured: the old body reports isConnected
+        // false while PANEL_NODE still matches. refreshVideoPromptPanel
+        // re-queries the live body, so it is right in every case and no-ops
+        // when the panel is gone. Same on all five async writes below.
+        refreshVideoPromptPanel(node);
         changed(node);
         return true;
       });
@@ -664,8 +665,7 @@ function renderPanel(node, body) {
       for (const m of MODES) {
         cacheTiers(m, (DATA.modes?.[m]?.durations || []).map((t) => t.name));
       }
-      if (!panelIsOpenFor(node)) return;
-      renderPanel(node, body);
+      refreshVideoPromptPanel(node);
       changed(node);
     });
 
@@ -712,8 +712,7 @@ function renderPanel(node, body) {
           const ok = await saveDurations(activeMode, next);
           if (!ok) return false;
           DATA = await fetchAll();
-          if (!panelIsOpenFor(node)) return true;
-          renderPanel(node, body);
+          refreshVideoPromptPanel(node);
           changed(node);
           return true;
         });
@@ -867,8 +866,7 @@ function renderPanel(node, body) {
       for (const m of MODES) {
         cacheTiers(m, (DATA.modes?.[m]?.durations || []).map((t) => t.name));
       }
-      if (!panelIsOpenFor(node)) return;
-      renderPanel(node, body);
+      refreshVideoPromptPanel(node);
       changed(node);
     });
     input.click();
@@ -885,8 +883,7 @@ function renderPanel(node, body) {
     for (const m of MODES) {
       cacheTiers(m, (DATA.modes?.[m]?.durations || []).map((t) => t.name));
     }
-    if (!panelIsOpenFor(node)) return;
-    renderPanel(node, body);
+    refreshVideoPromptPanel(node);
     changed(node);
   });
 
