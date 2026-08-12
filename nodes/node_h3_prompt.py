@@ -96,9 +96,14 @@ _NEEDED = (
     "  This node needs a VISION language model (a Qwen3-VL build) in your\n"
     "  ComfyUI/models/text_encoders folder, because it has to SEE the picture.\n"
     "  The one these formulas were written and measured against is\n"
-    "  qwen3-vl-8b-heretic-1.3.0_fp8_e4m3fn.safetensors (10 GB, for 12 GB+ cards).\n"
-    "  For an 8 GB card use a Qwen3-VL 4B build instead.\n"
-    "  Pick it afterwards from the gear on the node."
+    "  qwen3-vl-8b-heretic-1.3.0_fp8_e4m3fn.safetensors (10 GB, for 12 GB+ cards):\n"
+    "  https://huggingface.co/DreamFast/Qwen3-VL-8B-Heretic-1.3.0/tree/main/comfyui\n"
+    "  (take it from that comfyui folder, NOT the repo root - the root holds the\n"
+    "  raw model, which ComfyUI cannot load as a text encoder)\n"
+    "  For an 8 GB card use the 4B instead:\n"
+    "  https://huggingface.co/DreamFast/Qwen3-VL-4b-Heretic-ComfyUI/tree/main\n"
+    "  Pick it afterwards from the gear on the node, or leave it and the node\n"
+    "  will find it by itself."
 )
 
 
