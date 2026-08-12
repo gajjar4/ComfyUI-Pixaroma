@@ -329,7 +329,15 @@ export async function openH3Panel(node, onChange) {
   PANEL = panel;
 
   placeBeside(panel, getNodeScreenRect(node));
-  makeDraggable(panel, head, { onUserMove: () => { USER_MOVED = true; } });
+  // ignoreSelector is NOT optional when a control lives inside the drag handle.
+  // makeDraggable calls preventDefault() and takes pointer capture on
+  // pointerdown, so without this the ✕ never receives its click and the panel
+  // cannot be closed by the one control that exists to close it. Save Image and
+  // Save Video both pass their own close-button selector for the same reason.
+  makeDraggable(panel, head, {
+    onUserMove: () => { USER_MOVED = true; },
+    ignoreSelector: ".pix-h3p-x",
+  });
   followNode(panel, node, {
     isCurrent: () => PANEL === panel && PANEL_NODE === node,
     isUserMoved: () => USER_MOVED,
