@@ -98,11 +98,11 @@ export function injectCSS() {
     background:color-mix(in srgb, ${ACC} 10%, transparent);
     border:1px solid color-mix(in srgb, ${ACC} 35%, transparent);
   }
-  .pix-h3-bicon{
-    flex:none; width:14px; height:14px; background:${ACC};
-    -webkit-mask:url("${pixAsset("icons/note/gear.svg")}") center/contain no-repeat;
-    mask:url("${pixAsset("icons/note/gear.svg")}") center/contain no-repeat;
-  }
+  /* NO icon on the left of this banner. It used to carry the gear glyph purely
+     as decoration, which put a fake gear next to the real settings gear at the
+     other end of the same row - so the row appeared to have two settings
+     buttons. The mode is written in words; it does not need a picture, and
+     there is no icon in the bundled set that would mean "mode" anyway. */
   .pix-h3-blabel{ color:#eee; font-size:11px; }
   .pix-h3-bhint{ margin-left:auto; color:#888; font-size:10px; }
   .pix-h3-gear{
@@ -275,7 +275,6 @@ export function buildFace(node, openPanel) {
 
   // banner
   const banner = el("div", "pix-h3-banner");
-  const bicon = el("span", "pix-h3-bicon");
   const blabel = el("span", "pix-h3-blabel", "Text to video");
   const bhint = el("span", "pix-h3-bhint", "");
   const gear = el("button", "pix-h3-gear");
@@ -284,7 +283,7 @@ export function buildFace(node, openPanel) {
     e.stopPropagation();
     openPanel?.(node);
   });
-  banner.append(bicon, blabel, bhint, gear);
+  banner.append(blabel, bhint, gear);
 
   // idea
   const caption = el("div", "pix-h3-caption", "YOUR IDEA");
