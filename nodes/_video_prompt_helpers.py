@@ -496,6 +496,36 @@ def parse_state(raw):
     return out
 
 
+# A duration tier does TWO jobs, and only one of them is "length instructions".
+# Besides our word-count guidance it carries, in first_last mode, the ALIGNMENT
+# LINE that the formula orders the model to copy as its very first output line -
+# and that line has to name THIS tier's end second ("...aligns with the
+# 8.00-second mark").
+#
+# So the switch keeps the alignment part. Without this the tier was dropped
+# whole, and the only alignment line left anywhere in the prompt was the one
+# inside the formula's own EXAMPLE section, fixed at 5.00 seconds - so an 8, 10
+# or 15 second render silently told the model its last picture lands at 5.00s,
+# with no error and a prompt that looks complete. The example beats the rules
+# for a small model, so it WOULD be copied. Reproduced 2026-08-12 across all
+# four tiers; 5 seconds passed only because the example happens to be 5s, and
+# the default tier is 8.
+_STRUCTURAL_RE = re.compile(r"^ALIGNMENT LINE\b", re.I | re.M)
+
+
+def structural_tail(value) -> str:
+    """The part of a tier the FORMULA requires, independent of our length text.
+
+    Empty when a tier has no such part - which is every tier of text_to_video
+    and first_frame - so switching the length block off still removes the whole
+    tier there, exactly as before.
+    """
+    if not isinstance(value, str):
+        return ""
+    match = _STRUCTURAL_RE.search(value)
+    return value[match.start():].strip() if match else ""
+
+
 def assemble(state, mode: str):
     """The whole text side of a run, in one testable call.
 
@@ -503,16 +533,18 @@ def assemble(state, mode: str):
     harness can diff a generated prompt against the tested workflows without
     ComfyUI, torch or a model on disk.
 
-    `length_block` off means the tier's TEXT is not appended, so somebody
-    running their own wording is not handed our H3 length instructions. The
-    tier still sets the DURATION: the seconds come from its NAME, so `frames`
-    and `seconds` keep working and the chips simply become "how long is this
-    video" rather than "how much to write".
+    `length_block` off means the tier's LENGTH text is not appended, so somebody
+    running their own wording is not handed our H3 length instructions. Anything
+    the formula structurally requires survives the switch - see structural_tail.
+    The tier still sets the DURATION: the seconds come from its NAME, so
+    `frames` and `seconds` keep working and the chips simply become "how long is
+    this video" rather than "how much to write".
     """
     st = parse_state(state)
     tiers = load_durations(mode)
     tier = pick_tier(tiers, st["tier_index"], st["tier_name"])
     tier_name = tier.get("name", "") if tier else ""
-    length_block = (tier.get("value", "") if tier else "") if st["length_block"] else ""
+    raw_tier = tier.get("value", "") if tier else ""
+    length_block = raw_tier if st["length_block"] else structural_tail(raw_tier)
     prompt = build_prompt(load_formula(mode), st["idea"], length_block)
     return prompt, seconds_from_tier(tier_name), tier_name

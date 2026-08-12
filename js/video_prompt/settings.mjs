@@ -814,15 +814,45 @@ function renderPanel(node, body) {
         window.alert("That file is not a formula export.");
         return;
       }
-      for (const mode of MODES) {
+
+      // Import REPLACES what is on disk, so it is as destructive as Reset -
+      // which asks. Without this, picking the wrong file from a folder of
+      // exports silently destroys hand-edited formulas with no undo. Name the
+      // modes being replaced so the file can be recognised as the wrong one
+      // before it lands, not after.
+      const affected = MODES.filter((mode) => {
         const m = incoming[mode];
-        if (!m) continue;
+        if (!m) return false;
+        return (typeof m.formula === "string" && m.formula.trim())
+          || (Array.isArray(m.durations) && m.durations.length);
+      });
+      if (!affected.length) {
+        window.alert("That file has no formulas in it.");
+        return;
+      }
+      const names = affected.map((mode) => MODE_LABELS[mode] || mode).join(", ");
+      if (!window.confirm(
+        "Replace the formulas for " + names + " with the ones in this file?\n\n"
+        + "Your current wording for those is overwritten and cannot be undone.")) return;
+
+      // Each save is its own request, so a failure part way through leaves a
+      // HALF-applied import. Reporting nothing would look identical to success.
+      const failed = [];
+      for (const mode of affected) {
+        const m = incoming[mode];
         if (typeof m.formula === "string" && m.formula.trim()) {
-          await saveFormula(mode, m.formula);
+          if (!(await saveFormula(mode, m.formula))) failed.push(MODE_LABELS[mode] || mode);
         }
         if (Array.isArray(m.durations) && m.durations.length) {
-          await saveDurations(mode, m.durations);
+          if (!(await saveDurations(mode, m.durations))) {
+            const label = (MODE_LABELS[mode] || mode) + " durations";
+            if (!failed.includes(label)) failed.push(label);
+          }
         }
+      }
+      if (failed.length) {
+        window.alert("Some of that file could not be saved: " + failed.join(", ")
+          + ".\nThe rest was imported.");
       }
       DATA = await fetchAll();
       for (const m of MODES) {
