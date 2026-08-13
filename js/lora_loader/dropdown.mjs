@@ -59,9 +59,17 @@ export function closeLoraDropdown() {
   _pop = null;
 }
 
+// Slice the NORMALISED string, not the original. Windows hands us
+// "wan2.2\4steps\file.safetensors", and returning "wan2.2\4steps" made a
+// curPath that levelItems() could never match, because it compares against a
+// slash-normalised name - so opening the picker on a LoRA two folders deep
+// showed "Empty folder." and the user had to click back to the root and start
+// again. ONE level worked by luck: there is no separator left inside "wan2.2".
+// Reported 2026-08-11.
 function group(name) {
-  const i = name.replace(/\\/g, "/").lastIndexOf("/");
-  return i < 0 ? "" : name.slice(0, i);
+  const norm = name.replace(/\\/g, "/");
+  const i = norm.lastIndexOf("/");
+  return i < 0 ? "" : norm.slice(0, i);
 }
 function base(name) {
   const i = name.replace(/\\/g, "/").lastIndexOf("/");
