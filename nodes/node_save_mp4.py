@@ -16,6 +16,11 @@ from ._video_encode_helpers import (
     _write_wav_pcm16,
 )
 
+# Expands %date:...% and sanitises the prefix. The SAME helper the three sibling
+# save nodes use (Save Image, Save Video, Preview Image), so the four cannot
+# drift on what a filename may contain. See the fix note in save().
+from ._save_helpers import _safe_prefix
+
 # Honour ComfyUI's global --disable-metadata flag (same as SaveImage). Wrapped so
 # the node still imports on a build that lacks it.
 try:
@@ -135,6 +140,26 @@ class PixaromaSaveMp4:
         else:
             out_dir = folder_paths.get_output_directory()
             file_type = "output"
+        # Expand %date:...% and sanitise BEFORE handing the prefix on. Reported
+        # 2026-08-08: the widget's tooltip promises date tokens, but this node
+        # was the only one of the four save nodes that never expanded them, so
+        # `Clip_%date:yyyy-MM-dd%` reached the filesystem with the colon still in
+        # it. On Windows that is not an error - NTFS reads `name:stream` as an
+        # alternate data stream, so the write "succeeds" into a hidden stream and
+        # the user is left with a 0-byte file called `Clip_%date`, which is
+        # exactly what was reported. Measured before the fix: the asked-for
+        # filename never appears in the folder at all.
+        #
+        # _safe_prefix (not bare _expand_date_tokens) so this node also gains the
+        # same illegal-character sanitising the siblings have. It returns None
+        # only for genuinely unusable input (empty, over-long, leading slash, a
+        # '..' segment), and the node falls back to its own default rather than
+        # failing the run.
+        #
+        # The %Seed Pixaroma.seed% half of the tooltip needed nothing: those are
+        # resolved in the browser at submit time by installFilenameTokenResolver
+        # (js/save_mp4/index.js), so Python only ever sees the finished value.
+        filename_prefix = _safe_prefix(filename_prefix) or "Video"
         full_folder, fname, _ignored, subfolder, _ = folder_paths.get_save_image_path(
             filename_prefix, out_dir, W, H,
         )
