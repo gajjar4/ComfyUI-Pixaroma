@@ -51,6 +51,19 @@ export const VIDEO_PROMPT_HELP = {
       ],
     },
     {
+      heading: "Making the idea box bigger",
+      body:
+        "Three ways, and they all remember what you chose:\n\n" +
+        "Drag the node's own corner. The idea box and the prompt box share the "
+        + "height, so a taller node gives you more of both.\n\n" +
+        "Drag the small bar under the idea box to move the line between the two. "
+        + "Pull it down for a long idea, up when you would rather see more of the "
+        + "finished prompt. Double-click that bar to put it back where it started.\n\n" +
+        "Press Expand for a full-screen box. That is the one for a long idea, or "
+        + "for reading something you pasted in. Save keeps it, Cancel or Escape "
+        + "throws the edit away.",
+    },
+    {
       heading: "Length",
       body:
         "The length buttons do far more than set a number. Each one carries its own " +
@@ -69,6 +82,7 @@ export const VIDEO_PROMPT_HELP = {
         ["Generate", "Runs the workflow and writes the prompt."],
         ["Re-roll", "Generates again with a new seed. This is what to press when a result comes out flat. In Random mode every run already rolls a seed, so there it is simply another Generate."],
         ["Copy", "Puts the finished prompt on the clipboard."],
+        ["Expand", "Opens your idea in a full-screen box, for when it is longer than the space on the node. Save keeps what you typed, Cancel and Escape throw it away."],
         ["Free VRAM", "A switch, not a button. Off while you are only writing prompts, so generating again is instant. Turn it on when this node sits in the same workflow as your video model: the language model is unloaded as soon as the prompt is written, handing the memory over to the video. Your prompt is already finished by then, so nothing is lost. On one machine this freed about 17 GB. It greys out and does nothing when a Load CLIP node is wired in, because that model belongs to the loader and may be shared."],
         ["The seed chip", "Click F or R to switch between Fixed, which gives the same prompt every time, and Random, which gives a fresh one on every run. In Fixed you can click the number and type a seed of your own. In Random the number just shows what the last run happened to use."],
         ["The gear", "Opens the settings, where the formulas and the length instructions live."],

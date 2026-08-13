@@ -40,6 +40,17 @@ export const DEFAULT_H = 470;
 export const SEED_FIXED = "fixed";
 export const SEED_RANDOM = "random";
 
+// The idea box used to be a fixed 52px - about two and a half lines - and it
+// was the one thing on the node that could not be made bigger, because the
+// prompt box took every pixel the node grew by. Both boxes now share that
+// growth, and the grip under the idea box moves the line between them.
+// The bounds are on the SHARE, not on pixels: the CSS min-heights are the
+// pixel floor, and a share clamp is the only kind that stays right at any
+// canvas zoom.
+export const IDEA_SHARE_DEFAULT = 0.32;
+export const IDEA_SHARE_MIN = 0.12;
+export const IDEA_SHARE_MAX = 0.8;
+
 export const DEFAULT_STATE = {
   // --- what Python reads --------------------------------------------------
   idea: "",
@@ -72,6 +83,12 @@ export const DEFAULT_STATE = {
   // --- face only, never sent (see PROMPT_KEYS) ----------------------------
   seed_mode: SEED_FIXED,
   speech_hint: true,
+  // How the node's spare height is split between the idea box and the prompt
+  // box, as the idea's share of the two. A RATIO rather than a pixel height so
+  // it survives a node resize, and so the canvas zoom cancels out of the grip
+  // drag that edits it. Presentation only - sending it would change the node's
+  // cache signature and re-run a 10 GB model for a taller text box.
+  idea_share: IDEA_SHARE_DEFAULT,
 };
 
 // Exactly the keys Python reads. Anything outside this list is presentation,
@@ -121,6 +138,7 @@ export function readState(node) {
   st.release_model = st.release_model === true;
   st.length_block = st.length_block !== false;
   st.speech_hint = st.speech_hint !== false;
+  st.idea_share = num(st.idea_share, IDEA_SHARE_DEFAULT, IDEA_SHARE_MIN, IDEA_SHARE_MAX);
   return st;
 }
 

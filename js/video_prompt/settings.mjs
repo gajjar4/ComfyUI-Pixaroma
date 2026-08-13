@@ -298,7 +298,15 @@ function closeEditor() {
   EDITOR = null;
 }
 
-function openEditor(title, text, onSave) {
+/**
+ * The full-screen text box. Exported because the node FACE reuses it for the
+ * idea (its Expand button) - one editor rather than a second one that would
+ * drift from this.
+ *
+ * `opts.spellcheck` is on for prose and off for a formula; `opts.owner` names
+ * the node it belongs to, so deleting that node takes the editor with it.
+ */
+export function openEditor(title, text, onSave, opts) {
   closeEditor();
   const back = el("div", "pix-vpe-back");
   const box = el("div", "pix-vpe");
@@ -308,7 +316,8 @@ function openEditor(title, text, onSave) {
   head.append(name, cnt, el("span", "sp"));
   const ta = el("textarea");
   ta.value = text || "";
-  ta.spellcheck = false;
+  ta.spellcheck = opts?.spellcheck === true;
+  back._pixOwner = opts?.owner || null;
   const foot = el("div", "pix-vpe-foot");
   const cancel = el("button", "pix-vpp-btn", "Cancel");
   cancel.style.flex = "0 0 auto";
@@ -355,6 +364,10 @@ function openEditor(title, text, onSave) {
 // Panel
 // ---------------------------------------------------------------------------
 export function closeVideoPromptPanelFor(node) {
+  // The idea editor is opened from the node FACE, so it can be up with no panel
+  // open at all - in which case the early return below would leave a
+  // full-screen box belonging to a node that no longer exists.
+  if (node && EDITOR && EDITOR._pixOwner === node) closeEditor();
   if (node && PANEL_NODE !== node) return;
   closePop();
   closeEditor();

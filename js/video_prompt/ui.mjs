@@ -17,7 +17,9 @@ import { ACC, installNodeAccent } from "../shared/node_settings.mjs";
 import { applyAdaptiveCanvasOnly } from "../shared/nodes2.mjs";
 import { installCanvasZoomPassthrough } from "../shared/canvas_zoom.mjs";
 import { installResizeFloor } from "../shared/resize_floor.mjs";
+import { notifyGraphChanged } from "../shared/graph_changed.mjs";
 import {
+  IDEA_SHARE_DEFAULT, IDEA_SHARE_MAX, IDEA_SHARE_MIN,
   MODE_HINTS, MODE_LABELS, SEED_RANDOM, displaySeed, looksSpoken, modeOf,
   readState, rollSeed, writeState,
 } from "./core.mjs";
@@ -121,20 +123,53 @@ export function injectCSS() {
   }
   .pix-vp-gear:hover::before{ background:${ACC}; }
 
+  .pix-vp-caprow{ display:flex; align-items:center; gap:8px; flex:none; }
   .pix-vp-caption{ flex:none; color:${ACC}; font-size:10px; letter-spacing:.4px; }
+  /* A word, not a glyph. An arrow character is drawn by the operating system and
+     lands on a different baseline on Windows, Mac and Linux (the reason the gear
+     is a bundled SVG, convention #28), and there is no expand icon in the
+     bundled set. */
+  .pix-vp-expand{
+    margin-left:auto; background:none; border:none; padding:0;
+    cursor:pointer; color:#777; font:10px 'Segoe UI', sans-serif;
+    letter-spacing:.3px;
+  }
+  .pix-vp-expand:hover{ color:${ACC}; }
 
   .pix-vp-idea, .pix-vp-out{
     width:100%; background:#1d1d1d; color:#e0e0e0;
     border:1px solid #333; border-radius:4px; padding:6px 8px;
     font:12px monospace; resize:none; outline:none;
   }
-  .pix-vp-idea{ flex:none; height:52px; min-height:52px; }
+  /* THE TWO BOXES SHARE THE NODE'S SPARE HEIGHT. flex-basis 0 makes the two grow
+     numbers a pure ratio, so dragging the node taller grows BOTH - which is what
+     the idea box used to be missing, sitting at a fixed 52px while the prompt
+     box absorbed every pixel. renderFace writes the two variables from the
+     stored share; the fallbacks here are what an un-rendered node shows. */
+  .pix-vp-idea{
+    flex:var(--pix-vp-idea-grow,320) 1 0; min-height:44px;
+  }
   .pix-vp-idea:focus{ border-color:${ACC}; }
   .pix-vp-out{
-    flex:1 1 auto; min-height:64px; line-height:1.45;
+    flex:var(--pix-vp-out-grow,680) 1 0; min-height:64px; line-height:1.45;
     font-size:11px; color:#bbb; cursor:text;
   }
   .pix-vp-out:focus{ border-color:${ACC}; }
+
+  /* The grab strip under the idea box. Negative margins so a 9px target costs
+     about 1px of layout inside the 6px row gap it already sits in. */
+  .pix-vp-grip{
+    flex:none; height:9px; margin:-5px 0 -3px; width:100%;
+    display:flex; align-items:center; justify-content:center;
+    cursor:ns-resize; touch-action:none;
+  }
+  /* #555 rather than the #444 the chip borders use: this one has to be FOUND,
+     not just noticed once you are looking at it. */
+  .pix-vp-grip::before{
+    content:""; display:block; width:36px; height:2px; border-radius:1px;
+    background:#555;
+  }
+  .pix-vp-grip:hover::before, .pix-vp-grip.is-dragging::before{ background:${ACC}; }
 
   .pix-vp-tip{
     flex:none; display:flex; align-items:center; gap:5px;
@@ -279,6 +314,112 @@ async function copyText(text, button) {
   }
 }
 
+// ---------------------------------------------------------------------------
+// How tall is the idea box
+// ---------------------------------------------------------------------------
+/** Push the stored split onto the two CSS variables the flex rules read.
+ *  DOM only - it writes no state, so it is safe on the load path. */
+function applyShare(node) {
+  const root = node?._pixVpEls?.root;
+  if (!root) return;
+  const share = readState(node).idea_share;
+  // x1000 rather than a fraction: flex-grow takes a number, and integers keep
+  // the two sides exactly complementary with no float dust.
+  root.style.setProperty("--pix-vp-idea-grow", String(Math.round(share * 1000)));
+  root.style.setProperty("--pix-vp-out-grow", String(1000 - Math.round(share * 1000)));
+}
+
+/**
+ * Drag the bottom edge of the idea box.
+ *
+ * Both defences from convention #20, and neither is optional: `setPointerCapture`
+ * keeps the move events coming when the cursor leaves the node, and the
+ * buttons-are-up guard ends the drag when the release goes missing (the pointer
+ * leaves the viewport, something else takes capture). Without them the grip
+ * follows the cursor forever with no way to put it down, and a synthetic test
+ * cannot reproduce that - it only ever shows up under a real mouse.
+ *
+ * Only the RATIO is written, and every measurement is a screen-pixel rect, so
+ * the canvas zoom cancels out: dragging works the same at 40% and at 200%.
+ */
+function installIdeaGrip(node, grip, idea, out) {
+  let pid = null;
+  let startY = 0;
+  let startH = 0;
+  let total = 0;
+
+  const end = () => {
+    if (pid == null) return;          // idempotent - the buttons guard calls it too
+    try { grip.releasePointerCapture(pid); } catch (e) { /* already released */ }
+    pid = null;
+    grip.classList.remove("is-dragging");
+    // A drag ends on pointerup, so the pack-wide change net (which listens for
+    // click and change) never sees it. This is the explicit call convention #31
+    // asks for, or the new height is never recorded and is silently lost.
+    notifyGraphChanged();
+  };
+
+  grip.addEventListener("pointerdown", (e) => {
+    if (e.button !== 0) return;
+    // Stop LiteGraph starting a node drag under us. The node body would
+    // otherwise move while the grip is being pulled.
+    e.preventDefault();
+    e.stopPropagation();
+    const a = idea.getBoundingClientRect().height;
+    const b = out.getBoundingClientRect().height;
+    if (!(a > 0 && b > 0)) return;    // not laid out yet - a ratio of 0 is not one
+    pid = e.pointerId;
+    startY = e.clientY;
+    startH = a;
+    total = a + b;
+    grip.classList.add("is-dragging");
+    try { grip.setPointerCapture(pid); } catch (e2) { /* capture is a nicety */ }
+  });
+
+  grip.addEventListener("pointermove", (e) => {
+    if (pid == null) return;
+    if (!(e.buttons & 1)) { end(); return; }
+    const px = startH + (e.clientY - startY);
+    const share = Math.max(IDEA_SHARE_MIN, Math.min(IDEA_SHARE_MAX, px / total));
+    writeState(node, { idea_share: share });
+    applyShare(node);
+  });
+
+  grip.addEventListener("pointerup", end);
+  grip.addEventListener("pointercancel", end);
+  grip.addEventListener("lostpointercapture", end);
+
+  grip.addEventListener("dblclick", (e) => {
+    e.stopPropagation();
+    writeState(node, { idea_share: IDEA_SHARE_DEFAULT });
+    applyShare(node);
+    notifyGraphChanged();
+  });
+}
+
+/**
+ * Edit the idea in the full-screen box.
+ *
+ * Reuses the editor the formulas already use rather than building a second one.
+ * The import is DYNAMIC because settings.mjs imports this module for cacheTiers,
+ * so a static import here would be a cycle - and it is a LITERAL specifier, which
+ * is what the cache-bust middleware can stamp (a computed one would load a second
+ * unstamped copy of the module).
+ */
+async function openIdeaEditor(node) {
+  try {
+    const { openEditor } = await import("./settings.mjs");
+    openEditor("Your idea", readState(node).idea, (text) => {
+      writeState(node, { idea: text });
+      renderFace(node);
+      notifyGraphChanged();
+      return true;
+    }, { spellcheck: true, owner: node });
+  } catch (e) {
+    console.error("[Pixaroma.VideoPrompt] could not open the idea editor", e);
+  }
+}
+
 export function buildFace(node, openPanel) {
   if (node._pixVpRoot) return node._pixVpRoot;
 
@@ -297,13 +438,24 @@ export function buildFace(node, openPanel) {
   banner.append(blabel, bhint, gear);
 
   // idea
-  const caption = el("div", "pix-vp-caption", "YOUR IDEA");
+  const caprow = el("div", "pix-vp-caprow");
+  const caption = el("span", "pix-vp-caption", "YOUR IDEA");
+  const expand = el("button", "pix-vp-expand", "Expand");
+  expand.title = "Write the idea in a full-screen box";
+  expand.addEventListener("click", (e) => {
+    e.stopPropagation();
+    openIdeaEditor(node);
+  });
+  caprow.append(caption, expand);
   const idea = el("textarea", "pix-vp-idea");
   idea.placeholder = "she smiles and says: come and see this";
   idea.addEventListener("input", () => {
     writeState(node, { idea: idea.value });
     renderFace(node);
   });
+  const grip = el("div", "pix-vp-grip");
+  grip.title = "Drag to make the idea box taller or shorter. "
+    + "Double-click to put it back.";
 
   const tip = el("div", "pix-vp-tip");
   tip.innerHTML = "<b>Tip</b> put spoken words at the end of your idea";
@@ -386,7 +538,8 @@ export function buildFace(node, openPanel) {
   });
   actions.append(reroll, copy, vram, spacer, gen);
 
-  root.append(banner, caption, idea, tip, controls, readhead, out, actions);
+  root.append(banner, caprow, idea, grip, tip, controls, readhead, out, actions);
+  installIdeaGrip(node, grip, idea, out);
 
   const widget = node.addDOMWidget(WIDGET_TYPE, WIDGET_TYPE, root, {
     serialize: false,
@@ -432,6 +585,10 @@ export function renderFace(node) {
 
   const st = readState(node);
   const mode = modeOf(node);
+
+  // The saved split, re-applied on every paint so a workflow load lands on the
+  // user's own height. Style only, so it can never dirty a clean workflow.
+  applyShare(node);
 
   els.blabel.textContent = MODE_LABELS[mode] || mode;
   els.bhint.textContent = MODE_HINTS[mode] || "";
