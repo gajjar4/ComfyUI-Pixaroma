@@ -366,6 +366,9 @@ Master the Pixaroma suite with our video guides and workflow deep-dives:
 
 ## 🛠 Changelog
 
+### **August 13, 2026 · v1.4.105**
+- **Video Prompt: the box you type your idea into can be made bigger.** It used to be a fixed two and a half lines, and nothing you did would grow it: the finished prompt box underneath took every pixel you added when you dragged the node. So the one box you actually type in was the only one stuck at one size. There are now three ways to give it more room, and it remembers whichever you choose. Drag the node bigger and the two boxes share the extra space. Drag the small bar under the idea box to move the line between them, and double-click that bar to put it back. Or press Expand, next to YOUR IDEA, for a full-screen box, which is the one for a long idea or for reading something you pasted in. Thank you to the person who reported it.
+
 ### **August 12, 2026 · v1.4.104**
 - **New node: Video Prompt Pixaroma.** Type your idea in plain words, press Generate, and get a finished MiniMax H3 prompt back. H3 wants its prompts in a particular shape, with named sections, a soundscape, music and a strict way of writing anything a person says out loud, and getting it wrong quietly spoils the clip. This writes all of that from a sentence like "a blacksmith hammers glowing steel in a dark forge". It replaces three separate workflows of about ten nodes each with one node.
 - **It changes what it writes based on what you wire in.** You do not pick a mode. Wire nothing and it writes text to video. Wire one picture and it looks at that picture, describes what is really in it, and animates it. Wire two and it writes the journey from one to the other, joining the two pictures for you so they can never end up the wrong way round. The banner on the node always says which one it is using.
