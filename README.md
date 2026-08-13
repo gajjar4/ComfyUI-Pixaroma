@@ -366,8 +366,13 @@ Master the Pixaroma suite with our video guides and workflow deep-dives:
 
 ## 🛠 Changelog
 
-### **August 13, 2026 · v1.4.105**
-- **Video Prompt: the box you type your idea into can be made bigger.** It used to be a fixed two and a half lines, and nothing you did would grow it: the finished prompt box underneath took every pixel you added when you dragged the node. So the one box you actually type in was the only one stuck at one size. There are now three ways to give it more room, and it remembers whichever you choose. Drag the node bigger and the two boxes share the extra space. Drag the small bar under the idea box to move the line between them, and double-click that bar to put it back. Or press Expand, next to YOUR IDEA, for a full-screen box, which is the one for a long idea or for reading something you pasted in. Thank you to the person who reported it.
+### **August 13, 2026 · v1.4.105–v1.4.106**
+- **Video Prompt: the idea box can be made bigger.** Drag the node, drag the bar under the box, or press Expand for a full-screen one.
+- **LoRA Loader: a LoRA two folders deep no longer shows "Empty folder"**, and a LoRA's trigger word is now ticked for you when you pick it.
+- **Right-click in a text box gives copy and paste again** instead of the node menu, on the prompt and text nodes.
+- **Save Mp4: dates in the filename work.** `%date:yyyy-MM-dd%` used to be left in the name.
+- **Run Timer keeps counting** when you switch workflow and come back. Its chime now starts off.
+- Thank you to everyone who reported these.
 
 ### **August 12, 2026 · v1.4.104**
 - **New node: Video Prompt Pixaroma.** Type your idea in plain words, press Generate, and get a finished MiniMax H3 prompt back. H3 wants its prompts in a particular shape, with named sections, a soundscape, music and a strict way of writing anything a person says out loud, and getting it wrong quietly spoils the clip. This writes all of that from a sentence like "a blacksmith hammers glowing steel in a dark forge". It replaces three separate workflows of about ten nodes each with one node.
