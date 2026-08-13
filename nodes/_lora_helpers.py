@@ -133,6 +133,37 @@ def derive_trigger_words(meta, limit=_MAX_TRIGGERS):
     return out[:limit]
 
 
+def explicit_trigger_words(meta, limit=_MAX_TRIGGERS):
+    """ONLY the words the LoRA's author declared as its trigger phrase
+    (`modelspec.trigger_phrase` / `ss_trigger_words`), never the training tags.
+
+    `derive_trigger_words` merges the two on purpose - both are useful to OFFER.
+    They are very different things to TICK, though: the declared phrase is what
+    the LoRA needs in the prompt (usually one or two words), while the tag list
+    is the twenty most common labels in its training set. Auto-selecting those
+    would push twenty booru tags into the user's prompt. Never raises.
+    """
+    if not isinstance(meta, dict):
+        return []
+    phrase = meta.get("modelspec.trigger_phrase") or meta.get("ss_trigger_words") or ""
+    if not isinstance(phrase, str):
+        return []
+    out = []
+    seen = set()
+    for part in phrase.split(","):
+        w = part.strip()
+        if not w:
+            continue
+        key = w.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(w)
+        if len(out) >= limit:
+            break
+    return out
+
+
 def base_model_family(meta):
     """Coarse base-model family for the mismatch warning: 'SDXL', 'SD1.5', 'SD2',
     'SD3', 'Flux', or '' when unknown. Never raises."""
@@ -236,6 +267,10 @@ def build_lora_info(lora_path):
         # `sidecar_triggers` holds the saved Civitai words when a sidecar exists.
         "file_triggers": file_triggers,
         "sidecar_triggers": [],
+        # The author's DECLARED phrase on its own, so the info panel can tick
+        # words automatically without also ticking the twenty training tags that
+        # `file_triggers` carries after it. See explicit_trigger_words.
+        "explicit_triggers": explicit_trigger_words(meta),
         "source": "file",
         "has_preview": find_preview_path(lora_path) is not None,
     }

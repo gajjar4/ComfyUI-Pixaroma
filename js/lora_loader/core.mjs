@@ -81,6 +81,11 @@ function normLora(e, prefs) {
     custom: Array.isArray(e.custom)
       ? e.custom.map((w) => String(w)).filter((w) => w.trim()).slice(0, 64)
       : [],
+    // "the info panel has already offered this LoRA's own trigger words once".
+    // Set the first time the panel ticks them for the user; NOT a preference and
+    // never sent to Python (promptState picks its keys). It exists so un-ticking
+    // a word sticks: without it, reopening the panel would helpfully put it back.
+    at: e.at === true,
   };
 }
 
@@ -197,7 +202,9 @@ export function patchLora(node, id, patch) {
   if (patch.sc != null) e.sc = roundStrength(patch.sc);
   // Picking a DIFFERENT LoRA clears both the selected AND the custom words - they
   // belonged to the old file (custom words are "for this LoRA" too).
-  if (patch.name != null && patch.name !== oldName) { e.triggers = []; e.custom = []; }
+  // `at` goes with them: the new file's own words have not been offered yet, so
+  // the panel should tick them the first time it is opened for this row.
+  if (patch.name != null && patch.name !== oldName) { e.triggers = []; e.custom = []; e.at = false; }
   // When strengths are linked, a model-strength change mirrors to clip.
   if (st.linkStrength && patch.sm != null && patch.sc == null) e.sc = e.sm;
   return writeState(node, st);

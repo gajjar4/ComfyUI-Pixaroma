@@ -297,11 +297,18 @@ registerNodeHelp(CLASS, {
     {
       heading: "Trigger words",
       body:
-        "Click the i on a row to see the LoRA's info and its trigger words, read straight from the file - " +
-        "no internet needed. Tap the words you want; the switched-on picks come out of the triggers output " +
-        "as plain text you can wire into your prompt. If a LoRA has no words in its file, you can type your " +
-        "own in the box at the bottom of the panel, or use the optional Civitai " +
-        "button to look them up online (only when you click it) and save them for next time.",
+        "Pick a LoRA and its trigger word is ticked for you straight away, so a LoRA that needs one just " +
+        "works. The ticked words come out of the triggers output as plain text you can wire into your " +
+        "prompt.\n\n" +
+        "Only the real trigger is ticked: the words the maker declared in the file, or the ones saved from " +
+        "Civitai. Many LoRAs also carry a long list of tags from their training pictures, and those are " +
+        "offered in the panel but never ticked for you, because they are labels rather than the word the " +
+        "LoRA is waiting for.\n\n" +
+        "Click the i on a row to see everything it has and change the picks. Un-tick a word and it stays " +
+        "un-ticked, even after a run and after closing the panel. If a LoRA has no words in its file you " +
+        "can type your own in the box at the bottom, or use the optional Civitai button to look them up " +
+        "online (only when you click it) and save them for next time. All of this is read from the file, " +
+        "so it works offline.",
     },
     {
       heading: "Your own trigger words are remembered",

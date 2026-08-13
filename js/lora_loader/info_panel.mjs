@@ -15,6 +15,66 @@ let _ownerNode = null;
 let _followRaf = null;   // keeps the panel beside its node, see startFollowing()
 let _userMoved = false;  // the user dragged it, so stop following
 
+/**
+ * Tick a LoRA's own trigger words, once, the first time we learn them.
+ *
+ * Asked for 2026-08-11: *"the ticked trigger words get cleared after each run...
+ * it'd be better if the trigger words were just automatically ticked (and
+ * automatically used). Otherwise, adding the LoRA is pointless for those that
+ * require a trigger word."* Free when the `triggers` output is not wired, which
+ * is the normal case.
+ *
+ * ONLY the authoritative words: Civitai's trainedWords when we have them, else
+ * the author's DECLARED trigger phrase (`explicit_triggers`). Deliberately NOT
+ * `file_triggers`, which appends the twenty most frequent training tags after
+ * the phrase - ticking those would quietly paste twenty booru tags into the
+ * prompt, which is not what anyone means by "the trigger word".
+ *
+ * `at` on the row makes this happen once per LoRA rather than once per open, so
+ * un-ticking a word STICKS instead of reappearing on the next visit. patchLora
+ * clears it when the row's LoRA changes, so the new file gets the same offer.
+ */
+export function autoTickFromInfo(node, id, info, refresh) {
+  if (!node || !info) return;
+  const e = readState(node).loras.find((x) => x.id === id);
+  if (!e || e.at) return;                        // already offered for this LoRA
+  const words = (info.sidecar_triggers?.length ? info.sidecar_triggers
+    : (info.explicit_triggers || [])).filter((w) => String(w || "").trim());
+  // Mark it offered even when there are none, or a LoRA that simply has no
+  // declared words would be re-checked on every open for a set that will never
+  // appear - and the write itself would dirty the workflow each time.
+  if (!words.length) { patchLora(node, id, { at: true }); return; }
+  const have = new Set((e.triggers || []).map((w) => w.toLowerCase()));
+  const next = [...(e.triggers || [])];
+  for (const w of words) {
+    if (have.has(w.toLowerCase())) continue;
+    have.add(w.toLowerCase());
+    next.push(w);
+  }
+  patchLora(node, id, { triggers: next, at: true });
+  refresh?.(false);
+}
+
+/**
+ * The same thing for a row whose LoRA was just PICKED, without the info panel
+ * ever being opened - which is the common way to add a LoRA, and where the
+ * request actually bites.
+ *
+ * RE-QUERIES the row after the await instead of trusting what was captured
+ * before it: the user can pick a different LoRA, delete the row, or delete the
+ * node while a (usually instant, but not on a network share) metadata read is
+ * out. A guard has to be right about identity; a re-query cannot be wrong.
+ */
+export async function autoTickAfterPick(node, id, name, refresh) {
+  if (!node || !name) return;
+  let j;
+  try { j = await loraInfo(name); } catch { return; }
+  if (!j?.ok || !j.info) return;
+  const e = readState(node).loras.find((x) => x.id === id);
+  if (!e || e.name !== name) return;             // row is gone, or points elsewhere now
+  autoTickFromInfo(node, id, j.info, refresh);
+}
+
 function injectCSS() {
   if (document.getElementById("pix-ll-info-css")) return;
   const s = document.createElement("style");
@@ -337,6 +397,8 @@ export async function openInfoPanel(node, id, refresh) {
     if (merged.length > stored.length) persistCustom(merged);
   }
 
+  function autoTickTriggers() { autoTickFromInfo(node, id, info, refresh); }
+
   function thumb() {
     // The user's OWN picture outranks everything, a live Civitai result included.
     // "Replace it with my own" has to survive the next ↻ Civitai, or the override
@@ -450,7 +512,10 @@ export async function openInfoPanel(node, id, refresh) {
     // FIRST load alone is what lost it: when that load came back stale or
     // superseded, hydrateCustom - which has no other call site - never ran, and
     // the user's stored trigger words never reached the row.
-    if (!_hydrated) { _hydrated = true; hydrateCustom(); }
+    // Both run exactly once per panel, on whichever load first succeeds, and in
+    // this order: the stored custom words come onto the row first so autoTick
+    // sees the row's real contents before deciding what to add.
+    if (!_hydrated) { _hydrated = true; hydrateCustom(); autoTickTriggers(); }
     return "ok";
   }
 

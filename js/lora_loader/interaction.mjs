@@ -8,7 +8,7 @@ import {
   setAllOn, countOn, accentOf, MAX_LORAS,
 } from "./core.mjs";
 import { openLoraDropdown } from "./dropdown.mjs";
-import { openInfoPanel } from "./info_panel.mjs";
+import { openInfoPanel, autoTickAfterPick } from "./info_panel.mjs";
 import { openLoraPanel } from "./settings.mjs";
 
 let _menu = null;
@@ -205,7 +205,14 @@ function openNamePicker(node, id, anchorEl, refresh) {
   openLoraDropdown(anchorEl, {
     current: e?.name || "",
     accent: accentOf(node),
-    onPick: (name) => { patchLora(node, id, { name }); refresh(false); },
+    onPick: (name) => {
+      patchLora(node, id, { name });
+      refresh(false);
+      // Tick this LoRA's own trigger words straight away, so a LoRA that needs
+      // one works without having to open the info panel and find it. Async and
+      // deliberately not awaited: the pick must feel instant.
+      autoTickAfterPick(node, id, name, refresh);
+    },
   });
 }
 
