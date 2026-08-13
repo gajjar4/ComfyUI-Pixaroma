@@ -56,7 +56,16 @@ const DEFAULT_STATE = {
   version: 1,
   color: BRAND,   // clock digit color
   decimals: 0,    // 0 = m:s (default), 2 = + hundredths, 3 = + milliseconds
-  chime: true,    // play a sound on finish
+  // OFF by default (2026-08-13, the user's call after people asked for it). A
+  // node that starts making a noise the first time you press Run is the kind of
+  // thing you have to go and switch off, and the clock is the point of this node
+  // - the chime is the extra. Turn it on per timer in the right-click panel.
+  // Deliberately NOT done by defaulting the MASTER mute to on: that switch is a
+  // user-facing "silence everything" override, and defaulting it true would show
+  // every panel as muted with its rows dimmed, which reads as something being
+  // wrong rather than as a default.
+  chime: false,   // play a sound on finish
+
   sound: "",      // "" = the library default (Vista.mp3 / first file)
   volume: 70,     // 0..100
 };
@@ -332,6 +341,9 @@ const _timers = new Set();
 let _rafId = null;
 let _runStart = null; // run-level origin (set on execution_start) → history duration
 let _runName = "";    // active workflow name captured at run start → history label
+// Is a run in flight RIGHT NOW? _runStart alone cannot answer that - it is never
+// cleared, because the history needs it after the finish. See adoptLiveRun.
+let _runLive = false;
 function loop() {
   let anyRunning = false;
   const now = performance.now();
@@ -346,7 +358,37 @@ function loop() {
 }
 function ensureLoop() { if (_rafId == null) _rafId = requestAnimationFrame(loop); }
 
+/**
+ * Join a run that is ALREADY under way.
+ *
+ * Reported 2026-08-12 and reproduced by the user: start a workflow, switch to
+ * another tab, come back, and the clock has stopped even though the workflow is
+ * still going. Switching tabs TEARS DOWN the node - it leaves `_timers` through
+ * onRemoved - and coming back builds a FRESH one whose `_rtRunning` is false, so
+ * nothing counts it and it sits on the previous run's frozen total.
+ *
+ * The run itself is global (`execution_start` .. finish), so a timer that
+ * appears mid-run can simply adopt it, counting from the RUN's own origin rather
+ * than from zero - which is also what keeps its total honest if it is on screen
+ * when the run ends.
+ *
+ * Writes only RUNTIME fields, so it cannot dirty a workflow on the load path it
+ * runs from (Vue Compat #18); `refreshClock`'s width fit already bails during
+ * `isGraphLoading()`.
+ */
+function adoptLiveRun(node) {
+  if (!_runLive || _runStart == null || node._rtRunning) return;
+  clearTimeout(node._rtDotT);
+  node._rtRunning = true;
+  node._rtStart = _runStart;
+  node._rtDisplayMs = performance.now() - _runStart;
+  setDot(node, "run");
+  refreshClock(node);
+  ensureLoop();
+}
+
 function startAll() {
+  _runLive = true;
   _runStart = performance.now(); // one origin for the run → history duration
   _runName = activeWorkflowName(); // capture the workflow NOW (at start), not at
                                    // finish — the active tab may change mid-run
@@ -374,6 +416,10 @@ async function maybeChime(node) {
   if (sound) playSound(sound, (st.volume ?? 70) / 100);
 }
 function finishAll(success) {
+  // Clear the in-flight flag FIRST and unconditionally: it is run-level, so it
+  // must drop even when no timer node was on screen to be finished (otherwise a
+  // timer added later would adopt a run that ended long ago).
+  _runLive = false;
   let anyFinished = false;
   for (const node of _timers) {
     if (!node._rtRunning) continue;   // idempotent: first finish wins
@@ -982,25 +1028,34 @@ function setupNode(node) {
   _timers.add(node);
   // nodeCreated fires BEFORE configure() restores node.properties (Vue Compat #8)
   // — defer so a saved timer shows its restored color/decimals + last time.
-  queueMicrotask(() => { restoreLastRun(node); applyState(node); refreshNodeSize(node); });
+  // adoptLiveRun FIRST: if a run is still going (this node was just rebuilt by a
+  // workflow-tab switch) it takes over the live count, and restoreLastRun then
+  // correctly leaves the previous total alone - it early-returns while running.
+  queueMicrotask(() => {
+    adoptLiveRun(node);
+    restoreLastRun(node);
+    applyState(node);
+    refreshNodeSize(node);
+  });
 }
 
 const HELP = {
   title: "Run Timer Pixaroma",
   tagline: "Times how long a workflow takes, and chimes when it is done.",
   sections: [
-    { heading: "What it does", body: "The clock resets to zero the moment you press Run, counts up while the workflow is working, and freezes on the total time when it finishes. A chime plays on finish, so you know it is done even when you are in another browser tab or app." },
+    { heading: "What it does", body: "The clock resets to zero the moment you press Run, counts up while the workflow is working, and freezes on the total time when it finishes.\n\nIt can also chime when the run is done, so you know even when you are in another browser tab or app. That is off to begin with: right-click the timer and turn on 'Chime on finish' for the timers you want to hear." },
     { heading: "A clean floating clock", body: "The node is just the clock - no title bar, no frame - so it takes very little room on the canvas. Drag it from anywhere on the clock to move it, and right-click it for the settings. It works the same in both the classic and the new node interface." },
     { heading: "Reading the clock", body: "The time shows as minutes : seconds (for example 02:47). If a run goes past an hour the clock switches to hours : minutes : seconds. A small dot in the corner is green while running and orange the moment it finishes." },
     { heading: "Comparing workflows across tabs", body: "Each workflow remembers its own last time, so you can run several workflows in different tabs and switch between them to compare how long each one took.", bullets: [
       "The time is saved with the workflow, so it is still there after you switch tabs, reload the page, or restart ComfyUI.",
       "Because it is saved with the workflow, a small 'unsaved changes' dot shows on the tab after a run. Switching tabs never asks you to save; only closing a tab asks, as always.",
-      "If you switch tabs while a run is still going, that run's time is not captured, and you will see the previous finished time when you come back.",
+      "If you switch tabs while a run is going and come back before it ends, the clock picks the run up again and carries on from the right time.",
+      "If the run finishes while you are away on another tab, that time is not captured, and you will see the previous finished time when you come back.",
     ]},
     { heading: "Run time history", body: "Right-click the node and pick 'Run time history' to see the last 10 finished runs, newest first. Each line shows the workflow name and the time of day it ran, next to how long it took, and the fastest one is marked with a lightning bolt - handy for comparing how quick different workflows are. The list is shared across every workflow and is remembered between sessions (it is not saved inside any one workflow). You can copy a single line, export the whole list as a text file, or clear it. Each run is filed under whichever workflow was active when it started. Only completed runs are listed; a run you stop or that errors out is skipped." },
     { heading: "Settings (right-click the node)", defs: [
       ["Mute all Run Timers", "The master mute: no Run Timer plays its finish chime, in any workflow. It is the same switch wherever you reach it, so flipping it in one place flips it everywhere. While it is on, the rows below it are dimmed to show they are being ignored."],
-      ["Chime on finish (this timer)", "Turns the finish sound on or off for this one timer only. Other Run Timers keep chiming."],
+      ["Chime on finish (this timer)", "Turns the finish sound on or off for this one timer only. It starts off, so a new Run Timer is silent until you switch it on here."],
       ["Sound and Volume", "Pick the chime from the sound library and set how loud it is. The Preview button plays it right now, even while muted, so you can still try sounds out."],
       ["Decimals", "Show hundredths (2), milliseconds (3), or just minutes and seconds (Off)."],
       ["Clock color", "Pick the digit color right in the panel: tap a swatch, drag the color square, or type a hex code. Reset returns it to Pixaroma orange."],
