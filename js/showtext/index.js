@@ -1,6 +1,6 @@
 import { app } from "/scripts/app.js";
 import { BRAND, applyAdaptiveCanvasOnly,
-  installCanvasZoomPassthrough, installNodeAccent, registerNodeAccent,
+  installCanvasZoomPassthrough, installNativeTextMenu, installNodeAccent, registerNodeAccent,
 } from "../shared/index.mjs";
 
 // Resize clamp - user verified 210 x 118 as the smallest comfortable
@@ -152,6 +152,7 @@ app.registerExtension({
       // value lands on a detached node). A unique type falls through to
       // WidgetDOM.vue, which re-parents OUR element. See CLAUDE.md Nodes 2.0.
       installCanvasZoomPassthrough(wrap);
+      installNativeTextMenu(wrap);   // Copy / Select all in the readout
       installNodeAccent(this, wrap);   // the face follows this node's accent colour
       const widget = this.addDOMWidget("text", "pixaroma_showtext", wrap, {
         // canvasOnly is set ADAPTIVELY below (applyAdaptiveCanvasOnly):

@@ -16,7 +16,7 @@ import {
 } from "./core.mjs";
 import { injectCSS, buildRoot, renderRows, measureContentHeight } from "./render.mjs";
 import { installResizeFloor, isVueNodes,
-  installCanvasZoomPassthrough, installNodeAccent, registerNodeAccent,
+  installCanvasZoomPassthrough, installNativeTextMenu, installNodeAccent, registerNodeAccent,
 } from "../shared/index.mjs";
 import { pixConfirm, autoGrowTextareas } from "./interaction.mjs";
 import { isQueueLoopActive, runQueueLoop, feedsOnlyInactiveSwitch } from "../shared/queue_drivers.mjs";
@@ -206,6 +206,7 @@ app.registerExtension({
         node._pixPmRenderOnly = () => renderRows(node, root, handlers);
 
         installCanvasZoomPassthrough(root);
+        installNativeTextMenu(root);   // Cut/Copy/Paste in a row's text box
         installNodeAccent(node, root);   // the face follows this node's accent colour
         const _pmWidget = node.addDOMWidget("promptmulti", "div", root, {
           serialize: false,

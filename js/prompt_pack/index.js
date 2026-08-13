@@ -14,7 +14,7 @@ import { injectCSS, buildRoot, applyState, updateCounter } from "./render.mjs";
 import { wireEvents, showNoPromptsToast } from "./interaction.mjs";
 import { isQueueLoopActive, beginQueueLoop, endQueueLoop } from "../shared/queue_drivers.mjs";
 import { applyAdaptiveCanvasOnly, installResizeFloor, measureRootContent, isVueNodes,
-  installCanvasZoomPassthrough, installNodeAccent, registerNodeAccent,
+  installCanvasZoomPassthrough, installNativeTextMenu, installNodeAccent, registerNodeAccent,
 } from "../shared/index.mjs";
 
 const BRAND = "#f66744";
@@ -78,6 +78,7 @@ app.registerExtension({
         // pills would render in the panel AND its draw call would corrupt
         // node-body layout.
         installCanvasZoomPassthrough(root);
+        installNativeTextMenu(root);   // Cut/Copy/Paste in the prompt box
         installNodeAccent(node, root);   // the face follows this node's accent colour
         const _ppWidget = node.addDOMWidget("promptpack", "div", root, {
           serialize: false,

@@ -21,7 +21,7 @@ import {
 } from "./render.mjs";
 import { pixConfirm, autoGrowAllFields } from "./interaction.mjs";
 import { applyAdaptiveCanvasOnly, installResizeFloor, isVueNodes, closeHelpPopup,
-  installCanvasZoomPassthrough, installNodeAccent, registerNodeAccent,
+  installCanvasZoomPassthrough, installNativeTextMenu, installNodeAccent, registerNodeAccent,
 } from "../shared/index.mjs";
 
 const DEFAULT_W = 380;
@@ -165,6 +165,7 @@ app.registerExtension({
         node._pixFrRefit = () => { refitNode(node); node.setDirtyCanvas(true, true); };
 
         installCanvasZoomPassthrough(root);
+        installNativeTextMenu(root);   // Cut/Copy/Paste in the find + replace boxes
         installNodeAccent(node, root);   // the face follows this node's accent colour
         const widget = node.addDOMWidget("findreplace", "pixaroma_find_replace", root, {
           serialize: false,

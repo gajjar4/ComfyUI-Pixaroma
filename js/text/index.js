@@ -1,6 +1,6 @@
 import { app } from "/scripts/app.js";
 import { BRAND, applyAdaptiveCanvasOnly, registerNodeHelp, closeHelpPopup, isVueNodes, installResizeFloor,
-  installCanvasZoomPassthrough, installNodeAccent, registerNodeAccent,
+  installCanvasZoomPassthrough, installNativeTextMenu, installNodeAccent, registerNodeAccent,
 } from "../shared/index.mjs";
 import { resolveDynamicPrompt } from "./dynamic_prompts.mjs";
 
@@ -541,6 +541,7 @@ function setupNode(node) {
   updateClearEnabled(root);
 
   installCanvasZoomPassthrough(root);
+  installNativeTextMenu(root);   // Cut/Copy/Paste in the text box
   installNodeAccent(node, root);   // the face follows this node's accent colour
   const _textWidget = node.addDOMWidget("pix_text_ui", "custom", root, {
     // canvasOnly set adaptively (true in legacy → out of Parameters tab;

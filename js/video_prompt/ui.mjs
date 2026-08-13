@@ -16,6 +16,7 @@ import { pixAsset } from "../shared/api_url.mjs";
 import { ACC, installNodeAccent } from "../shared/node_settings.mjs";
 import { applyAdaptiveCanvasOnly } from "../shared/nodes2.mjs";
 import { installCanvasZoomPassthrough } from "../shared/canvas_zoom.mjs";
+import { installNativeTextMenu } from "../shared/native_text_menu.mjs";
 import { installResizeFloor } from "../shared/resize_floor.mjs";
 import { notifyGraphChanged } from "../shared/graph_changed.mjs";
 import {
@@ -557,6 +558,9 @@ export function buildFace(node, openPanel) {
   // Without this the wheel stops zooming the canvas while the cursor is over
   // this node (convention #17). Nothing errors; zoom just silently dies.
   installCanvasZoomPassthrough(root);
+  // Cut/Copy/Paste in the idea box and the prompt readout, rather than the node
+  // menu (reported against Prompt Stack 2026-08-13; every text node has it).
+  installNativeTextMenu(root);
   installNodeAccent(node, root);
   // Pins a min-height ONLY while a resize handle is dragged, so the fixed rows
   // cannot be squashed out of the frame, and nothing ever writes a

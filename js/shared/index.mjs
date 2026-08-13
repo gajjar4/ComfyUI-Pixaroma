@@ -47,6 +47,10 @@ export { installResizeFloor, measureRootContent } from "./resize_floor.mjs";
 
 export { installCanvasZoomPassthrough } from "./canvas_zoom.mjs";
 
+// Let a text field in a node body keep the browser's Cut/Copy/Paste menu instead
+// of ComfyUI's node menu. Call it on the element passed to addDOMWidget.
+export { installNativeTextMenu } from "./native_text_menu.mjs";
+
 // Call after a DOM control commits a change to SERIALIZED state. Core snapshots
 // the graph on mouseup; a DOM control commits on click, one phase later, so the
 // change is otherwise never recorded and the workflow never looks modified.

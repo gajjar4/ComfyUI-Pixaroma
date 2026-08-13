@@ -3,6 +3,7 @@ import { api } from "/scripts/api.js";
 import { applyAdaptiveCanvasOnly, isVueNodes } from "../shared/nodes2.mjs";
 import { installResizeFloor } from "../shared/resize_floor.mjs";
 import { installCanvasZoomPassthrough } from "../shared/canvas_zoom.mjs";
+import { installNativeTextMenu } from "../shared/native_text_menu.mjs";
 import { installNodeAccent, registerNodeAccent } from "../shared/node_settings.mjs";
 import {
   getState, setGate, setText, setModelText, revertText, STATE_PROP,
@@ -249,6 +250,7 @@ function setupNode(node) {
   // The text box keeps its own scroll: the helper yields to a scrollable region
   // that still has room to scroll in the wheel's direction.
   installCanvasZoomPassthrough(root);
+  installNativeTextMenu(root);   // Cut/Copy/Paste while editing the held text
   installNodeAccent(node, root);   // the face follows this node's accent colour
 
   // Pin a content floor WHILE a resize handle is dragged (Nodes 2.0; a no-op in

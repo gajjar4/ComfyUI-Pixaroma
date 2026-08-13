@@ -13,6 +13,7 @@ import { injectCSS, buildRoot, renderRows, measureContentHeight } from "./render
 import { applyAdaptiveCanvasOnly, installResizeFloor, isVueNodes,
   installCanvasZoomPassthrough, installNodeAccent, registerNodeAccent,
 } from "../shared/index.mjs";
+import { installNativeTextMenu } from "../shared/native_text_menu.mjs";
 import { pixConfirm, autoGrowTextareas } from "./interaction.mjs";
 
 const DEFAULT_W = 400;
@@ -208,6 +209,10 @@ app.registerExtension({
         node._pixPsRenderOnly = () => renderRows(node, root, handlers);
 
         installCanvasZoomPassthrough(root);
+        // Right-click inside a row's text box gets the BROWSER's Cut/Copy/Paste
+        // menu instead of ComfyUI's node menu (reported 2026-08-13). Anywhere
+        // else on the body still opens the node menu.
+        installNativeTextMenu(root);
         installNodeAccent(node, root);   // the face follows this node's accent colour
         const _psWidget = node.addDOMWidget("promptstack", "div", root, {
           serialize: false,
