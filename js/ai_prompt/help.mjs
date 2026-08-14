@@ -197,6 +197,7 @@ export const AI_PROMPT_HELP = {
         ["Run does nothing and the text never changes", "The seed is Fixed and nothing else changed, so ComfyUI is serving the cached answer. That is the point of Fixed. Press Re-roll, or switch the seed to R."],
         ["It writes far too much", "Say a length in the formula, and lower Max len in the settings so it cannot run on."],
         ["It repeats my formula back at me, or ignores it", "The temperature is too high for the model. Try 0.3. Small models especially need it, and this single setting is the difference between a formula working and looking broken."],
+        ["It hands back nothing at all", "Usually the formula is too short for that model to get going. A one-line instruction can produce an empty answer where a proper formula produces a good paragraph. Load a preset and try again before you blame the model."],
         ["It refuses, or says it cannot see my idea", "Same cause: lower the temperature to 0.3."],
         ["Every run reloads the model", "Two nodes in the workflow are using different models. Give them the same one if you can."],
         ["The settings panel will not close", "Click the gear again, press Escape, or click the canvas."],
