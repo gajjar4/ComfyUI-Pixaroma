@@ -866,7 +866,17 @@ function renderPanel(node, body) {
       openPop(anchor, rows, loaded ? loaded.name : null, (name) => {
         const preset = all.find((p) => p.name === name);
         if (!preset) return;
-        if (readState(node).formula.trim() &&
+        // A dialog earns its place only when something would be LOST. Switching
+        // away from a preset you have not edited loses nothing - the preset is
+        // still in the list, one click away - so asking there is pure friction,
+        // and a native confirm on a harmless action is exactly how a working
+        // control comes to look broken. That is the Clear button's lesson two
+        // rows up, reported by the user twice: once on Clear, and again as
+        // "why can I not select the image preset". Wording you actually wrote
+        // still gets the question.
+        const current = readState(node).formula;
+        const yourOwnWriting = current.trim() && !loadedPreset(node);
+        if (yourOwnWriting &&
             !window.confirm("Replace this node's formula with \"" + name + "\"?")) return;
         const patch = { formula: preset.formula };
         // The user's choice: the wording alone, or the whole recipe.
