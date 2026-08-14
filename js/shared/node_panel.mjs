@@ -118,12 +118,27 @@ export function followNode(panel, node, { isCurrent, isUserMoved }) {
   let ro = null;
   try {
     ro = new ResizeObserver(() => {
-      if (!panel.isConnected || (isCurrent && !isCurrent())) return;
+      // SELF-DISCONNECT on the dead path rather than just returning. Not every
+      // caller keeps the stop function this returns - two of the four did not,
+      // which was harmless while the rAF half was the only resource, since
+      // that self-cancels once the panel leaves the document. An observer does
+      // not, so it would sit watching a detached panel for every open. A
+      // removed element delivers a 0x0 notification, so this path is reached.
+      if (!panel.isConnected || (isCurrent && !isCurrent())) {
+        if (ro) { try { ro.disconnect(); } catch (e2) { /* already gone */ } ro = null; }
+        return;
+      }
       if (isUserMoved && isUserMoved()) return;
       placeBeside(panel, getNodeScreenRect(node));
     });
     ro.observe(panel);
-  } catch (e) { /* no ResizeObserver: the rAF loop still corrects on the next tick */ }
+  } catch (e) {
+    // No ResizeObserver at all. Nothing then corrects a height change until
+    // the canvas is panned or zoomed, since the tick above compares only the
+    // transform - so this is a real degrade, not a silent equivalence. Every
+    // browser ComfyUI supports has one, and the constructor does not throw;
+    // this exists so a hostile environment loses the polish, never the panel.
+  }
 
   return () => {
     if (raf != null) cancelAnimationFrame(raf);

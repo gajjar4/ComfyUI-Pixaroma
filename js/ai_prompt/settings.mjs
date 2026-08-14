@@ -587,7 +587,11 @@ async function applyRecipeText(node, raw, sourceName) {
   const label = recipe.name ? "“" + recipe.name + "”" : sourceName;
   const known = allPresets().some(
     (p) => p.name.toLowerCase() === recipe.name.toLowerCase());
-  const willSave = recipe.hadHeader && !!recipe.name && !known;
+  // ...and the same guard on import: `known` is computed from the in-memory
+  // list, so against a list that never loaded a recipe named after an existing
+  // preset reads as new, the confirm promises it will be ADDED, and the server
+  // replaces the real one. The recipe still lands on the node either way.
+  const willSave = recipe.hadHeader && !!recipe.name && !known && PRESETS.ok;
 
   // Import KEEPS its confirm where Clear lost one: this replaces writing the
   // user did, and an unconfirmed import was a reported bug on Video Prompt.
@@ -954,8 +958,19 @@ function renderPanel(node, body) {
 
   const prow = el("div", "pix-app-row");
   const saveBtn = el("button", "pix-app-btn", "Save current");
-  saveBtn.title = "Save this node's formula and settings as a preset you can reuse.";
-  saveBtn.disabled = !st.formula.trim();
+  // Refused while no read has EVER succeeded, and this is data loss, not
+  // tidiness. Both guards below test the in-memory list: the shipped-name
+  // check and the "you already have one called that" confirm are equally
+  // blind against an EMPTY list, while the SERVER is perfectly happy and
+  // replaces by name on disk. So a first-open fetch failure turned Save
+  // current into a silent overwrite of a preset the panel could not see.
+  // PRESETS.ok means "a read has succeeded at least once" - it was added for
+  // exactly this and then read by nothing, which is how the hole survived.
+  saveBtn.title = PRESETS.ok
+    ? "Save this node's formula and settings as a preset you can reuse."
+    : "Your presets could not be read, so saving is held back until they can - "
+      + "otherwise this could replace one without being able to warn you.";
+  saveBtn.disabled = !st.formula.trim() || !PRESETS.ok;
   saveBtn.addEventListener("click", async () => {
     const recipe = currentRecipe(node);
     // Tweaking a shipped preset and keeping it is the common case, so the name

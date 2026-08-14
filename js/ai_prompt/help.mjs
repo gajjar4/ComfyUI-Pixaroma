@@ -74,6 +74,10 @@ export const AI_PROMPT_HELP = {
         + "cel\". Meanwhile a Load Audio goes into a third whose formula is \"name "
         + "the mood of this music in five words\", and that text also joins the "
         + "second node. Four wires, no other nodes.\n\n"
+        + "That third one needs a model that can HEAR, which most vision models "
+        + "cannot. A model that cannot hear takes the audio, ignores it and writes "
+        + "something confident anyway, so check the answer describes your actual "
+        + "track before you build on it.\n\n"
         + "Rename each node to what its formula does and the graph reads as a "
         + "sentence. Double-click the title to rename it.",
     },
@@ -177,7 +181,7 @@ export const AI_PROMPT_HELP = {
       defs: [
         ["Krea 2 - prompt from an idea", "Turns a rough idea into a full Krea 2 prompt. Built from Krea's own published prompt-expansion instructions, then tightened by watching where it went wrong. Measured on Qwen3-VL 4B and 8B."],
         ["Krea 2 - prompt from an image", "Wire a Load Image into the image input and it writes the prompt that would make a similar picture, naming the medium, the framing and the light. Leave Your idea empty for this one. Needs a vision model. Photographs come back cleanest."],
-        ["Z-Image - prompt from an idea", "The same job as the Krea one, written for Z-Image Turbo, which wants a much longer and more detailed prompt. Built from the makers' own guidance. Its Max len is set high on purpose: the Qwen3 encoder thinks before it answers and spends the same budget doing it."],
+        ["Z-Image - prompt from an idea", "The same job as the Krea one, written for Z-Image Turbo, which wants a much longer and more detailed prompt. Built from the makers' own guidance, so its Max len is set high to leave room for one. Leave Thinking off, which is the default: Z-Image's encoder is a reasoning model, and thinking costs about three times the wait for no better prompt."],
       ],
     },
     {
@@ -215,11 +219,16 @@ export const AI_PROMPT_HELP = {
       body:
         "One language model in ComfyUI/models/text_encoders. For anything that has "
         + "to look at a picture it must be a vision model.\n\n"
-        + "The one the Pixaroma formulas were measured against is "
+        + "A good all-round choice is "
         + "`qwen3-vl-8b-heretic-1.3.0_fp8_e4m3fn.safetensors`, about 10 GB, for cards "
         + "with 12 GB or more. Take it from the comfyui folder of that repository, "
         + "not the root: the root holds the raw model, which ComfyUI cannot load as a "
         + "text encoder. For an 8 GB card use the 4B build instead.\n\n"
+        + "The shipped formulas were written and measured on Qwen3-VL 4B builds, "
+        + "which is why each preset names one. They are not fussy: the same wording "
+        + "was checked on the 8B and on both 4B builds and behaves the same. So when "
+        + "a preset says the model it was written for is one you do not have, that "
+        + "line is telling you what it was tuned on, not that anything is wrong.\n\n"
         + "The picker marks any file that does not look like a vision model. It does "
         + "not block them, because a text-only model is the right choice for a step "
         + "that only rewrites text, and it is a lot smaller and quicker.",
@@ -228,7 +237,7 @@ export const AI_PROMPT_HELP = {
       heading: "If something looks wrong",
       defs: [
         ["It hands back my own words unchanged", "No model is chosen, or there is nothing to send. The banner says which."],
-        ["It describes a picture it cannot have seen", "The model is text-only. It accepts the picture and ignores it, silently. Pick one the list marks as a vision model."],
+        ["It describes a picture it cannot have seen", "The model is text-only. It accepts the picture and ignores it, silently. Pick one the list does NOT mark with \"(no vision)\"."],
         ["Run does nothing and the text never changes", "The seed is Fixed and nothing else changed, so ComfyUI is serving the cached answer. That is the point of Fixed. Press Re-roll, or switch the seed to R."],
         ["It writes far too much", "Say a length in the formula, and lower Max len in the settings so it cannot run on."],
         ["It repeats my formula back at me, or ignores it", "The temperature is too high for the model. Try 0.3. Small models especially need it, and this single setting is the difference between a formula working and looking broken."],

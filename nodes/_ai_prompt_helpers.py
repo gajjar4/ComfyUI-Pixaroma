@@ -266,6 +266,12 @@ def reasoning_only(raw):
     """
     if not isinstance(raw, str) or "<think>" not in raw:
         return False
+    # A CLOSED block means the model FINISHED thinking and then chose to write
+    # nothing, so it cannot have run out of room - and telling that user to
+    # raise Max len sends them to change the one setting that will not help.
+    # Only an unclosed block is evidence of truncation.
+    if "</think>" in raw:
+        return False
     return not strip_reasoning(raw)
 
 
@@ -292,6 +298,15 @@ def apply_no_think(prompt, thinking, clip_name):
     if not _QWEN3.search(str(clip_name or "")):
         return prompt
     if "/no_think" in prompt:
+        return prompt
+    # A formula carrying chat markers writes its OWN turns, and the tokenizer
+    # then passes the text through verbatim - core skips its template when
+    # `use_default_template` is off AND, separately, whenever the text starts
+    # with `<|im_start|>`. Appending here would land the switch after the final
+    # `<|im_start|>assistant`, making it the opening words of the model's reply
+    # rather than an instruction in the user's. That is in the PROMPT, so
+    # strip_reasoning cannot rescue it; the user just gets an odd answer.
+    if "<|im_start|>" in prompt:
         return prompt
     return prompt.rstrip() + "\n\n/no_think"
 
