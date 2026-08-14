@@ -38,6 +38,11 @@ function injectCSS() {
   const style = document.createElement("style");
   style.id = CSS_ID;
   style.textContent = `
+    /* border-box everywhere in the panel. Without it a flex row mixing a
+       padded field with an unpadded sibling splits the space by CONTENT width
+       and then adds the padding back, so the padded one comes out ~20px wider
+       and the column stops lining up. */
+    .pix-app, .pix-app * { box-sizing:border-box; }
     .pix-app { position:fixed; z-index:1300; width:374px; max-height:82vh;
       display:flex; flex-direction:column; background:#232325;
       border:1px solid #3a3a3c; border-radius:8px; color:#e0e0e0;
@@ -67,8 +72,13 @@ function injectCSS() {
       background:rgba(224,163,58,.12); border-radius:4px; padding:5px 8px; }
     .pix-app-note.plain { color:#8b8b8e; background:rgba(255,255,255,.03); }
     .pix-app-nums { display:flex; gap:6px; }
-    .pix-app-num { flex:1; display:flex; align-items:center; gap:8px; background:#191919;
-      border:1px solid #343436; border-radius:4px; padding:5px 9px; min-height:26px; }
+    /* min-width:0 is load-bearing: a flex item defaults to min-width:auto, so
+       without it these boxes refuse to shrink below their content and the two
+       of them overflow the 374px panel - which showed up as a horizontal
+       scrollbar and a MAX LEN value clipped to "51". */
+    .pix-app-num { flex:1 1 0; min-width:0; display:flex; align-items:center;
+      gap:8px; background:#191919; border:1px solid #343436; border-radius:4px;
+      padding:5px 9px; min-height:26px; }
     .pix-app-num:focus-within { border-color:var(--pix-acc,#f66744); }
     .pix-app-num em { font-style:normal; font-size:9.5px; letter-spacing:.06em;
       color:var(--pix-acc,#f66744); flex:0 0 auto; }
@@ -80,7 +90,8 @@ function injectCSS() {
     .pix-app-adv:hover { color:var(--pix-acc,#f66744); }
     .pix-app-form { background:#191919; border:1px solid #343436; border-radius:4px;
       padding:8px 9px; font:11px monospace; line-height:1.5; color:#c2bfba;
-      min-height:58px; max-height:96px; overflow:hidden; white-space:pre-wrap; }
+      min-height:58px; max-height:96px; overflow:hidden; white-space:pre-wrap;
+      overflow-wrap:anywhere; }
     .pix-app-form.empty { color:#5c5a57; }
     .pix-app-row { display:flex; align-items:center; gap:6px; }
     .pix-app-row .cnt { margin-left:auto; font:10px monospace; color:#6f6c67; }
@@ -390,6 +401,9 @@ function numField(node, label, key, opts) {
   const tag = el("em", null, label);
   const input = document.createElement("input");
   input.type = "text";
+  // An <input> carries an intrinsic ~20-character width from its default size
+  // attribute, which is what stopped the row shrinking to fit the panel.
+  input.size = 1;
   const st = readState(node);
   const show = (v) => (opts?.int ? String(Math.trunc(v)) : String(v));
   input.value = show(st[key]);
@@ -525,6 +539,17 @@ function renderPanel(node, body) {
     r3.append(
       numField(node, "PRESENCE", "presence_penalty", { title: "Higher pushes it towards new subjects." }),
     );
+    // The odd one out needs a partner or it stretches to the full width and
+    // breaks the column the rows above it establish. The partner is an
+    // IDENTICAL hidden field, not a bare div: a plain spacer left the real
+    // field 10px wider, and neither box-sizing nor a shorter label fixed it -
+    // two elements with the same class and the same content shape are the only
+    // way to be sure the flex maths matches the rows that already line up.
+    const spacer = el("div", "pix-app-num");
+    spacer.style.visibility = "hidden";
+    spacer.setAttribute("aria-hidden", "true");
+    spacer.append(el("em", null, "REP"), document.createElement("input"));
+    r3.appendChild(spacer);
     body.append(r1, r2, r3);
     body.appendChild(toggleRow("Sampling on", st.do_sample,
       (v) => set({ do_sample: v }),
@@ -598,12 +623,15 @@ function renderPanel(node, body) {
   });
 
   const clear = el("button", "pix-app-btn", "Clear");
-  clear.title = "Empty this node's formula.";
+  clear.title = "Empty this node's formula, so it sends only your idea.";
   clear.disabled = !st.formula.trim();
-  clear.addEventListener("click", () => {
-    if (!window.confirm("Clear this node's formula?")) return;
-    set({ formula: "" });
-  });
+  // INSTANT, no confirm - node UI convention #2, the same call Text Pixaroma
+  // and Prompt Pack made. A confirm on a Clear is a sign the label is wrong,
+  // not that a dialog is needed; and here the dialog was actively harmful,
+  // because a native confirm is easy to dismiss without noticing, which made
+  // a button that works look like a button that does nothing. Undo is Ctrl+Z,
+  // and Export exists for anything worth keeping.
+  clear.addEventListener("click", () => set({ formula: "" }));
 
   frow.append(edit, exp, imp, clear);
   frow.appendChild(el("span", "cnt", st.formula.length.toLocaleString()));
