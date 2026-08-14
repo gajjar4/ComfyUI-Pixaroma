@@ -326,7 +326,16 @@ let ON_CHANGE = null;
 let USER_MOVED = false;
 let CP_HANDLE = null;
 let MODELS = { ok: true, models: [], error: null };
-let PRESETS = { ok: true, shipped: [], user: [] };
+// ok starts FALSE: it means "a read has succeeded at least once", not "this
+// object is fine".
+let PRESETS = { ok: false, shipped: [], user: [], userError: false };
+
+// Whether the LATEST attempt failed, which PRESETS.ok cannot tell you: once a
+// good list is being kept on purpose, PRESETS.ok stays true no matter how many
+// reads fail afterwards. So the panel needs its own signal to admit that what
+// it is showing may be out of date, otherwise "keep the last good list" is
+// just a quieter way of lying.
+let PRESETS_STALE = false;
 
 export function panelIsOpenFor(node) {
   return !!PANEL && PANEL_NODE === node;
@@ -474,6 +483,7 @@ function allPresets() {
  */
 async function refreshPresets() {
   const next = await fetchPresets();
+  PRESETS_STALE = !next.ok;
   if (next.ok) PRESETS = next;
   return next;
 }
@@ -625,7 +635,11 @@ async function applyRecipeText(node, raw, sourceName) {
       window.alert("The recipe is on the node, but it could not be added to "
         + "your presets.\n\n" + (res.message || ""));
     }
-    refreshPresets();
+    // AWAITED. Without it the re-render one line down paints from the list as
+    // it was BEFORE the save, so the preset just added is missing from the
+    // picker and the model line it exists to feed never appears - and it
+    // lands silently a moment later, with nothing on screen changing.
+    await refreshPresets();
   }
   refreshAIPromptPanel(node);
 }
@@ -946,8 +960,17 @@ function renderPanel(node, body) {
     const recipe = currentRecipe(node);
     // Tweaking a shipped preset and keeping it is the common case, so the name
     // is offered ready-made rather than suggesting one that is then refused.
-    const shipped = PRESETS.shipped.some((p) => p.name === recipe.name);
+    const known = loadedPreset(node);
+    const shipped = !!known && PRESETS.shipped.some((p) => p.name === known.name);
     const suggested = shipped ? recipe.name + " (mine)" : recipe.name;
+    // The ONE overwrite that may pass without a question: re-saving the preset
+    // you currently have loaded, and only when it is your own. Keying this on
+    // the SUGGESTED STRING was wrong twice over, and both holes were real
+    // silent loss. "<name> (mine)" is a name WE invent, so someone who already
+    // owned "Krea 2 (mine)" lost it by pressing Enter; and the suggestion
+    // falls back to the node TITLE, so a node renamed "My style" replaced an
+    // unrelated preset called "My style". Identity, never a string we built.
+    const quiet = known && !shipped ? known.name.toLowerCase() : null;
     let name = (window.prompt("Save this formula and its settings as:",
       suggested) || "").trim();
     if (!name) return;
@@ -969,7 +992,7 @@ function renderPanel(node, body) {
     // same damage. Saving under the name that was offered IS the deliberate
     // "update this preset" path, so that one stays quiet - which keeps this
     // from reintroducing the friction just removed from Clear and the picker.
-    if (name.toLowerCase() !== suggested.toLowerCase()
+    if (name.toLowerCase() !== quiet
         && PRESETS.user.some((p) => p.name.toLowerCase() === name.toLowerCase())
         && !window.confirm("You already have a preset called “" + name
           + "”. Replace it?")) return;
@@ -980,21 +1003,40 @@ function renderPanel(node, body) {
       settings: recipe.settings,
       model_hint: recipe.model,
     });
-    if (!res.ok) { window.alert(res.message || "Could not save that preset."); return; }
+    if (!res.ok) {
+      // Re-read BEFORE the alert. A refusal usually means the file went
+      // unreadable underneath us, and returning early left the panel still
+      // listing presets the server can no longer read - teaching the user
+      // "the list is fine, only saving is broken", which is the opposite of
+      // true. This is what makes the amber note reachable when it matters.
+      await refreshPresets();
+      refreshAIPromptPanel(node);
+      window.alert(res.message || "Could not save that preset.");
+      return;
+    }
     await refreshPresets();
     refreshAIPromptPanel(node);
   });
 
   const delBtn = el("button", "pix-app-btn", "Delete");
-  delBtn.title = PRESETS.user.length
-    ? "Delete one of your own presets. The ones that ship with Pixaroma stay."
-    : "You have no presets of your own yet.";
+  delBtn.title = PRESETS.userError
+    // Otherwise this flatly contradicts the amber note directly below it: the
+    // user's presets exist, they just could not be read.
+    ? "Your own presets could not be read, so they cannot be listed."
+    : (PRESETS.user.length
+      ? "Delete one of your own presets. The ones that ship with Pixaroma stay."
+      : "You have no presets of your own yet.");
   delBtn.disabled = !PRESETS.user.length;
   delBtn.addEventListener("click", () => {
     openPop(delBtn, PRESETS.user.map((p) => [p.name, p.name]), null, async (name) => {
       if (!window.confirm("Delete your preset \"" + name + "\"?")) return;
       const res = await deletePreset(name);
-      if (!res.ok) { window.alert(res.message || "Could not delete that preset."); return; }
+      if (!res.ok) {
+        await refreshPresets();          // same reason as Save current above
+        refreshAIPromptPanel(node);
+        window.alert(res.message || "Could not delete that preset.");
+        return;
+      }
       await refreshPresets();
       refreshAIPromptPanel(node);
     }, { markVision: false });
@@ -1046,6 +1088,14 @@ function renderPanel(node, body) {
       + "Pixaroma are listed. Nothing has been lost: saving is refused until "
       + "the file is readable again. It is ai_prompt_presets.json in "
       + "ComfyUI/user/pixaroma."));
+  } else if (PRESETS_STALE) {
+    // The list itself could not be fetched. Without this the panel presents an
+    // empty library as a healthy one, which is indistinguishable from a fresh
+    // install - and on a FIRST open there is no earlier list to fall back to,
+    // so the guard alone cannot cover it.
+    body.appendChild(el("div", "pix-app-note",
+      "The preset list could not be read from the server, so what is shown "
+      + "here may be out of date. Saving is best left until it comes back."));
   }
 
   // ---- WIRED TEXT ----------------------------------------------------------
@@ -1130,6 +1180,12 @@ export async function openAIPromptPanel(node, onChange) {
   const [fetched, presets] = await Promise.all([fetchModels(), fetchPresets()]);
   if (PANEL !== panel) return;
   MODELS = fetched;
-  PRESETS = presets;
+  // Same guard as refreshPresets, and this was the site that kept the bug: a
+  // failed read here wiped a list that had been good, so the panel offered
+  // "No presets yet" AND both name-collision guards went blind, because they
+  // test against a list that is now empty. Keeping the last good list is the
+  // deliberate trade - a stale list beats a confident lie.
+  PRESETS_STALE = !presets.ok;
+  if (presets.ok) PRESETS = presets;
   renderPanel(node, body);
 }

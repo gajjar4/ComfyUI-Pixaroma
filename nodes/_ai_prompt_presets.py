@@ -108,6 +108,15 @@ def _read_checked(path):
     if not path or not os.path.isfile(path):
         return [], True
     try:
+        # An EMPTY file holds nothing to protect, and refusing to write over it
+        # would lock the user out of their own library forever with no way back
+        # but deleting it by hand. Before this module distinguished the two
+        # cases it self-healed on the next save; keep that.
+        if os.path.getsize(path) == 0:
+            return [], True
+    except OSError:
+        pass
+    try:
         with open(path, "r", encoding="utf-8-sig") as fh:
             data = json.load(fh)
     except Exception:
@@ -123,6 +132,14 @@ def _read_checked(path):
         one = normalise(item)
         if one:
             out.append(one)
+    if items and not out:
+        # The container looked right but NOT ONE entry was usable. That is the
+        # shape a schema bump actually takes - same "presets" key, renamed item
+        # fields - and it slips past the top-level check above, so reading it
+        # as an empty library is how the next save would destroy it. The
+        # "items and" half is load-bearing: deleting your last preset writes a
+        # genuinely empty list, and that file must stay readable.
+        return [], False
     return out, True
 
 

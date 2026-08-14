@@ -38,12 +38,18 @@ const FALSE_WORDS = ["no", "false", "off", "0"];
 
 // The settings that take a FRACTION. A comma decimal is rescued for these and
 // only these: much of the world writes 0,3, and the whole point of a readable
-// .txt is that people hand-edit it. For the two integer settings (max_length,
-// top_k) a comma is far more likely a thousands separator, and guessing there
-// could read "1,024" as 1.024 and cap an answer at a single token - so those
-// are left exactly as they were. Derived by hand rather than from
-// DEFAULT_STATE because presence_penalty defaults to 0.0, which
-// Number.isInteger calls an integer.
+// .txt is that people hand-edit it.
+//
+// The two integer settings are excluded because a comma there is far more
+// likely a thousands separator, and reading "max_length: 1,024" as 1.024 would
+// be a guess at what the writer meant. Be honest about what that buys, though:
+// parseFloat("1,024") is 1 and readState truncates, so that file caps the
+// answer at ONE TOKEN either way. Excluding them avoids GUESSING; it does not
+// protect anybody. Rejecting a comma outright for integer keys would be the
+// real improvement, and is deliberately left for its own change.
+//
+// Listed by hand rather than derived from DEFAULT_STATE because
+// presence_penalty defaults to 0.0, which Number.isInteger calls an integer.
 const FRACTION_KEYS = new Set([
   "temperature", "top_p", "min_p", "repetition_penalty", "presence_penalty",
 ]);

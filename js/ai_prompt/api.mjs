@@ -46,6 +46,14 @@ export async function fetchPresets() {
     });
     if (!res.ok) throw new Error("presets -> " + res.status);
     const data = await res.json();
+    // The route answers 200 with an `error` field when its own read threw, so
+    // ignoring that field turned a server-side failure into a confident empty
+    // library - the exact lie the rest of this is built to avoid. Three
+    // channels exist (HTTP status, `error`, `userError`); honour all three.
+    if (data?.error) {
+      return { ok: false, shipped: [], user: [], userError: false,
+               error: String(data.error) };
+    }
     return {
       ok: true,
       shipped: Array.isArray(data?.shipped) ? data.shipped : [],
