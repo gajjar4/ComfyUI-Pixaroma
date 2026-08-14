@@ -209,6 +209,52 @@ export function injectedState(node) {
   return out;
 }
 
+// ---------------------------------------------------------------------------
+// The last run's result
+// ---------------------------------------------------------------------------
+// SERIALIZED on purpose, and a SEPARATE property from videoPromptState.
+//
+// It lived on `node._pixVpLast` until 2026-08-14, on the reading that Vue
+// Compat #18 forbids a run from writing serialized state. Too broad: #18 is
+// about the LOAD window - an untouched workflow must not flag ITSELF modified
+// merely by being opened - and a run is the user asking for something.
+// MEASURED on the AI Prompt sibling: a workflow tab switch DESTROYS and
+// rebuilds every node object, so NO `node._xxx` field survives one, and the
+// written prompt vanished (reported by the user). Preview Image Pixaroma has
+// always persisted its run output this way.
+//
+// Outside videoPromptState deliberately: PROMPT_KEYS is an allow-list, so this
+// could not reach Python either way, but a separate key cannot touch
+// injectedState or IS_CHANGED's fingerprint at all - and on this node a
+// cosmetic key in the injected state would re-run a 10 GB encoder.
+export const LAST_PROP = "videoPromptLast";
+
+/**
+ * The last run AS STORED, or null.
+ *
+ * ⚠️ Deliberately NOT normalised into a fixed shape. The staleness check in
+ * renderFace distinguishes an ABSENT `for*` stamp (`last.forX !== undefined`)
+ * from one that differs, so filling defaults in would make an old result - and
+ * every failure, which stamps none of them - read as "changed since this ran".
+ */
+export function readLast(node) {
+  const raw = node?.properties?.[LAST_PROP];
+  return raw && typeof raw === "object" ? raw : null;
+}
+
+/** Whole-object write, so a failure cannot inherit a stamp from a success. */
+export function writeLast(node, next) {
+  if (!node) return;
+  node.properties = node.properties || {};
+  if (!next) { delete node.properties[LAST_PROP]; return; }
+  // Drop undefined here, because JSON.stringify drops it on the way into the
+  // saved workflow - so the object behaves identically before and after a tab
+  // switch rather than only after one.
+  const out = {};
+  for (const [k, v] of Object.entries(next)) if (v !== undefined) out[k] = v;
+  node.properties[LAST_PROP] = out;
+}
+
 /** What the face should show as the seed: the last rolled one in Random, the
  *  stored one in Fixed. */
 export function displaySeed(node) {

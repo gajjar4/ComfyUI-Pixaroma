@@ -22,7 +22,7 @@ import { notifyGraphChanged } from "../shared/graph_changed.mjs";
 import {
   IDEA_SHARE_DEFAULT, IDEA_SHARE_MAX, IDEA_SHARE_MIN,
   MODE_HINTS, MODE_LABELS, SEED_RANDOM, displaySeed, looksSpoken, modeOf,
-  readState, rollSeed, writeState,
+  readLast, readState, rollSeed, writeLast, writeState,
 } from "./core.mjs";
 
 const ROOT_CLASS = "pix-vp-root";
@@ -659,8 +659,10 @@ export function renderFace(node) {
     : "New seed, then generate")
     + ". Queues the whole workflow, so mute the video part while writing prompts.";
 
-  // readout
-  const last = node._pixVpLast;
+  // readout. From node.properties, so it is still here after a workflow tab
+  // switch - which rebuilds every node object (core.mjs, LAST_PROP). Reading it
+  // here also means the load path restores it with no extra hook.
+  const last = readLast(node);
   let stale = false;
   if (last && typeof last.text === "string") {
     if (els.out.value !== last.text) els.out.value = last.text;
@@ -727,18 +729,24 @@ export function renderFace(node) {
  * picked the wrong model saw nothing that told them what to do. The readout is
  * where they are already looking.
  *
- * Runtime only, like applyResult: nothing here reaches node.properties.
+ * Persisted like applyResult (core.mjs, LAST_PROP), so a tab switch does not
+ * throw the message away and leave an unexplained empty box.
+ *
+ * It stamps NO `for*` fields on purpose: a failure has nothing to be stale
+ * against, and renderFace only computes staleness on the success branch.
  */
 export function applyError(node, message) {
   const text = String(message || "").trim() ||
     "The node failed, but ComfyUI did not say why. Check the console.";
-  node._pixVpLast = { text, words: 0, error: true };
+  writeLast(node, { text, words: 0, error: true });
   renderFace(node);
 }
 
 /**
- * Called from the executed listener in index.js. Runtime only - none of this
- * reaches node.properties, so a run can never dirty a clean workflow.
+ * Called from the executed listener in index.js. Kept on node.properties
+ * (core.mjs, LAST_PROP) so a workflow tab switch does not throw the written
+ * prompt away - it is outside the injected state, so it can neither reach
+ * Python nor change the node's cache signature.
  *
  * ⚠️ KEEP mode_label / tier / frames. The node already reports what it ACTUALLY
  * did, and throwing that away hid the worst bug in this node: mute or bypass
@@ -755,7 +763,7 @@ export function applyError(node, message) {
  */
 export function applyResult(node, payload, elapsed) {
   const st = readState(node);
-  node._pixVpLast = {
+  writeLast(node, {
     text: typeof payload?.text === "string" ? payload.text : "",
     words: Number(payload?.words) || 0,
     seed: payload?.seed,
@@ -769,7 +777,7 @@ export function applyResult(node, payload, elapsed) {
     forTier: st.tier_name,
     forLengthBlock: st.length_block,
     forSeed: st.seed_mode === SEED_RANDOM ? null : st.seed,
-  };
+  });
   if (Number.isFinite(Number(payload?.seed))) {
     node._pixVpLastSeed = Number(payload.seed);
   }
