@@ -32,12 +32,14 @@ import {
   SEED_FIXED,
   SEED_RANDOM,
   displaySeed,
+  readLast,
   readState,
   rollSeed,
   shortModel,
   slotConnected,
   willGenerate,
   wiredSummary,
+  writeLast,
   writeState,
 } from "./core.mjs";
 
@@ -456,7 +458,7 @@ export function buildFace(node, openPanel, openIdeaEditor) {
   });
 
   copy.addEventListener("click", async () => {
-    const text = node._pixApOut || "";
+    const text = readLast(node).text;
     if (!text) return;
     if (await copyText(text)) flash(copy, "Copied");
   });
@@ -580,12 +582,16 @@ export function renderFace(node) {
   els.segWired.title = "The wired text first, then your idea.";
 
   // ---- readout -------------------------------------------------------------
-  const text = node._pixApOut || "";
-  els.out.value = text;
-  els.copy.disabled = !text || !!node._pixApError;
-  els.meta.classList.toggle("is-error", !!node._pixApError || !!node._pixApMuted);
-  els.meta.textContent = node._pixApMeta || "";
-  els.meta.title = node._pixApMeta || "";
+  // Read from node.properties, not a runtime field, so it is still here after
+  // a workflow tab switch - which rebuilds every node object (core.mjs,
+  // LAST_PROP). That also means renderFace on the load path restores it with
+  // nothing extra to wire up.
+  const last = readLast(node);
+  els.out.value = last.text;
+  els.copy.disabled = !last.text || last.error;
+  els.meta.classList.toggle("is-error", last.error || last.muted);
+  els.meta.textContent = last.meta;
+  els.meta.title = last.meta;
 
   // ---- Free VRAM -----------------------------------------------------------
   els.vram.classList.toggle("is-on", st.release_model);
@@ -603,11 +609,10 @@ export function renderFace(node) {
   applyShare(node);
 }
 
-/** The result of a run. Runtime fields only - never node.properties, or a run
- *  would mark a clean workflow as modified (Vue Compat #18). */
+/** The result of a run, kept on node.properties so a workflow tab switch does
+ *  not throw it away (core.mjs, LAST_PROP). It is outside the injected state,
+ *  so it can neither reach Python nor change the node's cache signature. */
 export function applyResult(node, payload, elapsed) {
-  node._pixApOut = String(payload?.text ?? "");
-  node._pixApError = false;
   const bits = [];
   // The banner says WHICH model, so this line does not repeat it - it reports
   // only what the banner cannot know. The one thing worth shouting about is a
@@ -621,14 +626,23 @@ export function applyResult(node, payload, elapsed) {
   if (payload?.words != null) bits.push(payload.words + " words");
   const secs = payload?.seconds != null ? payload.seconds : elapsed;
   if (secs != null) bits.push(Number(secs).toFixed(1) + "s");
-  node._pixApMeta = bits.join(" · ");
-  node._pixApMuted = payload?.used_clip === false && slotConnected(node, "clip");
+  writeLast(node, {
+    text: String(payload?.text ?? ""),
+    meta: bits.join(" · "),
+    error: false,
+    muted: payload?.used_clip === false && slotConnected(node, "clip"),
+  });
   renderFace(node);
 }
 
 export function applyError(node, message) {
-  node._pixApError = true;
-  node._pixApOut = String(message || "It did not run.");
-  node._pixApMeta = "did not run";
+  // A whole-object write, so `muted` from an earlier successful run cannot
+  // survive into a failure and paint the meta line for the wrong reason.
+  writeLast(node, {
+    text: String(message || "It did not run."),
+    meta: "did not run",
+    error: true,
+    muted: false,
+  });
   renderFace(node);
 }

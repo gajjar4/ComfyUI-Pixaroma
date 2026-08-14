@@ -226,6 +226,54 @@ export function injectedState(node) {
   return out;
 }
 
+// ---------------------------------------------------------------------------
+// The last run's answer
+// ---------------------------------------------------------------------------
+// A SEPARATE property from aiPromptState, and SERIALIZED on purpose.
+//
+// It lived on a runtime `node._pixApOut` field at first, on the reading that
+// Vue Compat #18 forbids a run from writing serialized state. That reading was
+// too broad, and the user reported the cost: switch workflow tabs, come back,
+// and the generated prompt was gone. MEASURED - a tab switch DESTROYS and
+// rebuilds every node object (a marker stamped on the node was gone on the way
+// back, while node.properties came back intact), so no `node._xxx` field can
+// survive one (Vue Compat #11). #18 is about the LOAD window: an untouched
+// workflow must not flag ITSELF modified merely by being opened. A run is the
+// user asking for something, and the workflow genuinely holds something new
+// afterwards - which is exactly why Preview Image Pixaroma already persists
+// its own run output this way (`pixaromaFrames`, js/preview/index.js).
+//
+// Kept OUT of aiPromptState deliberately. PROMPT_KEYS is an allow-list so the
+// answer could not reach Python either way, but a separate key cannot touch
+// injectedState, the preset SETTING_KEYS, the recipe export or the settings
+// panel's "N changed" counter AT ALL - zero blast radius on the run path,
+// where a mistake costs a 10 GB model reload.
+export const LAST_PROP = "aiPromptLast";
+
+/** The last run's answer, or empty fields for a node that has never run. */
+export function readLast(node) {
+  const raw = node?.properties?.[LAST_PROP];
+  const src = raw && typeof raw === "object" ? raw : {};
+  return {
+    text: str(src.text, ""),
+    meta: str(src.meta, ""),
+    error: src.error === true,
+    muted: src.muted === true,
+  };
+}
+
+/** Whole-object write, so a failure can never inherit a field from a success. */
+export function writeLast(node, next) {
+  if (!node) return;
+  node.properties = node.properties || {};
+  node.properties[LAST_PROP] = {
+    text: str(next?.text, ""),
+    meta: str(next?.meta, ""),
+    error: next?.error === true,
+    muted: next?.muted === true,
+  };
+}
+
 export function displaySeed(node) {
   const st = readState(node);
   if (st.seed_mode === SEED_RANDOM && Number.isFinite(node?._pixApLastSeed)) {
