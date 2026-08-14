@@ -223,10 +223,18 @@ export function displaySeed(node) {
   return st.seed;
 }
 
-/** A model filename shortened for the banner, which has one line. */
+/**
+ * A model filename tidied for the banner: the folder and the extension go,
+ * because every file has one and neither tells the reader anything.
+ *
+ * It does NOT truncate. A fixed character cut is wrong at every node width but
+ * one - it hid the end of the name even on a node made wide enough to show it
+ * all. The banner label is `overflow:hidden; text-overflow:ellipsis`, so the
+ * name uses whatever room there is and only ellipsises when it genuinely runs
+ * out. Widen the node and more of it appears.
+ */
 export function shortModel(name) {
   const raw = String(name || "").trim();
   if (!raw) return "";
-  const base = raw.split(/[\\/]/).pop().replace(/\.(safetensors|sft|gguf|pt|bin)$/i, "");
-  return base.length > 34 ? base.slice(0, 32) + "…" : base;
+  return raw.split(/[\\/]/).pop().replace(/\.(safetensors|sft|gguf|pt|bin)$/i, "");
 }

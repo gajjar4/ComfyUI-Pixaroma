@@ -286,6 +286,11 @@ class PixaromaAIPrompt:
                         "text": out,
                         "generated": False,
                         "status": status_line(st, wired, has_clip, False),
+                        # So the face can tell the user when its own banner is
+                        # lying: graphToPrompt DROPS an input whose origin node
+                        # is muted or bypassed, so the wire can be there in the
+                        # UI while Python never received a model.
+                        "used_clip": has_clip,
                         "words": word_count(out),
                         "seconds": round(time.time() - started, 2),
                     }]
@@ -363,6 +368,7 @@ class PixaromaAIPrompt:
                     "text": out,
                     "generated": True,
                     "status": status_line(st, wired, has_clip, True),
+                    "used_clip": has_clip,
                     "words": word_count(out),
                     "seconds": round(time.time() - started, 2),
                 }]

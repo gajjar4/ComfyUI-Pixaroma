@@ -125,9 +125,13 @@ export function injectCSS() {
       border-radius:5px; padding:6px 9px; font-size:11.5px; color:#e7e4e0;
       background:color-mix(in srgb, ${ACC} 10%, transparent);
       border:1px solid color-mix(in srgb, ${ACC} 34%, transparent); }
-    .pix-ap-banner .lbl { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-    .pix-ap-banner .hint { margin-left:auto; color:#6f6c67; font-size:11px;
-      flex:0 0 auto; }
+    /* The label takes the room and ellipsises; the hint never shrinks. This is
+       what makes a wider node show more of the model name - a JS character cut
+       would show the same truncated string at every width. */
+    .pix-ap-banner .lbl { flex:1 1 auto; min-width:0; overflow:hidden;
+      text-overflow:ellipsis; white-space:nowrap; }
+    .pix-ap-banner .hint { margin-left:auto; padding-left:8px; color:#6f6c67;
+      font-size:11px; flex:0 0 auto; }
     .pix-ap-banner.is-warn { background:rgba(224,163,58,.12);
       border-color:rgba(224,163,58,.4); }
     .pix-ap-banner.is-warn .lbl { color:#e0a33a; }
@@ -135,13 +139,18 @@ export function injectCSS() {
       border-color:rgba(255,255,255,.1); }
     .pix-ap-banner.is-mute .lbl { color:#a4a09a; }
 
-    .pix-ap-caprow { display:flex; align-items:center; flex:0 0 auto; }
+    .pix-ap-caprow { display:flex; align-items:baseline; gap:10px; flex:0 0 auto; }
     .pix-ap-cap { font-size:10px; letter-spacing:.09em; text-transform:uppercase;
-      color:${ACC}; }
+      color:${ACC}; flex:0 0 auto; }
     .pix-ap-expand { margin-left:auto; background:none; border:none; color:#6f6c67;
       font-size:11px; cursor:pointer; padding:0; font-family:'Segoe UI', sans-serif; }
     .pix-ap-expand:hover { color:${ACC}; }
-    .pix-ap-meta { margin-left:auto; font:10.5px monospace; color:#6f6c67; }
+    /* One line, always. Left to wrap it ran under the PROMPT label and the two
+       collided; nowrap plus a shrinkable min-width means a long note
+       ellipsises instead of pushing the row taller. */
+    .pix-ap-meta { margin-left:auto; font:10.5px monospace; color:#6f6c67;
+      flex:0 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis;
+      white-space:nowrap; text-align:right; }
     .pix-ap-meta.is-error { color:#e0a33a; }
     .pix-ap-meta.is-stale { color:#7d7a4a; }
 
@@ -503,6 +512,9 @@ export function renderFace(node) {
 
   // ---- banner --------------------------------------------------------------
   els.banner.classList.remove("is-warn", "is-mute");
+  // The full filename on the label itself, so a name too long for even a wide
+  // node is still one hover away.
+  els.bLabel.title = clipWired ? "" : (st.model || "");
   if (!clipWired && !st.model) {
     els.banner.classList.add("is-warn");
     els.bLabel.textContent = "No model";
@@ -548,8 +560,9 @@ export function renderFace(node) {
   const text = node._pixApOut || "";
   els.out.value = text;
   els.copy.disabled = !text || !!node._pixApError;
-  els.meta.classList.toggle("is-error", !!node._pixApError);
+  els.meta.classList.toggle("is-error", !!node._pixApError || !!node._pixApMuted);
   els.meta.textContent = node._pixApMeta || "";
+  els.meta.title = node._pixApMeta || "";
 
   // ---- Free VRAM -----------------------------------------------------------
   els.vram.classList.toggle("is-on", st.release_model);
@@ -573,11 +586,20 @@ export function applyResult(node, payload, elapsed) {
   node._pixApOut = String(payload?.text ?? "");
   node._pixApError = false;
   const bits = [];
+  // The banner says WHICH model, so this line does not repeat it - it reports
+  // only what the banner cannot know. The one thing worth shouting about is a
+  // clip wire that was there in the UI but never reached Python, because
+  // graphToPrompt drops an input whose origin node is muted or bypassed: the
+  // banner would read "Model on wire" while a completely different model ran.
+  if (payload?.used_clip === false && slotConnected(node, "clip")) {
+    bits.push("the wired model was muted");
+  }
   if (payload?.status) bits.push(payload.status);
   if (payload?.words != null) bits.push(payload.words + " words");
   const secs = payload?.seconds != null ? payload.seconds : elapsed;
   if (secs != null) bits.push(Number(secs).toFixed(1) + "s");
   node._pixApMeta = bits.join(" · ");
+  node._pixApMuted = payload?.used_clip === false && slotConnected(node, "clip");
   renderFace(node);
 }
 

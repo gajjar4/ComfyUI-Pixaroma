@@ -196,10 +196,17 @@ def will_generate(state, wired_text, has_clip):
 
 
 def status_line(state, wired_text, has_clip, generated):
-    """One short sentence for the node's readout describing what just ran."""
+    """A SHORT note for the readout, or "" when there is nothing worth saying.
+
+    It deliberately does NOT name the model on a normal run: the banner at the
+    top of the node already does, and repeating a 48-character filename beside
+    the word count wrapped onto a second line and crowded the PROMPT label.
+
+    The pass-through wordings stay, because those explain something the user
+    cannot otherwise see - why the text came back unchanged.
+    """
     if generated:
-        source = "model on wire" if has_clip else (state.get("model") or "model")
-        return "wrote with %s" % source
+        return ""
     if not (has_clip or state.get("model")):
         return "no model, text passed through"
     return "nothing to send, text passed through"
