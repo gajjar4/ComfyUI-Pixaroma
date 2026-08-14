@@ -36,6 +36,18 @@ const BOOL_KEYS = new Set(
 const TRUE_WORDS = ["yes", "true", "on", "1"];
 const FALSE_WORDS = ["no", "false", "off", "0"];
 
+// The settings that take a FRACTION. A comma decimal is rescued for these and
+// only these: much of the world writes 0,3, and the whole point of a readable
+// .txt is that people hand-edit it. For the two integer settings (max_length,
+// top_k) a comma is far more likely a thousands separator, and guessing there
+// could read "1,024" as 1.024 and cap an answer at a single token - so those
+// are left exactly as they were. Derived by hand rather than from
+// DEFAULT_STATE because presence_penalty defaults to 0.0, which
+// Number.isInteger calls an integer.
+const FRACTION_KEYS = new Set([
+  "temperature", "top_p", "min_p", "repetition_penalty", "presence_penalty",
+]);
+
 /** One line, no line breaks: a header value must not be able to end the header. */
 function oneLine(value) {
   return String(value == null ? "" : value).replace(/[\r\n]+/g, " ").trim();
@@ -72,7 +84,13 @@ function coerce(key, value) {
     if (FALSE_WORDS.includes(word)) return false;
     return null;
   }
-  const n = parseFloat(value);
+  // parseFloat("0,3") is 0, which is FINITE, so it used to be accepted and
+  // then clamped to the floor: a file reading 0,3 behaving as 0.01, the exact
+  // "the formula looks broken" failure this format exists to prevent. Nothing
+  // formatRecipe writes contains a comma, so this only ever rescues human
+  // input. See FRACTION_KEYS for why it is scoped by key.
+  const decimal = FRACTION_KEYS.has(key) && /^[+-]?\d+,\d+$/.test(value);
+  const n = parseFloat(decimal ? value.replace(",", ".") : value);
   return Number.isFinite(n) ? n : null;
 }
 

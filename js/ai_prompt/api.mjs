@@ -50,9 +50,14 @@ export async function fetchPresets() {
       ok: true,
       shipped: Array.isArray(data?.shipped) ? data.shipped : [],
       user: Array.isArray(data?.user) ? data.user : [],
+      // The server read the file and could not understand it. An empty library
+      // and an unreadable one must never look the same: in the second case the
+      // user still HAS presets, and saving would have overwritten them.
+      userError: !!data?.userError,
     };
   } catch (e) {
-    return { ok: false, shipped: [], user: [], error: String(e?.message || e) };
+    return { ok: false, shipped: [], user: [], userError: false,
+             error: String(e?.message || e) };
   }
 }
 

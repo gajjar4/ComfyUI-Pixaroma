@@ -25,6 +25,7 @@ never affect a render, only what the browser puts on the node.
 """
 import json
 import os
+import threading
 
 MAX_NAME = 80
 MAX_FORMULA = 200_000
@@ -89,24 +90,44 @@ def normalise(raw):
     }
 
 
-def _read(path):
+def _read_checked(path):
+    """(presets, ok).
+
+    ok is False ONLY when the file exists and could not be understood. That
+    distinction is load-bearing: "you have no presets" and "your presets could
+    not be read" look identical to a caller that only gets a list, and the
+    consequence was total, silent data loss. A corrupt file read as [] means
+    the next save writes ONE preset over everything the user ever kept, with
+    no message at any point (reference_lazy_store_write_back_destroys_data).
+    So an unreadable file returns ok False, and the write path refuses.
+
+    utf-8-sig because a hand-edited file saved by a Windows editor carries a
+    BOM, which plain utf-8 rejects at byte one - this pack has been bitten by
+    exactly that before. It reads BOM-less UTF-8 identically.
+    """
     if not path or not os.path.isfile(path):
-        return []
+        return [], True
     try:
-        with open(path, "r", encoding="utf-8") as fh:
+        with open(path, "r", encoding="utf-8-sig") as fh:
             data = json.load(fh)
     except Exception:
         # A corrupt or hand-edited file must not take the picker down with it.
-        return []
+        return [], False
     items = data.get("presets") if isinstance(data, dict) else data
     if not isinstance(items, list):
-        return []
+        # A shape we do not understand is NOT an empty library. It could be a
+        # future schema, so say so rather than offering to overwrite it.
+        return [], False
     out = []
     for item in items[:MAX_PRESETS]:
         one = normalise(item)
         if one:
             out.append(one)
-    return out
+    return out, True
+
+
+def _read(path):
+    return _read_checked(path)[0]
 
 
 def load_shipped():
@@ -117,20 +138,47 @@ def load_user():
     return _read(user_store_path())
 
 
+def user_readable():
+    """False when the user's file exists but could not be understood, so the
+    picker can say that instead of showing an empty library."""
+    return _read_checked(user_store_path())[1]
+
+
 def _write_user(items):
     path = user_store_path()
     if not path:
         return False
+    # The temp name carries pid AND thread id: a bare ".tmp" is shared by every
+    # writer, so two ComfyUI instances pointed at one user directory can have
+    # each truncate the other's half-written file and then both replace, which
+    # lands exactly in the corrupt-file case above
+    # (reference_shared_temp_name_needs_thread_id).
+    tmp = "%s.%d.%d.tmp" % (path, os.getpid(), threading.get_ident())
     try:
         os.makedirs(os.path.dirname(path), exist_ok=True)
-        tmp = path + ".tmp"
         with open(tmp, "w", encoding="utf-8") as fh:
             json.dump({"version": 1, "presets": items}, fh,
                       indent=2, ensure_ascii=False)
-        os.replace(tmp, path)          # atomic, so a crash cannot truncate it
+        os.replace(tmp, path)   # atomic, so a crashed PROCESS cannot truncate it
         return True
     except Exception:
         return False
+    finally:
+        # A failure mid-dump (a lone surrogate in a name will do it) otherwise
+        # leaves the temp on disk forever. os.replace has already consumed it
+        # on the happy path, so this only ever fires after a failure.
+        try:
+            if os.path.exists(tmp):
+                os.remove(tmp)
+        except OSError:
+            pass
+
+
+# Refusing to write beats writing: the user can move one file aside, but they
+# cannot get back a library that was silently replaced by a single entry.
+_UNREADABLE = ("Your presets file could not be read, so nothing was saved "
+               "rather than overwrite what is inside it. Move this file "
+               "somewhere safe and try again:\n%s")
 
 
 def save_user(raw):
@@ -138,7 +186,9 @@ def save_user(raw):
     one = normalise(raw)
     if not one:
         return False, "A preset needs a name and a formula."
-    items = load_user()
+    items, readable = _read_checked(user_store_path())
+    if not readable:
+        return False, _UNREADABLE % (user_store_path() or "the presets file")
     # Replace by name, case-insensitively, so saving twice under the same name
     # updates rather than quietly making a second entry that looks identical.
     lowered = one["name"].lower()
@@ -157,7 +207,9 @@ def delete_user(name):
     if not isinstance(name, str) or not name.strip():
         return False, "No name given."
     lowered = name.strip().lower()
-    items = load_user()
+    items, readable = _read_checked(user_store_path())
+    if not readable:
+        return False, _UNREADABLE % (user_store_path() or "the presets file")
     kept = [p for p in items if p["name"].lower() != lowered]
     if len(kept) == len(items):
         return False, "There is no preset saved under that name."

@@ -3889,10 +3889,19 @@ async def api_ai_prompt_presets(request):
     Split so the UI can show which are yours (deletable) and which ship with
     the pack (not deletable). Never raises: a corrupt user file returns an
     empty list rather than taking the picker down.
+
+    userError says that empty list means "could not be read" rather than "you
+    have none" - an empty folder and a broken read must never look identical
+    (convention #18), and here they differ by whether the user has lost
+    anything.
     """
     try:
         return web.json_response(
-            {"shipped": _aip.load_shipped(), "user": _aip.load_user()},
+            {
+                "shipped": _aip.load_shipped(),
+                "user": _aip.load_user(),
+                "userError": not _aip.user_readable(),
+            },
             headers=_vp_no_store(),
         )
     except Exception as e:

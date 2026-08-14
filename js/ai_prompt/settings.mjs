@@ -460,6 +460,24 @@ function allPresets() {
   return PRESETS.shipped.concat(PRESETS.user);
 }
 
+/**
+ * Re-read the list after a change, publishing ONLY a successful read.
+ *
+ * fetchPresets never rejects - it resolves { ok:false, shipped:[], user:[] } -
+ * so assigning it unconditionally turned a momentary server hiccup into "every
+ * preset you have, the shipped ones included, just disappeared", right after
+ * an action the user took. The panel then reads "No presets yet" and offers
+ * "Presets that ship with Pixaroma will appear here", which is a flat lie that
+ * heals only on the next open. An empty library and a failed read must never
+ * look identical. MODELS.ok was already checked this way; this was the odd one
+ * out, and two reviewers found it independently.
+ */
+async function refreshPresets() {
+  const next = await fetchPresets();
+  if (next.ok) PRESETS = next;
+  return next;
+}
+
 /** The preset a node is currently running, found by matching the formula, so
  *  it survives a reload and a duplicate with nothing extra stored. */
 function loadedPreset(node) {
@@ -511,17 +529,22 @@ async function copyText(text) {
       return true;
     }
   } catch (e) { /* fall through to the old way */ }
+  const ta = document.createElement("textarea");
   try {
-    const ta = document.createElement("textarea");
     ta.value = text;
     ta.style.cssText = "position:fixed;top:-1000px;opacity:0;";
     document.body.appendChild(ta);
     ta.select();
-    const ok = document.execCommand("copy");
-    ta.remove();
-    return ok;
+    return document.execCommand("copy");
   } catch (e) {
     return false;
+  } finally {
+    // Removed even when select() or execCommand throws - and this branch only
+    // runs on the old browsers and plain-http LAN addresses where they DO
+    // throw. Left in the document it keeps focus and a selection, so every
+    // later keystroke lands in an invisible box and ComfyUI's single-letter
+    // shortcuts quietly stop working, with nothing on screen to explain it.
+    ta.remove();
   }
 }
 
@@ -587,14 +610,22 @@ async function applyRecipeText(node, raw, sourceName) {
   // when the name is already taken, so the list can never show two identical
   // names - Save current is there for deliberately making a variant.
   if (willSave) {
-    await savePreset({
+    const res = await savePreset({
       name: recipe.name,
       note: recipe.note,
       model_hint: recipe.model,
       formula: recipe.formula,
       settings: recipe.settings,
     });
-    PRESETS = await fetchPresets();
+    // The confirm PROMISED this would join their presets. Swallowing the
+    // failure leaves that promise broken silently, and quietly costs them the
+    // model line, which reads off the preset list. Worded so it cannot be
+    // mistaken for the import itself failing - that part already succeeded.
+    if (!res.ok) {
+      window.alert("The recipe is on the node, but it could not be added to "
+        + "your presets.\n\n" + (res.message || ""));
+    }
+    refreshPresets();
   }
   refreshAIPromptPanel(node);
 }
@@ -916,16 +947,32 @@ function renderPanel(node, body) {
     // Tweaking a shipped preset and keeping it is the common case, so the name
     // is offered ready-made rather than suggesting one that is then refused.
     const shipped = PRESETS.shipped.some((p) => p.name === recipe.name);
-    const name = (window.prompt("Save this formula and its settings as:",
-      shipped ? recipe.name + " (mine)" : recipe.name) || "").trim();
+    const suggested = shipped ? recipe.name + " (mine)" : recipe.name;
+    let name = (window.prompt("Save this formula and its settings as:",
+      suggested) || "").trim();
     if (!name) return;
-    // A shipped preset cannot be replaced, so allowing its name through would
-    // put two identical-looking rows in the list with no way to tell them apart.
+    // A shipped preset cannot be replaced, so its name would put two
+    // identical-looking rows in the list. Offer the name that WOULD work
+    // rather than refusing into a dead end: the old alert sent you back with
+    // nothing saved and nothing to click, and it fired most often on the very
+    // case it was meant to help - an edited shipped preset, whose formula no
+    // longer matches, so the prefill was empty and people typed the original.
     if (PRESETS.shipped.some((p) => p.name.toLowerCase() === name.toLowerCase())) {
-      window.alert("Pixaroma already ships a preset called “" + name
-        + "”. Give yours a different name.");
-      return;
+      name = (window.prompt("Pixaroma already ships a preset called “" + name
+        + "”, and those cannot be replaced. Save yours as:",
+        name + " (mine)") || "").trim();
+      if (!name || PRESETS.shipped.some(
+        (p) => p.name.toLowerCase() === name.toLowerCase())) return;
     }
+    // Overwriting one of YOUR OWN presets is real loss: it is a file on disk,
+    // so Ctrl+Z cannot bring it back, and Delete asks before doing exactly the
+    // same damage. Saving under the name that was offered IS the deliberate
+    // "update this preset" path, so that one stays quiet - which keeps this
+    // from reintroducing the friction just removed from Clear and the picker.
+    if (name.toLowerCase() !== suggested.toLowerCase()
+        && PRESETS.user.some((p) => p.name.toLowerCase() === name.toLowerCase())
+        && !window.confirm("You already have a preset called “" + name
+          + "”. Replace it?")) return;
     const res = await savePreset({
       name,
       note: recipe.note,
@@ -934,7 +981,7 @@ function renderPanel(node, body) {
       model_hint: recipe.model,
     });
     if (!res.ok) { window.alert(res.message || "Could not save that preset."); return; }
-    PRESETS = await fetchPresets();
+    await refreshPresets();
     refreshAIPromptPanel(node);
   });
 
@@ -948,7 +995,7 @@ function renderPanel(node, body) {
       if (!window.confirm("Delete your preset \"" + name + "\"?")) return;
       const res = await deletePreset(name);
       if (!res.ok) { window.alert(res.message || "Could not delete that preset."); return; }
-      PRESETS = await fetchPresets();
+      await refreshPresets();
       refreshAIPromptPanel(node);
     }, { markVision: false });
   });
@@ -988,6 +1035,17 @@ function renderPanel(node, body) {
   } else if (!all.length) {
     body.appendChild(el("div", "pix-app-note plain",
       "Presets that ship with Pixaroma will appear here."));
+  }
+
+  // Amber, and never silent: your own presets are still on disk, the file just
+  // could not be read. Saving is refused while this is true rather than
+  // overwriting a file we do not understand, so say why before you try.
+  if (PRESETS.userError) {
+    body.appendChild(el("div", "pix-app-note",
+      "Your own presets could not be read, so only the ones that ship with "
+      + "Pixaroma are listed. Nothing has been lost: saving is refused until "
+      + "the file is readable again. It is ai_prompt_presets.json in "
+      + "ComfyUI/user/pixaroma."));
   }
 
   // ---- WIRED TEXT ----------------------------------------------------------
