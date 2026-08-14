@@ -132,6 +132,9 @@ function injectCSS() {
     .pix-app-poplist > div.is-on { color:var(--pix-acc,#f66744); }
     .pix-app-poplist > div.is-blind { color:#6d6d6d; }
     .pix-app-poplist > div.is-blind::after { content:" (no vision)"; font-size:10px; }
+    /* Positive, and deliberately not greyed: this one can do MORE, and it is
+       the only file in the list that can use the audio input at all. */
+    .pix-app-poplist > div.is-ears::after { content:" (sees + hears)"; font-size:10px; opacity:.7; }
 
     .pix-ape-back { position:fixed; inset:0; z-index:1500; background:rgba(0,0,0,.72);
       display:flex; align-items:center; justify-content:center; }
@@ -156,11 +159,30 @@ function injectCSS() {
 // ---------------------------------------------------------------------------
 // Dropdown. Never a native <select> - convention #14.
 // ---------------------------------------------------------------------------
-/** Mirror of the vision test people rely on: a filename with "vl" in it.
- *  Marked, never blocked - a renamed VL file is legitimate, and a text-only
- *  model is the RIGHT choice for a rewrite step in a chain. */
+/** Does this filename look like a model that can SEE?
+ *
+ *  ⚠️ It used to be `/vl/i` alone, which called Gemma 4 blind - reported by a
+ *  user who knew better. Gemma 4's tokenizer takes image, audio AND video
+ *  (`comfy/text_encoders/gemma4.py` tokenize_with_weights), and Qwen3.5's
+ *  takes image, and neither carries "vl" in its name.
+ *
+ *  ComfyUI itself decides this from the file's CONTENTS, not its name
+ *  (`detect_te_model` reads the state dict), which a picker listing filenames
+ *  cannot do - so this stays a hint, marked and never blocked. Being wrong in
+ *  the direction of "no mark" is the safe way round: an unmarked text-only
+ *  model wastes a run, a model wrongly marked blind is a thing the user is
+ *  told not to use when it would have worked. */
 function looksVision(name) {
-  return /vl/i.test(String(name || ""));
+  return /vl|gemma\W?4|qwen\W?3\.?5/i.test(String(name || ""));
+}
+
+/** ...and can it HEAR? Gemma 4 is the only text encoder in ComfyUI whose
+ *  tokenizer accepts an `audio` argument - every Qwen3-VL takes the audio,
+ *  ignores it and answers anyway. Worth marking POSITIVELY: this node has an
+ *  audio input, and nothing else on screen says which of thirty files can use
+ *  it. */
+function looksAudio(name) {
+  return /gemma\W?4/i.test(String(name || ""));
 }
 
 let POP = null;
@@ -198,8 +220,10 @@ function openPop(anchor, values, current, onPick, opts) {
       // specificity, its grey also beat the orange selected highlight, so the
       // most common state showed no selection at all.
       const vision = !mark || value === "" || looksVision(value);
+      const ears = mark && value !== "" && looksAudio(value);
       const row = el("div", (value === current ? "is-on" : "") +
-                            (vision ? "" : " is-blind"), label);
+                            (vision ? "" : " is-blind") +
+                            (ears ? " is-ears" : ""), label);
       // Marking matters more than it looks: every tokenizer in the chain ends
       // in **kwargs, so image= is accepted and IGNORED by a text-only model,
       // and .generate exists on the wrapper - so picking one is completely

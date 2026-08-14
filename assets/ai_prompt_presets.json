@@ -56,6 +56,24 @@
       }
     },
     {
+      "name": "Transcribe - the words only (Gemma 4)",
+      "note": "Writes out what is said, and nothing else: no summary, no description of the sounds, no speaker labels or timestamps. An unclear word comes back as [inaudible]. Needs Gemma 4, the only text encoder ComfyUI can feed audio to. Same output at temperature 0.3 and 0.7, so it is set steady.",
+      "model_hint": "gemma4_e4b_it_fp8_scaled.safetensors",
+      "formula": "Transcribe the audio exactly. Write only the spoken words from the audio. Keep natural punctuation and capitalization. Do not summarize. Do not describe sounds. Do not explain. Do not add labels, timestamps, speaker names, or extra text. If a word is unclear, write [inaudible]. Output only the transcription.",
+      "settings": {
+        "temperature": 0.3,
+        "max_length": 2048,
+        "top_k": 64,
+        "top_p": 0.95,
+        "min_p": 0.05,
+        "repetition_penalty": 1.05,
+        "presence_penalty": 0.0,
+        "do_sample": true,
+        "thinking": false,
+        "use_default_template": true
+      }
+    },
+    {
       "name": "Z-Image - prompt from an idea (Qwen3 4B)",
       "note": "Turns a rough idea into a Z-Image Turbo prompt. Built from the makers own guidance, which asks for LONG detailed sentences rather than the short paragraph Krea 2 wants. Leave Thinking off in Behaviour: the Qwen3 encoder otherwise reasons at length before it answers, which takes a run from about 17 seconds to about 59.",
       "model_hint": "qwen_3_4b_fp8_mixed.safetensors",

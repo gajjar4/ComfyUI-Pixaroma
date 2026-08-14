@@ -180,6 +180,7 @@ export const AI_PROMPT_HELP = {
         + "and any prompt you already had lying around still work.",
       defs: [
         ["The name in brackets", "Every preset ends with the model it was written and measured on, so you can see that before you load it. They are not fussy: a formula tuned on one Qwen3-VL build behaves the same on the others. Only the Gemma 4 one genuinely needs its model, because nothing else here can hear."],
+        ["Transcribe - the words only (Gemma 4)", "Writes out what is said and nothing else: no summary, no description of the sounds, no speaker labels or timestamps, and an unclear word comes back as [inaudible]. Use this one when you want the words themselves; use Sound when you want the mood."],
         ["Sound - describe what you hear (Gemma 4)", "Wire a Load Audio in and it says what kind of sound it is, quotes any words spoken or sung, names the instruments and gives the mood. Gemma 4 is the ONLY text encoder ComfyUI can feed audio to, so a Qwen3-VL will take the audio, ignore it and answer anyway. Send its text into a second AI Prompt node to turn it into an image prompt."],
         ["Krea 2 - prompt from an idea", "Turns a rough idea into a full Krea 2 prompt. Built from Krea's own published prompt-expansion instructions, then tightened by watching where it went wrong. Measured on Qwen3-VL 4B and 8B."],
         ["Krea 2 - prompt from an image", "Wire a Load Image into the image input and it writes the prompt that would make a similar picture, naming the medium, the framing and the light. Leave Your idea empty for this one. Needs a vision model. Photographs come back cleanest."],
@@ -239,7 +240,8 @@ export const AI_PROMPT_HELP = {
       heading: "If something looks wrong",
       defs: [
         ["It hands back my own words unchanged", "No model is chosen, or there is nothing to send. The banner says which."],
-        ["It describes a picture it cannot have seen", "The model is text-only. It accepts the picture and ignores it, silently. Pick one the list does NOT mark with \"(no vision)\"."],
+        ["It describes a picture it cannot have seen", "The model is text-only. It accepts the picture and ignores it, silently. Pick one the list does NOT mark with \"(no vision)\". That mark is a guess from the filename, since ComfyUI only knows a model's abilities from inside the file, so treat it as a hint rather than a verdict."],
+        ["It answers about audio but describes the wrong thing", "The model cannot hear. Only Gemma 4 can, and the list marks it \"(sees + hears)\". Every other model takes the audio, ignores it and answers anyway."],
         ["Run does nothing and the text never changes", "The seed is Fixed and nothing else changed, so ComfyUI is serving the cached answer. That is the point of Fixed. Press Re-roll, or switch the seed to R."],
         ["It writes far too much", "Say a length in the formula, and lower Max len in the settings so it cannot run on."],
         ["It repeats my formula back at me, or ignores it", "The temperature is too high for the model. Try 0.3. Small models especially need it, and this single setting is the difference between a formula working and looking broken."],
