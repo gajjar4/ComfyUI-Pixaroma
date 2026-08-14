@@ -27,7 +27,9 @@ from ._ai_prompt_helpers import (
     build_prompt,
     content_text,
     parse_state,
+    reasoning_only,
     status_line,
+    strip_reasoning,
     will_generate,
     word_count,
 )
@@ -367,6 +369,13 @@ class PixaromaAIPrompt:
         out = clip.decode(generated_ids)
         out = out if isinstance(out, str) else str(out or "")
 
+        # A reasoning model narrates before it answers, and that narration is
+        # not the prompt. Plain Qwen3 - the Z-Image text encoder - does it even
+        # with thinking off, so without this the node returns 380 words of
+        # "Okay, the user wants me to ..." and the image model renders it.
+        ran_out_thinking = reasoning_only(out)
+        out = strip_reasoning(out)
+
         # The text is a plain string by now, so the model can go. Only ours -
         # a model that arrived on a wire belongs to a loader the user placed
         # and may be shared with the rest of the graph.
@@ -378,7 +387,14 @@ class PixaromaAIPrompt:
                 "pixaroma_ai_prompt": [{
                     "text": out,
                     "generated": True,
-                    "status": status_line(st, wired, has_clip, True),
+                    # An empty answer because the model thought until it ran out
+                    # of room needs its own words: the fix is Max len or a
+                    # different model, and an unexplained empty box sends people
+                    # rewriting a formula that was never the problem.
+                    "status": ("this model reasons, and it used the whole Max len "
+                               "thinking before it wrote anything - raise Max len, "
+                               "or pick a model that does not reason")
+                    if ran_out_thinking else status_line(st, wired, has_clip, True),
                     "used_clip": has_clip,
                     "words": word_count(out),
                     "seconds": round(time.time() - started, 2),

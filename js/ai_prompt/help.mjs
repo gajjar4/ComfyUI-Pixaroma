@@ -177,6 +177,7 @@ export const AI_PROMPT_HELP = {
       defs: [
         ["Krea 2 - prompt from an idea", "Turns a rough idea into a full Krea 2 prompt. Built from Krea's own published prompt-expansion instructions, then tightened by watching where it went wrong. Measured on Qwen3-VL 4B and 8B."],
         ["Krea 2 - prompt from an image", "Wire a Load Image into the image input and it writes the prompt that would make a similar picture, naming the medium, the framing and the light. Leave Your idea empty for this one. Needs a vision model. Photographs come back cleanest."],
+        ["Z-Image - prompt from an idea", "The same job as the Krea one, written for Z-Image Turbo, which wants a much longer and more detailed prompt. Built from the makers' own guidance. Its Max len is set high on purpose: the Qwen3 encoder thinks before it answers and spends the same budget doing it."],
       ],
     },
     {

@@ -25,6 +25,8 @@ signature, so editing one changed nothing until something else did
 (video-prompt.md #8). A formula in the state blob re-runs by itself.
 """
 
+import re
+
 # ---------------------------------------------------------------------------
 # Joining
 # ---------------------------------------------------------------------------
@@ -218,6 +220,53 @@ def status_line(state, wired_text, has_clip, generated):
     if not (has_clip or state.get("model")):
         return "no model, text passed through"
     return "nothing to send, text passed through"
+
+
+# A REASONING model narrates its working before it answers, and that narration
+# is not the prompt. Qwen3 (the plain one, as used by Z-Image) does it even
+# with thinking off, because the template that would suppress it is not the one
+# a lumina2-type encoder applies. Without this the node hands back 380 words of
+# "Okay, the user wants me to ..." and the image model renders that.
+#
+# Core's own text node strips a CLOSED block, and these two patterns are copied
+# from it so the behaviour matches. What core does not cover is the case this
+# was reported from: the reasoning ran past max_length, so there is an opening
+# tag and no closing one and NOTHING was ever answered. Core leaves the raw
+# reasoning in place there; see reasoning_only() for why that has to be told
+# apart rather than passed on.
+_THINK_BLOCK = re.compile(r"<think>.*?</think>", re.DOTALL)
+_THINK_TAGS = re.compile(r"</?think>|<\|channel>\w*\n?|<channel\|>|<\|turn>\w*\n?")
+
+
+def strip_reasoning(text):
+    """The answer, with any reasoning block removed. Never raises."""
+    if not isinstance(text, str):
+        return ""
+    out = _THINK_BLOCK.sub("", text)
+    if "</think>" in out:
+        # Truncated: keep whatever follows the last close.
+        out = out.rsplit("</think>", 1)[-1]
+    elif "<think>" in out:
+        # An opening tag and NO closing one: the model ran out of room in the
+        # middle of thinking, so everything from that tag onward is unfinished
+        # reasoning and none of it is an answer. Core strips the bare tag and
+        # hands the reasoning back as though it were one, which is precisely
+        # how "Okay, the user wants me to..." reached a user's image.
+        out = out.split("<think>", 1)[0]
+    return _THINK_TAGS.sub("", out).strip()
+
+
+def reasoning_only(raw):
+    """True when the model spent the whole budget thinking and never answered.
+
+    Told apart from an ordinary empty answer because the fix is different and
+    specific: raise Max len, or pick a model that does not reason. Returning
+    the reasoning instead - which is what core does here - puts "Okay, the user
+    wants me to..." into somebody's image.
+    """
+    if not isinstance(raw, str) or "<think>" not in raw:
+        return False
+    return not strip_reasoning(raw)
 
 
 def word_count(text):
