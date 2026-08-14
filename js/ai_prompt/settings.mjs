@@ -24,6 +24,7 @@ import {
 } from "./core.mjs";
 import { deletePreset, fetchModels, fetchPresets, savePreset } from "./api.mjs";
 import { DEFAULT_STATE, SETTING_KEYS } from "./core.mjs";
+import { formatRecipe, parseRecipe, recipeFileStem } from "./recipe.mjs";
 
 const CSS_ID = "pixaroma-ai-prompt-panel-css";
 
@@ -454,10 +455,148 @@ function pickRow(label, onOpen, opts) {
   return row;
 }
 
-function safeFileStem(node) {
-  const raw = String(node?.title || "AI Prompt").trim() || "AI Prompt";
-  const stem = raw.replace(/[^A-Za-z0-9 _-]+/g, "").replace(/\s+/g, "-").slice(0, 48);
-  return (stem || "ai-prompt") + "-formula";
+/** Every preset the picker knows about, shipped first. */
+function allPresets() {
+  return PRESETS.shipped.concat(PRESETS.user);
+}
+
+/** The preset a node is currently running, found by matching the formula, so
+ *  it survives a reload and a duplicate with nothing extra stored. */
+function loadedPreset(node) {
+  const formula = readState(node).formula;
+  return allPresets().find((p) => p.formula === formula) || null;
+}
+
+/** This node's whole recipe: the wording AND the settings that make it work. */
+function currentRecipe(node) {
+  const st = readState(node);
+  const settings = {};
+  for (const key of SETTING_KEYS) settings[key] = st[key];
+  const known = loadedPreset(node);
+  return {
+    name: known?.name
+      || (node?.title && node.title !== "AI Prompt Pixaroma" ? node.title : ""),
+    note: known?.note || "",
+    // A model that arrived on a wire belongs to the loader the user placed, not
+    // to this recipe, so it is never written into the file.
+    model: slotConnected(node, "clip") ? "" : st.model,
+    settings,
+    formula: st.formula,
+  };
+}
+
+/** Label restore that caches the ORIGINAL once - a second click inside the
+ *  window otherwise captures "Copied" as the original and the button reads it
+ *  for the rest of the session. Copied from ui.mjs's flash, which learned it. */
+function flashLabel(button, label) {
+  if (!button) return;
+  clearTimeout(button._pixFlashT);
+  if (button._pixFlashOrig == null) button._pixFlashOrig = button.textContent;
+  button.textContent = label;
+  button._pixFlashT = setTimeout(() => {
+    if (button._pixFlashOrig != null) button.textContent = button._pixFlashOrig;
+  }, 900);
+}
+
+/** True if the text reached the clipboard.
+ *
+ *  navigator.clipboard is absent on a plain http LAN address, which is exactly
+ *  how a lot of people reach their own ComfyUI, so the old execCommand path is
+ *  a real fallback here and not legacy clutter (Seed Pixaroma made the same
+ *  call for the same reason). */
+async function copyText(text) {
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch (e) { /* fall through to the old way */ }
+  try {
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.style.cssText = "position:fixed;top:-1000px;opacity:0;";
+    document.body.appendChild(ta);
+    ta.select();
+    const ok = document.execCommand("copy");
+    ta.remove();
+    return ok;
+  } catch (e) {
+    return false;
+  }
+}
+
+/** Clipboard text, or null when the browser will not give it to us. There is
+ *  no execCommand fallback for READING, so the caller must say so plainly and
+ *  point at the file route instead of failing silently. */
+async function readClipboard() {
+  try {
+    if (!navigator.clipboard?.readText) return null;
+    return await navigator.clipboard.readText();
+  } catch (e) {
+    return null;
+  }
+}
+
+/**
+ * Put a recipe onto a node, from a file or a paste.
+ *
+ * A file with no header is a plain formula, exactly as Import always behaved,
+ * so nothing that worked before stops working.
+ */
+async function applyRecipeText(node, raw, sourceName) {
+  const recipe = parseRecipe(raw);
+  if (!recipe.formula.trim()) {
+    window.alert("There is nothing to import from " + sourceName + ".");
+    return;
+  }
+
+  const hasSettings = Object.keys(recipe.settings).length > 0;
+  const label = recipe.name ? "“" + recipe.name + "”" : sourceName;
+  const known = allPresets().some(
+    (p) => p.name.toLowerCase() === recipe.name.toLowerCase());
+  const willSave = recipe.hadHeader && !!recipe.name && !known;
+
+  // Import KEEPS its confirm where Clear lost one: this replaces writing the
+  // user did, and an unconfirmed import was a reported bug on Video Prompt.
+  // The wording names everything that is about to change, so one dialog is
+  // enough - including the fact that it joins their presets.
+  if (readState(node).formula.trim()) {
+    const what = hasSettings ? "formula and sampling settings" : "formula";
+    if (!window.confirm(
+      "Replace this node's " + what + " with " + label + "?"
+      + (willSave ? "\n\nIt will also be added to your presets." : ""))) return;
+  }
+
+  const patch = { formula: recipe.formula };
+  for (const key of SETTING_KEYS) {
+    if (key in recipe.settings) patch[key] = recipe.settings[key];
+  }
+  // Same rule as loading a preset: a named model is applied only when it is
+  // actually here and nothing is on the clip wire. Never point a node at a
+  // file that does not exist on this machine.
+  if (recipe.model && !slotConnected(node, "clip")
+      && MODELS.models.includes(recipe.model)) {
+    patch.model = recipe.model;
+  }
+  writeState(node, patch);
+  changed(node);
+
+  // Keeping it is the obvious intent for a recipe somebody deliberately
+  // imported, and it is also what makes the model line appear: that line keys
+  // off the preset list, so an unsaved import would explain nothing. Skipped
+  // when the name is already taken, so the list can never show two identical
+  // names - Save current is there for deliberately making a variant.
+  if (willSave) {
+    await savePreset({
+      name: recipe.name,
+      note: recipe.note,
+      model_hint: recipe.model,
+      formula: recipe.formula,
+      settings: recipe.settings,
+    });
+    PRESETS = await fetchPresets();
+  }
+  refreshAIPromptPanel(node);
 }
 
 function renderPanel(node, body) {
@@ -608,47 +747,74 @@ function renderPanel(node, body) {
       }, { spellcheck: false, owner: node });
   });
 
+  // Export and Import carry the WHOLE recipe - the wording, the settings that
+  // make it work, and the model it was measured with - because a formula
+  // without its temperature is half a recipe and lands as something that looks
+  // broken. The file is still readable text, so it can be pasted into a chat
+  // message and read by somebody who does not have this plugin.
   const exp = el("button", "pix-app-btn", "Export");
-  exp.title = "Save this formula as a plain .txt file.";
+  exp.title = "Save this recipe, or copy it ready to paste into a message. "
+            + "It carries the formula, the settings and the model it was written for.";
   exp.disabled = !st.formula.trim();
   exp.addEventListener("click", () => {
-    // Plain text, not JSON: a formula is prose, so it should be readable and
-    // pasteable by somebody who does not have this plugin.
-    const blob = new Blob([readState(node).formula], {
-      type: "text/plain;charset=utf-8",
-    });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = safeFileStem(node) + ".txt";
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(url), 4000);
+    openPop(exp, [
+      ["file", "Save as a file",
+       "Writes a .txt you can keep, back up or send to somebody."],
+      ["clip", "Copy to clipboard",
+       "Puts the whole recipe on the clipboard as text, ready to paste into "
+       + "Discord or a message."],
+    ], null, async (which) => {
+      const recipe = currentRecipe(node);
+      const text = formatRecipe(recipe);
+      if (which === "clip") {
+        flashLabel(exp, await copyText(text) ? "Copied" : "Could not copy");
+        return;
+      }
+      const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = recipeFileStem(recipe.name, node?.title) + ".txt";
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 4000);
+    }, { markVision: false });
   });
 
   const imp = el("button", "pix-app-btn", "Import");
-  imp.title = "Load a formula from a .txt file.";
+  imp.title = "Load a recipe from a file or from something you have copied. "
+            + "A plain .txt with no header still loads as the formula.";
   imp.addEventListener("click", () => {
-    const input = document.createElement("input");
-    input.type = "file";
-    input.accept = ".txt,.md,text/plain";
-    input.addEventListener("change", async () => {
-      const file = input.files?.[0];
-      if (!file) return;
-      // Replacing something the user wrote deserves a question. Reset asks in
-      // every other panel; Import did not, and that was a reported bug there.
-      if (readState(node).formula.trim() &&
-          !window.confirm("Replace this node's formula with the contents of "
-            + file.name + "?")) return;
-      try {
-        const text = await file.text();
-        writeState(node, { formula: text });
-        changed(node);
-        refreshAIPromptPanel(node);
-      } catch (e) {
-        window.alert("Could not read that file.");
+    openPop(imp, [
+      ["file", "Open a file", "Load a recipe or a plain formula from a .txt."],
+      ["clip", "Paste from clipboard",
+       "Load a recipe somebody sent you, straight from the clipboard."],
+    ], null, async (which) => {
+      if (which === "clip") {
+        const text = await readClipboard();
+        if (text == null) {
+          // Honest about WHY: there is no fallback for reading a clipboard, and
+          // this is the common case on a plain http LAN address.
+          window.alert("This browser will not let a page read the clipboard "
+            + "here. Save the recipe as a .txt and use Open a file instead.");
+          return;
+        }
+        applyRecipeText(node, text, "the clipboard");
+        return;
       }
-    });
-    input.click();
+      const input = document.createElement("input");
+      input.type = "file";
+      input.accept = ".txt,.md,text/plain";
+      input.addEventListener("change", async () => {
+        const file = input.files?.[0];
+        if (!file) return;
+        try {
+          applyRecipeText(node, await file.text(), file.name);
+        } catch (e) {
+          window.alert("Could not read that file.");
+        }
+      });
+      input.click();
+    }, { markVision: false });
   });
 
   const clear = el("button", "pix-app-btn", "Clear");
@@ -671,24 +837,25 @@ function renderPanel(node, body) {
   // Krea 2 wording without temperature 0.3 would ship something that reads as
   // broken, because the same words ramble and invent objects at 0.7.
   body.appendChild(el("div", "pix-app-sec", "Presets"));
-  const all = PRESETS.shipped.concat(PRESETS.user);
-  const userNames = new Set(PRESETS.user.map((p) => p.name.toLowerCase()));
+  const all = allPresets();
 
   // The row shows the preset that is on the node, so reopening the panel tells
   // you what you are looking at without having to remember.
-  const loaded = all.find((p) => p.formula === st.formula);
+  const loaded = loadedPreset(node);
   body.appendChild(pickRow(
     loaded ? loaded.name : (all.length ? "Load a preset…" : "No presets yet"),
     (anchor) => {
       // Each row carries its model in the hover, so you can see what a preset
       // was measured with BEFORE you load it, without cluttering the list.
-      const rows = all.map((p) => [p.name, p.name,
+      const rows = all.map((p, i) => [p.name, p.name,
         p.name
         // Which of the two kinds this is, because "where did my preset go" and
         // "does my friend already have this one" are the same question asked
-        // from either end, and the list itself cannot show it.
-        + (userNames.has(p.name.toLowerCase())
-             ? "\nYour own preset" : "\nShips with Pixaroma")
+        // from either end, and the list itself cannot show it. By INDEX rather
+        // than by name: shipped ones come first, so this stays correct even if
+        // a user preset somehow shares a name with one.
+        + (i < PRESETS.shipped.length
+             ? "\nShips with Pixaroma" : "\nYour own preset")
         + (p.model_hint ? "\nMeasured with " + p.model_hint
                                  + (MODELS.models.includes(p.model_hint)
                                     ? " (you have it)" : " (you do NOT have it)")
@@ -735,17 +902,26 @@ function renderPanel(node, body) {
   saveBtn.title = "Save this node's formula and settings as a preset you can reuse.";
   saveBtn.disabled = !st.formula.trim();
   saveBtn.addEventListener("click", async () => {
-    const current = readState(node);
+    const recipe = currentRecipe(node);
+    // Tweaking a shipped preset and keeping it is the common case, so the name
+    // is offered ready-made rather than suggesting one that is then refused.
+    const shipped = PRESETS.shipped.some((p) => p.name === recipe.name);
     const name = (window.prompt("Save this formula and its settings as:",
-      node.title && node.title !== "AI Prompt Pixaroma" ? node.title : "") || "").trim();
+      shipped ? recipe.name + " (mine)" : recipe.name) || "").trim();
     if (!name) return;
-    const settings = {};
-    for (const key of SETTING_KEYS) settings[key] = current[key];
+    // A shipped preset cannot be replaced, so allowing its name through would
+    // put two identical-looking rows in the list with no way to tell them apart.
+    if (PRESETS.shipped.some((p) => p.name.toLowerCase() === name.toLowerCase())) {
+      window.alert("Pixaroma already ships a preset called “" + name
+        + "”. Give yours a different name.");
+      return;
+    }
     const res = await savePreset({
       name,
-      formula: current.formula,
-      settings,
-      model_hint: slotConnected(node, "clip") ? "" : current.model,
+      note: recipe.note,
+      formula: recipe.formula,
+      settings: recipe.settings,
+      model_hint: recipe.model,
     });
     if (!res.ok) { window.alert(res.message || "Could not save that preset."); return; }
     PRESETS = await fetchPresets();

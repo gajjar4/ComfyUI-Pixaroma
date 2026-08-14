@@ -156,10 +156,19 @@ export const AI_PROMPT_HELP = {
         + "That sits outside the plugin folder, so updating or reinstalling "
         + "Pixaroma cannot wipe them, and it is the single file to copy when you "
         + "move to another machine.\n\n"
-        + "To hand one of yours to somebody else, Export beside the formula "
-        + "writes the wording out as a .txt they can Import. That carries the "
-        + "words but not the numbers, so tell them the temperature too, or send "
-        + "them that presets file and let them copy your entry into their own.",
+        + "To hand one of yours to somebody else, use Export beside the "
+        + "formula. It carries the whole recipe: the wording, the sampling "
+        + "settings, and the model it was written for. Save as a file gives "
+        + "you a .txt to send or keep; Copy to clipboard puts the same thing "
+        + "on the clipboard, ready to paste straight into a Discord message.\n\n"
+        + "At the other end, Import takes either one: Open a file, or Paste "
+        + "from clipboard. Anything that arrives with a name is added to their "
+        + "presets automatically, so it is in the list next time too.\n\n"
+        + "The file is ordinary readable text, so it can be opened in Notepad "
+        + "and the temperature changed by hand. A plain .txt with no header "
+        + "still loads as the formula on its own, exactly as it always did, so "
+        + "older exports and any prompt you already had lying around still "
+        + "work.",
       defs: [
         ["Krea 2 - text to image", "Built from Krea's own published prompt-expansion instructions, then tightened by watching where it went wrong. Measured on Qwen3-VL 4B and 8B."],
       ],
