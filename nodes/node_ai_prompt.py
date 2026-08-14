@@ -307,6 +307,12 @@ class PixaromaAIPrompt:
                         "used_clip": has_clip,
                         "words": word_count(out),
                         "seconds": round(time.time() - started, 2),
+                        # The seed this run actually used. The browser rolls a
+                        # Random one at graphToPrompt time onto a runtime field,
+                        # which a workflow tab switch destroys along with the
+                        # node object - so report it and let the face store it
+                        # beside the answer (js/ai_prompt/core.mjs displaySeed).
+                        "seed": st["seed"],
                     }]
                 },
                 "result": (out,),
@@ -415,6 +421,9 @@ class PixaromaAIPrompt:
                     "used_clip": has_clip,
                     "words": word_count(out),
                     "seconds": round(time.time() - started, 2),
+                    # See the pass-through payload above: the face stores this
+                    # so the seed chip still names the run after a tab switch.
+                    "seed": st["seed"],
                 }]
             },
             "result": (out,),

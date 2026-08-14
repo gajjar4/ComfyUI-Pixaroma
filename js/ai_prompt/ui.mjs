@@ -631,6 +631,7 @@ export function applyResult(node, payload, elapsed) {
     meta: bits.join(" · "),
     error: false,
     muted: payload?.used_clip === false && slotConnected(node, "clip"),
+    seed: payload?.seed,
   });
   renderFace(node);
 }

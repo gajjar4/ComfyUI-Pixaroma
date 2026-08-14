@@ -276,6 +276,7 @@ export function readLast(node) {
     meta: str(src.meta, ""),
     error: src.error === true,
     muted: src.muted === true,
+    seed: Number.isFinite(Number(src.seed)) ? Number(src.seed) : null,
   };
 }
 
@@ -288,13 +289,26 @@ export function writeLast(node, next) {
     meta: str(next?.meta, ""),
     error: next?.error === true,
     muted: next?.muted === true,
+    // The seed the run REPORTED, so the chip can still name it after a tab
+    // switch has taken _pixApLastSeed with the node object - see displaySeed.
+    seed: Number.isFinite(Number(next?.seed)) ? Number(next.seed) : null,
   };
 }
 
+/**
+ * The runtime field dies with the node object on a workflow tab switch, and
+ * once the ANSWER started surviving one (LAST_PROP) that left the chip naming a
+ * seed which had nothing to do with the text beside it - and a user who copied
+ * that number into Fixed to lock the result in would silently get a different
+ * generation. So fall back to the seed the run reported, which is stored with
+ * the answer and outlives the node object.
+ */
 export function displaySeed(node) {
   const st = readState(node);
-  if (st.seed_mode === SEED_RANDOM && Number.isFinite(node?._pixApLastSeed)) {
-    return node._pixApLastSeed;
+  if (st.seed_mode === SEED_RANDOM) {
+    if (Number.isFinite(node?._pixApLastSeed)) return node._pixApLastSeed;
+    const ran = readLast(node).seed;
+    if (Number.isFinite(ran)) return ran;
   }
   return st.seed;
 }

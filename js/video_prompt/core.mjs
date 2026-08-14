@@ -234,8 +234,16 @@ export const LAST_PROP = "videoPromptLast";
  *
  * ⚠️ Deliberately NOT normalised into a fixed shape. The staleness check in
  * renderFace distinguishes an ABSENT `for*` stamp (`last.forX !== undefined`)
- * from one that differs, so filling defaults in would make an old result - and
- * every failure, which stamps none of them - read as "changed since this ran".
+ * from one that differs, so filling defaults in would make a result saved
+ * before a given stamp existed read as "changed since this ran" forever. Every
+ * stamp is written today, so that guard is inert RIGHT NOW - it earns its keep
+ * the moment a fifth stamp is added, which is exactly how `forLengthBlock`
+ * arrived (video-prompt.md #18). Normalising would quietly disarm it.
+ *
+ * ⚠️ Returned BY REFERENCE, not cloned - renderFace runs on every keystroke,
+ * so a copy per call is not worth it. Do NOT mutate what you get back: route
+ * every write through `writeLast`, or you bypass its whole-object replace and
+ * a failure starts inheriting a success's stamps.
  */
 export function readLast(node) {
   const raw = node?.properties?.[LAST_PROP];
@@ -255,12 +263,23 @@ export function writeLast(node, next) {
   node.properties[LAST_PROP] = out;
 }
 
-/** What the face should show as the seed: the last rolled one in Random, the
- *  stored one in Fixed. */
+/**
+ * What the face should show as the seed: the last rolled one in Random, the
+ * stored one in Fixed.
+ *
+ * The runtime field dies with the node object on a workflow tab switch, and
+ * once the PROMPT started surviving one (LAST_PROP) that left the chip naming a
+ * seed which had nothing to do with the text beside it - and a user who copied
+ * that number into Fixed to lock the result in would silently get a different
+ * generation. So fall back to the seed Python reported for the run, which is
+ * already inside the stored result and outlives the node object.
+ */
 export function displaySeed(node) {
   const st = readState(node);
-  if (st.seed_mode === SEED_RANDOM && Number.isFinite(node?._pixVpLastSeed)) {
-    return node._pixVpLastSeed;
+  if (st.seed_mode === SEED_RANDOM) {
+    if (Number.isFinite(node?._pixVpLastSeed)) return node._pixVpLastSeed;
+    const ran = Number(readLast(node)?.seed);
+    if (Number.isFinite(ran)) return ran;
   }
   return st.seed;
 }
