@@ -1,0 +1,589 @@
+// AI Prompt Pixaroma - the node face.
+//
+// ONE DOM widget in both renderers, so a live renderer flip has nothing to
+// swap and ComfyUI re-parents the element itself (video-prompt.md #13 - an
+// onRendererChange rebuild was tried there, leaked a root per flip, and was
+// reverted).
+//
+// THE CONTROLS LIVE IN THE SLOT BAND. Five inputs against one output leaves
+// four empty rows on the right, and the seed, the gear and the join order sit
+// there instead of costing the body a row each. In CLASSIC the band FLOATS out
+// of the widget flow with a negative top, which is free height
+// (reference_classic_dom_band_float); in Nodes 2.0 the node body CLIPS
+// anything above the widget top, so it stays in flow as a top row. Both write
+// only DOM style, never node.size or node.properties, so neither can dirty a
+// saved workflow, and both are wrapped so a future frontend degrades to a row
+// rather than breaking the node.
+
+import { app } from "/scripts/app.js";
+import { pixAsset } from "../shared/api_url.mjs";
+import { ACC, installNodeAccent } from "../shared/node_settings.mjs";
+import { applyAdaptiveCanvasOnly, isVueNodes } from "../shared/nodes2.mjs";
+import { installCanvasZoomPassthrough } from "../shared/canvas_zoom.mjs";
+import { installNativeTextMenu } from "../shared/native_text_menu.mjs";
+import { installResizeFloor } from "../shared/resize_floor.mjs";
+import { notifyGraphChanged } from "../shared/graph_changed.mjs";
+import {
+  IDEA_SHARE_DEFAULT,
+  IDEA_SHARE_MAX,
+  IDEA_SHARE_MIN,
+  ORDER_IDEA,
+  ORDER_WIRED,
+  SEED_FIXED,
+  SEED_RANDOM,
+  displaySeed,
+  readState,
+  rollSeed,
+  shortModel,
+  slotConnected,
+  willGenerate,
+  wiredSummary,
+  writeState,
+} from "./core.mjs";
+
+const CSS_ID = "pixaroma-ai-prompt-css";
+export const WIDGET_TYPE = "pixaroma_ai_prompt";
+const WIDGET_MIN_H = 250;
+
+// Calibrated against a 5-input / 1-output node in the Classic renderer.
+// The band's first row lands beside the SECOND input (directly under the
+// output dot) and the second row two slots below it, leaving one empty row
+// between them so the seed and the join segment never read as one block.
+const CLASSIC_BAND_TOP = -92;
+const CLASSIC_RSV_L = 78;      // clear the clip / image / video / audio labels
+const CLASSIC_ROW_GAP = 21;    // one whole 20px slot row between the two rows
+const VUE_ROW_GAP = 5;
+// The widget root stops at node width - 10, while LiteGraph draws the output
+// dot centred at width - 9 with radius 4, so its right edge is 5px further
+// out. Measured, not guessed: getConnectionPos(false, 0) put the dot at x=391
+// on a 400-wide node while the root's right edge sat at 390. Without this the
+// rail stops short of the dot and the alignment reads as an accident.
+const CLASSIC_BAND_RIGHT = -5;
+
+function el(tag, cls, text) {
+  const node = document.createElement(tag);
+  if (cls) node.className = cls;
+  if (text != null) node.textContent = text;
+  return node;
+}
+
+export function injectCSS() {
+  if (document.getElementById(CSS_ID)) return;
+  const style = document.createElement("style");
+  style.id = CSS_ID;
+  style.textContent = `
+    .pix-ap-root { position:relative; width:100%; height:100%; box-sizing:border-box; }
+    /* The flex column lives on an INNER layer: ComfyUI writes display:block on
+       the addDOMWidget root itself when a node is rebuilt or collapsed, and an
+       inline style beats a class, so a flex column on the root silently dies
+       after the first tab switch. */
+    .pix-ap-inner { position:absolute; inset:0; display:flex; flex-direction:column;
+      gap:6px; font:12px 'Segoe UI', sans-serif; box-sizing:border-box; }
+
+    .pix-ap-band { display:flex; flex-direction:column; align-items:flex-end;
+      gap:${VUE_ROW_GAP}px; }
+    .pix-ap-band.floated { position:absolute; left:${CLASSIC_RSV_L}px;
+      right:${CLASSIC_BAND_RIGHT}px; top:${CLASSIC_BAND_TOP}px;
+      gap:${CLASSIC_ROW_GAP}px; z-index:2; pointer-events:none; }
+    .pix-ap-band.floated > * { pointer-events:auto; }
+    .pix-ap-bandrow { display:flex; align-items:center; gap:6px; }
+
+    .pix-ap-gear { width:19px; height:19px; flex:0 0 auto; border-radius:4px;
+      background:rgba(255,255,255,.05); border:1px solid rgba(255,255,255,.14);
+      display:flex; align-items:center; justify-content:center; cursor:pointer;
+      padding:0; }
+    .pix-ap-gear::before { content:""; display:block; width:12px; height:12px;
+      background:#bbb;
+      -webkit-mask:url("${pixAsset("icons/note/gear.svg")}") center/contain no-repeat;
+      mask:url("${pixAsset("icons/note/gear.svg")}") center/contain no-repeat; }
+    .pix-ap-gear:hover { border-color:${ACC}; }
+    .pix-ap-gear:hover::before { background:${ACC}; }
+
+    .pix-ap-seedwrap { display:flex; height:19px; flex:0 0 auto; border-radius:4px;
+      overflow:hidden; border:1px solid rgba(255,255,255,.14); }
+    .pix-ap-seed { background:rgba(255,255,255,.05); color:#c9c6c2;
+      font:10.5px monospace; border:none; padding:0 8px; cursor:pointer;
+      display:flex; align-items:center; }
+    .pix-ap-seed:hover { color:${ACC}; }
+    .pix-ap-seedmode { background:rgba(255,255,255,.05); color:#c9c6c2;
+      font:10.5px monospace; border:none; border-left:1px solid rgba(255,255,255,.14);
+      padding:0 7px; cursor:pointer; display:flex; align-items:center; }
+    .pix-ap-seedmode.is-on { background:${ACC}; color:#fff;
+      border-left-color:rgba(0,0,0,.3); }
+
+    .pix-ap-seg { display:flex; height:19px; flex:0 0 auto; border-radius:4px;
+      overflow:hidden; border:1px solid rgba(255,255,255,.14); }
+    .pix-ap-seg button { background:rgba(255,255,255,.04); color:rgba(255,255,255,.6);
+      border:none; font:10.5px 'Segoe UI', sans-serif; padding:0 8px; cursor:pointer;
+      display:flex; align-items:center; }
+    .pix-ap-seg button + button { border-left:1px solid rgba(255,255,255,.12); }
+    .pix-ap-seg button:hover { color:#fff; }
+    .pix-ap-seg button.is-on { background:${ACC}; color:#fff;
+      border-left-color:rgba(0,0,0,.3); }
+
+    .pix-ap-banner { display:flex; align-items:center; gap:8px; flex:0 0 auto;
+      border-radius:5px; padding:6px 9px; font-size:11.5px; color:#e7e4e0;
+      background:color-mix(in srgb, ${ACC} 10%, transparent);
+      border:1px solid color-mix(in srgb, ${ACC} 34%, transparent); }
+    .pix-ap-banner .lbl { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .pix-ap-banner .hint { margin-left:auto; color:#6f6c67; font-size:11px;
+      flex:0 0 auto; }
+    .pix-ap-banner.is-warn { background:rgba(224,163,58,.12);
+      border-color:rgba(224,163,58,.4); }
+    .pix-ap-banner.is-warn .lbl { color:#e0a33a; }
+    .pix-ap-banner.is-mute { background:rgba(255,255,255,.03);
+      border-color:rgba(255,255,255,.1); }
+    .pix-ap-banner.is-mute .lbl { color:#a4a09a; }
+
+    .pix-ap-caprow { display:flex; align-items:center; flex:0 0 auto; }
+    .pix-ap-cap { font-size:10px; letter-spacing:.09em; text-transform:uppercase;
+      color:${ACC}; }
+    .pix-ap-expand { margin-left:auto; background:none; border:none; color:#6f6c67;
+      font-size:11px; cursor:pointer; padding:0; font-family:'Segoe UI', sans-serif; }
+    .pix-ap-expand:hover { color:${ACC}; }
+    .pix-ap-meta { margin-left:auto; font:10.5px monospace; color:#6f6c67; }
+    .pix-ap-meta.is-error { color:#e0a33a; }
+    .pix-ap-meta.is-stale { color:#7d7a4a; }
+
+    .pix-ap-idea, .pix-ap-out { background:#191919; border:1px solid #343436;
+      border-radius:4px; padding:6px 8px; color:#ddd9d4; font:11.5px/1.45 monospace;
+      resize:none; outline:none; box-sizing:border-box; width:100%; }
+    .pix-ap-idea:focus, .pix-ap-out:focus { border-color:${ACC}; }
+    .pix-ap-idea { flex:var(--pix-ap-idea-grow,360) 1 0; min-height:44px; }
+    .pix-ap-out { flex:var(--pix-ap-out-grow,640) 1 0; min-height:64px; }
+    .pix-ap-idea::placeholder, .pix-ap-out::placeholder { color:#5c5a57; }
+
+    .pix-ap-grip { height:9px; flex:0 0 auto; display:flex; align-items:center;
+      justify-content:center; cursor:ns-resize; }
+    .pix-ap-grip i { display:block; width:34px; height:2px; border-radius:2px;
+      background:#3d3d3f; }
+    .pix-ap-grip:hover i { background:${ACC}; }
+
+    .pix-ap-acts { display:flex; align-items:center; gap:6px; flex-wrap:wrap;
+      flex:0 0 auto; }
+    .pix-ap-btn { background:rgba(255,255,255,.05);
+      border:1px solid rgba(255,255,255,.13); color:rgba(255,255,255,.7);
+      border-radius:4px; padding:5px 11px; font:11.5px 'Segoe UI', sans-serif;
+      cursor:pointer; box-sizing:border-box; user-select:none; }
+    .pix-ap-btn:hover { background:${ACC}; border-color:${ACC}; color:#fff; }
+    .pix-ap-btn:disabled, .pix-ap-btn:disabled:hover { opacity:.38;
+      background:rgba(255,255,255,.05); border-color:rgba(255,255,255,.13);
+      color:rgba(255,255,255,.7); cursor:default; }
+    .pix-ap-btn.is-on, .pix-ap-btn.is-on:hover { background:${ACC};
+      border-color:${ACC}; color:#fff; }
+    .pix-ap-btn.is-on::before { content:"✓ "; }
+    .pix-ap-btn.is-inert { opacity:.4; }
+    .pix-ap-btn.is-flash, .pix-ap-btn.is-flash:hover { background:#3ec371;
+      border-color:#3ec371; color:#fff; }
+    .pix-ap-spacer { flex:1; }
+    .pix-ap-primary { font-weight:600; padding:5px 18px; background:${ACC};
+      border-color:${ACC}; color:#fff; }
+    .pix-ap-primary:hover { filter:brightness(1.1); }
+  `;
+  document.head.appendChild(style);
+}
+
+// ---------------------------------------------------------------------------
+// Small helpers
+// ---------------------------------------------------------------------------
+function flash(button, label) {
+  const original = button.textContent;
+  button.classList.add("is-flash");
+  button.textContent = label;
+  setTimeout(() => {
+    button.classList.remove("is-flash");
+    button.textContent = original;
+  }, 700);
+}
+
+async function copyText(text) {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch (e) {
+    // http on a LAN has no clipboard API. execCommand still works there.
+    try {
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      ta.style.position = "fixed";
+      ta.style.opacity = "0";
+      document.body.appendChild(ta);
+      ta.select();
+      const ok = document.execCommand("copy");
+      ta.remove();
+      return ok;
+    } catch (e2) {
+      return false;
+    }
+  }
+}
+
+/** Write the two grow numbers the idea/prompt split rides on.
+ *  Style ONLY, so this is safe to call from the load path (Vue Compat #18). */
+export function applyShare(node) {
+  const els = node?._pixApEls;
+  if (!els?.inner) return;
+  const share = readState(node).idea_share;
+  els.inner.style.setProperty("--pix-ap-idea-grow", String(Math.round(share * 1000)));
+  els.inner.style.setProperty("--pix-ap-out-grow", String(Math.round((1 - share) * 1000)));
+}
+
+function installGrip(node, grip, idea, out) {
+  let active = false;
+  let pid = null;
+
+  const end = () => {
+    if (!active) return;
+    active = false;
+    try { if (pid != null) grip.releasePointerCapture(pid); } catch (e) { /* gone */ }
+    pid = null;
+    // A drag ends on pointerup, and the pack-wide change net listens for click
+    // and change - so without this the new height is silently lost on the next
+    // open (convention #31).
+    notifyGraphChanged();
+  };
+
+  grip.addEventListener("pointerdown", (e) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+    active = true;
+    pid = e.pointerId;
+    try { grip.setPointerCapture(pid); } catch (e2) { /* not fatal */ }
+  });
+
+  grip.addEventListener("pointermove", (e) => {
+    if (!active) return;
+    // The buttons-up guard. A real mouse can lose its release - the pointer
+    // leaves the viewport, another element takes capture - and without this
+    // the grip follows the cursor forever. A synthetic drag CANNOT reproduce
+    // that, so this is on principle, not on a repro (convention #20).
+    if (!(e.buttons & 1)) { end(); return; }
+    const top = idea.getBoundingClientRect().top;
+    const bottom = out.getBoundingClientRect().bottom;
+    const span = bottom - top;
+    if (span <= 1) return;
+    // A RATIO, never pixels: every rect here is in SCREEN pixels, which is
+    // element pixels times the canvas zoom, so a stored pixel height would be
+    // wrong at every zoom but the one it was set at. Dividing cancels it out.
+    const share = Math.max(IDEA_SHARE_MIN,
+      Math.min(IDEA_SHARE_MAX, (e.clientY - top) / span));
+    writeState(node, { idea_share: share });
+    applyShare(node);
+  });
+
+  grip.addEventListener("pointerup", end);
+  grip.addEventListener("pointercancel", end);
+  grip.addEventListener("lostpointercapture", end);
+  grip.addEventListener("dblclick", (e) => {
+    e.preventDefault();
+    writeState(node, { idea_share: IDEA_SHARE_DEFAULT });
+    applyShare(node);
+    notifyGraphChanged();
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Band placement
+// ---------------------------------------------------------------------------
+/** Float the band into the slot band in Classic; leave it in flow otherwise.
+ *  Wrapped so a frontend change costs the placement, never the node. */
+export function placeBand(node) {
+  const els = node?._pixApEls;
+  if (!els?.band) return;
+  try {
+    const classic = !isVueNodes();
+    els.band.classList.toggle("floated", classic);
+  } catch (e) {
+    els.band.classList.remove("floated");
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Face
+// ---------------------------------------------------------------------------
+export function buildFace(node, openPanel, openIdeaEditor) {
+  injectCSS();
+
+  const root = el("div", "pix-ap-root");
+  const inner = el("div", "pix-ap-inner");
+  root.appendChild(inner);
+
+  // ---- the slot band -------------------------------------------------------
+  const band = el("div", "pix-ap-band");
+
+  const row1 = el("div", "pix-ap-bandrow");
+  const gear = el("button", "pix-ap-gear");
+  gear.title = "Settings: the model, the formula and how wired text is joined";
+  gear.addEventListener("click", (e) => { e.stopPropagation(); openPanel(node); });
+  const seedwrap = el("div", "pix-ap-seedwrap");
+  const seed = el("button", "pix-ap-seed", "0");
+  const seedmode = el("button", "pix-ap-seedmode", "F");
+  seedwrap.append(seed, seedmode);
+  row1.append(gear, seedwrap);
+
+  const row2 = el("div", "pix-ap-bandrow");
+  const seg = el("div", "pix-ap-seg");
+  const segIdea = el("button", null, "Idea first");
+  const segWired = el("button", null, "Wired first");
+  seg.append(segIdea, segWired);
+  row2.appendChild(seg);
+
+  band.append(row1, row2);
+  inner.appendChild(band);
+
+  // ---- banner --------------------------------------------------------------
+  const banner = el("div", "pix-ap-banner");
+  const bLabel = el("span", "lbl", "");
+  const bHint = el("span", "hint", "");
+  banner.append(bLabel, bHint);
+  inner.appendChild(banner);
+
+  // ---- idea ----------------------------------------------------------------
+  const cap1 = el("div", "pix-ap-caprow");
+  const expand = el("button", "pix-ap-expand", "Expand");
+  expand.title = "Open the idea in a full-screen box";
+  cap1.append(el("span", "pix-ap-cap", "Your idea"), expand);
+  const idea = el("textarea", "pix-ap-idea");
+  idea.placeholder = "what you want, in plain words";
+  idea.spellcheck = true;
+  inner.append(cap1, idea);
+
+  const grip = el("div", "pix-ap-grip");
+  grip.title = "Drag to change how the height is shared. Double-click to reset.";
+  grip.appendChild(el("i"));
+  inner.appendChild(grip);
+
+  // ---- prompt --------------------------------------------------------------
+  const cap2 = el("div", "pix-ap-caprow");
+  const meta = el("span", "pix-ap-meta", "");
+  cap2.append(el("span", "pix-ap-cap", "Prompt"), meta);
+  const out = el("textarea", "pix-ap-out");
+  out.readOnly = true;
+  out.placeholder = "press Generate to write the text";
+  inner.append(cap2, out);
+
+  // ---- buttons -------------------------------------------------------------
+  const acts = el("div", "pix-ap-acts");
+  const reroll = el("button", "pix-ap-btn", "Re-roll");
+  reroll.title = "Roll a new seed and run again, for a different answer";
+  const copy = el("button", "pix-ap-btn", "Copy");
+  copy.title = "Copy the text";
+  const vram = el("button", "pix-ap-btn", "Free VRAM");
+  const generate = el("button", "pix-ap-btn pix-ap-primary", "Generate");
+  generate.title = "Run the workflow";
+  acts.append(reroll, copy, vram, el("span", "pix-ap-spacer"), generate);
+  inner.appendChild(acts);
+
+  // ---- wiring --------------------------------------------------------------
+  idea.addEventListener("input", () => {
+    writeState(node, { idea: idea.value });
+    renderFace(node);
+  });
+  idea.addEventListener("keydown", (e) => e.stopPropagation());
+  out.addEventListener("keydown", (e) => e.stopPropagation());
+
+  expand.addEventListener("click", () => openIdeaEditor(node));
+
+  seed.addEventListener("click", () => {
+    const current = readState(node);
+    const typed = window.prompt("Seed", String(current.seed));
+    if (typed == null) return;
+    const value = parseInt(typed, 10);
+    if (!Number.isFinite(value)) return;
+    writeState(node, { seed: Math.max(0, value) });
+    renderFace(node);
+    notifyGraphChanged();
+  });
+
+  seedmode.addEventListener("click", () => {
+    const current = readState(node);
+    writeState(node, {
+      seed_mode: current.seed_mode === SEED_RANDOM ? SEED_FIXED : SEED_RANDOM,
+    });
+    renderFace(node);
+    notifyGraphChanged();
+  });
+
+  segIdea.addEventListener("click", () => {
+    writeState(node, { order: ORDER_IDEA });
+    renderFace(node);
+    notifyGraphChanged();
+  });
+  segWired.addEventListener("click", () => {
+    writeState(node, { order: ORDER_WIRED });
+    renderFace(node);
+    notifyGraphChanged();
+  });
+
+  reroll.addEventListener("click", () => {
+    // A re-roll has to CHANGE something, or ComfyUI serves the cached answer
+    // and the button looks broken. Fixed mode reuses its number by design, so
+    // this writes a fresh one - a deliberate user action, so dirtying the
+    // workflow here is correct.
+    writeState(node, { seed: rollSeed() });
+    renderFace(node);
+    notifyGraphChanged();
+    app.queuePrompt?.(0, 1);
+  });
+
+  copy.addEventListener("click", async () => {
+    const text = node._pixApOut || "";
+    if (!text) return;
+    if (await copyText(text)) flash(copy, "Copied");
+  });
+
+  vram.addEventListener("click", () => {
+    const current = readState(node);
+    writeState(node, { release_model: !current.release_model });
+    renderFace(node);
+    notifyGraphChanged();
+  });
+
+  generate.addEventListener("click", () => app.queuePrompt?.(0, 1));
+
+  installGrip(node, grip, idea, out);
+
+  node._pixApEls = {
+    root, inner, band, banner, bLabel, bHint, idea, out, meta,
+    seed, seedmode, seedwrap, seg, segIdea, segWired, copy, vram, gear,
+    row1, row2,
+  };
+
+  const widget = node.addDOMWidget(WIDGET_TYPE, WIDGET_TYPE, root, {
+    serialize: false,
+    hideOnZoom: false,
+    getMinHeight: () => WIDGET_MIN_H,
+  });
+  // BOTH flags: widget.options.serialize controls prompt inclusion, the
+  // top-level widget.serialize controls workflow persistence. Setting only one
+  // leaves this widget taking a widgets_values slot.
+  widget.serialize = false;
+  // No custom computeSize, and no getMaxHeight. A fill widget with a
+  // computeSize is treated as FIXED height by legacy LiteGraph: the node
+  // refuses to be dragged smaller and the content spills a few px past the
+  // frame (nodes2-preview-fill.md).
+  widget.computeLayoutSize = () => ({ minHeight: WIDGET_MIN_H, minWidth: 1 });
+  applyAdaptiveCanvasOnly(widget);
+  installCanvasZoomPassthrough(root);
+  installNativeTextMenu(root);
+  installNodeAccent(node, root);
+  node._pixApFloorOff = installResizeFloor(root, () => WIDGET_MIN_H);
+  node._pixApWidget = widget;
+
+  applyShare(node);
+  placeBand(node);
+  renderFace(node);
+  return widget;
+}
+
+export function destroyFace(node) {
+  try { node._pixApFloorOff?.(); } catch (e) { /* gone */ }
+  node._pixApFloorOff = null;
+  const widget = node?._pixApWidget;
+  if (widget && Array.isArray(node.widgets)) {
+    const at = node.widgets.indexOf(widget);
+    if (at >= 0) node.widgets.splice(at, 1);
+  }
+  node._pixApWidget = null;
+  node._pixApEls = null;
+}
+
+// ---------------------------------------------------------------------------
+// Repaint
+// ---------------------------------------------------------------------------
+export function renderFace(node) {
+  const els = node?._pixApEls;
+  if (!els) return;
+  const st = readState(node);
+  const clipWired = slotConnected(node, "clip");
+  const textWired = slotConnected(node, "text");
+
+  if (els.idea.value !== st.idea) els.idea.value = st.idea;
+
+  // ---- banner --------------------------------------------------------------
+  els.banner.classList.remove("is-warn", "is-mute");
+  if (!clipWired && !st.model) {
+    els.banner.classList.add("is-warn");
+    els.bLabel.textContent = "No model";
+    els.bHint.textContent = "text passes through";
+    els.banner.title = "Nothing to write with, so the node hands its text "
+      + "straight on. Pick a model from the gear.";
+  } else {
+    const name = clipWired ? "Model on wire" : shortModel(st.model);
+    if (!st.formula.trim()) {
+      els.banner.classList.add("is-mute");
+      els.bLabel.textContent = name;
+      els.bHint.textContent = willGenerate(node)
+        ? "no formula · idea only" : "nothing to send";
+      els.banner.title = "No formula, so the model gets your idea by itself.";
+    } else {
+      els.bLabel.textContent = name;
+      els.bHint.textContent = wiredSummary(node);
+      els.banner.title = "Formula, your idea and anything wired in.";
+    }
+  }
+
+  // ---- band ---------------------------------------------------------------
+  els.seed.textContent = String(displaySeed(node));
+  els.seed.title = "The seed this run uses. Click to type one.";
+  const random = st.seed_mode === SEED_RANDOM;
+  els.seedmode.textContent = random ? "R" : "F";
+  els.seedmode.classList.toggle("is-on", random);
+  els.seedmode.title = random
+    ? "Random: a new seed every Run, so it writes something different each time."
+    : "Fixed: the same seed every Run, so an unchanged node is cached and Run "
+      + "is instant.";
+
+  // The join segment is only meaningful while text is wired, and a control
+  // that does nothing is worse than no control. The band has spare rows, so
+  // hiding it costs the node no height either way.
+  els.row2.style.display = textWired ? "" : "none";
+  els.segIdea.classList.toggle("is-on", st.order === ORDER_IDEA);
+  els.segWired.classList.toggle("is-on", st.order === ORDER_WIRED);
+  els.segIdea.title = "Your idea first, then the wired text.";
+  els.segWired.title = "The wired text first, then your idea.";
+
+  // ---- readout -------------------------------------------------------------
+  const text = node._pixApOut || "";
+  els.out.value = text;
+  els.copy.disabled = !text || !!node._pixApError;
+  els.meta.classList.toggle("is-error", !!node._pixApError);
+  els.meta.textContent = node._pixApMeta || "";
+
+  // ---- Free VRAM -----------------------------------------------------------
+  els.vram.classList.toggle("is-on", st.release_model);
+  els.vram.classList.toggle("is-inert", clipWired);
+  els.vram.title = clipWired
+    ? "Skipped while a model is wired in: that one belongs to the node feeding "
+      + "it, so it is not this node's to unload."
+    : st.release_model
+      ? "On: the model is unloaded as soon as the text is written, so a video "
+        + "model downstream gets the memory. In a chain, turn this on only for "
+        + "the LAST node using this model."
+      : "Off: the model stays loaded, so the next run is quicker.";
+
+  placeBand(node);
+  applyShare(node);
+}
+
+/** The result of a run. Runtime fields only - never node.properties, or a run
+ *  would mark a clean workflow as modified (Vue Compat #18). */
+export function applyResult(node, payload, elapsed) {
+  node._pixApOut = String(payload?.text ?? "");
+  node._pixApError = false;
+  const bits = [];
+  if (payload?.status) bits.push(payload.status);
+  if (payload?.words != null) bits.push(payload.words + " words");
+  const secs = payload?.seconds != null ? payload.seconds : elapsed;
+  if (secs != null) bits.push(Number(secs).toFixed(1) + "s");
+  node._pixApMeta = bits.join(" · ");
+  renderFace(node);
+}
+
+export function applyError(node, message) {
+  node._pixApError = true;
+  node._pixApOut = String(message || "It did not run.");
+  node._pixApMeta = "did not run";
+  renderFace(node);
+}

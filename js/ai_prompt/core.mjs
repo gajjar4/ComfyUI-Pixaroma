@@ -1,0 +1,232 @@
+// AI Prompt Pixaroma - state.
+//
+// Vue Compat #9: everything lives on node.properties.aiPromptState and is
+// injected into the hidden AIPromptState input at graphToPrompt time, so the
+// node has no visible widgets and no stray input dots beyond the five real
+// ones (clip, image, video, audio, text).
+//
+// THE KEYS ARE snake_case ON PURPOSE, matching Video Prompt: Python's
+// parse_state reads them directly, so there is no camelCase-to-snake mapping
+// layer to get out of step.
+//
+// THE FORMULA IS IN HERE, not in a file. That is the deliberate difference
+// from Video Prompt. Three consequences, all wanted:
+//   - a duplicate of the node gets its own copy, so a chain can hold three
+//     different instructions;
+//   - a shared workflow carries its instructions with it;
+//   - the formula is part of the node's cache signature, so editing it
+//     re-runs by itself. Video Prompt's formulas live on disk and needed an
+//     IS_CHANGED fingerprint bolted on afterwards, because editing one
+//     changed nothing until something else did (video-prompt.md #8).
+
+export const CLASS = "PixaromaAIPrompt";
+export const HIDDEN_INPUT = "AIPromptState";
+export const STATE_PROP = "aiPromptState";
+
+export const MIN_W = 320;
+export const DEFAULT_W = 400;
+export const MIN_H = 300;
+export const DEFAULT_H = 430;
+
+export const SEED_FIXED = "fixed";
+export const SEED_RANDOM = "random";
+
+export const ORDER_IDEA = "idea";
+export const ORDER_WIRED = "wired";
+
+// Mirrors Prompt Pixaroma's SEP_OPTIONS and the Python SEP_MAP, so wiring text
+// into either node behaves the same way.
+export const SEP_OPTIONS = [
+  ["newline", "New line"],
+  ["blank", "Blank line"],
+  ["space", "Space"],
+  ["comma", "Comma"],
+  ["period", "Full stop"],
+  ["pipe", "Pipe"],
+  ["break", "BREAK"],
+  ["none", "Nothing"],
+];
+
+// Same ratio model as Video Prompt: the idea box and the prompt box share the
+// node's height, and the grip between them moves the line. A RATIO rather than
+// a pixel height because every rect measured inside a node body is in SCREEN
+// pixels (element px times the canvas zoom), so a stored pixel height is wrong
+// at every zoom but the one it was set at.
+export const IDEA_SHARE_DEFAULT = 0.36;
+export const IDEA_SHARE_MIN = 0.12;
+export const IDEA_SHARE_MAX = 0.8;
+
+export const DEFAULT_STATE = {
+  // --- what Python reads --------------------------------------------------
+  idea: "",
+  formula: "",
+  // Empty on purpose. Video Prompt ships a filename and auto-picks a
+  // substitute because it cannot work without a vision model; this node CAN
+  // work with none - it passes its text through - so there is nothing to
+  // guess and nothing to go wrong on somebody else's machine.
+  model: "",
+  clip_type: "minimax",
+  order: ORDER_IDEA,
+  sep: "newline",
+  seed: 0,
+  // Core's Generate Text defaults, exactly, so a workflow moved between the
+  // two nodes behaves the same (comfy_extras/nodes_textgen.py).
+  temperature: 0.7,
+  max_length: 512,
+  top_k: 64,
+  top_p: 0.95,
+  min_p: 0.05,
+  repetition_penalty: 1.05,
+  presence_penalty: 0.0,
+  do_sample: true,
+  thinking: false,
+  use_default_template: true,
+  release_model: false,
+  passthrough: true,
+  // --- face only, never sent (see PROMPT_KEYS) ----------------------------
+  seed_mode: SEED_FIXED,
+  idea_share: IDEA_SHARE_DEFAULT,
+};
+
+// Exactly the keys Python reads. Anything outside this list is presentation,
+// and sending it would change the node's cache signature - so dragging the
+// grip to make the text box taller would re-run a 10 GB model
+// (reference_cosmetic_key_in_injected_state_recaches).
+const PROMPT_KEYS = [
+  "idea", "formula", "model", "clip_type", "order", "sep", "seed",
+  "temperature", "max_length", "top_k", "top_p", "min_p",
+  "repetition_penalty", "presence_penalty", "do_sample", "thinking",
+  "use_default_template", "release_model", "passthrough",
+];
+
+function num(value, fallback, lo, hi) {
+  const out = typeof value === "number" ? value : parseFloat(value);
+  if (!Number.isFinite(out)) return fallback;
+  return Math.max(lo, Math.min(hi, out));
+}
+
+function str(value, fallback) {
+  return typeof value === "string" ? value : fallback;
+}
+
+export function readState(node) {
+  const raw = node?.properties?.[STATE_PROP];
+  const st = { ...DEFAULT_STATE, ...(raw && typeof raw === "object" ? raw : {}) };
+  st.idea = str(st.idea, "");
+  st.formula = str(st.formula, "");
+  st.model = str(st.model, "").trim();
+  st.clip_type = str(st.clip_type, "").trim() || "minimax";
+  st.order = st.order === ORDER_WIRED ? ORDER_WIRED : ORDER_IDEA;
+  st.sep = SEP_OPTIONS.some(([k]) => k === st.sep) ? st.sep : "newline";
+  st.seed = Math.trunc(num(st.seed, 0, 0, Number.MAX_SAFE_INTEGER));
+  st.seed_mode = st.seed_mode === SEED_RANDOM ? SEED_RANDOM : SEED_FIXED;
+  st.temperature = num(st.temperature, 0.7, 0.01, 2);
+  st.max_length = Math.trunc(num(st.max_length, 512, 1, 32768));
+  st.top_k = Math.trunc(num(st.top_k, 64, 0, 1000));
+  st.top_p = num(st.top_p, 0.95, 0, 1);
+  st.min_p = num(st.min_p, 0.05, 0, 1);
+  st.repetition_penalty = num(st.repetition_penalty, 1.05, 0, 5);
+  st.presence_penalty = num(st.presence_penalty, 0, 0, 5);
+  st.do_sample = st.do_sample !== false;
+  st.thinking = st.thinking === true;
+  st.use_default_template = st.use_default_template !== false;
+  st.release_model = st.release_model === true;
+  st.passthrough = st.passthrough !== false;
+  st.idea_share = num(st.idea_share, IDEA_SHARE_DEFAULT, IDEA_SHARE_MIN, IDEA_SHARE_MAX);
+  return st;
+}
+
+export function writeState(node, patch) {
+  if (!node) return { ...DEFAULT_STATE };
+  const next = { ...readState(node), ...(patch || {}) };
+  node.properties = node.properties || {};
+  node.properties[STATE_PROP] = next;
+  return next;
+}
+
+// ---------------------------------------------------------------------------
+// Wires
+// ---------------------------------------------------------------------------
+export function slotConnected(node, name) {
+  const inputs = node?.inputs || [];
+  for (const inp of inputs) {
+    if (inp && inp.name === name) return inp.link != null;
+  }
+  return false;
+}
+
+/** What is wired in, as a short phrase for the banner. Reads the WIRES, which
+ *  is not the same as what arrived: a muted loader is dropped by
+ *  graphToPrompt, so the readout below the prompt reports what really ran. */
+export function wiredSummary(node) {
+  const bits = [];
+  if (slotConnected(node, "image")) bits.push("image");
+  if (slotConnected(node, "video")) bits.push("video");
+  if (slotConnected(node, "audio")) bits.push("audio");
+  if (slotConnected(node, "text")) bits.push("text");
+  if (!bits.length) return "nothing wired";
+  return bits.join(" + ") + " wired";
+}
+
+/** The one rule: a model (picked or on a wire) AND something to send. */
+export function willGenerate(node) {
+  const st = readState(node);
+  if (!st.model && !slotConnected(node, "clip")) return false;
+  if (st.formula.trim() || st.idea.trim()) return true;
+  // Nothing typed here, but wired text counts as something to send. We cannot
+  // see its VALUE from the browser, only that a wire exists.
+  return slotConnected(node, "text");
+}
+
+// ---------------------------------------------------------------------------
+// Seed
+// ---------------------------------------------------------------------------
+export function rollSeed() {
+  // Number.MAX_SAFE_INTEGER, not the full 64-bit range: above it a value stops
+  // round-tripping through JSON as the same integer, and a seed that changed
+  // on the way to Python would break Fixed mode's whole promise.
+  return Math.floor(Math.random() * Number.MAX_SAFE_INTEGER);
+}
+
+/**
+ * The seed this run will use.
+ *
+ * Random rolls a fresh one per run, so the state - and therefore the node's
+ * cache signature - differs and the model runs again. Fixed reuses the stored
+ * number, so an unchanged node is cached and Run is instant. That is Seed
+ * Pixaroma's model, and it is why there is no nonce here.
+ *
+ * The rolled number goes on a RUNTIME field, never node.properties, so a run
+ * can never mark a clean workflow as modified (Vue Compat #18).
+ */
+export function seedForRun(node) {
+  const st = readState(node);
+  if (st.seed_mode !== SEED_RANDOM) return st.seed;
+  const rolled = rollSeed();
+  node._pixApLastSeed = rolled;
+  return rolled;
+}
+
+export function injectedState(node) {
+  const st = readState(node);
+  const out = {};
+  for (const key of PROMPT_KEYS) out[key] = st[key];
+  out.seed = seedForRun(node);
+  return out;
+}
+
+export function displaySeed(node) {
+  const st = readState(node);
+  if (st.seed_mode === SEED_RANDOM && Number.isFinite(node?._pixApLastSeed)) {
+    return node._pixApLastSeed;
+  }
+  return st.seed;
+}
+
+/** A model filename shortened for the banner, which has one line. */
+export function shortModel(name) {
+  const raw = String(name || "").trim();
+  if (!raw) return "";
+  const base = raw.split(/[\\/]/).pop().replace(/\.(safetensors|sft|gguf|pt|bin)$/i, "");
+  return base.length > 34 ? base.slice(0, 32) + "…" : base;
+}

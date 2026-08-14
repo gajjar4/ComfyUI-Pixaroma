@@ -3854,3 +3854,28 @@ async def api_video_prompt_reset(request):
                                  headers=_vp_no_store())
     ok = _vp.reset_formula(mode)
     return web.json_response({"ok": bool(ok)}, headers=_vp_no_store())
+
+
+# ---------------------------------------------------------------------------
+# AI Prompt Pixaroma
+# ---------------------------------------------------------------------------
+@PromptServer.instance.routes.get("/pixaroma/api/ai_prompt/models")
+async def api_ai_prompt_models(request):
+    """The text encoders on disk, for the node's model picker.
+
+    That is ALL this node needs from the server - its formula lives on the
+    node, not in a file, so there is nothing here to save or reset.
+
+    Re-listed on every panel open (convention #18): a custom picker backed by
+    our own route gets nothing from ComfyUI's R refresh, so a session cache
+    would look permanently stale after a rename. `error` is reported separately
+    so an empty folder and a failed scan cannot be confused - saying [] for a
+    scan failure would tell the user they own no models at all.
+    """
+    try:
+        models = list(folder_paths.get_filename_list("text_encoders"))
+        return web.json_response({"models": models}, headers=_vp_no_store())
+    except Exception as e:
+        return web.json_response(
+            {"models": [], "error": str(e)}, headers=_vp_no_store()
+        )
