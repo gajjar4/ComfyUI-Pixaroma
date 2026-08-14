@@ -23,7 +23,7 @@ import {
   writeState,
 } from "./core.mjs";
 import { deletePreset, fetchModels, fetchPresets, savePreset } from "./api.mjs";
-import { SETTING_KEYS } from "./core.mjs";
+import { DEFAULT_STATE, SETTING_KEYS } from "./core.mjs";
 
 const CSS_ID = "pixaroma-ai-prompt-panel-css";
 
@@ -190,7 +190,7 @@ function openPop(anchor, values, current, onPick, opts) {
       none.style.color = "#888";
       list.appendChild(none);
     }
-    for (const [value, label] of hits) {
+    for (const [value, label, hoverTitle] of hits) {
       // The empty value is the "None" sentinel, not a file. Without this it got
       // marked "(no vision)" - nonsense for a state the node documents as a
       // working one - and because .is-blind is declared after .is-on at equal
@@ -204,9 +204,12 @@ function openPop(anchor, values, current, onPick, opts) {
       // and .generate exists on the wrapper - so picking one is completely
       // silent and the node writes a confident caption for a picture the
       // model never saw.
-      row.title = vision ? label
+      // A caller may supply its own hover text (the preset list uses it to say
+      // which model each preset was measured with). Rows stay names-only -
+      // secondary detail belongs in the title, not on the row (convention #27).
+      row.title = hoverTitle || (vision ? label
         : label + "  -  does not look like a vision model, so it cannot see "
-          + "pictures. Fine for a text step in a chain.";
+          + "pictures. Fine for a text step in a chain.");
       row.addEventListener("click", (e) => {
         e.stopPropagation();
         closePop();
@@ -523,13 +526,32 @@ function renderPanel(node, body) {
   );
   body.appendChild(nums);
 
+  // The disclosure and the Reset share one line, so neither costs a row.
+  const advRow = el("div", "pix-app-row");
   const adv = el("div", "pix-app-adv",
     (node._pixApAdvOpen ? "▼" : "▶") + " Advanced sampling");
   adv.addEventListener("click", () => {
     node._pixApAdvOpen = !node._pixApAdvOpen;
     renderPanel(node, body);
   });
-  body.appendChild(adv);
+  // "Changed" means different from the node's own defaults, so the button is
+  // dead until there is genuinely something to undo - which is also how the
+  // user can see at a glance whether anything has been fiddled with.
+  const drifted = SETTING_KEYS.filter((k) => st[k] !== DEFAULT_STATE[k]);
+  const reset = el("button", "pix-app-btn", "Reset");
+  reset.style.flex = "0 0 auto";
+  reset.disabled = !drifted.length;
+  reset.title = drifted.length
+    ? "Put the sampling settings back to the defaults. Changed: "
+      + drifted.join(", ") + ". The formula is left alone."
+    : "The sampling settings are already at their defaults.";
+  reset.addEventListener("click", () => {
+    const patch = {};
+    for (const key of SETTING_KEYS) patch[key] = DEFAULT_STATE[key];
+    set(patch);
+  });
+  advRow.append(adv, el("span", "cnt", drifted.length ? drifted.length + " changed" : ""), reset);
+  body.appendChild(advRow);
 
   if (node._pixApAdvOpen) {
     const r1 = el("div", "pix-app-nums");
@@ -652,10 +674,23 @@ function renderPanel(node, body) {
   const all = PRESETS.shipped.concat(PRESETS.user);
   const userNames = new Set(PRESETS.user.map((p) => p.name.toLowerCase()));
 
+  // The row shows the preset that is on the node, so reopening the panel tells
+  // you what you are looking at without having to remember.
+  const loaded = all.find((p) => p.formula === st.formula);
   body.appendChild(pickRow(
-    all.length ? "Load a preset…" : "No presets yet",
+    loaded ? loaded.name : (all.length ? "Load a preset…" : "No presets yet"),
     (anchor) => {
-      openPop(anchor, all.map((p) => [p.name, p.name]), null, (name) => {
+      // Each row carries its model in the hover, so you can see what a preset
+      // was measured with BEFORE you load it, without cluttering the list.
+      const rows = all.map((p) => [p.name, p.name,
+        p.name + (p.model_hint ? "\nMeasured with " + p.model_hint
+                                 + (MODELS.models.includes(p.model_hint)
+                                    ? " (you have it)" : " (you do NOT have it)")
+                               : "\nNo model recorded")
+        + (p.settings && p.settings.temperature != null
+           ? "\nTemperature " + p.settings.temperature : "")
+        + (p.note ? "\n\n" + p.note : "")]);
+      openPop(anchor, rows, loaded ? loaded.name : null, (name) => {
         const preset = all.find((p) => p.name === name);
         if (!preset) return;
         if (readState(node).formula.trim() &&
@@ -679,12 +714,12 @@ function renderPanel(node, body) {
         set(patch);
       }, { markVision: false });
     },
-    { title: "Load a saved formula, with the settings it was measured at." },
+    { title: "Load a saved formula, with the settings it was measured at. "
+             + "Hover a name to see which model it was written for." },
   ));
 
   const withSettings = node._pixApPresetSettings !== false;
-  body.appendChild(toggleRow("Load the settings too, not just the wording",
-    withSettings,
+  body.appendChild(toggleRow("Bring its settings too", withSettings,
     (v) => { node._pixApPresetSettings = v; renderPanel(node, body); },
     "On, a preset also sets temperature and the sampling values it was measured "
     + "at. Off, only the formula text is loaded and your own settings stay."));
@@ -729,37 +764,35 @@ function renderPanel(node, body) {
   prow.append(saveBtn, delBtn);
   body.appendChild(prow);
 
-  // Which preset is on this node right now, recognised by its formula so it
-  // survives a reload and a duplicate without anything extra being stored.
-  const chosen = all.find((p) => p.formula === st.formula);
-  if (chosen) {
-    if (chosen.note) {
-      body.appendChild(el("div", "pix-app-note plain", chosen.note));
+  // ONE line about the loaded preset, not two. It answers the only question
+  // worth answering here - which model this recipe was written for, and
+  // whether that is what is about to run - and goes amber only when those
+  // disagree in a way that will change the result.
+  if (loaded) {
+    const hint = loaded.model_hint;
+    const wired = slotConnected(node, "clip");
+    let line = "";
+    let warn = false;
+    if (!hint) {
+      line = "No model was recorded with this preset.";
+    } else if (wired) {
+      line = "Written for " + hint + ". Your wired model is being used instead.";
+    } else if (!MODELS.models.includes(hint)) {
+      line = "Written for " + hint + ", which you do not have. Your own model "
+           + "was left alone, so results may differ.";
+      warn = true;
+    } else if (st.model !== hint) {
+      line = "Written for " + hint + ", but this node is set to "
+           + (st.model || "none") + ".";
+      warn = true;
+    } else {
+      line = "Written for " + hint + ", which is what this node is using.";
     }
-    const hint = chosen.model_hint;
-    if (hint) {
-      const have = MODELS.models.includes(hint);
-      const wired = slotConnected(node, "clip");
-      let line;
-      if (wired) {
-        line = "Measured with " + hint + ". Your wired model is being used "
-             + "instead, which is fine if it is a similar size.";
-      } else if (!have) {
-        // The case that used to say nothing at all: the preset named a model
-        // this machine does not have, so the node kept whatever it had.
-        line = "This preset was saved with " + hint + ", which is not in your "
-             + "text_encoders folder, so your own model was left alone. Results "
-             + "may differ from the settings it was measured at.";
-      } else if (st.model !== hint) {
-        line = "This preset was saved with " + hint + ". You have that model, "
-             + "but this node is set to " + (st.model || "none") + ".";
-      } else {
-        line = "Saved and measured with " + hint + ", which is what this node "
-             + "is using.";
-      }
-      body.appendChild(el("div",
-        "pix-app-note" + (have || wired ? " plain" : ""), line));
-    }
+    const note = el("div", "pix-app-note" + (warn ? "" : " plain"), line);
+    // The preset's own description stays as hover text rather than a second
+    // paragraph - it is background, not something you need on every open.
+    if (loaded.note) note.title = loaded.note;
+    body.appendChild(note);
   } else if (!all.length) {
     body.appendChild(el("div", "pix-app-note plain",
       "Presets that ship with Pixaroma will appear here."));
