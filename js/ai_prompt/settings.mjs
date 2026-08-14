@@ -190,7 +190,12 @@ function openPop(anchor, values, current, onPick, opts) {
       list.appendChild(none);
     }
     for (const [value, label] of hits) {
-      const vision = !mark || looksVision(value);
+      // The empty value is the "None" sentinel, not a file. Without this it got
+      // marked "(no vision)" - nonsense for a state the node documents as a
+      // working one - and because .is-blind is declared after .is-on at equal
+      // specificity, its grey also beat the orange selected highlight, so the
+      // most common state showed no selection at all.
+      const vision = !mark || value === "" || looksVision(value);
       const row = el("div", (value === current ? "is-on" : "") +
                             (vision ? "" : " is-blind"), label);
       // Marking matters more than it looks: every tokenizer in the chain ends
@@ -712,8 +717,12 @@ export async function openAIPromptPanel(node, onChange) {
   };
 
   body.textContent = "Loading...";
-  MODELS = await fetchModels();
-  // The panel may have been closed while the request was in flight.
+  // Land it in a LOCAL first and publish only after the staleness guard.
+  // Writing the module singleton before the check let a slow request for a
+  // closed panel clobber the list a newer panel had already rendered from, so
+  // the next re-render in that newer panel showed the older node's models.
+  const fetched = await fetchModels();
   if (PANEL !== panel) return;
+  MODELS = fetched;
   renderPanel(node, body);
 }

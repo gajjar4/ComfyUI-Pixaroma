@@ -152,7 +152,11 @@ export function injectCSS() {
       flex:0 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis;
       white-space:nowrap; text-align:right; }
     .pix-ap-meta.is-error { color:#e0a33a; }
-    .pix-ap-meta.is-stale { color:#7d7a4a; }
+    /* No .is-stale rule here on purpose. Video Prompt marks a readout that no
+       longer matches the node's current settings; porting that needs the
+       matching stamp-and-compare in applyResult/renderFace, which this node
+       does not have, and a CSS class nothing ever sets is just a promise the
+       code does not keep. */
 
     .pix-ap-idea, .pix-ap-out { background:#191919; border:1px solid #343436;
       border-radius:4px; padding:6px 8px; color:#ddd9d4; font:11.5px/1.45 monospace;
@@ -196,12 +200,22 @@ export function injectCSS() {
 // Small helpers
 // ---------------------------------------------------------------------------
 function flash(button, label) {
-  const original = button.textContent;
+  if (!button) return;
+  // Cache the ORIGINAL once and cancel any pending restore. Capturing it fresh
+  // on every call meant a second click inside the 700ms window captured
+  // "Copied" as the original, so the button read "Copied" for the rest of the
+  // session - and not even green, so it just looked broken. Nothing in
+  // renderFace rewrites button labels, so nothing ever put it right.
+  // Reproduced here before fixing; the sibling node had already learned this.
+  clearTimeout(button._pixFlashT);
+  if (button._pixFlashOrig == null) button._pixFlashOrig = button.textContent;
   button.classList.add("is-flash");
-  button.textContent = label;
-  setTimeout(() => {
+  if (label) button.textContent = label;
+  button._pixFlashT = setTimeout(() => {
     button.classList.remove("is-flash");
-    button.textContent = original;
+    if (button._pixFlashOrig != null) button.textContent = button._pixFlashOrig;
+    button._pixFlashOrig = null;
+    button._pixFlashT = null;
   }, 700);
 }
 
