@@ -126,51 +126,56 @@ export const AI_PROMPT_HELP = {
         + "rambles, invents objects and sometimes refuses at 0.7, using the very "
         + "same words on the very same model. So a preset carries the wording "
         + "AND the settings it was measured at.\n\n"
-        + "Open the settings and look under Presets. Pick one from the list and "
-        + "it fills in the formula, the temperature and the sampling values in "
-        + "one go. If you only want the wording and would rather keep your own "
-        + "settings, turn off \"Load the settings too\" first.\n\n"
-        + "Save current keeps whatever this node has right now under a name of "
-        + "your choosing, so your own recipes sit in the same list. Delete only "
-        + "ever offers your own: the ones that ship with Pixaroma stay put.\n\n"
-        + "Hover a preset's name in the list to see which model it was written "
-        + "for, whether you have that model, and what temperature it wants, all "
-        + "before you load it. Once loaded, the picker row shows its name so you "
-        + "always know what is on the node.\n\n"
-        + "Changed a lot of settings and want to start over? Reset, on the "
-        + "Advanced sampling line, puts the sampling values back to the "
-        + "defaults and leaves your formula and model alone. It only wakes up "
-        + "when something has actually been changed, and it tells you what.\n\n"
-        + "A preset also remembers which model it was measured with. If you have "
-        + "that model it is selected for you; if you do not, the line under the "
-        + "picker says so in amber and your own model is left alone, so a preset "
-        + "shared from another machine can never point this node at something "
-        + "that is not there. The same line tells you when a wired model is "
-        + "being used instead.\n\n"
-        + "The list holds two kinds, and hovering a name tells you which. The "
-        + "ones that ship with Pixaroma are on every machine that installs it, "
-        + "so a formula like Krea 2 is already there for everybody and you never "
-        + "need to send it to anyone. New ones arrive with a Pixaroma update.\n\n"
-        + "Your own are kept together in one file of your own:\n"
+        + "It also remembers which model it was written for. If you have that "
+        + "model it is chosen for you; if you do not, the line under the picker "
+        + "says so in amber and your own model is left alone, so a preset from "
+        + "somebody else's machine can never point this node at something that "
+        + "is not there.\n\n"
+        + "Everything below is in the settings, under Presets.",
+      defs: [
+        ["Pick one from the list", "Fills in the formula, the temperature and the sampling values in one go. Turn off \"Bring its settings too\" first if you want the wording only."],
+        ["Hover a name", "Shows whether it is yours or one that ships with Pixaroma, which model it was written for, whether you have that model, and its temperature. All before you load it."],
+        ["Save current", "Keeps whatever this node has right now under a name you choose, so your own recipes sit in the same list."],
+        ["Delete", "Only ever offers your own. The ones that ship with Pixaroma stay put."],
+        ["Reset", "On the Advanced sampling line. Puts the sampling values back to the defaults and leaves your formula and model alone. It wakes up only when something has really changed, and its tooltip names what."],
+      ],
+    },
+    {
+      heading: "Sending a recipe to somebody else",
+      body:
+        "Export and Import sit beside the formula in the settings, and they "
+        + "carry the whole recipe: the wording, the sampling settings, and the "
+        + "model it was written for. Sending only the words would send something "
+        + "that looks broken, because the temperature is half of why it works.\n\n"
+        + "Each one offers a file or the clipboard. Pick whichever suits.",
+      defs: [
+        ["Export, then Save as a file", "Writes a .txt you can keep, back up, or send to somebody."],
+        ["Export, then Copy to clipboard", "Puts the same thing on the clipboard, ready to paste straight into a Discord message."],
+        ["Import, then Open a file", "Loads a .txt somebody sent you."],
+        ["Import, then Paste from clipboard", "Loads one you have just copied out of a message."],
+      ],
+    },
+    {
+      heading: "Where your presets are kept",
+      body:
+        "The list holds two kinds, and hovering a name tells you which.\n\n"
+        + "The ones that ship with Pixaroma are on every machine that installs "
+        + "it, so a formula like Krea 2 is already there for everybody and you "
+        + "never need to send it to anyone. New ones arrive with a Pixaroma "
+        + "update.\n\n"
+        + "Your own are kept together in one file:\n"
         + "`ComfyUI/user/pixaroma/ai_prompt_presets.json`\n"
         + "That sits outside the plugin folder, so updating or reinstalling "
-        + "Pixaroma cannot wipe them, and it is the single file to copy when you "
+        + "Pixaroma cannot wipe them, and it is the one file to copy when you "
         + "move to another machine.\n\n"
-        + "To hand one of yours to somebody else, use Export beside the "
-        + "formula. It carries the whole recipe: the wording, the sampling "
-        + "settings, and the model it was written for. Save as a file gives "
-        + "you a .txt to send or keep; Copy to clipboard puts the same thing "
-        + "on the clipboard, ready to paste straight into a Discord message.\n\n"
-        + "At the other end, Import takes either one: Open a file, or Paste "
-        + "from clipboard. Anything that arrives with a name is added to their "
-        + "presets automatically, so it is in the list next time too.\n\n"
-        + "The file is ordinary readable text, so it can be opened in Notepad "
-        + "and the temperature changed by hand. A plain .txt with no header "
-        + "still loads as the formula on its own, exactly as it always did, so "
-        + "older exports and any prompt you already had lying around still "
-        + "work.",
+        + "A recipe you import that arrives with a name is added to that list by "
+        + "itself, so it is there next time too. The file it came from is "
+        + "ordinary readable text: you can open it in Notepad and change the "
+        + "temperature by hand. And a plain .txt with no header still loads as "
+        + "the formula on its own, exactly as it always did, so older exports "
+        + "and any prompt you already had lying around still work.",
       defs: [
-        ["Krea 2 - text to image", "Built from Krea's own published prompt-expansion instructions, then tightened by watching where it went wrong. Measured on Qwen3-VL 4B and 8B."],
+        ["Krea 2 - text to image", "The one that ships. Built from Krea's own published prompt-expansion instructions, then tightened by watching where it went wrong. Measured on Qwen3-VL 4B and 8B."],
       ],
     },
     {
