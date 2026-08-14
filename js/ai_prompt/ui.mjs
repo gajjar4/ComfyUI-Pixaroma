@@ -163,10 +163,19 @@ export function injectCSS() {
     .pix-ap-idea, .pix-ap-out { background:#191919; border:1px solid #343436;
       border-radius:4px; padding:6px 8px; color:#ddd9d4; font:11.5px/1.45 monospace;
       resize:none; outline:none; box-sizing:border-box; width:100%; }
-    .pix-ap-idea:focus, .pix-ap-out:focus { border-color:${ACC}; }
+    /* ONLY the idea box takes the accent on focus. The readout is readOnly, and
+       a focus ring is the strongest "you can type here" cue there is. */
+    .pix-ap-idea:focus { border-color:${ACC}; }
     .pix-ap-idea { flex:var(--pix-ap-idea-grow,360) 1 0; min-height:44px; }
-    .pix-ap-out { flex:var(--pix-ap-out-grow,640) 1 0; min-height:64px; }
-    .pix-ap-idea::placeholder, .pix-ap-out::placeholder { color:#5c5a57; }
+    /* The PROMPT readout is a preview, not an input, so it wears Prompt
+       Pixaroma's read-only surface (.pix-prm-expand): a LIGHTER, raised panel
+       rather than the sunken dark field an editable box uses. Reported as
+       "since text is on dark background look like is editable". Still
+       selectable and copyable - cursor:text says so. */
+    .pix-ap-out { flex:var(--pix-ap-out-grow,640) 1 0; min-height:64px;
+      background:#2d2d2d; border-color:#3a3a3a; color:#d8d8d8; cursor:text; }
+    .pix-ap-idea::placeholder { color:#5c5a57; }
+    .pix-ap-out::placeholder { color:#7d7a76; }
 
     .pix-ap-grip { height:9px; flex:0 0 auto; display:flex; align-items:center;
       justify-content:center; cursor:ns-resize; }

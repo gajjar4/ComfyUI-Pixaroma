@@ -151,11 +151,18 @@ export function injectCSS() {
     flex:var(--pix-vp-idea-grow,320) 1 0; min-height:44px;
   }
   .pix-vp-idea:focus{ border-color:${ACC}; }
+  /* The PROMPT readout is a preview, not an input. It wears Prompt Pixaroma's
+     read-only surface (.pix-prm-expand): a LIGHTER, raised panel instead of the
+     sunken dark field an editable box uses, and NO accent on focus - a focus
+     ring is the strongest "you can type here" cue there is, and this box is
+     readOnly. Reported alongside the AI Prompt one. Still selectable and
+     copyable; cursor:text says so. Declared before the .is-error / .is-stale
+     rules below, so those still win on their border and opacity. */
   .pix-vp-out{
     flex:var(--pix-vp-out-grow,680) 1 0; min-height:64px; line-height:1.45;
-    font-size:11px; color:#bbb; cursor:text;
+    font-size:11px; color:#d8d8d8; cursor:text;
+    background:#2d2d2d; border-color:#3a3a3a;
   }
-  .pix-vp-out:focus{ border-color:${ACC}; }
 
   /* The grab strip under the idea box. Negative margins so a 9px target costs
      about 1px of layout inside the 6px row gap it already sits in. */
