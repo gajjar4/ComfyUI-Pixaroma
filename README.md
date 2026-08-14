@@ -369,7 +369,12 @@ Master the Pixaroma suite with our video guides and workflow deep-dives:
 
 ## 🛠 Changelog
 
-### **August 14, 2026 · v1.4.107**
+### **August 14, 2026 · v1.4.107–v1.4.108**
+- **Your written prompt stays put.** On AI Prompt and Video Prompt it used to vanish the moment you switched workflow tab and came back. It is kept with the workflow now, along with the seed that wrote it, so the number beside the text is the one that made it.
+- **The Krea 2 idea recipe keeps the look you asked for.** Say cartoon, illustration or 3D animation and it says so in the prompt instead of quietly writing a photograph, and a colourful idea comes out colourful rather than moody. On a node you already have, load the preset again to pick it up.
+- **AI Prompt's banner says what it is sending.** With a model on the wire and your idea typed in it used to read "nothing wired", which looked like a warning on a node that was about to work perfectly well.
+- **The formula box in the settings panel scrolls.** It was showing about an eighth of a long recipe with no way to reach or copy the rest.
+- **The prompt box looks like a preview**, not somewhere to type, since it never was.
 - **NEW: AI Prompt Pixaroma.** Give it a model and an instruction you save on the node, wire in whatever you have, and it writes text. Runs on your own machine, no account and no key. It comes with six ready-made recipes for Krea 2, Z-Image and audio and video work, each naming the model it was written for.
 - **It reads pictures, audio and video, not just text.** Point it at a photo to get the prompt that would make a similar one, at a recording to get the words or the mood, or at a clip to get a video prompt describing what happens.
 - **Chain them.** The output is plain text and the text input takes plain text, so one node describes a photo, the next restyles it, and nothing goes in between.
