@@ -125,8 +125,8 @@ export const AI_PROMPT_HELP = {
     {
       heading: "Presets: a formula and the settings that make it work",
       body:
-        "A formula on its own is only half a recipe. The Krea 2 formula that "
-        + "ships with this node writes beautifully at temperature 0.3 and "
+        "A formula on its own is only half a recipe. The Krea 2 idea formula "
+        + "that ships with this node writes beautifully at temperature 0.3 and "
         + "rambles, invents objects and sometimes refuses at 0.7, using the very "
         + "same words on the very same model. So a preset carries the wording "
         + "AND the settings it was measured at.\n\n"
@@ -141,7 +141,7 @@ export const AI_PROMPT_HELP = {
         ["Hover a name", "Shows whether it is yours or one that ships with Pixaroma, which model it was written for, whether you have that model, and its temperature. All before you load it."],
         ["Save current", "Keeps whatever this node has right now under a name you choose, so your own recipes sit in the same list."],
         ["Delete", "Only ever offers your own. The ones that ship with Pixaroma stay put."],
-        ["Reset", "On the Advanced sampling line. Puts the sampling values back to the defaults and leaves your formula and model alone. It wakes up only when something has really changed, and its tooltip names what."],
+        ["Reset", "On the Advanced sampling line. Puts the sampling values back to the defaults and leaves your formula and model alone. It covers everything a preset can carry, so the two Behaviour switches at the bottom go back too. It wakes up only when something has really changed, and its tooltip names what."],
       ],
     },
     {

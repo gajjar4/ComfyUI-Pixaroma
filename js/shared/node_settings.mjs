@@ -771,10 +771,29 @@ export function createAccentSection(node, opts = {}) {
   txt.appendChild(el("div", "sub", opts.hint || "This node only. Save it as a default below."));
   row.append(sw, txt);
 
+  // PIN THE WIDTH for the duration. Measured: the label going to "Saved"
+  // shrank this button from 149px to 57px, which on the narrow panels
+  // (Save Image 300px, Save Video 320px) collapsed the two-button row from two
+  // lines to one and took 35px off the panel height. Panels re-place
+  // themselves when their height changes, so the whole panel slid out from
+  // under the cursor and back again 1.2s later. Node UI convention #2 asks for
+  // this on every flash-label button, for exactly this reason.
+  //
+  // The original is cached ONCE and any pending restore cancelled. Capturing
+  // it fresh each call means a second click inside the window captures "Saved"
+  // as the original, and the button reads "Saved" for the rest of the session
+  // - the same bug this pack has now had to fix twice elsewhere, so this is
+  // the proven shape rather than a fresh one.
   const flash = (btn, text) => {
-    const was = btn.textContent;
+    clearTimeout(btn._pixFlashT);
+    if (btn._pixFlashOrig == null) {
+      btn._pixFlashOrig = btn.textContent;
+      btn.style.minWidth = Math.ceil(btn.getBoundingClientRect().width) + "px";
+    }
     btn.textContent = text;
-    setTimeout(() => { btn.textContent = was; }, 1200);
+    btn._pixFlashT = setTimeout(() => {
+      if (btn._pixFlashOrig != null) btn.textContent = btn._pixFlashOrig;
+    }, 1200);
   };
 
   const btns = el("div", "pix-nset-row");
