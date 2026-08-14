@@ -22,7 +22,8 @@ import {
   slotConnected,
   writeState,
 } from "./core.mjs";
-import { fetchModels } from "./api.mjs";
+import { deletePreset, fetchModels, fetchPresets, savePreset } from "./api.mjs";
+import { SETTING_KEYS } from "./core.mjs";
 
 const CSS_ID = "pixaroma-ai-prompt-panel-css";
 
@@ -321,6 +322,7 @@ let ON_CHANGE = null;
 let USER_MOVED = false;
 let CP_HANDLE = null;
 let MODELS = { ok: true, models: [], error: null };
+let PRESETS = { ok: true, shipped: [], user: [] };
 
 export function panelIsOpenFor(node) {
   return !!PANEL && PANEL_NODE === node;
@@ -642,6 +644,105 @@ function renderPanel(node, body) {
   frow.appendChild(el("span", "cnt", st.formula.length.toLocaleString()));
   body.appendChild(frow);
 
+  // ---- PRESETS -------------------------------------------------------------
+  // A preset is the formula AND the settings that make it work. Shipping the
+  // Krea 2 wording without temperature 0.3 would ship something that reads as
+  // broken, because the same words ramble and invent objects at 0.7.
+  body.appendChild(el("div", "pix-app-sec", "Presets"));
+  const all = PRESETS.shipped.concat(PRESETS.user);
+  const userNames = new Set(PRESETS.user.map((p) => p.name.toLowerCase()));
+
+  body.appendChild(pickRow(
+    all.length ? "Load a preset…" : "No presets yet",
+    (anchor) => {
+      openPop(anchor, all.map((p) => [p.name, p.name]), null, (name) => {
+        const preset = all.find((p) => p.name === name);
+        if (!preset) return;
+        if (readState(node).formula.trim() &&
+            !window.confirm("Replace this node's formula with \"" + name + "\"?")) return;
+        const patch = { formula: preset.formula };
+        // The user's choice: the wording alone, or the whole recipe.
+        if (node._pixApPresetSettings !== false && preset.settings) {
+          for (const key of SETTING_KEYS) {
+            if (key in preset.settings) patch[key] = preset.settings[key];
+          }
+        }
+        // A model hint is only APPLIED when that file is actually here, and
+        // never over a wired clip. Otherwise it is reported, not forced - a
+        // preset shared from another machine must not silently point this node
+        // at a model that does not exist.
+        const hint = preset.model_hint;
+        if (hint && !slotConnected(node, "clip")) {
+          if (MODELS.models.includes(hint)) patch.model = hint;
+          else if (!readState(node).model) {
+            setTimeout(() => window.alert(
+              "\"" + name + "\" was measured with " + hint +
+              ", which is not in your text_encoders folder. The formula and the "
+              + "settings loaded; pick a model yourself."), 0);
+          }
+        }
+        set(patch);
+      }, { markVision: false });
+    },
+    { title: "Load a saved formula, with the settings it was measured at." },
+  ));
+
+  const withSettings = node._pixApPresetSettings !== false;
+  body.appendChild(toggleRow("Load the settings too, not just the wording",
+    withSettings,
+    (v) => { node._pixApPresetSettings = v; renderPanel(node, body); },
+    "On, a preset also sets temperature and the sampling values it was measured "
+    + "at. Off, only the formula text is loaded and your own settings stay."));
+
+  const prow = el("div", "pix-app-row");
+  const saveBtn = el("button", "pix-app-btn", "Save current");
+  saveBtn.title = "Save this node's formula and settings as a preset you can reuse.";
+  saveBtn.disabled = !st.formula.trim();
+  saveBtn.addEventListener("click", async () => {
+    const current = readState(node);
+    const name = (window.prompt("Save this formula and its settings as:",
+      node.title && node.title !== "AI Prompt Pixaroma" ? node.title : "") || "").trim();
+    if (!name) return;
+    const settings = {};
+    for (const key of SETTING_KEYS) settings[key] = current[key];
+    const res = await savePreset({
+      name,
+      formula: current.formula,
+      settings,
+      model_hint: slotConnected(node, "clip") ? "" : current.model,
+    });
+    if (!res.ok) { window.alert(res.message || "Could not save that preset."); return; }
+    PRESETS = await fetchPresets();
+    refreshAIPromptPanel(node);
+  });
+
+  const delBtn = el("button", "pix-app-btn", "Delete");
+  delBtn.title = PRESETS.user.length
+    ? "Delete one of your own presets. The ones that ship with Pixaroma stay."
+    : "You have no presets of your own yet.";
+  delBtn.disabled = !PRESETS.user.length;
+  delBtn.addEventListener("click", () => {
+    openPop(delBtn, PRESETS.user.map((p) => [p.name, p.name]), null, async (name) => {
+      if (!window.confirm("Delete your preset \"" + name + "\"?")) return;
+      const res = await deletePreset(name);
+      if (!res.ok) { window.alert(res.message || "Could not delete that preset."); return; }
+      PRESETS = await fetchPresets();
+      refreshAIPromptPanel(node);
+    }, { markVision: false });
+  });
+
+  prow.append(saveBtn, delBtn);
+  body.appendChild(prow);
+
+  const chosen = all.find((p) => p.formula === st.formula);
+  if (chosen && chosen.note) {
+    body.appendChild(el("div", "pix-app-note plain", chosen.note));
+  } else if (!all.length) {
+    body.appendChild(el("div", "pix-app-note plain",
+      "Presets that ship with Pixaroma will appear here."));
+  }
+  void userNames;
+
   // ---- WIRED TEXT ----------------------------------------------------------
   body.appendChild(el("div", "pix-app-sec", "Wired text"));
   const orderLabels = { [ORDER_IDEA]: "My idea first", [ORDER_WIRED]: "Wired text first" };
@@ -721,8 +822,9 @@ export async function openAIPromptPanel(node, onChange) {
   // Writing the module singleton before the check let a slow request for a
   // closed panel clobber the list a newer panel had already rendered from, so
   // the next re-render in that newer panel showed the older node's models.
-  const fetched = await fetchModels();
+  const [fetched, presets] = await Promise.all([fetchModels(), fetchPresets()]);
   if (PANEL !== panel) return;
   MODELS = fetched;
+  PRESETS = presets;
   renderPanel(node, body);
 }

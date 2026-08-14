@@ -101,6 +101,16 @@ const PROMPT_KEYS = [
   "use_default_template", "release_model",
 ];
 
+// Exactly what a PRESET may carry, and it must match SETTING_KEYS in
+// nodes/_ai_prompt_presets.py. The idea, the seed, the join order and the
+// separator are deliberately absent: those belong to the workflow and the
+// wiring, not to the recipe.
+export const SETTING_KEYS = [
+  "temperature", "max_length", "top_k", "top_p", "min_p",
+  "repetition_penalty", "presence_penalty", "do_sample", "thinking",
+  "use_default_template",
+];
+
 function num(value, fallback, lo, hi) {
   const out = typeof value === "number" ? value : parseFloat(value);
   if (!Number.isFinite(out)) return fallback;

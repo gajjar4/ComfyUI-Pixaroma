@@ -119,6 +119,43 @@ export const AI_PROMPT_HELP = {
         + "of your workflow. The button dims to show it is doing nothing.",
     },
     {
+      heading: "Presets: a formula and the settings that make it work",
+      body:
+        "A formula on its own is only half a recipe. The Krea 2 formula that "
+        + "ships with this node writes beautifully at temperature 0.3 and "
+        + "rambles, invents objects and sometimes refuses at 0.7, using the very "
+        + "same words on the very same model. So a preset carries the wording "
+        + "AND the settings it was measured at.\n\n"
+        + "Open the settings and look under Presets. Pick one from the list and "
+        + "it fills in the formula, the temperature and the sampling values in "
+        + "one go. If you only want the wording and would rather keep your own "
+        + "settings, turn off \"Load the settings too\" first.\n\n"
+        + "Save current keeps whatever this node has right now under a name of "
+        + "your choosing, so your own recipes sit in the same list. Delete only "
+        + "ever offers your own: the ones that ship with Pixaroma stay put.\n\n"
+        + "Your presets live in ComfyUI's user folder, well away from the plugin "
+        + "folder, so updating or reinstalling Pixaroma cannot wipe them.",
+      defs: [
+        ["Krea 2 - text to image", "Built from Krea's own published prompt-expansion instructions, then tightened by watching where it went wrong. Measured on Qwen3-VL 4B and 8B."],
+      ],
+    },
+    {
+      heading: "Sharing a workflow's model instead of loading a second one",
+      body:
+        "Some image models use a language model as their text encoder. Krea 2 "
+        + "uses Qwen3-VL, which is exactly the kind of model this node wants. "
+        + "When that is true you can wire the workflow's own CLIP loader "
+        + "straight into this node's clip input and write your prompts with the "
+        + "model that is already in memory. Nothing extra loads, and a whole "
+        + "text-to-image run takes seconds.\n\n"
+        + "The banner changes to Model on wire and Free VRAM dims, because a "
+        + "model that arrived on a wire belongs to the node feeding it.\n\n"
+        + "One thing to watch: a small model needs a lower temperature than a "
+        + "big one. A 4B at 0.7 will echo your formula back at you or invent "
+        + "things you never asked for. At 0.3 it behaves. If a formula seems to "
+        + "be ignored, lower the temperature before you blame the wording.",
+    },
+    {
       heading: "Writing a good formula",
       bullets: [
         "Say what you want back, not what you want it to think about. \"Write one paragraph describing this photo as a video prompt\" beats \"analyse this photo\".",
@@ -153,6 +190,8 @@ export const AI_PROMPT_HELP = {
         ["It describes a picture it cannot have seen", "The model is text-only. It accepts the picture and ignores it, silently. Pick one the list marks as a vision model."],
         ["Run does nothing and the text never changes", "The seed is Fixed and nothing else changed, so ComfyUI is serving the cached answer. That is the point of Fixed. Press Re-roll, or switch the seed to R."],
         ["It writes far too much", "Say a length in the formula, and lower Max len in the settings so it cannot run on."],
+        ["It repeats my formula back at me, or ignores it", "The temperature is too high for the model. Try 0.3. Small models especially need it, and this single setting is the difference between a formula working and looking broken."],
+        ["It refuses, or says it cannot see my idea", "Same cause: lower the temperature to 0.3."],
         ["Every run reloads the model", "Two nodes in the workflow are using different models. Give them the same one if you can."],
         ["The settings panel will not close", "Click the gear again, press Escape, or click the canvas."],
       ],
