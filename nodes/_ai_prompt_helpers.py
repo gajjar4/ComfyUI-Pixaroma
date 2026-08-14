@@ -269,5 +269,32 @@ def reasoning_only(raw):
     return not strip_reasoning(raw)
 
 
+# Qwen3 reads /think and /no_think out of the USER turn. That matters because
+# the `thinking` argument handed to tokenize only reaches a chat template some
+# encoder paths never apply: a Qwen3 loaded as type lumina2 (Z-Image's encoder)
+# reasons at length with thinking FALSE, so the toggle said one thing and did
+# nothing, and a run took 59s instead of 17s.
+_QWEN3 = re.compile(r"qwen[_\-\s]?3", re.I)
+
+
+def apply_no_think(prompt, thinking, clip_name):
+    """Append Qwen3's soft switch when the user has Thinking off.
+
+    Scoped to Qwen3 by name because on any other model the line is not a switch
+    at all, just a stray token that could end up quoted back in the answer.
+    Left alone when the formula already carries it, so a preset written before
+    this existed cannot end up saying it twice.
+    """
+    if thinking:
+        return prompt
+    if not isinstance(prompt, str) or not prompt.strip():
+        return prompt
+    if not _QWEN3.search(str(clip_name or "")):
+        return prompt
+    if "/no_think" in prompt:
+        return prompt
+    return prompt.rstrip() + "\n\n/no_think"
+
+
 def word_count(text):
     return len([w for w in str(text or "").split() if w.strip()])

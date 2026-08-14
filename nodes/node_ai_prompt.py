@@ -23,6 +23,7 @@ import comfy.sd
 import folder_paths
 
 from ._ai_prompt_helpers import (
+    apply_no_think,
     as_text,
     build_prompt,
     content_text,
@@ -315,11 +316,27 @@ class PixaromaAIPrompt:
         prompt = build_prompt(
             st["formula"], st["idea"], wired, st["order"], st["sep"]
         )
-
         own_clip = False
         if not has_clip:
             clip = _load_clip(st["model"], st["clip_type"])
             own_clip = True
+
+        # Make the Thinking toggle mean something. AFTER the clip is resolved,
+        # because the decision reads the model's NAME - and because own_clip
+        # does not exist until here, which is how the first draft of this
+        # would have raised NameError on every generating run.
+        #
+        # The `thinking` argument handed to tokenize below only reaches a chat
+        # template some encoder paths never apply, so a Qwen3 loaded as lumina2
+        # reasoned at length with the toggle already OFF: 59 seconds against
+        # 17, for a control the user had set correctly. The switch written into
+        # the user turn IS honoured there.
+        prompt = apply_no_think(
+            prompt,
+            st["thinking"],
+            getattr(getattr(clip, "tokenizer", None), "clip_name", "")
+            or (st["model"] if own_clip else ""),
+        )
 
         img = _img(image)
         vid = _img(video)
