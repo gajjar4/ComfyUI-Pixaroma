@@ -38,7 +38,7 @@
       }
     },
     {
-      "name": "Sound - describe what you hear (Gemma 4)",
+      "name": "Sound - describe what you hear (Gemma 4 E4B)",
       "note": "Listens to whatever is on the audio input and describes it: what kind of sound it is, the words if anyone speaks or sings, the instruments, and the mood. Needs Gemma 4, which is the only text encoder ComfyUI can feed audio to - no Qwen3-VL can hear. Send its text into a second AI Prompt node to turn it into an image prompt.",
       "model_hint": "gemma4_e4b_it_fp8_scaled.safetensors",
       "formula": "Listen to the recording and describe it in one short paragraph of plain English.\n\nOpen with what it is: speech, singing, music, a sound effect, or a mixture of those.\n\nIf anyone speaks or sings, write their words exactly as you hear them, wrapped in double quotes. That is the only use of double quotes.\n\nThen say what the voices sound like, and if there is music, name the instruments you can pick out and whether it is fast or slow, bright or dark.\n\nEnd with the mood, in plain words.\n\nDescribe only what you can actually hear, and say so where the recording is unclear. No preamble, no explanation, no closing remark, and no list of keywords.",
@@ -56,7 +56,7 @@
       }
     },
     {
-      "name": "Transcribe - the words only (Gemma 4)",
+      "name": "Transcribe - the words only (Gemma 4 E4B)",
       "note": "Writes out what is said, and nothing else: no summary, no description of the sounds, no speaker labels or timestamps. An unclear word comes back as [inaudible]. Needs Gemma 4, the only text encoder ComfyUI can feed audio to. Same output at temperature 0.3 and 0.7, so it is set steady.",
       "model_hint": "gemma4_e4b_it_fp8_scaled.safetensors",
       "formula": "Transcribe the audio exactly. Write only the spoken words from the audio. Keep natural punctuation and capitalization. Do not summarize. Do not describe sounds. Do not explain. Do not add labels, timestamps, speaker names, or extra text. If a word is unclear, write [inaudible]. Output only the transcription.",
@@ -74,7 +74,7 @@
       }
     },
     {
-      "name": "Video - prompt from a video (Gemma 4)",
+      "name": "Video - prompt from a video (Gemma 4 E4B)",
       "note": "Watches a clip and writes the video prompt that would make one like it: the medium and style, what HAPPENS from beginning to end, and what the camera does. Wire Load Video Pixaroma into the video input. Needs Gemma 4, the only text encoder ComfyUI can feed video to. Frames are read as 24fps and sampled one per second, so a few seconds is plenty - load a short stretch rather than a whole clip.",
       "model_hint": "gemma4_e4b_it_fp8_scaled.safetensors",
       "formula": "Watch the clip and write ONE video prompt that would produce a clip like it.\n\nOpen by naming the medium and the style: live action film, a stylised 3D animation, a hand drawn cartoon, a screen recording.\n\nThen say what is in the frame, and what HAPPENS over the clip: the movement, the action, the change from beginning to end. That is what a video prompt is for, so give it more room than the scenery.\n\nDescribe the subject and what they are wearing or made of, the setting, and what the light is doing.\n\nSay what the camera does, choosing ONE: a locked off shot, a slow push in, a pull back, a pan, an orbit, or a shot that follows the subject.\n\nWrite ONE flowing paragraph of plain English, between 60 and 110 words, in ordinary sentences. No preamble, no explanation, no closing remark, and no list of keywords.\n\nNever mention the clip, the video or the footage itself: write it as an instruction for making one.",
