@@ -166,17 +166,34 @@ export function slotConnected(node, name) {
   return false;
 }
 
-/** What is wired in, as a short phrase for the banner. Reads the WIRES, which
- *  is not the same as what arrived: a muted loader is dropped by
- *  graphToPrompt, so the readout below the prompt reports what really ran. */
+/**
+ * What the model is being GIVEN, as a short phrase for the banner.
+ *
+ * It counts the typed idea as well as the wires. It used to list the wires
+ * only, so a node with the model on a wire and a full idea typed in read
+ * "Model on wire … nothing wired" - a contradiction on one line, and it read
+ * as a warning on a node that was about to work perfectly well. The user asked
+ * why it said nothing was wired. **A hint beside a working node must say what
+ * WILL happen, not name what is absent.**
+ *
+ * `clip` is deliberately not in the list: that is the MODEL, and the label
+ * beside this hint already reports it.
+ *
+ * It reads the WIRES, which is not the same as what arrived - a muted loader
+ * is dropped by graphToPrompt - so the readout below the prompt is still the
+ * thing that reports what really ran.
+ */
 export function wiredSummary(node) {
   const bits = [];
+  if (readState(node).idea.trim()) bits.push("your idea");
   if (slotConnected(node, "image")) bits.push("image");
   if (slotConnected(node, "video")) bits.push("video");
   if (slotConnected(node, "audio")) bits.push("audio");
   if (slotConnected(node, "text")) bits.push("text");
-  if (!bits.length) return "nothing wired";
-  return bits.join(" + ") + " wired";
+  // Nothing but the formula is a real, working state: the model is sent the
+  // instruction by itself. Saying so beats reporting an absence.
+  if (!bits.length) return "formula only";
+  return bits.join(" + ");
 }
 
 /** The one rule: a model (picked or on a wire) AND something to send. */
