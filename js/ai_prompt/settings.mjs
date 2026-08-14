@@ -90,11 +90,22 @@ function injectCSS() {
     .pix-app-adv { font-size:11px; color:#a4a09a; padding:3px 0; cursor:pointer;
       user-select:none; }
     .pix-app-adv:hover { color:var(--pix-acc,#f66744); }
+    /* SCROLLS, and that is the point. It was overflow:hidden at 96px against a
+       775px formula - 12% of it on screen, ~209 characters of 1704, with no
+       scrollbar and no wheel. So the box showed text the reader could neither
+       reach nor select, which is exactly how it was reported ("i can not seems
+       to select the formula there"). A preview may be short; it may not be a
+       dead end. cursor:text says the words are grabbable. */
     .pix-app-form { background:#191919; border:1px solid #343436; border-radius:4px;
       padding:8px 9px; font:11px monospace; line-height:1.5; color:#c2bfba;
-      min-height:58px; max-height:96px; overflow:hidden; white-space:pre-wrap;
-      overflow-wrap:anywhere; }
-    .pix-app-form.empty { color:#5c5a57; }
+      min-height:58px; max-height:150px; overflow-y:auto; overflow-x:hidden;
+      white-space:pre-wrap; overflow-wrap:anywhere; cursor:text;
+      scrollbar-width:thin; scrollbar-color:#4a4a4c transparent; }
+    .pix-app-form::-webkit-scrollbar { width:8px; }
+    .pix-app-form::-webkit-scrollbar-thumb { background:#4a4a4c; border-radius:4px; }
+    .pix-app-form::-webkit-scrollbar-thumb:hover { background:var(--pix-acc,#f66744); }
+    .pix-app-form::-webkit-scrollbar-track { background:transparent; }
+    .pix-app-form.empty { color:#5c5a57; cursor:default; }
     .pix-app-row { display:flex; align-items:center; gap:6px; }
     .pix-app-row .cnt { margin-left:auto; font:10px monospace; color:#6f6c67; }
     .pix-app-btn { flex:1; background:rgba(255,255,255,.05);
@@ -821,6 +832,10 @@ function renderPanel(node, body) {
       ? st.formula
       : "Empty. Press Edit and write the instruction this node should always "
         + "follow, for example: describe this photo as a short video prompt.");
+  if (st.formula.trim()) {
+    preview.title = "Scroll to read the whole thing, and select from it to copy. "
+      + "Press Edit for the full-screen editor.";
+  }
   body.appendChild(preview);
 
   const frow = el("div", "pix-app-row");
