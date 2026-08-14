@@ -77,7 +77,7 @@ export function placeBeside(panel, rect) {
 // while a panel is open.
 export function followNode(panel, node, { isCurrent, isUserMoved }) {
   let raf = null;
-  let lastScale = null, lastX = null, lastY = null, lastH = null;
+  let lastScale = null, lastX = null, lastY = null;
   const tick = () => {
     if (!panel.isConnected || (isCurrent && !isCurrent())) { raf = null; return; }
     // Stop if the NODE is gone. `node.graph || app.graph`, NOT app.graph:
@@ -92,26 +92,43 @@ export function followNode(panel, node, { isCurrent, isUserMoved }) {
     if (!ds) return;
     const sc = ds.scale || 1;
     const ox = ds.offset?.[0] ?? 0, oy = ds.offset?.[1] ?? 0;
-    // The panel's own HEIGHT is the third thing that can push it off screen,
-    // and it changes without the canvas moving at all. Every one of these
-    // panels opens saying "Loading..." and grows when its content arrives, so
-    // the placement made at open time was measured against a panel a fraction
-    // of its final size - and nothing re-placed it afterwards. Measured: an
-    // 871px panel in a 1270px window, placed at top 684, hanging 285px off the
-    // bottom. It also covers a section being expanded later.
-    //
-    // Reported as "if it doesn't have enough room it is cut, I have to zoom in
-    // and out to readjust" - zooming appeared to fix it precisely because THIS
-    // loop then re-placed it with the real height.
-    const h = panel.offsetHeight;
-    if (sc === lastScale && ox === lastX && oy === lastY && h === lastH) return;
-    lastScale = sc; lastX = ox; lastY = oy; lastH = h;
+    if (sc === lastScale && ox === lastX && oy === lastY) return;
+    lastScale = sc; lastX = ox; lastY = oy;
     placeBeside(panel, getNodeScreenRect(node));
   };
   raf = requestAnimationFrame(tick);
+
+  // The panel's own HEIGHT is the other thing that can push it off screen, and
+  // it changes without the canvas moving at all: every one of these panels
+  // opens saying "Loading..." and grows when its content arrives, so the
+  // placement made at open time was measured against a panel a fraction of its
+  // final size and nothing re-placed it. Measured: an 871px panel in a 1270px
+  // window, placed at top 684, hanging 285px off the bottom. Reported as "if it
+  // doesn't have enough room it is cut, I have to zoom in and out to readjust"
+  // - zooming appeared to fix it because the loop above then re-placed it.
+  //
+  // A ResizeObserver rather than a per-frame `offsetHeight` read, for two
+  // reasons: reading offsetHeight every animation frame forces layout every
+  // animation frame for the whole time a panel is open, and the rAF version
+  // only corrected on the NEXT tick, which was a visible jump - measured at
+  // about a second in the in-app browser, whose frames are throttled. This
+  // fires the moment the size actually changes (Vue Compat #13).
+  //
+  // It cannot oscillate: placeBeside writes left/top only, never a size.
+  let ro = null;
+  try {
+    ro = new ResizeObserver(() => {
+      if (!panel.isConnected || (isCurrent && !isCurrent())) return;
+      if (isUserMoved && isUserMoved()) return;
+      placeBeside(panel, getNodeScreenRect(node));
+    });
+    ro.observe(panel);
+  } catch (e) { /* no ResizeObserver: the rAF loop still corrects on the next tick */ }
+
   return () => {
     if (raf != null) cancelAnimationFrame(raf);
     raf = null;
+    if (ro) { try { ro.disconnect(); } catch (e) { /* already gone */ } ro = null; }
   };
 }
 
