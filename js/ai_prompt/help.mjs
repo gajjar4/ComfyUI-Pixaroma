@@ -133,6 +133,12 @@ export const AI_PROMPT_HELP = {
         + "Save current keeps whatever this node has right now under a name of "
         + "your choosing, so your own recipes sit in the same list. Delete only "
         + "ever offers your own: the ones that ship with Pixaroma stay put.\n\n"
+        + "A preset also remembers which model it was measured with. If you have "
+        + "that model it is selected for you; if you do not, the line under the "
+        + "picker says so in amber and your own model is left alone, so a preset "
+        + "shared from another machine can never point this node at something "
+        + "that is not there. The same line tells you when a wired model is "
+        + "being used instead.\n\n"
         + "Your presets live in ComfyUI's user folder, well away from the plugin "
         + "folder, so updating or reinstalling Pixaroma cannot wipe them.",
       defs: [

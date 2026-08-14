@@ -667,19 +667,14 @@ function renderPanel(node, body) {
             if (key in preset.settings) patch[key] = preset.settings[key];
           }
         }
-        // A model hint is only APPLIED when that file is actually here, and
-        // never over a wired clip. Otherwise it is reported, not forced - a
-        // preset shared from another machine must not silently point this node
-        // at a model that does not exist.
+        // A model hint is APPLIED when that file is actually here, and never
+        // over a wired clip. When it is missing the panel SAYS so, on the line
+        // under the picker, rather than popping a dialog - a preset shared from
+        // another machine must not silently point this node at a model that
+        // does not exist, but it must not nag either.
         const hint = preset.model_hint;
-        if (hint && !slotConnected(node, "clip")) {
-          if (MODELS.models.includes(hint)) patch.model = hint;
-          else if (!readState(node).model) {
-            setTimeout(() => window.alert(
-              "\"" + name + "\" was measured with " + hint +
-              ", which is not in your text_encoders folder. The formula and the "
-              + "settings loaded; pick a model yourself."), 0);
-          }
+        if (hint && !slotConnected(node, "clip") && MODELS.models.includes(hint)) {
+          patch.model = hint;
         }
         set(patch);
       }, { markVision: false });
@@ -734,9 +729,37 @@ function renderPanel(node, body) {
   prow.append(saveBtn, delBtn);
   body.appendChild(prow);
 
+  // Which preset is on this node right now, recognised by its formula so it
+  // survives a reload and a duplicate without anything extra being stored.
   const chosen = all.find((p) => p.formula === st.formula);
-  if (chosen && chosen.note) {
-    body.appendChild(el("div", "pix-app-note plain", chosen.note));
+  if (chosen) {
+    if (chosen.note) {
+      body.appendChild(el("div", "pix-app-note plain", chosen.note));
+    }
+    const hint = chosen.model_hint;
+    if (hint) {
+      const have = MODELS.models.includes(hint);
+      const wired = slotConnected(node, "clip");
+      let line;
+      if (wired) {
+        line = "Measured with " + hint + ". Your wired model is being used "
+             + "instead, which is fine if it is a similar size.";
+      } else if (!have) {
+        // The case that used to say nothing at all: the preset named a model
+        // this machine does not have, so the node kept whatever it had.
+        line = "This preset was saved with " + hint + ", which is not in your "
+             + "text_encoders folder, so your own model was left alone. Results "
+             + "may differ from the settings it was measured at.";
+      } else if (st.model !== hint) {
+        line = "This preset was saved with " + hint + ". You have that model, "
+             + "but this node is set to " + (st.model || "none") + ".";
+      } else {
+        line = "Saved and measured with " + hint + ", which is what this node "
+             + "is using.";
+      }
+      body.appendChild(el("div",
+        "pix-app-note" + (have || wired ? " plain" : ""), line));
+    }
   } else if (!all.length) {
     body.appendChild(el("div", "pix-app-note plain",
       "Presets that ship with Pixaroma will appear here."));
