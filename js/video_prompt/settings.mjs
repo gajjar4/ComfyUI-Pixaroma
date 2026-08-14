@@ -431,6 +431,19 @@ function outsideClose(e) {
   closeVideoPromptPanelFor(null);
 }
 
+/** Zoom or pan and the PANEL moves, because it follows its node - but a popup
+ *  lives on <body> and does not, so it is left hanging in mid-air pointing at
+ *  nothing. Same fix as AI Prompt, made here at the same time because this
+ *  panel is the same shape and had the same gap; only the wheel was missing,
+ *  since a pointerdown and Escape were already handled.
+ *
+ *  Scrolling INSIDE the popup is exempt, or a long model list could never be
+ *  scrolled (Load Image pattern #14). */
+function wheelClose(e) {
+  if (!POP || POP.contains(e.target)) return;
+  closePop();
+}
+
 function escClose(e) {
   if (e.key !== "Escape" || !PANEL) return;
   if (EDITOR) return;                 // the editor handles its own Escape
@@ -487,10 +500,12 @@ export async function openVideoPromptPanel(node, onChange) {
   setTimeout(() => {
     document.addEventListener("pointerdown", outsideClose, true);
     document.addEventListener("keydown", escClose, true);
+    document.addEventListener("wheel", wheelClose, true);
   }, 0);
   panel._pixCleanup = () => {
     document.removeEventListener("pointerdown", outsideClose, true);
     document.removeEventListener("keydown", escClose, true);
+    document.removeEventListener("wheel", wheelClose, true);
   };
 
   body.textContent = "Loading...";

@@ -414,6 +414,22 @@ function outsideClose(e) {
   closeAIPromptPanelFor(null);
 }
 
+/** Zoom or pan the canvas and the PANEL moves, because it follows its node -
+ *  but a popup lives on <body> and does not, so it was left hanging in mid-air
+ *  over the graph, pointing at nothing. Reported after the placement fix, which
+ *  is what made it obvious: the panel now moves further and more often.
+ *
+ *  It CLOSES rather than re-places, which is what every other Pixaroma popup
+ *  does on a wheel (Load Image pattern #14): a list re-anchored mid-zoom under
+ *  a moving cursor is its own kind of wrong, and the pick is one click away.
+ *
+ *  Scrolling INSIDE the popup is exempt, or a long model list could never be
+ *  scrolled - that exact guard is the one Load Image's pattern calls out. */
+function wheelClose(e) {
+  if (!POP || POP.contains(e.target)) return;
+  closePop();
+}
+
 function escClose(e) {
   if (e.key !== "Escape" || !PANEL) return;
   if (EDITOR) return;                     // the editor handles its own Escape
@@ -1205,10 +1221,12 @@ export async function openAIPromptPanel(node, onChange) {
   setTimeout(() => {
     document.addEventListener("pointerdown", outsideClose, true);
     document.addEventListener("keydown", escClose, true);
+    document.addEventListener("wheel", wheelClose, true);
   }, 0);
   panel._pixCleanup = () => {
     document.removeEventListener("pointerdown", outsideClose, true);
     document.removeEventListener("keydown", escClose, true);
+    document.removeEventListener("wheel", wheelClose, true);
   };
 
   body.textContent = "Loading...";
