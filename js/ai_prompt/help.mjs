@@ -176,7 +176,7 @@ export const AI_PROMPT_HELP = {
         + "and any prompt you already had lying around still work.",
       defs: [
         ["Krea 2 - prompt from an idea", "Turns a rough idea into a full Krea 2 prompt. Built from Krea's own published prompt-expansion instructions, then tightened by watching where it went wrong. Measured on Qwen3-VL 4B and 8B."],
-        ["Krea 2 - prompt from an image", "Wire a Load Image into the image input and it writes the prompt that would make a similar picture, naming the medium, the framing and the light. Needs a vision model. Photographs come back cleanest."],
+        ["Krea 2 - prompt from an image", "Wire a Load Image into the image input and it writes the prompt that would make a similar picture, naming the medium, the framing and the light. Leave Your idea empty for this one. Needs a vision model. Photographs come back cleanest."],
       ],
     },
     {
@@ -234,6 +234,7 @@ export const AI_PROMPT_HELP = {
         ["It hands back nothing at all", "Usually the formula is too short for that model to get going. A one-line instruction can produce an empty answer where a proper formula produces a good paragraph. Load a preset and try again before you blame the model."],
         ["It refuses, or says it cannot see my idea", "Same cause: lower the temperature to 0.3."],
         ["Every run reloads the model", "Two nodes in the workflow are using different models. Give them the same one if you can."],
+        ["I typed in Your idea with the image preset and it changed nothing", "That preset's strongest rule is to describe only what is really in the picture, so it overrules you, which is what stops it inventing things. A change of medium does land, so \"as a watercolour painting\" works. To change what is IN the picture, leave the idea empty and send this node's text into a second AI Prompt node whose formula is the change you want."],
         ["A workflow somebody sent me says the model is not in my text_encoders folder", "A workflow carries the model's NAME, not the model itself. Either download that file, or open the settings and pick one you already have. Everything else, the formula and all the settings, came with the workflow and is already there."],
         ["The settings panel will not close", "Click the gear again, press Escape, or click the canvas."],
       ],
