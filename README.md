@@ -169,6 +169,9 @@ Make a **MiniMax H3** video perform *your* recording instead of the meaningless 
 ### 🎥 Video Prompt Pixaroma
 Type your idea in plain words, press **Generate**, and get a finished **MiniMax H3** prompt written for you, on your own machine. H3 wants its prompts in a particular shape, with named sections, a soundscape, music and a strict way of writing anything a person says out loud, and getting it wrong quietly spoils the clip. This node does all of that from a sentence like *"a blacksmith hammers glowing steel in a dark forge"*. It also hands back a **frames** output already snapped to the pattern H3 accepts, so the video is exactly as long as the prompt was written for - getting those two out of step is the easiest way to waste a render. **You do not pick a mode:** wire nothing and it writes text to video, wire one picture and it looks at that picture and animates it, wire two and it writes the journey between them, joining them for you so they cannot end up the wrong way round. Everything runs locally through a vision model in your `text_encoders` folder, with no account and nothing sent anywhere, and the node finds a suitable model by itself if you have one. Every word of the wording it follows is **yours to edit** in the settings, kept outside the plugin folder so updates never overwrite it, and you can switch our length instructions off entirely and use your own for any video model you like. A **Free VRAM** switch hands the memory straight back to your video model once the prompt is written.
 
+### 🤖 AI Prompt Pixaroma
+A model, an instruction you save on the node, and whatever you wire in - out comes text. Everything runs on your own machine using a model in your `text_encoders` folder, with no account, no key, and nothing sent anywhere. The instruction is called the **formula**, and because it lives on the node rather than in a shared file, a copy of the node is a complete independent one, so a row of three can hold three different jobs. That is the point: the output is plain text and the text input takes plain text, so they **chain with nothing in between** - one node turns a photo into a prompt, the next rewrites it in another style, a third names the mood of a piece of music, and all of it joins up. It comes with **six ready-made recipes**, each naming the model it was written for: two for **Krea 2** (from your idea, or from a picture you feed it), one for **Z-Image Turbo**, and three that use audio and video - transcribe what is said, describe what a recording sounds like, or watch a clip and write the video prompt that would recreate it. A recipe carries the sampling settings it was measured at as well as the wording, because the two together are what make it work, and you can **share one as a plain readable .txt** or straight to the clipboard for a chat message. Wire nothing and it simply passes your text through, so you can drop it into a working graph and set it up afterwards.
+
 ### 🎬 Save Mp4 Pixaroma
 Encode video frames + optional audio straight to MP4. Built-in `<video>` preview right on the node so you can watch the result without leaving ComfyUI (click the picture to play / pause). Pairs with AudioReact and Load Video, but works with any source that produces frames + AUDIO.
 
@@ -365,6 +368,13 @@ Master the Pixaroma suite with our video guides and workflow deep-dives:
 ---
 
 ## 🛠 Changelog
+
+### **August 14, 2026 · v1.4.107**
+- **NEW: AI Prompt Pixaroma.** Give it a model and an instruction you save on the node, wire in whatever you have, and it writes text. Runs on your own machine, no account and no key. It comes with six ready-made recipes for Krea 2, Z-Image and audio and video work, each naming the model it was written for.
+- **It reads pictures, audio and video, not just text.** Point it at a photo to get the prompt that would make a similar one, at a recording to get the words or the mood, or at a clip to get a video prompt describing what happens.
+- **Chain them.** The output is plain text and the text input takes plain text, so one node describes a photo, the next restyles it, and nothing goes in between.
+- **Share a recipe** as one readable .txt file, or straight to the clipboard for a message. Anything you import joins your own list.
+- Settings panels no longer open with their bottom off the screen, and a dropdown closes when you zoom instead of hanging in mid-air.
 
 ### **August 13, 2026 · v1.4.105–v1.4.106**
 - **Video Prompt: the idea box can be made bigger.** Drag the node, drag the bar under the box, or press Expand for a full-screen one.
