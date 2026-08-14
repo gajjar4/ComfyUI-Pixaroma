@@ -82,7 +82,9 @@ export const DEFAULT_STATE = {
   thinking: false,
   use_default_template: true,
   release_model: false,
-  passthrough: true,
+  // NOTE: no "passthrough" flag, deliberately. Passing the text through is what
+  // the node does when there is no model or nothing to send, and a switch to
+  // turn that off could only mean "error instead", which is strictly worse.
   // --- face only, never sent (see PROMPT_KEYS) ----------------------------
   seed_mode: SEED_FIXED,
   idea_share: IDEA_SHARE_DEFAULT,
@@ -96,7 +98,7 @@ const PROMPT_KEYS = [
   "idea", "formula", "model", "clip_type", "order", "sep", "seed",
   "temperature", "max_length", "top_k", "top_p", "min_p",
   "repetition_penalty", "presence_penalty", "do_sample", "thinking",
-  "use_default_template", "release_model", "passthrough",
+  "use_default_template", "release_model",
 ];
 
 function num(value, fallback, lo, hi) {
@@ -131,7 +133,6 @@ export function readState(node) {
   st.thinking = st.thinking === true;
   st.use_default_template = st.use_default_template !== false;
   st.release_model = st.release_model === true;
-  st.passthrough = st.passthrough !== false;
   st.idea_share = num(st.idea_share, IDEA_SHARE_DEFAULT, IDEA_SHARE_MIN, IDEA_SHARE_MAX);
   return st;
 }

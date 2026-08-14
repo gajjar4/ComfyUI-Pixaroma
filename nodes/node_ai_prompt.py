@@ -23,6 +23,7 @@ import comfy.sd
 import folder_paths
 
 from ._ai_prompt_helpers import (
+    as_text,
     build_prompt,
     content_text,
     parse_state,
@@ -117,7 +118,18 @@ def _load_clip(name, clip_type):
             )
         )
 
-    path = folder_paths.get_full_path_or_raise("text_encoders", name)
+    # Guarded even though the membership check above passed: the two can
+    # disagree if the file goes away between them, and the sibling node wraps
+    # this same call for the same reason. Without it a resolver mismatch
+    # surfaces as a raw traceback where every other failure here is friendly.
+    try:
+        path = folder_paths.get_full_path_or_raise("text_encoders", name)
+    except Exception as e:
+        raise RuntimeError(
+            "[Pixaroma] AI Prompt: the model \"%s\" could not be found on disk, "
+            "even though it is listed in your text_encoders folder.\n%s"
+            % (name, _NEEDED)
+        ) from e
     clip_type_enum = getattr(
         comfy.sd.CLIPType, str(clip_type).upper(), comfy.sd.CLIPType.STABLE_DIFFUSION
     )
@@ -273,7 +285,6 @@ class PixaromaAIPrompt:
         started = time.time()
         st = parse_state(AIPromptState)
 
-        from ._ai_prompt_helpers import _text as as_text
         wired = as_text(text)
         has_clip = clip is not None
 

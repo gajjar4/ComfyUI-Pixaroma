@@ -426,13 +426,18 @@ export function buildFace(node, openPanel, openIdeaEditor) {
   });
 
   reroll.addEventListener("click", () => {
-    // A re-roll has to CHANGE something, or ComfyUI serves the cached answer
-    // and the button looks broken. Fixed mode reuses its number by design, so
-    // this writes a fresh one - a deliberate user action, so dirtying the
-    // workflow here is correct.
-    writeState(node, { seed: rollSeed() });
-    renderFace(node);
-    notifyGraphChanged();
+    // In FIXED mode a re-roll has to CHANGE the seed, or nothing differs and
+    // ComfyUI serves the cached answer - the button would look broken. That is
+    // a deliberate user action, so dirtying the workflow is correct.
+    //
+    // In RANDOM mode it must NOT: seedForRun already rolls a fresh seed for
+    // every run and ignores the stored one, so writing one here would change
+    // nothing about the result while still marking a clean workflow modified.
+    if (readState(node).seed_mode !== SEED_RANDOM) {
+      writeState(node, { seed: rollSeed() });
+      renderFace(node);
+      notifyGraphChanged();
+    }
     app.queuePrompt?.(0, 1);
   });
 
@@ -456,7 +461,7 @@ export function buildFace(node, openPanel, openIdeaEditor) {
   node._pixApEls = {
     root, inner, band, banner, bLabel, bHint, idea, out, meta,
     seed, seedmode, seedwrap, seg, segIdea, segWired, copy, vram, gear,
-    row1, row2,
+    reroll, row1, row2,
   };
 
   const widget = node.addDOMWidget(WIDGET_TYPE, WIDGET_TYPE, root, {
@@ -546,6 +551,10 @@ export function renderFace(node) {
     ? "Random: a new seed every Run, so it writes something different each time."
     : "Fixed: the same seed every Run, so an unchanged node is cached and Run "
       + "is instant.";
+  els.reroll.title = random
+    ? "Run again. Random mode already rolls a new seed every time, so this is "
+      + "the same as Generate."
+    : "Roll a new seed and run again, for a different answer.";
 
   // The join segment is only meaningful while text is wired, and a control
   // that does nothing is worse than no control. The band has spare rows, so

@@ -72,8 +72,12 @@ DEFAULT_STATE = {
     "thinking": False,
     "use_default_template": True,
     "release_model": False,
-    "passthrough": True,
 }
+# NOTE: there is deliberately no "passthrough" flag. Passing the text through
+# is what the node does when there is no model or nothing to send, and a switch
+# to turn that OFF could only mean "error instead", which is strictly worse.
+# The key existed unread on both sides for a while; it is gone rather than
+# wired up.
 
 
 def _clamp(value, fallback, lo, hi):
@@ -86,7 +90,7 @@ def _clamp(value, fallback, lo, hi):
     return max(lo, min(hi, out))
 
 
-def _text(value):
+def as_text(value):
     """A string, whatever arrived.
 
     A wired STRING can reach a node as a length-1 list from some upstream
@@ -125,12 +129,17 @@ def parse_state(raw):
     st = dict(DEFAULT_STATE)
     st.update({k: v for k, v in data.items() if k in DEFAULT_STATE})
 
-    st["idea"] = _text(st["idea"])
-    st["formula"] = _text(st["formula"])
-    st["model"] = _text(st["model"]).strip()
-    st["clip_type"] = _text(st["clip_type"]).strip() or "minimax"
+    st["idea"] = as_text(st["idea"])
+    st["formula"] = as_text(st["formula"])
+    st["model"] = as_text(st["model"]).strip()
+    st["clip_type"] = as_text(st["clip_type"]).strip() or "minimax"
     st["order"] = ORDER_WIRED if st["order"] == ORDER_WIRED else ORDER_IDEA
-    st["sep"] = st["sep"] if st["sep"] in SEP_MAP else DEFAULT_SEP
+    # isinstance FIRST: `x in SEP_MAP` hashes x, so a list or a dict here raised
+    # TypeError straight out of parse_state - which run() calls unguarded, so a
+    # hand-edited workflow or a crafted /prompt body killed the node with a raw
+    # traceback instead of being clamped like every other field.
+    st["sep"] = st["sep"] if isinstance(st["sep"], str) and st["sep"] in SEP_MAP \
+        else DEFAULT_SEP
 
     st["seed"] = int(_clamp(st["seed"], 0, 0, 0xFFFFFFFFFFFFFFFF))
     st["temperature"] = _clamp(st["temperature"], 0.7, 0.01, 2.0)
@@ -145,7 +154,6 @@ def parse_state(raw):
     st["thinking"] = st["thinking"] is True
     st["use_default_template"] = st["use_default_template"] is not False
     st["release_model"] = st["release_model"] is True
-    st["passthrough"] = st["passthrough"] is not False
     return st
 
 
