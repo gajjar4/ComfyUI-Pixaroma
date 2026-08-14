@@ -1188,4 +1188,11 @@ export async function openAIPromptPanel(node, onChange) {
   PRESETS_STALE = !presets.ok;
   if (presets.ok) PRESETS = presets;
   renderPanel(node, body);
+  // Place it AGAIN now the content is in. The placement above ran while the
+  // body still said "Loading..." and the panel was 78px tall, so it was
+  // clamped against the wrong height and the finished panel hung off the
+  // bottom of the screen. followNode notices and corrects it, but only on its
+  // next frame, and this panel fills after a network round trip - so without
+  // this the user sees the panel jump. Belt and braces on the slowest path.
+  if (!USER_MOVED) placeBeside(panel, getNodeScreenRect(node));
 }

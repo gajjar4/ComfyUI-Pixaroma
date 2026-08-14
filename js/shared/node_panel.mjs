@@ -77,7 +77,7 @@ export function placeBeside(panel, rect) {
 // while a panel is open.
 export function followNode(panel, node, { isCurrent, isUserMoved }) {
   let raf = null;
-  let lastScale = null, lastX = null, lastY = null;
+  let lastScale = null, lastX = null, lastY = null, lastH = null;
   const tick = () => {
     if (!panel.isConnected || (isCurrent && !isCurrent())) { raf = null; return; }
     // Stop if the NODE is gone. `node.graph || app.graph`, NOT app.graph:
@@ -92,8 +92,20 @@ export function followNode(panel, node, { isCurrent, isUserMoved }) {
     if (!ds) return;
     const sc = ds.scale || 1;
     const ox = ds.offset?.[0] ?? 0, oy = ds.offset?.[1] ?? 0;
-    if (sc === lastScale && ox === lastX && oy === lastY) return;
-    lastScale = sc; lastX = ox; lastY = oy;
+    // The panel's own HEIGHT is the third thing that can push it off screen,
+    // and it changes without the canvas moving at all. Every one of these
+    // panels opens saying "Loading..." and grows when its content arrives, so
+    // the placement made at open time was measured against a panel a fraction
+    // of its final size - and nothing re-placed it afterwards. Measured: an
+    // 871px panel in a 1270px window, placed at top 684, hanging 285px off the
+    // bottom. It also covers a section being expanded later.
+    //
+    // Reported as "if it doesn't have enough room it is cut, I have to zoom in
+    // and out to readjust" - zooming appeared to fix it precisely because THIS
+    // loop then re-placed it with the real height.
+    const h = panel.offsetHeight;
+    if (sc === lastScale && ox === lastX && oy === lastY && h === lastH) return;
+    lastScale = sc; lastX = ox; lastY = oy; lastH = h;
     placeBeside(panel, getNodeScreenRect(node));
   };
   raf = requestAnimationFrame(tick);
