@@ -74,10 +74,10 @@ export const AI_PROMPT_HELP = {
         + "cel\". Meanwhile a Load Audio goes into a third whose formula is \"name "
         + "the mood of this music in five words\", and that text also joins the "
         + "second node. Four wires, no other nodes.\n\n"
-        + "That third one needs a model that can HEAR, which most vision models "
-        + "cannot. A model that cannot hear takes the audio, ignores it and writes "
-        + "something confident anyway, so check the answer describes your actual "
-        + "track before you build on it.\n\n"
+        + "That third one needs a model that can HEAR, and in ComfyUI that means "
+        + "Gemma 4 (`gemma4_e4b_it_fp8_scaled.safetensors`). No Qwen3-VL can hear, "
+        + "however good it is with pictures: it takes the audio, ignores it and "
+        + "writes something confident anyway. The Sound preset is set up for this.\n\n"
         + "Rename each node to what its formula does and the graph reads as a "
         + "sentence. Double-click the title to rename it.",
     },
@@ -179,6 +179,8 @@ export const AI_PROMPT_HELP = {
         + "the formula on its own, exactly as it always did, so older exports "
         + "and any prompt you already had lying around still work.",
       defs: [
+        ["The name in brackets", "Every preset ends with the model it was written and measured on, so you can see that before you load it. They are not fussy: a formula tuned on one Qwen3-VL build behaves the same on the others. Only the Gemma 4 one genuinely needs its model, because nothing else here can hear."],
+        ["Sound - describe what you hear (Gemma 4)", "Wire a Load Audio in and it says what kind of sound it is, quotes any words spoken or sung, names the instruments and gives the mood. Gemma 4 is the ONLY text encoder ComfyUI can feed audio to, so a Qwen3-VL will take the audio, ignore it and answer anyway. Send its text into a second AI Prompt node to turn it into an image prompt."],
         ["Krea 2 - prompt from an idea", "Turns a rough idea into a full Krea 2 prompt. Built from Krea's own published prompt-expansion instructions, then tightened by watching where it went wrong. Measured on Qwen3-VL 4B and 8B."],
         ["Krea 2 - prompt from an image", "Wire a Load Image into the image input and it writes the prompt that would make a similar picture, naming the medium, the framing and the light. Leave Your idea empty for this one. Needs a vision model. Photographs come back cleanest."],
         ["Z-Image - prompt from an idea", "The same job as the Krea one, written for Z-Image Turbo, which wants a much longer and more detailed prompt. Built from the makers' own guidance, so its Max len is set high to leave room for one. Leave Thinking off, which is the default: Z-Image's encoder is a reasoning model, and thinking costs about three times the wait for no better prompt."],
