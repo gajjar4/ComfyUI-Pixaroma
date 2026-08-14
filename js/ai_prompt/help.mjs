@@ -147,8 +147,19 @@ export const AI_PROMPT_HELP = {
         + "shared from another machine can never point this node at something "
         + "that is not there. The same line tells you when a wired model is "
         + "being used instead.\n\n"
-        + "Your presets live in ComfyUI's user folder, well away from the plugin "
-        + "folder, so updating or reinstalling Pixaroma cannot wipe them.",
+        + "The list holds two kinds, and hovering a name tells you which. The "
+        + "ones that ship with Pixaroma are on every machine that installs it, "
+        + "so a formula like Krea 2 is already there for everybody and you never "
+        + "need to send it to anyone. New ones arrive with a Pixaroma update.\n\n"
+        + "Your own are kept together in one file of your own:\n"
+        + "`ComfyUI/user/pixaroma/ai_prompt_presets.json`\n"
+        + "That sits outside the plugin folder, so updating or reinstalling "
+        + "Pixaroma cannot wipe them, and it is the single file to copy when you "
+        + "move to another machine.\n\n"
+        + "To hand one of yours to somebody else, Export beside the formula "
+        + "writes the wording out as a .txt they can Import. That carries the "
+        + "words but not the numbers, so tell them the temperature too, or send "
+        + "them that presets file and let them copy your entry into their own.",
       defs: [
         ["Krea 2 - text to image", "Built from Krea's own published prompt-expansion instructions, then tightened by watching where it went wrong. Measured on Qwen3-VL 4B and 8B."],
       ],

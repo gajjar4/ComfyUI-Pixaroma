@@ -683,7 +683,13 @@ function renderPanel(node, body) {
       // Each row carries its model in the hover, so you can see what a preset
       // was measured with BEFORE you load it, without cluttering the list.
       const rows = all.map((p) => [p.name, p.name,
-        p.name + (p.model_hint ? "\nMeasured with " + p.model_hint
+        p.name
+        // Which of the two kinds this is, because "where did my preset go" and
+        // "does my friend already have this one" are the same question asked
+        // from either end, and the list itself cannot show it.
+        + (userNames.has(p.name.toLowerCase())
+             ? "\nYour own preset" : "\nShips with Pixaroma")
+        + (p.model_hint ? "\nMeasured with " + p.model_hint
                                  + (MODELS.models.includes(p.model_hint)
                                     ? " (you have it)" : " (you do NOT have it)")
                                : "\nNo model recorded")
@@ -797,7 +803,6 @@ function renderPanel(node, body) {
     body.appendChild(el("div", "pix-app-note plain",
       "Presets that ship with Pixaroma will appear here."));
   }
-  void userNames;
 
   // ---- WIRED TEXT ----------------------------------------------------------
   body.appendChild(el("div", "pix-app-sec", "Wired text"));
