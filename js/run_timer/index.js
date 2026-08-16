@@ -469,15 +469,26 @@ function applyDomFont(node) {
 }
 async function applyClockFont(node) {
   const id = readState(node).font || "";
+  // GENERATION GUARD. The load is async, so two picks in quick succession race,
+  // and the SLOWER one resolves last and wins - REPRODUCED by delaying one
+  // font's file: pick Inter (slow) then Montserrat, and Montserrat renders
+  // correctly until Inter lands late and overwrites it, leaving the clock drawn
+  // in Inter while the saved state says Montserrat (and the node re-hugged to
+  // the wrong metrics). It only self-corrects on the next workflow load. Stamp
+  // each attempt and let only the newest one commit.
+  const gen = (node._rtFontGen || 0) + 1;
+  node._rtFontGen = gen;
   if (!id) {
     if (node._rtFontKey === "" && !node._rtFontVar) return;
     node._rtFontVar = null; node._rtFontKey = "";
   } else {
     if (node._rtFontKey === id && node._rtFontVar) return;
     try {
-      node._rtFontVar = await loadFontForLayer(id, CLOCK_FONT_WEIGHT, false);
-      node._rtFontKey = id;
+      const variant = await loadFontForLayer(id, CLOCK_FONT_WEIGHT, false);
+      if (node._rtFontGen !== gen) return;   // a newer pick already won
+      node._rtFontVar = variant; node._rtFontKey = id;
     } catch (e) {
+      if (node._rtFontGen !== gen) return;
       // A font that has been deleted from models/fonts since it was picked: keep
       // the clock readable on the built-in face rather than failing to draw.
       console.warn("[Run Timer Pixaroma] font '" + id + "' could not load:", (e && e.message) || e);
