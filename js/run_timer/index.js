@@ -291,11 +291,24 @@ function numRunWidth(ctx, str, cell, dotW) {
   return w;
 }
 function drawNumRun(ctx, str, x, midY, cell, dotW) {
+  // ONE baseline for the whole run, taken from a DIGIT - never per character.
+  // fillTextVC centres text on ITS OWN glyph box, which is right for a whole
+  // string but wrong character-by-character: "." has a 4px-tall box against a
+  // digit's 12px, so it was being centred on the digits' MIDDLE and the clock
+  // read "19·886" instead of "19.886" (measured 4px off at scale 1, 17px at
+  // scale 4). Widths are untouched - both the measure and the paint still use
+  // cell/dotW - so nothing about the layout or the node width moves.
+  const dm = ctx.measureText("0");
+  const haveBox = dm && dm.actualBoundingBoxAscent != null && dm.actualBoundingBoxDescent != null;
+  const prevBase = ctx.textBaseline;
+  const dy = haveBox ? (dm.actualBoundingBoxAscent - dm.actualBoundingBoxDescent) / 2 : 0;
+  ctx.textBaseline = haveBox ? "alphabetic" : "middle";
   for (const ch of str) {
     const c = ch === "." ? dotW : cell;
-    fillTextVC(ctx, ch, x + (c - ctx.measureText(ch).width) / 2, midY);
+    ctx.fillText(ch, x + (c - ctx.measureText(ch).width) / 2, midY + dy);
     x += c;
   }
+  ctx.textBaseline = prevBase;
   return x;
 }
 
@@ -341,7 +354,13 @@ function measureCtx() {
 }
 function shapeSig(node) {
   const parts = clockParts(node._rtDisplayMs || 0, node._pixRtDecimals != null ? node._pixRtDecimals : 0);
-  return parts.groups.length + "|" + (parts.frac ? parts.frac.length : 0) + "|" + (node._rtFontKey || "");
+  // The DIGIT COUNT per group matters, not just how many groups there are: the
+  // hour group is unpadded String(h), so 1h is one cell and 10h is two. Keyed on
+  // the count alone, a run crossing 10 hours kept the 1-digit width and the side
+  // padding quietly collapsed. Minutes and seconds are always pad(_,2), so this
+  // can only change at an hour boundary - never per tick.
+  const shape = parts.groups.map((g) => g.num.length).join(",");
+  return shape + "|" + (parts.frac ? parts.frac.length : 0) + "|" + (node._rtFontKey || "");
 }
 function clockUnitWidth(node) {
   const sig = shapeSig(node);
@@ -378,6 +397,14 @@ function fitClockWidth(node) {
   if (dw > 1 || dh > 1) node.setSize([w, vue ? node.size[1] : h]);
 }
 function maybeFitWidth(node) {
+  // Bail BEFORE stamping the signature. fitClockWidth bails during a load, and
+  // stamping first meant the shape was recorded as "already fitted" when it
+  // never was - nothing re-drives it afterwards, so the refit was lost for good.
+  // The case that bites: a run passes one hour (the readout gains an h group)
+  // while a workflow-tab switch is loading. The node keeps its 2-group width and
+  // the painter's fit-to-box then draws the clock at ~74% inside it, letterboxed,
+  // until the next run resets the shape.
+  if (isGraphLoading()) return;
   const sig = shapeSig(node);
   if (node._rtWidthSig === sig) return; // only refit when the readout shape changes
   node._rtWidthSig = sig;
@@ -465,10 +492,26 @@ const CLOCK_FONT_WEIGHT = 700;
 // face if you set ctx.font before the file is in - so nothing is applied until
 // the load resolves, and then everything is remeasured and repainted.
 function applyDomFont(node) {
-  if (node._pixRtTime) node._pixRtTime.style.fontFamily = clockFontStack(node);
+  if (!node._pixRtTime) return;
+  node._pixRtTime.style.fontFamily = clockFontStack(node);
+  // The WEIGHT too, or the two renderers draw different faces of the same font:
+  // the canvas painter asks for the resolved weight (and the node is measured at
+  // it), while the CSS declares none and inherits ~400 - so an Inter clock was
+  // genuinely bold in classic and light in Nodes 2.0, narrower than the box the
+  // scale was computed for.
+  node._pixRtTime.style.fontWeight = String(node._rtFontVar ? node._rtFontVar.weight : 600);
 }
 async function applyClockFont(node) {
   const id = readState(node).font || "";
+  // Capture the load flag BEFORE any await. fitClockWidth checks it at CALL
+  // time, and this is the one caller that resumes asynchronously: the catalog
+  // fetch plus the .ttf download routinely outlive isGraphLoading's 300ms
+  // trailing window on a cold first open. Landing late, it re-hugged from a
+  // scale recovered out of the ROUNDED height (up to 0.01 of scale lost), so
+  // the width came back 1-3px off the saved one and node.size was rewritten on
+  // a workflow the user only OPENED - the dirty-on-load class this node's gates
+  // exist to prevent.
+  const wasLoading = isGraphLoading();
   // GENERATION GUARD. The load is async, so two picks in quick succession race,
   // and the SLOWER one resolves last and wins - REPRODUCED by delaying one
   // font's file: pick Inter (slow) then Montserrat, and Montserrat renders
@@ -486,18 +529,49 @@ async function applyClockFont(node) {
     try {
       const variant = await loadFontForLayer(id, CLOCK_FONT_WEIGHT, false);
       if (node._rtFontGen !== gen) return;   // a newer pick already won
-      node._rtFontVar = variant; node._rtFontKey = id;
+      // resolveFontVariant does NOT throw for an id it has never heard of - it
+      // quietly substitutes Inter (verified: asking for a nonexistent id returns
+      // fontId "Inter"). So the catch below could never fire for the case its own
+      // comment names, and a workflow shared with a drop-in font the recipient
+      // does not have would draw in INTER: not their font, and not the built-in
+      // clock face either, with nothing said. Treat a substituted variant as
+      // missing. Do NOT "fix" this in resolveFontVariant - Text Overlay and
+      // Watermark rely on that Inter fallback.
+      if (!variant || variant.fontId !== id) {
+        console.warn("[Run Timer Pixaroma] clock font '" + id + "' is not installed; using the built-in face.");
+        node._rtFontVar = null; node._rtFontKey = "";
+      } else {
+        node._rtFontVar = variant; node._rtFontKey = id;
+      }
     } catch (e) {
       if (node._rtFontGen !== gen) return;
-      // A font that has been deleted from models/fonts since it was picked: keep
-      // the clock readable on the built-in face rather than failing to draw.
+      // The file itself failed to fetch or parse.
       console.warn("[Run Timer Pixaroma] font '" + id + "' could not load:", (e && e.message) || e);
       node._rtFontVar = null; node._rtFontKey = "";
     }
   }
   node._rtUnitSig = null;   // the metrics changed → drop the cached width
   applyDomFont(node);
-  fitClockWidth(node);      // re-hug at the same scale, with the new metrics
+  // RE-DERIVE THE SCALE BEFORE RE-HUGGING. Until this await resolved, the unit
+  // width was measured with the FALLBACK face, so in Nodes 2.0 - where the scale
+  // comes from the rendered width divided by that unit - the scale was wrong by
+  // however much the real face differs (measured: Playfair's digits are 17%
+  // wider than the fallback's). The clock rendered at the wrong size on every
+  // load, and the re-hug below then wrote that wrong size back into node.size,
+  // so it drifted further on each open and flagged an untouched workflow as
+  // modified. With the real metrics in hand the scale comes back out as the one
+  // the user saved, and the fit below is a no-op.
+  syncScaleFromSize(node);
+  if (wasLoading) {
+    // Trust the saved width: it was measured with THIS font when it was saved.
+    // Stamping the signature is what makes that stick - refreshClock below calls
+    // maybeFitWidth, and the signature has just changed (it includes the font
+    // key), so without the stamp the fit runs there instead and the gate buys
+    // nothing.
+    node._rtWidthSig = shapeSig(node);
+  } else {
+    fitClockWidth(node);    // re-hug at the same scale, with the new metrics
+  }
   refreshClock(node);
 }
 
@@ -721,6 +795,8 @@ function installRunListeners() {
 
 // ── settings panel (floating, draggable — Group Switch pattern) ─────────────
 let _panel = null, _panelNode = null;
+// The live font popup's dismiss closure, so closePanel can take it down too.
+let _fontPopupClose = null;
 // Re-syncs the panel's master-mute row from the live setting. Set while a panel
 // is open; called by the setting's onChange so flipping the mute in ComfyUI's
 // Settings dialog is reflected here immediately (and vice versa).
@@ -959,7 +1035,13 @@ function renderPanelBody(node, body) {
   getFontCatalog().then((cat) => { fontCat = clockFontCatalog(cat); paintFontBtn(); }).catch(() => {});
   fBtn.onclick = (e) => {
     e.stopPropagation();
-    openFontPopup(fBtn, {
+    // Keep the dismiss closure: every POINTER path closes the popup by itself,
+    // but the paths that destroy the node WITHOUT a pointerdown do not - drop a
+    // workflow file onto the canvas, or press Ctrl+Z while the popup's filter
+    // box has focus, and the graph reloads, closePanel runs, and the popup is
+    // left floating over the new graph. Clicking a font in it then writes to a
+    // detached node and the pick is silently lost.
+    _fontPopupClose = openFontPopup(fBtn, {
       catalog: fontCat,
       currentId: readState(node).font || "",
       extraTop: [{ id: "", label: "Clock (default)" }],
@@ -1077,6 +1159,10 @@ function escClose(e) {
   closePanel();
 }
 function closePanel() {
+  // Take the font popup down with the panel (see the note at the open site).
+  // dismiss is idempotent, and it also detaches the popup's own document
+  // listeners + its IntersectionObserver, which removing the element would not.
+  if (_fontPopupClose) { try { _fontPopupClose(); } catch (_e) {} _fontPopupClose = null; }
   destroyPicker(_panelNode);
   if (_panel) { try { _panel.remove(); } catch (_e) {} }
   _panel = null; _panelNode = null; _panelSyncMute = null;
@@ -1413,7 +1499,11 @@ function setupNode(node) {
     });
     applyAdaptiveCanvasOnly(widget);
     widget.computeLayoutSize = () => ({ minHeight: BASE_H, minWidth: 1 });
-    node._pixRtFloorOff = installResizeFloor(root, () => BASE_H);
+    // The floor must follow the SCALE, not sit at BASE_H. It is pinned only
+    // while a resize handle is dragged, which is exactly when the frontend takes
+    // its collapse measurement - so a constant 50 let the bottom edge be dragged
+    // up through a 4x clock, spilling 200px of digits out of the frame.
+    node._pixRtFloorOff = installResizeFloor(root, () => Math.round(BASE_H * (node._rtScale || 1)));
     node._pixRtScaleOff = installVueScaleObserver(node, root);
   } else {
     // Classic: NO DOM widget — the clock is painted on the node canvas
@@ -1576,12 +1666,25 @@ app.registerExtension({
       const r = _origFg ? _origFg.apply(this, arguments) : undefined;
       if (ctx && !isVueNodes()) {
         if (!isGraphLoading()) {
-          // ONLY while this node's handle is actually being dragged. Outside a
-          // gesture the size is not ours to touch: the height carries the scale
-          // and nothing needs correcting. (onResize normally lands first and has
-          // already done this; the frame after the drag ends is what this is
-          // really for, plus any path that moves node.size without onResize.)
-          if (isResizingThis(this)) applyResizeAspect(this);
+          // ONLY while this node's handle is actually being dragged - outside a
+          // gesture the size is not ours to touch. (onResize normally lands
+          // first and has already done this; the frame after the drag ends is
+          // what this is really for, plus any path that moves node.size without
+          // onResize.)
+          //
+          // ...with ONE exception: a height that is OUT OF RANGE is not a size
+          // anyone chose, so it gets repaired. This is how a timer saved in
+          // NODES 2.0 survives being opened in classic. Vue owns the height
+          // there and leaves a stub in node.size (MEASURED: 13.3 while the node
+          // rendered 43px tall), so without the repair classic would honour that
+          // stub - a 13px-tall sliver with the clock drawn at the MIN_S floor
+          // inside it, and nothing left to heal it once the aspect rule is
+          // gesture-gated. applyResizeAspect derives from the WIDTH, which IS
+          // the scale carrier in Nodes 2.0, so the clock comes back the size the
+          // user actually made it there. A legitimately-sized node always has
+          // its height in range, so this can never fire on a normal open.
+          const hOut = !(this.size[1] >= BASE_H - 0.5 && this.size[1] <= BASE_H * MAX_S + 0.5);
+          if (isResizingThis(this) || hOut) applyResizeAspect(this);
           else syncScaleFromSize(this);
         }
         try { paintLegacyClock(this, ctx); } catch (_e) {}
