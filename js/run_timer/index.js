@@ -383,6 +383,43 @@ function maybeFitWidth(node) {
   node._rtWidthSig = sig;
   fitClockWidth(node);
 }
+/**
+ * THE RESIZE RULE (classic): the node becomes the smallest clock-shaped box that
+ * CONTAINS the pointer - `scale = max(width/unit, height/BASE_H)`.
+ *
+ * It is a pure function of the size LiteGraph proposes, with NO history, and
+ * that is the whole point. The first cut derived the scale from the WIDTH alone
+ * and it felt exactly as reported: "snappy up and down, jumping text". The cause
+ * is that LiteGraph proposes an ABSOLUTE size each frame (pointer minus node
+ * origin), not a delta - so dragging DOWNWARD leaves the proposed width
+ * untouched, the width-derived height snapped back to where it already was, the
+ * node refused to grow, and the vertically-centred digits jumped as the height
+ * flicked between two values.
+ *
+ * Anything that compares against the size we ourselves wrote last frame
+ * oscillates for the same reason: after we grow the node past the pointer, the
+ * next proposal is still measured from the pointer, so it reads as a large
+ * "movement" back the other way. max() has no such memory: as the pointer moves
+ * smoothly, the scale moves smoothly, in whichever direction is being pulled.
+ */
+function applyResizeAspect(node) {
+  const u = clockUnitWidth(node);
+  const s = Math.max(1, Math.min(MAX_S, Math.max(node.size[0] / u, node.size[1] / BASE_H)));
+  node._rtScale = s;
+  const w = Math.round(u * s), h = Math.round(BASE_H * s);
+  if (Math.abs(node.size[0] - w) > 0.5) node.size[0] = w;
+  if (Math.abs(node.size[1] - h) > 0.5) node.size[1] = h;
+}
+// Is THIS node's resize handle being dragged right now? LiteGraph tracks it on
+// the canvas (verified live: canvas.resizing_node). It is what lets the aspect
+// rule run ONLY during a real gesture - so it can never fire on the load path,
+// where max() would happily "correct" a workflow saved by the pre-resize
+// version (height pinned at 50, width whatever the user dragged) into a 2x clock
+// on sight, and flag the untouched workflow modified.
+function isResizingThis(node) {
+  try { return app.canvas && app.canvas.resizing_node === node; } catch (_e) { return false; }
+}
+
 // Adopt the scale the CURRENT node size implies. Read-only (never writes
 // node.size), so it is safe on the load path: a workflow saved with a big clock
 // comes back big, and the scale falls out of the size that was saved.
@@ -403,13 +440,6 @@ function syncScaleFromSize(node) {
   }
   const h = node.size[1] || BASE_H;
   node._rtScale = Math.max(1, Math.min(MAX_S, h / BASE_H));
-  // Seed the width memo so the FIRST painted frame is not mistaken for a drag.
-  // It matters for a workflow saved by the pre-resize version, where the height
-  // was pinned at 50 but the width was whatever the user had dragged: read as a
-  // drag, a 300x50 timer would be "corrected" to a 2x clock on sight (and flag
-  // the untouched workflow modified). Seeded, it keeps the digit size it was
-  // saved with, and simply re-hugs the next time the readout changes.
-  node._rtLastW = node.size[0];
 }
 
 // ── the chosen font ─────────────────────────────────────────────────────────
@@ -1418,7 +1448,7 @@ const HELP = {
   sections: [
     { heading: "What it does", body: "The clock resets to zero the moment you press Run, counts up while the workflow is working, and freezes on the total time when it finishes.\n\nIt can also chime when the run is done, so you know even when you are in another browser tab or app. That is off to begin with: right-click the timer and turn on 'Chime on finish' for the timers you want to hear." },
     { heading: "A clean floating clock", body: "The node is just the clock - no title bar, no frame - so it takes very little room on the canvas. Drag it from anywhere on the clock to move it, and right-click it for the settings. It works the same in both the classic and the new node interface." },
-    { heading: "Make it bigger", body: "Drag the corner of the clock (the bottom-right edge in the classic interface, any edge in the new one) and the whole clock scales up with it: digits, the little m and s, and the status dot. Handy on a second monitor, or just to see the time from across the room.\n\nYou size it by dragging it WIDER, and the height follows on its own so the clock always fills the node with no empty black around it. It will not go smaller than its original size, and each timer remembers how big you made it, saved with the workflow." },
+    { heading: "Make it bigger", body: "Drag the corner of the clock and the whole thing scales up with it: digits, the little m and s, and the status dot. Handy on a second monitor, or just to see the time from across the room.\n\nDrag in any direction you like - out, down, or diagonally - and the clock keeps its shape, so it always fills the node with no empty black around it. It will not go smaller than its original size, and each timer remembers how big you made it, saved with the workflow." },
     { heading: "Pick a font for it", body: "Right-click and choose 'Clock font' to draw the time in any of the bundled fonts: condensed ones like Oswald, Bebas Neue and Anton look particularly good as a big clock, and JetBrains Mono keeps the classic digital look.\n\nIt is the same font list the Text Overlay and Watermark nodes use, so any .ttf or .otf you drop into ComfyUI/models/fonts shows up here too (press the ↻ button in the picker to pick up new ones without restarting). Handwriting fonts are left out on purpose: they are hard to read as a clock. Choose 'Clock (default)' to go back to the built-in face." },
     { heading: "Reading the clock", body: "The time shows as minutes : seconds (for example 02:47). If a run goes past an hour the clock switches to hours : minutes : seconds. A small dot in the corner is green while running and orange the moment it finishes." },
     { heading: "Comparing workflows across tabs", body: "Each workflow remembers its own last time, so you can run several workflows in different tabs and switch between them to compare how long each one took.", bullets: [
@@ -1509,13 +1539,7 @@ app.registerExtension({
     // serialized field on a load frame (convention #7 / Vue Compat #18).
     const _origResize = nodeType.prototype.onResize;
     nodeType.prototype.onResize = function (size) {
-      if (!isVueNodes()) {
-        const u = clockUnitWidth(this);
-        if (this.size[0] < u) this.size[0] = u;                 // never below scale 1
-        if (this.size[0] > u * MAX_S) this.size[0] = u * MAX_S; // and never absurd
-        this._rtScale = clockScale(this, this.size[0], true);
-        this.size[1] = Math.round(BASE_H * this._rtScale);
-      }
+      if (!isVueNodes()) applyResizeAspect(this);
       if (_origResize) return _origResize.apply(this, arguments);
     };
 
@@ -1541,24 +1565,13 @@ app.registerExtension({
       const r = _origFg ? _origFg.apply(this, arguments) : undefined;
       if (ctx && !isVueNodes()) {
         if (!isGraphLoading()) {
-          const u = clockUnitWidth(this);
-          if (this.size[0] < u) this.size[0] = u;
-          else if (this.size[0] > u * MAX_S) this.size[0] = u * MAX_S;
-          // Only a WIDTH that actually moved is a resize gesture. Without this
-          // test the scale would be re-read from the width on every frame, and
-          // the frame right after the readout gets wider (decimals on, a wider
-          // font) - but before the re-hug lands - would read that as "the user
-          // made it smaller" and shrink the clock for good. The height carries
-          // the scale the rest of the time, precisely because it does not move
-          // when the readout does.
-          if (Math.abs((this._rtLastW == null ? -1 : this._rtLastW) - this.size[0]) > 0.5) {
-            this._rtScale = clockScale(this, this.size[0], true);
-            const h = Math.round(BASE_H * this._rtScale);
-            if (Math.abs((this.size[1] || 0) - h) > 1) this.size[1] = h;
-          } else {
-            syncScaleFromSize(this);
-          }
-          this._rtLastW = this.size[0];
+          // ONLY while this node's handle is actually being dragged. Outside a
+          // gesture the size is not ours to touch: the height carries the scale
+          // and nothing needs correcting. (onResize normally lands first and has
+          // already done this; the frame after the drag ends is what this is
+          // really for, plus any path that moves node.size without onResize.)
+          if (isResizingThis(this)) applyResizeAspect(this);
+          else syncScaleFromSize(this);
         }
         try { paintLegacyClock(this, ctx); } catch (_e) {}
       }
