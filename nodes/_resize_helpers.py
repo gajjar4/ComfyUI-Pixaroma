@@ -12,6 +12,23 @@ from typing import Tuple
 
 from PIL import Image
 
+# Pillow's spellings for a 16-bit GREYSCALE image, which it does NOT normalise
+# to one name: the exact string varies with the file format and the Pillow
+# version (this box's Pillow 12.1.1 reports "I;16" for a 16-bit PNG where an
+# older one reports "I"). Any loader that calls .convert("RGB") must scale
+# these down FIRST, because convert CLAMPS every sample above 255 instead of
+# scaling it. Measured on a 0..65535 ramp: mean 254.0 with 2 unique values
+# against the correct 127.5 with 256. That is a near-white picture handed back
+# with no error anywhere, for a perfectly ordinary scan, depth map or
+# astro/medical capture - and ComfyUI's own Load Image renders the same file
+# correctly, because core now routes through PyAV instead of this idiom.
+# 257 is the exact divisor: 65535 / 257 = 255.
+#
+# Kept HERE rather than in each loader because all three (Load Image, Load
+# Image Mini, Load Images from Folder) share this module, and three private
+# copies of a rule like this drift.
+_I16_MODES = ("I;16", "I;16B", "I;16L", "I;16N")
+
 # Resize-related defaults shared by both nodes. Each node owns its own
 # DEFAULT_STATE that spreads these in (Image Resize adds preview_open + cached
 # dims; Load Image keeps its own copy with version/etc).

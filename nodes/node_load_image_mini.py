@@ -23,7 +23,7 @@ from PIL import Image, ImageOps, ImageSequence
 import folder_paths
 import node_helpers
 
-from ._resize_helpers import _resize_frame
+from ._resize_helpers import _I16_MODES, _resize_frame
 # Reuse Load Image's state parsing verbatim so the resize behaviour is identical
 # (_parse_state merges against its DEFAULT_STATE; _parse_orig_name reads the
 # non-clipspace name the frontend injects for a stable Filename after masking).
@@ -107,6 +107,8 @@ class PixaromaLoadImageMini:
             frame = node_helpers.pillow(ImageOps.exif_transpose, frame)
             if frame.mode == "I":
                 frame = frame.point(lambda px: px * (1 / 255))
+            elif frame.mode in _I16_MODES:
+                frame = frame.point(lambda px: px * (1 / 257))
             rgb = frame.convert("RGB")
 
             if orig_w is None:

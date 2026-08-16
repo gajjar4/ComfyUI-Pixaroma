@@ -25,7 +25,7 @@ from ._path_guard import (
     denied_message as _pix_denied_message,
     rel_is_rooted as _pix_rel_is_rooted,
 )
-from ._resize_helpers import _resize_frame
+from ._resize_helpers import _I16_MODES, _resize_frame
 
 
 # Resize keys MUST match node_load_image.py::DEFAULT_STATE (shared engine).
@@ -85,6 +85,8 @@ def _load_one(path, state, dtype):
     frame = ImageOps.exif_transpose(next(ImageSequence.Iterator(img)))
     if frame.mode == "I":
         frame = frame.point(lambda px: px * (1 / 255))
+    elif frame.mode in _I16_MODES:
+        frame = frame.point(lambda px: px * (1 / 257))
     rgb = frame.convert("RGB")
     orig_w, orig_h = rgb.size
 

@@ -108,17 +108,27 @@ def _plain_file_path(video):
     if not isinstance(video, VideoFromFile):
         return None
 
-    try:
-        start, duration = video.get_active_trim_window()
+    # Discriminate on PRESENCE, never on exception type. An earlier version of
+    # this guard used `except AttributeError: pass` to mean "older build with no
+    # trim concept", which left exactly the hole the guard exists to close:
+    # get_active_trim_window() is only a pure accessor for a NON-NEGATIVE
+    # start_time - for a negative one (core's Trim Video accepts down to -1e5)
+    # it calls _get_raw_duration(), which opens the file with PyAV and reaches
+    # for things like video_stream.codec.capabilities. An AttributeError from
+    # in there is indistinguishable from a missing method, so a PyAV version
+    # skew would have been read as "untrimmed" and the untrimmed file read -
+    # silently wrong frames. Measured by mutation: of AttributeError /
+    # ValueError / RuntimeError raised inside, only AttributeError reached the
+    # file; the other two already failed safe.
+    getter = getattr(video, "get_active_trim_window", None)
+    if getter is not None:
+        try:
+            start, duration = getter()
+        except Exception:
+            # Cannot prove it is untrimmed, so do not read the file.
+            return None
         if start or duration:
             return None
-    except AttributeError:
-        pass        # older ComfyUI builds have no trim concept at all
-    except Exception:
-        # Something went wrong ASKING about the trim. Fail safe: if we cannot
-        # prove the video is untrimmed, do not read the file, because reading a
-        # trimmed one returns the wrong frames with no error at all.
-        return None
 
     try:
         source = video.get_stream_source()

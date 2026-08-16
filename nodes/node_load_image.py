@@ -19,7 +19,7 @@ from PIL import Image, ImageOps, ImageSequence
 import folder_paths
 import node_helpers
 
-from ._resize_helpers import _resize_frame
+from ._resize_helpers import _I16_MODES, _resize_frame
 
 
 DEFAULT_STATE = {
@@ -175,6 +175,8 @@ class PixaromaLoadImage:
             frame = node_helpers.pillow(ImageOps.exif_transpose, frame)
             if frame.mode == "I":
                 frame = frame.point(lambda px: px * (1 / 255))
+            elif frame.mode in _I16_MODES:
+                frame = frame.point(lambda px: px * (1 / 257))
             rgb = frame.convert("RGB")
 
             if orig_w is None:
