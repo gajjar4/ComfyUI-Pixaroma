@@ -10,6 +10,9 @@ import {
 import { registerNodeHelp } from "../shared/help.mjs";
 import { createPixaromaColorPicker } from "../shared/color_picker.mjs";
 import { pixApiUrl, pixAsset } from "../shared/api_url.mjs";
+// openFontPopup injects its own CSS, so there is nothing else to import here.
+import { openFontPopup } from "../shared/font_picker.mjs";
+import { getFontCatalog, loadFontForLayer } from "../framework/fonts.mjs";
 import { openRunHistory, closeRunHistoryFor, refreshRunHistory } from "./history.mjs";
 
 // ╔══════════════════════════════════════════════════════════════════════╗
@@ -47,15 +50,47 @@ const BRAND = "#f66744";
 const NODE_NAME = "PixaromaRunTimer";
 const STATE_PROP = "runTimerState";
 
-const NODE_W = 160;  // starting width (refit to the clock content on drop)
-const MIN_W = 130;   // resize floor — keeps the m:s readout un-clipped
-const CLOCK_H = 50;  // node height (constant — a single tight clock line)
-const FIT_PAD_X = 26; // horizontal breathing room added around the measured clock
+const MIN_W = 130;   // absolute safety floor if a measurement ever returns junk
+const BASE_H = 50;   // node height AT SCALE 1 (the original, un-resized clock)
+
+// ── the clock scales with the node (2026-08-16) ─────────────────────────────
+// Asked for on Discord: "make it bigger so I can read it across the room."
+//
+// WIDTH IS THE HANDLE, and the height follows from it. That is not a taste
+// call, it is what each renderer allows (measured live, frontend 1.4x):
+//   • NODES 2.0 REJECTS a height write. setSize([300,180]) came back as
+//     [300, 13.3] while the node rendered 43px tall - the height is derived
+//     from the widget's CONTENT and the layout store owns it. The WIDTH write
+//     took (139 -> 300). So there, scaling the font is what makes the node
+//     taller, and we must never write the height at all.
+//   • CLASSIC has one resize handle (the bottom-right corner) and honours
+//     node.size, so we read the width the user dragged and set the height
+//     ourselves. Dragging the corner therefore scales the clock and the node
+//     keeps hugging it - no empty black margin, which is the whole look.
+// One rule, both renderers: scale = node width / the clock's width at scale 1.
+const MIN_S = 0.45;  // Nodes 2.0 has no width clamp: shrink to fit, never clip
+const MAX_S = 8;     // sanity cap (a ~400px tall clock) so a stray drag can't
+                     // produce a 4000px node that is a pain to grab back
+
+// Every hard-coded pixel of the clock face, at scale 1. The canvas painter and
+// the Nodes 2.0 CSS both multiply these by the scale, so the two renderers stay
+// the same clock. Change a number here, not in one of the two renderers.
+const M = {
+  num: 30, frac: 19, unit: 13,  // font sizes
+  ls: 1,                         // letter-spacing between digits
+  gap: 5,                        // half-gap either side of the colon
+  unitDx: 2, unitDy: 8,          // superscript offset from the digits
+  padX: 26,                      // breathing room either side of the readout
+  dotR: 3.5, dotAt: 11,          // status dot radius + centre
+  radius: 8,                     // screen corner radius
+};
 
 const DEFAULT_STATE = {
   version: 1,
   color: BRAND,   // clock digit color
   decimals: 0,    // 0 = m:s (default), 2 = + hundredths, 3 = + milliseconds
+  font: "",       // "" = the built-in monospace clock face; else a catalog id
+                  // (the SAME font library Text Overlay / Watermark / Note use)
   // OFF by default (2026-08-13, the user's call after people asked for it). A
   // node that starts making a noise the first time you press Run is the kind of
   // thing you have to go and switch off, and the clock is the point of this node
@@ -211,47 +246,227 @@ function refreshClock(node) {
   else paint(node);
 }
 
-// ── fit the node width to the clock content (the Label 'fit' trick) ─────────
-// Monospace digits → the width is stable per SHAPE (decimals + hour rollover), so
-// we only remeasure/resize when the shape changes. Sizing the node tightly to the
-// content is what makes it look like a compact clock with no empty space.
-let _measCanvas = null;
-function measureClockContentWidth(node) {
-  if (!_measCanvas) _measCanvas = document.createElement("canvas");
-  const ctx = _measCanvas.getContext("2d");
-  const parts = clockParts(node._rtDisplayMs || 0, node._pixRtDecimals != null ? node._pixRtDecimals : 0);
-  const NUM = "600 30px 'Consolas','DejaVu Sans Mono',ui-monospace,monospace";
-  const UNIT = "500 13px 'Consolas','DejaVu Sans Mono',ui-monospace,monospace";
-  const FRAC = "600 19px 'Consolas','DejaVu Sans Mono',ui-monospace,monospace";
-  const gap = 5;
-  let total = 0;
-  ctx.font = NUM; const colonW = ctx.measureText(":").width;
-  parts.groups.forEach((g, i) => {
-    if (i > 0) total += gap * 2 + colonW;
-    ctx.font = NUM; total += ctx.measureText(g.num).width + Math.max(0, g.num.length - 1); // + ~1px letter-spacing/digit
-    if (parts.frac && i === parts.groups.length - 1) { ctx.font = FRAC; total += ctx.measureText(parts.frac).width; }
-    ctx.font = UNIT; total += 2 + ctx.measureText(g.unit).width;
-  });
-  return total;
+// ── the clock face: fonts, layout, measurement ──────────────────────────────
+// ONE layout function serves BOTH the width measurement and the canvas painter.
+// They used to compute widths separately with slightly different formulas, which
+// is a drift waiting to happen the moment the face changes (and it did: the
+// measure carried a letter-spacing fudge the painter did not apply).
+
+/** The canvas/CSS font stack for this node: the chosen catalog font if one is
+ *  loaded, else the built-in monospace clock face. */
+function clockFontStack(node) {
+  const v = node._rtFontVar;
+  return v
+    ? `"Pix-${v.fontId}${v.italic ? "-Italic" : ""}",'Consolas','DejaVu Sans Mono',ui-monospace,monospace`
+    : "'Consolas','DejaVu Sans Mono',ui-monospace,monospace";
 }
+function clockFonts(node, s) {
+  const stack = clockFontStack(node);
+  // A catalog font is registered at the weight resolveFontVariant picked, so ask
+  // for THAT: requesting 600 from a static 400-only face (Bebas Neue, Anton)
+  // makes the browser synthesize a smeared fake bold.
+  const w = node._rtFontVar ? node._rtFontVar.weight : 0;
+  return {
+    num: `${w || 600} ${M.num * s}px ${stack}`,
+    frac: `${w || 600} ${M.frac * s}px ${stack}`,
+    unit: `${w || 500} ${M.unit * s}px ${stack}`,
+    stack,
+  };
+}
+
+// Widest digit at the current font — the fixed cell every digit is drawn in.
+// WHY fixed cells: the built-in face is monospace, but a chosen font need not
+// be, and a proportional font makes every digit a different width, so the
+// centred readout would visibly shuffle sideways on every tick (and, at 3
+// decimals, on every frame). Drawing each digit centred in a constant cell
+// pins the layout for ANY font.
+function digitCell(ctx, s) {
+  let w = 0;
+  for (let i = 0; i < 10; i++) w = Math.max(w, ctx.measureText(String(i)).width);
+  return w + M.ls * s;
+}
+function numRunWidth(ctx, str, cell, dotW) {
+  let w = 0;
+  for (const ch of str) w += (ch === "." ? dotW : cell);
+  return w;
+}
+function drawNumRun(ctx, str, x, midY, cell, dotW) {
+  for (const ch of str) {
+    const c = ch === "." ? dotW : cell;
+    fillTextVC(ctx, ch, x + (c - ctx.measureText(ch).width) / 2, midY);
+    x += c;
+  }
+  return x;
+}
+
+/** Measure the whole readout at `s`. Returns the pieces the painter needs, so
+ *  the painted clock and the node width can never disagree. */
+function clockLayout(ctx, node, s) {
+  const parts = clockParts(node._rtDisplayMs || 0, node._pixRtDecimals != null ? node._pixRtDecimals : 0);
+  const f = clockFonts(node, s);
+  ctx.font = f.num;
+  const numCell = digitCell(ctx, s);
+  const numDot = ctx.measureText(".").width;
+  const colonW = ctx.measureText(":").width;
+  ctx.font = f.frac;
+  const fracCell = digitCell(ctx, s);
+  const fracDot = ctx.measureText(".").width;
+  const segs = parts.groups.map((g, i) => {
+    ctx.font = f.num;
+    const numW = numRunWidth(ctx, g.num, numCell, numDot);
+    let fracW = 0;
+    if (parts.frac && i === parts.groups.length - 1) {
+      ctx.font = f.frac;
+      fracW = numRunWidth(ctx, parts.frac, fracCell, fracDot);
+    }
+    ctx.font = f.unit;
+    const unitW = ctx.measureText(g.unit).width;
+    return { g, numW, fracW, unitW };
+  });
+  let total = 0;
+  segs.forEach((sg, i) => {
+    if (i > 0) total += M.gap * 2 * s + colonW;
+    total += sg.numW + sg.fracW + M.unitDx * s + sg.unitW;
+  });
+  return { parts, f, segs, total, colonW, numCell, numDot, fracCell, fracDot };
+}
+
+// ── node width <-> scale ────────────────────────────────────────────────────
+// The node's width at scale 1 (readout + breathing room). Cached per
+// shape+font: it costs ~20 measureText calls and the painter runs every frame.
+let _measCanvas = null;
+function measureCtx() {
+  if (!_measCanvas) _measCanvas = document.createElement("canvas");
+  return _measCanvas.getContext("2d");
+}
+function shapeSig(node) {
+  const parts = clockParts(node._rtDisplayMs || 0, node._pixRtDecimals != null ? node._pixRtDecimals : 0);
+  return parts.groups.length + "|" + (parts.frac ? parts.frac.length : 0) + "|" + (node._rtFontKey || "");
+}
+function clockUnitWidth(node) {
+  const sig = shapeSig(node);
+  if (node._rtUnitSig === sig && node._rtUnitW > 0) return node._rtUnitW;
+  const w = Math.max(MIN_W, Math.round(clockLayout(measureCtx(), node, 1).total + M.padX));
+  node._rtUnitSig = sig;
+  node._rtUnitW = w;
+  return w;
+}
+/** The scale a box of `boxW` px asks for. `floorAtOne` for the size writers
+ *  (classic can be clamped, so it never renders below the original size);
+ *  the painter passes false so a too-narrow Nodes 2.0 node shrinks to fit
+ *  rather than spilling its digits outside the frame. */
+function clockScale(node, boxW, floorAtOne) {
+  const u = clockUnitWidth(node);
+  if (!(u > 0) || !(boxW > 0)) return 1;
+  return Math.max(floorAtOne ? 1 : MIN_S, Math.min(MAX_S, boxW / u));
+}
+
+// ── fit the node to the clock (the Label 'fit' trick, now scale-aware) ──────
+// THE one width writer. Re-hugs the node to the readout at the CURRENT scale,
+// so toggling decimals or swapping the font keeps the size the user chose.
+// In Nodes 2.0 the height is NOT ours to set (see the note at MIN_S) - it
+// follows the content by itself.
 function fitClockWidth(node) {
   if (isGraphLoading()) return; // dirty-on-load safe (trust the saved width on load)
   if (typeof node.setSize !== "function") return;
-  const w = Math.max(MIN_W, Math.round(measureClockContentWidth(node) + FIT_PAD_X));
-  if (Math.abs((node.size[0] || 0) - w) > 1) node.setSize([w, node.size[1]]);
+  const s = node._rtScale || 1;
+  const w = Math.round(clockUnitWidth(node) * s);
+  const h = Math.round(BASE_H * s);
+  const vue = isVueNodes();
+  const dw = Math.abs((node.size[0] || 0) - w);
+  const dh = vue ? 0 : Math.abs((node.size[1] || 0) - h);
+  if (dw > 1 || dh > 1) node.setSize([w, vue ? node.size[1] : h]);
 }
 function maybeFitWidth(node) {
-  const parts = clockParts(node._rtDisplayMs || 0, node._pixRtDecimals != null ? node._pixRtDecimals : 0);
-  const sig = parts.groups.length + "|" + (parts.frac ? parts.frac.length : 0);
+  const sig = shapeSig(node);
   if (node._rtWidthSig === sig) return; // only refit when the readout shape changes
   node._rtWidthSig = sig;
   fitClockWidth(node);
 }
-// Apply color + decimals from state and repaint.
+// Adopt the scale the CURRENT node size implies. Read-only (never writes
+// node.size), so it is safe on the load path: a workflow saved with a big clock
+// comes back big, and the scale falls out of the size that was saved.
+//
+// In CLASSIC the HEIGHT is the carrier, deliberately, even though a drag is read
+// from the width: the height is BASE_H * scale and nothing else, whereas the
+// width also depends on how wide the readout happens to be - which changes with
+// the decimals AND with the chosen font. On the load path that difference is the
+// whole ballgame, because a custom font has NOT loaded yet when we first
+// measure, so a width-derived scale would be computed against fallback metrics
+// and come out wrong. Nodes 2.0 has no choice (the height is the layout's, see
+// MIN_S) and re-derives on every observer tick anyway.
+function syncScaleFromSize(node) {
+  if (isVueNodes()) {
+    const w = (node._pixRtRoot && node._pixRtRoot.clientWidth) || node.size[0] || 0;
+    node._rtScale = clockScale(node, w, false);
+    return;
+  }
+  const h = node.size[1] || BASE_H;
+  node._rtScale = Math.max(1, Math.min(MAX_S, h / BASE_H));
+  // Seed the width memo so the FIRST painted frame is not mistaken for a drag.
+  // It matters for a workflow saved by the pre-resize version, where the height
+  // was pinned at 50 but the width was whatever the user had dragged: read as a
+  // drag, a 300x50 timer would be "corrected" to a 2x clock on sight (and flag
+  // the untouched workflow modified). Seeded, it keeps the digit size it was
+  // saved with, and simply re-hugs the next time the readout changes.
+  node._rtLastW = node.size[0];
+}
+
+// ── the chosen font ─────────────────────────────────────────────────────────
+// A clock is read at a glance, from across the room, so not every font in the
+// library earns a place in this list. Judged by rendering "08:47" and
+// "11:19.886" in all ten (2026-08-16):
+//   • HANDWRITING is out. Caveat's digits are ambiguous at clock sizes and its
+//     slant fights the m/s superscripts - it reads as a broken clock, not a
+//     styled one. The rule is by CATEGORY, not by name, so a future bundled
+//     script font is excluded too. A user's OWN drop-in font is category
+//     "custom" and is never filtered: their font, their call.
+//   • Everything else (sans, serif, display, mono) reads cleanly and stays.
+const CLOCK_FONT_SKIP = ["handwriting"];
+function clockFontCatalog(cat) {
+  return (cat || []).filter((f) => CLOCK_FONT_SKIP.indexOf(f.category) === -1);
+}
+// Ask for 700, not 600. resolveFontVariant picks the CLOSEST available weight,
+// and at 600 Montserrat (400/800) tie-broke to 400 and drew visibly thinner than
+// every other face; at 700 it lands on 800. Inter/Roboto/Lora/Playfair get their
+// 700, and the single-weight display faces (Anton, Bebas Neue) are unaffected.
+const CLOCK_FONT_WEIGHT = 700;
+// Loading is async (FontFace), and a canvas silently falls back to the default
+// face if you set ctx.font before the file is in - so nothing is applied until
+// the load resolves, and then everything is remeasured and repainted.
+function applyDomFont(node) {
+  if (node._pixRtTime) node._pixRtTime.style.fontFamily = clockFontStack(node);
+}
+async function applyClockFont(node) {
+  const id = readState(node).font || "";
+  if (!id) {
+    if (node._rtFontKey === "" && !node._rtFontVar) return;
+    node._rtFontVar = null; node._rtFontKey = "";
+  } else {
+    if (node._rtFontKey === id && node._rtFontVar) return;
+    try {
+      node._rtFontVar = await loadFontForLayer(id, CLOCK_FONT_WEIGHT, false);
+      node._rtFontKey = id;
+    } catch (e) {
+      // A font that has been deleted from models/fonts since it was picked: keep
+      // the clock readable on the built-in face rather than failing to draw.
+      console.warn("[Run Timer Pixaroma] font '" + id + "' could not load:", (e && e.message) || e);
+      node._rtFontVar = null; node._rtFontKey = "";
+    }
+  }
+  node._rtUnitSig = null;   // the metrics changed → drop the cached width
+  applyDomFont(node);
+  fitClockWidth(node);      // re-hug at the same scale, with the new metrics
+  refreshClock(node);
+}
+
+// Apply color + decimals + font from state and repaint.
 function applyState(node) {
   const st = readState(node);
   node._pixRtDecimals = st.decimals;
   if (node._pixRtScreen) node._pixRtScreen.style.setProperty("--cc", st.color || BRAND);
+  node._rtUnitSig = null;   // decimals change the readout width
+  applyClockFont(node);     // async; repaints itself when the file lands
   refreshClock(node);
 }
 // Restore the last frozen total from node.properties (survives tab switch /
@@ -556,7 +771,11 @@ function renderPanelBody(node, body) {
 
   const chRow = row("Chime on finish (this timer)");
   chRow.title = "Turns the finish sound on or off for THIS Run Timer only. Other Run Timers are not affected.";
-  chRow.appendChild(toggle(st.chime, (on) => writeState(node, { chime: on })));
+  // liveToggle, not toggle: this same state is also driven by the mute button on
+  // the Volume row below, and a plain toggle keeps its own internal flag, which
+  // would go stale the moment the other surface flipped it.
+  const chTog = liveToggle(() => !!readState(node).chime, (on) => { writeState(node, { chime: on }); syncMute(); });
+  chRow.appendChild(chTog);
   cSec.appendChild(chRow);
 
   const sRow = row("Sound");
@@ -585,6 +804,20 @@ function renderPanelBody(node, body) {
 
   const vRow = row("Volume");
   vRow.title = "How loud this timer's finish sound is.";
+  // Mute button, at the left of the slider like any media player. It drives the
+  // SAME per-node chime switch as the row above - one state, two surfaces (which
+  // is why both are liveToggle/synced). Added 2026-08-16 because a dimmed "70%"
+  // on its own does not say WHY it is dim, and a struck-out speaker does.
+  // Deliberately NOT dimmed while muted: it is the control that un-mutes, so a
+  // greyed-out version of it would read as broken (the Preview precedent).
+  const muteBtn = el("button", "pix-rt-mutebtn");
+  muteBtn.type = "button";
+  muteBtn.onclick = (e) => {
+    e.stopPropagation();
+    writeState(node, { chime: !readState(node).chime });
+    syncMute();
+  };
+  vRow.appendChild(muteBtn);
   const vol = el("input", "pix-rt-vol");
   vol.type = "range"; vol.min = "0"; vol.max = "100"; vol.step = "1"; vol.value = String(st.volume);
   vol.style.setProperty("--fill", st.volume + "%");
@@ -619,10 +852,21 @@ function renderPanelBody(node, body) {
   // which by then is written.
   function syncMute(force) {
     const on = (typeof force === "boolean") ? force : isMuted();
+    const chime = !!readState(node).chime;
+    // "quiet" = nothing will play, for EITHER reason. The Sound/Volume rows are
+    // meaningless in both cases, so they dim in both; the chime row itself only
+    // dims under the master mute, since it is the switch you would reach for.
+    const quiet = on || !chime;
     mTog.sync(on);
+    chTog.sync(chime);                                   // the other surface
+    muteBtn.classList.toggle("off", !chime);             // ...and the third
+    muteBtn.title = chime
+      ? "Mute this timer (the same switch as Chime on finish above)"
+      : "Unmute this timer";
+    muteBtn.setAttribute("aria-label", chime ? "Mute this timer" : "Unmute this timer");
     chRow.classList.toggle("pix-rt-dim", on);
-    sRow.classList.toggle("pix-rt-dim", on);
-    vRow.classList.toggle("pix-rt-dimv", on);
+    sRow.classList.toggle("pix-rt-dim", quiet);
+    vRow.classList.toggle("pix-rt-dimv", quiet);
     mHint.style.display = on ? "block" : "none";
     requestAnimationFrame(reclampPanel);  // the hint changes the panel height
   }
@@ -641,6 +885,50 @@ function renderPanelBody(node, body) {
     (v) => { writeState(node, { decimals: v }); applyState(node); }
   ));
   dSec.appendChild(dRow);
+
+  // ── Clock font ──
+  // The SAME font library Text Overlay / Text Watermark / Composer text use
+  // (bundled faces + anything dropped into ComfyUI/models/fonts), through the
+  // SAME picker - js/shared/font_picker.mjs - so there is one control to learn
+  // and one to maintain. Convention #14: a custom dark dropdown, never a
+  // native <select>.
+  const fRow = row("Clock font");
+  fRow.title = "The typeface the clock is drawn in. Same font list as the Text Overlay and Watermark nodes, including your own fonts from ComfyUI/models/fonts.";
+  const fBtn = el("div", "pix-rt-fontbtn");
+  const fName = el("span", "name");
+  const fArr = el("span", "arrow"); fArr.textContent = "▾";
+  fBtn.appendChild(fName); fBtn.appendChild(fArr);
+  let fontCat = [];
+  const paintFontBtn = () => {
+    const id = readState(node).font || "";
+    if (!id) {
+      fName.textContent = "Clock (default)";
+      fName.style.fontFamily = "'Consolas',ui-monospace,monospace";
+      return;
+    }
+    const hit = fontCat.find((f) => f.id === id);
+    fName.textContent = hit ? hit.label : id;
+    // Preview the name in its own face, but only once the file is actually in:
+    // naming a font in a family that has not loaded just shows the fallback.
+    loadFontForLayer(id, CLOCK_FONT_WEIGHT, false)
+      .then(() => { fName.style.fontFamily = `"Pix-${id}", 'Consolas', monospace`; })
+      .catch(() => { fName.style.fontFamily = "'Consolas',ui-monospace,monospace"; });
+  };
+  paintFontBtn();
+  getFontCatalog().then((cat) => { fontCat = clockFontCatalog(cat); paintFontBtn(); }).catch(() => {});
+  fBtn.onclick = (e) => {
+    e.stopPropagation();
+    openFontPopup(fBtn, {
+      catalog: fontCat,
+      currentId: readState(node).font || "",
+      extraTop: [{ id: "", label: "Clock (default)" }],
+      filter: clockFontCatalog,   // also applied after the popup's ↻ refresh
+      onPick: (id) => { writeState(node, { font: id || "" }); paintFontBtn(); applyState(node); },
+      onCatalog: (cat) => { fontCat = clockFontCatalog(cat); paintFontBtn(); },
+    });
+  };
+  fRow.appendChild(fBtn);
+  dSec.appendChild(fRow);
 
   const colLbl = el("div", "pix-rt-sublbl"); colLbl.textContent = "Clock color";
   dSec.appendChild(colLbl);
@@ -732,10 +1020,21 @@ function makeDraggable(panel, handle) {
 function outsideClose(e) {
   if (!_panel) return;
   if (_panel.contains(e.target)) return;
-  if (e.target.closest && e.target.closest(".pix-cp-popup, .pix-cp-modal-backdrop")) return;
+  // Both the colour picker and the font picker mount on document.body, so a
+  // click inside either is NOT outside this panel. Without .pix-to-popup here,
+  // picking a font dismisses the settings panel underneath it (convention #19).
+  if (e.target.closest && e.target.closest(".pix-cp-popup, .pix-cp-modal-backdrop, .pix-to-popup")) return;
   closePanel();
 }
-function escClose(e) { if (e.key === "Escape" && _panel) { e.stopPropagation(); closePanel(); } }
+function escClose(e) {
+  if (e.key !== "Escape" || !_panel) return;
+  // The font popup owns Escape while it is open, so one press closes the popup
+  // and leaves the panel standing. Both listeners are capture-phase on document,
+  // so stopPropagation cannot arbitrate this - only the check can.
+  if (document.querySelector(".pix-to-popup")) return;
+  e.stopPropagation();
+  closePanel();
+}
 function closePanel() {
   destroyPicker(_panelNode);
   if (_panel) { try { _panel.remove(); } catch (_e) {} }
@@ -780,16 +1079,23 @@ function injectCSS() {
     // The DOM clock (Nodes 2.0 only). padding:0 → the dark screen fills the node
     // EXACTLY, so there is no frame ring / gray contour around it (the screen IS
     // the node surface). user-select:none so the digits never select.
+    // ── EVERY size below is a calc() off --rt-s, the scale the node's width asks
+    //    for (installVueScaleObserver sets it). That is what makes the clock
+    //    resizable in Nodes 2.0: the font grows, and the node's height follows
+    //    the content by itself. The numbers match the M table used by the
+    //    classic canvas painter, so the two renderers draw the same clock.
+    //    font-feature-settings tnum keeps a chosen (proportional) font's digits
+    //    on a fixed advance, the DOM counterpart of the painter's digit cells.
     ".pix-rt-root{display:flex;padding:0;box-sizing:border-box;width:100%;height:100%;user-select:none;-webkit-user-select:none;}",
-    ".pix-rt-screen{flex:1;min-width:0;position:relative;display:flex;align-items:center;justify-content:center;background:#0c0c0e;border:1px solid #1d1d20;border-radius:8px;padding:6px;box-sizing:border-box;}",
-    ".pix-rt-time{display:flex;align-items:center;justify-content:center;gap:4px;font-family:'Consolas','DejaVu Sans Mono','SF Mono',ui-monospace,monospace;font-variant-numeric:tabular-nums;white-space:nowrap;color:var(--cc,#f66744);}",
+    ".pix-rt-screen{flex:1;min-width:0;position:relative;display:flex;align-items:center;justify-content:center;background:#0c0c0e;border:1px solid #1d1d20;border-radius:calc(8px * var(--rt-s,1));padding:calc(6px * var(--rt-s,1));box-sizing:border-box;}",
+    ".pix-rt-time{display:flex;align-items:center;justify-content:center;gap:calc(4px * var(--rt-s,1));font-family:'Consolas','DejaVu Sans Mono','SF Mono',ui-monospace,monospace;font-variant-numeric:tabular-nums;font-feature-settings:'tnum' 1;white-space:nowrap;color:var(--cc,#f66744);}",
     ".pix-rt-cseg{display:inline-flex;align-items:flex-start;}",
     ".pix-rt-numwrap{display:inline-flex;align-items:baseline;line-height:1;}",
-    ".pix-rt-num{font-size:30px;letter-spacing:1px;}",
-    ".pix-rt-frac{font-size:19px;opacity:0.85;letter-spacing:0.5px;}",
-    ".pix-rt-colon{font-size:30px;line-height:1;opacity:0.7;}",
-    ".pix-rt-unit{font-size:13px;line-height:1;margin-left:2px;margin-top:2px;opacity:0.5;}",
-    ".pix-rt-dot{position:absolute;top:6px;left:7px;width:7px;height:7px;border-radius:50%;background:#6b6b72;}",
+    ".pix-rt-num{font-size:calc(30px * var(--rt-s,1));letter-spacing:calc(1px * var(--rt-s,1));}",
+    ".pix-rt-frac{font-size:calc(19px * var(--rt-s,1));opacity:0.85;letter-spacing:calc(0.5px * var(--rt-s,1));}",
+    ".pix-rt-colon{font-size:calc(30px * var(--rt-s,1));line-height:1;opacity:0.7;}",
+    ".pix-rt-unit{font-size:calc(13px * var(--rt-s,1));line-height:1;margin-left:calc(2px * var(--rt-s,1));margin-top:calc(2px * var(--rt-s,1));opacity:0.5;}",
+    ".pix-rt-dot{position:absolute;top:calc(6px * var(--rt-s,1));left:calc(7px * var(--rt-s,1));width:calc(7px * var(--rt-s,1));height:calc(7px * var(--rt-s,1));border-radius:50%;background:#6b6b72;}",
     ".pix-rt-dot.run{background:#3ec371;animation:pixRtPulse 1s infinite;}",
     ".pix-rt-dot.done{background:var(--pix-acc,#f66744);}",
     ".pix-rt-screen.flash{animation:pixRtFlash 0.6s;}",
@@ -816,7 +1122,14 @@ function injectCSS() {
     // FILLS the node width instead of hugging the digits, so the node body never
     // shows as gray to the right of the clock.
     ".lg-node:has(.pix-rt-root) .lg-node-widgets{grid-template-columns:minmax(0,1fr)!important;padding:0!important;row-gap:0!important;gap:0!important;}",
-    ".lg-node:has(.pix-rt-root) .lg-node-widget{gap:0!important;width:100%!important;}",
+    // padding:0 is load-bearing, NOT tidying. The frontend gives every widget
+    // row a 12px RIGHT padding (its output-dot gutter). On a node whose body IS
+    // the dark clock screen, that padding is 12px of bare node left showing past
+    // the screen's right edge - the "gray contour sticking out on the right"
+    // reported 2026-08-16. MEASURED: node right edge 730 vs screen right edge
+    // 719.2; with this rule both are 730. Same family as the grid-template-columns
+    // fix below, different cause, so fixing one never fixed the other.
+    ".lg-node:has(.pix-rt-root) .lg-node-widget{gap:0!important;width:100%!important;padding:0!important;}",
     ".lg-node:has(.pix-rt-root) .lg-node-widget > *:first-child{display:none!important;}",
     ".lg-node:has(.pix-rt-root) .lg-node-content{padding:0!important;}",
     ".lg-node:has(.pix-rt-root) [class*=\"component-node-background\"]{padding:0!important;gap:0!important;background:transparent!important;}",
@@ -843,6 +1156,14 @@ function injectCSS() {
     // per-child rule rather than dimming the whole row.)
     ".pix-rt-dim{opacity:0.45;}",
     ".pix-rt-dimv > .pix-rt-lbl,.pix-rt-dimv > .pix-rt-vol,.pix-rt-dimv > .pix-rt-volout{opacity:0.45;}",
+    // Mute button on the Volume row. The icon is the BUNDLED SVG used as a CSS
+    // mask, never an emoji (house rule #28): an emoji is drawn by the OS, so it
+    // is a different shape on Windows/Mac/Linux and sits on its own baseline.
+    ".pix-rt-mutebtn{background:transparent;border:1px solid #444;border-radius:4px;width:26px;height:26px;padding:0;cursor:pointer;flex:none;display:flex;align-items:center;justify-content:center;}",
+    ".pix-rt-mutebtn:hover{border-color:var(--pix-acc,#f66744);}",
+    ".pix-rt-mutebtn::before{content:\"\";display:block;width:14px;height:14px;background:#ccc;-webkit-mask:url(\"" + pixAsset("icons/ui/audio.svg") + "\") center/contain no-repeat;mask:url(\"" + pixAsset("icons/ui/audio.svg") + "\") center/contain no-repeat;}",
+    ".pix-rt-mutebtn:hover::before{background:var(--pix-acc,#f66744);}",
+    ".pix-rt-mutebtn.off::before{background:#8a8a8a;-webkit-mask-image:url(\"" + pixAsset("icons/ui/mute.svg") + "\");mask-image:url(\"" + pixAsset("icons/ui/mute.svg") + "\");}",
     ".pix-rt-hint{display:none;font-size:11px;line-height:1.35;color:#8a8a8a;margin:-3px 0 9px;}",
     ".pix-rt-sublbl{font-size:11px;color:#888;margin:2px 0 8px;}",
     ".pix-rt-tog{width:34px;height:18px;border-radius:9px;background:#3a3a3a;position:relative;cursor:pointer;flex:none;transition:background .15s;}",
@@ -851,6 +1172,13 @@ function injectCSS() {
     ".pix-rt-tog.on .k{left:18px;background:#fff;}",
     ".pix-rt-select{background:#1a1a1a;border:1px solid #444;color:#ddd;border-radius:4px;font-size:12.5px;padding:5px 7px;font-family:inherit;cursor:pointer;max-width:150px;}",
     ".pix-rt-select:focus{outline:none;border-color:var(--pix-acc,#f66744);}",
+    // The font picker's closed state: deliberately the same box as .pix-rt-select
+    // above so the two rows read as one control family, even though this one
+    // opens our dark popup and that one is a native list.
+    ".pix-rt-fontbtn{display:flex;align-items:center;gap:6px;background:#1a1a1a;border:1px solid #444;color:#ddd;border-radius:4px;font-size:12.5px;padding:5px 7px;cursor:pointer;max-width:150px;flex:none;}",
+    ".pix-rt-fontbtn:hover{border-color:var(--pix-acc,#f66744);}",
+    ".pix-rt-fontbtn .name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}",
+    ".pix-rt-fontbtn .arrow{color:var(--pix-acc,#f66744);font-size:11px;flex:none;}",
     ".pix-rt-vol{-webkit-appearance:none;appearance:none;flex:1;min-width:0;height:4px;border-radius:2px;outline:none;cursor:pointer;background:linear-gradient(to right,var(--pix-acc,#f66744) var(--fill,70%),#3a3a3a var(--fill,70%));}",
     ".pix-rt-vol::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:14px;height:14px;border-radius:50%;background:var(--pix-acc,#f66744);border:2px solid #1a1a1a;cursor:pointer;}",
     ".pix-rt-vol::-moz-range-thumb{width:13px;height:13px;border-radius:50%;background:var(--pix-acc,#f66744);border:2px solid #1a1a1a;cursor:pointer;}",
@@ -885,44 +1213,43 @@ function fillTextVC(ctx, text, x, yMid) {
 // so LiteGraph handles drag + right-click natively (like the Label node).
 function paintLegacyClock(node, ctx) {
   const w = node.size[0], h = node.size[1];
+  // FIT-TO-BOX, and deliberately NOT just the width: the painter is pure (it
+  // writes no size), so it must stay honest about a box it did not choose - a
+  // node left short by an older version, or mid-drag before onResize lands,
+  // renders a smaller clock instead of spilling digits outside the frame.
+  const s = Math.min(clockScale(node, w, false), Math.max(MIN_S, h / BASE_H));
   const rr = (x, y, ww, hh, r) => { if (ctx.roundRect) ctx.roundRect(x, y, ww, hh, r); else ctx.rect(x, y, ww, hh); };
   ctx.save();
+  // Inside the save(): the layout sets ctx.font while measuring, and that must
+  // not leak out to whatever LiteGraph draws after us.
+  const L = clockLayout(ctx, node, s);
   ctx.fillStyle = "#0c0c0e";
-  ctx.beginPath(); rr(0, 0, w, h, 8); ctx.fill();
+  ctx.beginPath(); rr(0, 0, w, h, M.radius * s); ctx.fill();
   // status dot
   const dm = node._rtDotState || "idle";
   ctx.fillStyle = dm === "run" ? "#3ec371" : dm === "done" ? accentOf(node) : "#6b6b72";
-  ctx.beginPath(); ctx.arc(11, 11, 3.5, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(M.dotAt * s, M.dotAt * s, M.dotR * s, 0, Math.PI * 2); ctx.fill();
   // time
   const col = readState(node).color || BRAND;
-  const parts = clockParts(node._rtDisplayMs || 0, node._pixRtDecimals != null ? node._pixRtDecimals : 0);
-  const NUM = "600 30px 'Consolas','DejaVu Sans Mono',ui-monospace,monospace";
-  const UNIT = "500 13px 'Consolas','DejaVu Sans Mono',ui-monospace,monospace";
-  const FRAC = "600 19px 'Consolas','DejaVu Sans Mono',ui-monospace,monospace";
-  const gap = 5;
   ctx.textAlign = "left";
-  ctx.font = NUM; const colonW = ctx.measureText(":").width;
-  const segs = parts.groups.map((g, i) => {
-    ctx.font = NUM; const nw = ctx.measureText(g.num).width;
-    ctx.font = UNIT; const uw = ctx.measureText(g.unit).width;
-    let fw = 0;
-    if (parts.frac && i === parts.groups.length - 1) { ctx.font = FRAC; fw = ctx.measureText(parts.frac).width; }
-    return { g, nw, uw, fw };
-  });
-  let total = 0;
-  segs.forEach((s, i) => { if (i > 0) total += gap * 2 + colonW; total += s.nw + s.fw + 2 + s.uw; });
-  let x = (w - total) / 2;
+  let x = (w - L.total) / 2;
   const midY = h / 2;
-  segs.forEach((s, i) => {
+  L.segs.forEach((sg, i) => {
     if (i > 0) {
-      ctx.font = NUM; ctx.fillStyle = col; ctx.globalAlpha = 0.7;
-      fillTextVC(ctx, ":", x + gap, midY); ctx.globalAlpha = 1; x += gap * 2 + colonW;
+      ctx.font = L.f.num; ctx.fillStyle = col; ctx.globalAlpha = 0.7;
+      fillTextVC(ctx, ":", x + M.gap * s, midY); ctx.globalAlpha = 1;
+      x += M.gap * 2 * s + L.colonW;
     }
-    ctx.font = NUM; ctx.fillStyle = col; ctx.globalAlpha = 1;
-    fillTextVC(ctx, s.g.num, x, midY); x += s.nw;
-    if (s.fw) { ctx.font = FRAC; ctx.globalAlpha = 0.85; fillTextVC(ctx, parts.frac, x, midY); ctx.globalAlpha = 1; x += s.fw; }
-    ctx.font = UNIT; ctx.fillStyle = col; ctx.globalAlpha = 0.5; ctx.textBaseline = "alphabetic";
-    ctx.fillText(s.g.unit, x + 2, midY - 8); ctx.globalAlpha = 1; x += 2 + s.uw;
+    ctx.font = L.f.num; ctx.fillStyle = col; ctx.globalAlpha = 1;
+    x = drawNumRun(ctx, sg.g.num, x, midY, L.numCell, L.numDot);
+    if (sg.fracW) {
+      ctx.font = L.f.frac; ctx.globalAlpha = 0.85;
+      x = drawNumRun(ctx, L.parts.frac, x, midY, L.fracCell, L.fracDot);
+      ctx.globalAlpha = 1;
+    }
+    ctx.font = L.f.unit; ctx.fillStyle = col; ctx.globalAlpha = 0.5; ctx.textBaseline = "alphabetic";
+    ctx.fillText(sg.g.unit, x + M.unitDx * s, midY - M.unitDy * s);
+    ctx.globalAlpha = 1; x += M.unitDx * s + sg.unitW;
   });
   ctx.restore();
 }
@@ -961,16 +1288,48 @@ function installRtBodyHook() {
 }
 
 // ── node sizing ─────────────────────────────────────────────────────────────
-// The node height is a constant (CLOCK_H) — a title-less single clock line. No
-// reserve to compensate (title_mode NO_TITLE on the node type is consistent from
-// mount in both renderers, so Nodes 2.0 never reserves the title height).
+// The node is a single clock line whose height is BASE_H * the current scale.
+// No title reserve to compensate (title_mode NO_TITLE on the node type is
+// consistent from mount in both renderers).
+//
+// CLASSIC ONLY. In Nodes 2.0 the height is the layout store's (a write there is
+// silently discarded - see the note at MIN_S), so we never touch it.
 function refreshNodeSize(node) {
   if (isGraphLoading()) return;
+  if (isVueNodes()) return;
   try {
     if (typeof node.setSize !== "function") return;
-    const target = isVueNodes() ? CLOCK_H : (typeof node.computeSize === "function" ? node.computeSize()[1] : CLOCK_H);
+    syncScaleFromSize(node);
+    const target = Math.round(BASE_H * (node._rtScale || 1));
     if (Math.abs((node.size[1] || 0) - target) > 1) node.setSize([node.size[0], target]);
   } catch (_e) {}
+}
+
+// Nodes 2.0: the rendered WIDTH is what the user drags, so watch the widget root
+// and hand the scale to the CSS (every face size is a calc() off --rt-s). The
+// node then grows TALLER by itself, because its height is derived from this
+// content. Vue Compat #13: node.onResize is not reliable for a DOM widget, and
+// node.size lies about the rendered size - so measure the element.
+//
+// It deliberately writes NOTHING but a CSS variable: a ResizeObserver that calls
+// setSize fires mid-drag and desyncs Align's resize guard (CLAUDE.md), and any
+// serialized write here would run on the load path and false-dirty the workflow.
+function installVueScaleObserver(node, root) {
+  if (typeof ResizeObserver === "undefined") return () => {};
+  let last = -1;
+  const apply = () => {
+    const w = root.clientWidth;
+    if (!(w > 0)) return;
+    const s = clockScale(node, w, false);
+    node._rtScale = s;
+    if (Math.abs(s - last) < 0.005) return;  // also stops the content-height
+    last = s;                                // reflow from re-triggering us
+    root.style.setProperty("--rt-s", String(s));
+  };
+  const ro = new ResizeObserver(apply);
+  ro.observe(root);
+  apply();
+  return () => { try { ro.disconnect(); } catch (_e) {} };
 }
 
 function setupNode(node) {
@@ -1005,25 +1364,36 @@ function setupNode(node) {
     const widget = node.addDOMWidget("run_timer_ui", "pixaroma_run_timer", root, {
       getValue: () => readState(node),
       setValue: () => {},
-      getMinHeight: () => CLOCK_H,
+      // CONSTANTS, not a live measurement: these feed the layout's floor, and a
+      // measured value creeps node.size bigger on every workflow switch
+      // (CLAUDE.md). The clock grows via the font scale, not via this floor.
+      getMinHeight: () => BASE_H,
       serialize: false, // state lives on node.properties
     });
     applyAdaptiveCanvasOnly(widget);
-    widget.computeLayoutSize = () => ({ minHeight: CLOCK_H, minWidth: 1 });
-    node._pixRtFloorOff = installResizeFloor(root, () => CLOCK_H);
+    widget.computeLayoutSize = () => ({ minHeight: BASE_H, minWidth: 1 });
+    node._pixRtFloorOff = installResizeFloor(root, () => BASE_H);
+    node._pixRtScaleOff = installVueScaleObserver(node, root);
   } else {
     // Classic: NO DOM widget — the clock is painted on the node canvas
     // (onDrawForeground), so the node is a real canvas node: draggable +
-    // right-clickable, no DOM element eating clicks. computeSize hugs the body.
-    node.computeSize = function () { return [MIN_W, CLOCK_H]; };
+    // right-clickable, no DOM element eating clicks.
+    //
+    // computeSize is the SCALE-1 size, which is also LiteGraph's resize floor:
+    // the corner drag cannot make the clock smaller than its original look, and
+    // it grows freely from there. It is a live value (a wider readout at 3
+    // decimals, or a wide font, raises the floor) - never a constant.
+    node.computeSize = function () { return [clockUnitWidth(this), BASE_H]; };
   }
 
-  if (Array.isArray(node.size)) {
-    if (node.size[0] < NODE_W) node.size[0] = NODE_W;
-    node.size[1] = CLOCK_H;
-  } else {
-    node.size = [NODE_W, CLOCK_H];
-  }
+  // A FRESH node opens at SCALE 1 - the original compact clock. Assigned
+  // synchronously (convention #9): configure() runs after this and restores the
+  // saved size for a saved or duplicated node, so this only ever decides what a
+  // brand-new drop looks like. Never deferred into a microtask, or it would run
+  // AFTER configure and flatten every user-resized timer back to small.
+  const fresh = [clockUnitWidth(node), BASE_H];
+  if (Array.isArray(node.size)) { node.size[0] = fresh[0]; node.size[1] = fresh[1]; }
+  else node.size = fresh;
 
   _timers.add(node);
   // nodeCreated fires BEFORE configure() restores node.properties (Vue Compat #8)
@@ -1034,6 +1404,9 @@ function setupNode(node) {
   queueMicrotask(() => {
     adoptLiveRun(node);
     restoreLastRun(node);
+    // BEFORE applyState: the restored WIDTH is what says how big this clock was
+    // left, and every fit below re-hugs at that scale.
+    syncScaleFromSize(node);
     applyState(node);
     refreshNodeSize(node);
   });
@@ -1108,7 +1481,9 @@ app.registerExtension({
       // Re-assert the no_title flag after configure restores node.flags (Align).
       this.flags = this.flags || {};
       if (!this.flags.no_title) this.flags.no_title = true;
-      restoreLastRun(this); applyState(this); refreshNodeSize(this);
+      restoreLastRun(this);
+      syncScaleFromSize(this);   // the restored size carries the chosen scale
+      applyState(this); refreshNodeSize(this);
       return r;
     };
 
@@ -1118,30 +1493,70 @@ app.registerExtension({
       clearTimeout(this._rtDotT);
       try { if (this._pixRtFloorOff) this._pixRtFloorOff(); } catch (_e) {}
       this._pixRtFloorOff = null;
+      try { if (this._pixRtScaleOff) this._pixRtScaleOff(); } catch (_e) {}
+      this._pixRtScaleOff = null;
       if (_panelNode === this) closePanel();
       closeRunHistoryFor(this);
       if (_origRemoved) return _origRemoved.apply(this, arguments);
     };
 
-    // Classic: keep resize HORIZONTAL (width free, height locked to the clock).
+    // Classic: the user drags the WIDTH and the height follows, so the node
+    // always hugs the clock (see the note at MIN_S). Both writes happen here, in
+    // a real user gesture - never in the painter, which must not touch a
+    // serialized field on a load frame (convention #7 / Vue Compat #18).
     const _origResize = nodeType.prototype.onResize;
     nodeType.prototype.onResize = function (size) {
       if (!isVueNodes()) {
-        if (this.size[0] < MIN_W) this.size[0] = MIN_W;
-        this.size[1] = CLOCK_H;
+        const u = clockUnitWidth(this);
+        if (this.size[0] < u) this.size[0] = u;                 // never below scale 1
+        if (this.size[0] > u * MAX_S) this.size[0] = u * MAX_S; // and never absurd
+        this._rtScale = clockScale(this, this.size[0], true);
+        this.size[1] = Math.round(BASE_H * this._rtScale);
       }
       if (_origResize) return _origResize.apply(this, arguments);
     };
 
-    // Classic: paint the clock onto the node canvas + keep the height fixed (also
-    // self-heals a taller size saved by an older version). Nodes 2.0 skips this
-    // (its DOM clock renders instead + onDrawForeground is not the paint path).
+    // Classic: paint the clock onto the node canvas. Nodes 2.0 skips this (its
+    // DOM clock renders instead + onDrawForeground is not the paint path).
+    //
+    // It ALSO carries the height derivation, because onResize alone cannot be
+    // trusted with it: instrumented live through a corner drag, onResize logged
+    // ONE call (our own setSize) while LiteGraph moved node.size repeatedly - so
+    // a width change does land without it. Deriving here means the height is
+    // right on the very next frame whichever path moved the width. (It is also
+    // how the pre-resize version really pinned the height: its onResize lock was
+    // largely decorative and this clamp did the work.)
+    //
+    // THE isGraphLoading GATE IS NOT OPTIONAL (convention #7): node.size is
+    // serialized and a draw hook runs on the FIRST frame of a workflow load, so
+    // an ungated write here is the one thing that can flag an untouched workflow
+    // as modified. It is safe by construction too - every width we write is
+    // paired with its height, so a saved pair already agrees and nothing is
+    // written - but the gate is what makes that a guarantee instead of a hope.
     const _origFg = nodeType.prototype.onDrawForeground;
     nodeType.prototype.onDrawForeground = function (ctx) {
       const r = _origFg ? _origFg.apply(this, arguments) : undefined;
       if (ctx && !isVueNodes()) {
-        if (this.size[0] < MIN_W) this.size[0] = MIN_W;
-        if (Math.abs((this.size[1] || 0) - CLOCK_H) > 0.5) this.size[1] = CLOCK_H;
+        if (!isGraphLoading()) {
+          const u = clockUnitWidth(this);
+          if (this.size[0] < u) this.size[0] = u;
+          else if (this.size[0] > u * MAX_S) this.size[0] = u * MAX_S;
+          // Only a WIDTH that actually moved is a resize gesture. Without this
+          // test the scale would be re-read from the width on every frame, and
+          // the frame right after the readout gets wider (decimals on, a wider
+          // font) - but before the re-hug lands - would read that as "the user
+          // made it smaller" and shrink the clock for good. The height carries
+          // the scale the rest of the time, precisely because it does not move
+          // when the readout does.
+          if (Math.abs((this._rtLastW == null ? -1 : this._rtLastW) - this.size[0]) > 0.5) {
+            this._rtScale = clockScale(this, this.size[0], true);
+            const h = Math.round(BASE_H * this._rtScale);
+            if (Math.abs((this.size[1] || 0) - h) > 1) this.size[1] = h;
+          } else {
+            syncScaleFromSize(this);
+          }
+          this._rtLastW = this.size[0];
+        }
         try { paintLegacyClock(this, ctx); } catch (_e) {}
       }
       return r;
