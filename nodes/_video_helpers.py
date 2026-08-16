@@ -593,6 +593,19 @@ def _grab_frame_ffmpeg(path, fps, idx):
         ffmpeg, "-nostdin", "-loglevel", "error",
         "-ss", f"{t:.6f}", "-i", path,
         "-frames:v", "1", "-an",
+        # rgb24 is load-bearing, not tidiness. Without it a 16-bit GRAYSCALE
+        # source (gray16le, or a gray10/12le encode - scientific, astro and
+        # medical captures look like this) makes ffmpeg emit a 16-bit grey PNG,
+        # which Pillow opens as mode `I;16`, and .convert("RGB") on that mode
+        # CLAMPS every sample above 255 instead of scaling it down. Measured:
+        # 2 unique values and mean 225 (near-white) against 151 values and mean
+        # 125 for the identical 8-bit source. ffmpeg exits 0 and Pillow raises
+        # nothing, so the caller's fallback never engages and the user is handed
+        # a white picture with no error anywhere. Fixing it in the PIL call
+        # instead would have to cover Pillow's `I`, `I;16`, `I;16B` and `I;16L`
+        # spellings, which differ between Pillow versions. Verified: ordinary
+        # 8-bit output is BYTE-IDENTICAL with and without the flag.
+        "-pix_fmt", "rgb24",
         "-f", "image2pipe", "-c:v", "png", "-",
     ]
     try:
