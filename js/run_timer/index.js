@@ -538,10 +538,21 @@ async function applyClockFont(node) {
       // missing. Do NOT "fix" this in resolveFontVariant - Text Overlay and
       // Watermark rely on that Inter fallback.
       if (!variant || variant.fontId !== id) {
-        console.warn("[Run Timer Pixaroma] clock font '" + id + "' is not installed; using the built-in face.");
+        // WARN ONCE PER ID. Falling back sets _rtFontKey = "", which can never
+        // satisfy the "already applied" memo at the top, so every later
+        // applyState re-enters this branch - and applyState runs on EVERY
+        // pointermove of the colour picker, which meant a warning per mousemove
+        // for exactly the user the warning is meant for. Deliberately NOT
+        // memoizing the RESOLVE itself: someone who installs the font, presses ↻
+        // in the picker and re-picks it must still get it.
+        if (node._rtFontWarned !== id) {
+          console.warn("[Run Timer Pixaroma] clock font '" + id + "' is not installed; using the built-in face.");
+          node._rtFontWarned = id;
+        }
         node._rtFontVar = null; node._rtFontKey = "";
       } else {
         node._rtFontVar = variant; node._rtFontKey = id;
+        node._rtFontWarned = null;   // installed later → warn again if it goes missing
       }
     } catch (e) {
       if (node._rtFontGen !== gen) return;
