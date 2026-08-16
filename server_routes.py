@@ -43,6 +43,7 @@ from .nodes._path_guard import (
     rel_is_rooted as _pix_rel_is_rooted,
 )
 from .nodes._font_catalog import full_catalog as _font_full_catalog
+from .nodes._resize_helpers import _I16_MODES
 from .nodes._font_catalog import (
     get_custom_fonts_dir as _font_custom_dir,
     resolve_custom_file as _font_resolve_custom,
@@ -1820,10 +1821,25 @@ async def api_lif_list(request):
 
 
 def _lif_make_thumb(full):
-    """Decode + downscale one image to a small JPEG. Blocking - run off the loop."""
+    """Decode + downscale one image to a small JPEG. Blocking - run off the loop.
+
+    The bit-depth branches MUST match nodes/node_load_images_folder.py::_load_one
+    exactly. This is the gallery the user hand-picks images in, so a thumbnail
+    that disagrees with what the node will actually load is worse than a wrong
+    thumbnail on its own: they are choosing from pictures that do not describe
+    the output. A 16-bit greyscale file measured 253.98 (4 unique values) here
+    against the loader's correct 127.66 - i.e. a white square. See
+    .claude/patterns/load-image.md #21 for why convert CLAMPS and why the
+    .convert("I") is required before .point().
+    """
     from PIL import ImageOps
     im = Image.open(full)
-    im = ImageOps.exif_transpose(im).convert("RGB")
+    im = ImageOps.exif_transpose(im)
+    if im.mode == "I":
+        im = im.point(lambda px: px * (1 / 255))
+    elif im.mode in _I16_MODES:
+        im = im.convert("I").point(lambda px: px * (1 / 257))
+    im = im.convert("RGB")
     im.thumbnail((192, 192))
     buf = io.BytesIO()
     im.save(buf, format="JPEG", quality=80)
