@@ -369,6 +369,13 @@ Master the Pixaroma suite with our video guides and workflow deep-dives:
 
 ## 🛠 Changelog
 
+### **August 16, 2026 · v1.4.109**
+- **Run Timer: make the clock as big as you like.** Drag the corner and the whole clock grows with it: the digits, the little m and s, and the status dot. Drag out, down or diagonally, whichever feels natural. It keeps its shape so the clock always fills the node with no empty black around it, it will not go below its original size, and each timer remembers how big you made it with the workflow.
+- **Pick a font for the clock.** Right-click the timer and choose Clock font. It is the same font list the Text Overlay and Watermark nodes use, so your own .ttf files from ComfyUI/models/fonts show up there too. Condensed faces like Oswald, Bebas Neue and Anton look particularly good on a big clock.
+- **A mute button on the Run Timer settings**, right next to the volume. It is the same switch as Chime on finish, whichever is easier to reach.
+- **The timer now shows you when it is going to stay silent.** The sound and volume rows dim whenever nothing will play, so a volume reading 70% no longer looks like a sound that is about to happen.
+- **No more grey edge down the right of the clock** in the new node interface.
+
 ### **August 14, 2026 · v1.4.107–v1.4.108**
 - **Your written prompt stays put.** On AI Prompt and Video Prompt it used to vanish the moment you switched workflow tab and came back. It is kept with the workflow now, along with the seed that wrote it, so the number beside the text is the one that made it.
 - **The Krea 2 idea recipe keeps the look you asked for.** Say cartoon, illustration or 3D animation and it says so in the prompt instead of quietly writing a photograph, and a colourful idea comes out colourful rather than moody. On a node you already have, load the preset again to pick it up.
