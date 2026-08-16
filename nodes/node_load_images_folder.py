@@ -86,7 +86,7 @@ def _load_one(path, state, dtype):
     if frame.mode == "I":
         frame = frame.point(lambda px: px * (1 / 255))
     elif frame.mode in _I16_MODES:
-        frame = frame.point(lambda px: px * (1 / 257))
+        frame = frame.convert("I").point(lambda px: px * (1 / 257))
     rgb = frame.convert("RGB")
     orig_w, orig_h = rgb.size
 

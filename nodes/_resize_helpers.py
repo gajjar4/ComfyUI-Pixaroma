@@ -27,6 +27,21 @@ from PIL import Image
 # Kept HERE rather than in each loader because all three (Load Image, Load
 # Image Mini, Load Images from Folder) share this module, and three private
 # copies of a rule like this drift.
+#
+# ⚠️ THE CALL SITE MUST BE `frame.convert("I").point(...)`, NOT `frame.point(...)`.
+# Pillow only routes a callable through point_transform for modes I, I;16 and F;
+# every other mode falls to a 256-entry LUT path that REFUSES anything above 8
+# bits. So a bare .point() raises "point operation not supported for this mode"
+# on I;16B - which a big-endian (Motorola, "MM") 16-bit TIFF really does load as,
+# verified by saving and reloading one. Getting this wrong turns a wrong PICTURE
+# into a hard node failure, and in Load Images from Folder the per-file
+# `except Exception: continue` swallows it, so the image silently vanishes from
+# the batch and every downstream index shifts. Measured:
+#     I;16   point OK        I;16B  point ValueError
+#     I;16L  point ValueError I;16N point ValueError
+# ⚠️ And do NOT "fix" it with .convert("I;16") - that returns ALL BLACK for
+# I;16B (mean 0.00), silently. Only .convert("I") is correct; it is a no-op for
+# I;16 and byte-identical to the old behaviour on every other mode.
 _I16_MODES = ("I;16", "I;16B", "I;16L", "I;16N")
 
 # Resize-related defaults shared by both nodes. Each node owns its own
