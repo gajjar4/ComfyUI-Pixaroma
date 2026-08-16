@@ -104,6 +104,8 @@ from .nodes.node_load_video import NODE_CLASS_MAPPINGS as _MAPS_LOAD_VIDEO
 from .nodes.node_load_video import NODE_DISPLAY_NAME_MAPPINGS as _NAMES_LOAD_VIDEO
 from .nodes.node_load_video_frame import NODE_CLASS_MAPPINGS as _MAPS_LOAD_VIDEO_FRAME
 from .nodes.node_load_video_frame import NODE_DISPLAY_NAME_MAPPINGS as _NAMES_LOAD_VIDEO_FRAME
+from .nodes.node_first_last_frame import NODE_CLASS_MAPPINGS as _MAPS_FIRST_LAST_FRAME
+from .nodes.node_first_last_frame import NODE_DISPLAY_NAME_MAPPINGS as _NAMES_FIRST_LAST_FRAME
 from .nodes.node_loop import NODE_CLASS_MAPPINGS as _MAPS_LOOP
 from .nodes.node_loop import NODE_DISPLAY_NAME_MAPPINGS as _NAMES_LOOP
 from .nodes.node_combine import NODE_CLASS_MAPPINGS as _MAPS_COMBINE
@@ -203,6 +205,7 @@ NODE_CLASS_MAPPINGS = {
     **_MAPS_SET_GET,
     **_MAPS_LOAD_VIDEO,
     **_MAPS_LOAD_VIDEO_FRAME,
+    **_MAPS_FIRST_LAST_FRAME,
     **_MAPS_LOOP,
     **_MAPS_COMBINE,
     **_MAPS_GROUP_SWITCH,
@@ -277,6 +280,7 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     **_NAMES_SET_GET,
     **_NAMES_LOAD_VIDEO,
     **_NAMES_LOAD_VIDEO_FRAME,
+    **_NAMES_FIRST_LAST_FRAME,
     **_NAMES_LOOP,
     **_NAMES_COMBINE,
     **_NAMES_GROUP_SWITCH,

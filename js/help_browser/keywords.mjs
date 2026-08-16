@@ -41,6 +41,7 @@ export const KEYWORDS = {
   PixaromaRemoveBackground: "cutout transparent alpha matte birefnet rembg erase background",
   PixaromaLoadVideo: "mp4 movie frames clip import video",
   PixaromaLoadVideoFrame: "still grab frame single picture screenshot",
+  PixaromaFirstLastFrame: "first last frame start end continue continuation extend chain join carry on next video ending beginning still grab last frame from video",
   PixaromaSaveMp4: "export video render encode movie mp4 h264",
   PixaromaSaveVideo: "export video render encode movie mp4 h264 h265 hevc 10 bit 10bit ten bit colour color depth banding gradient smooth quality crf bitrate folder subfolders filename tokens counter name fps duration frames seconds length trim audio soundtrack player preview scrub settings gear hide buttons master grade edit",
   PixaromaPauseImage: "stop check gate review approve interrupt",
