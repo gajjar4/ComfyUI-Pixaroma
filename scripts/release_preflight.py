@@ -216,17 +216,34 @@ def check_changelog(data):
     words = sum(len(l.split()) for l in bullets)
     per_bullet = words // max(len(bullets), 1)
 
-    # Healthy is 190-270 chars per version; a day introducing a NEW NODE
-    # legitimately earns roughly 300 more. 600 is comfortably clear of both and
-    # sits well below the days that prompted this (Aug 14 = 975, Aug 12 = 828,
-    # Aug 10 = 749), so it fails bloat without ever nagging a normal release.
-    if per_version > 600:
+    # TWO caps, and they are complementary - either one alone has a hole.
+    #
+    # DAY TOTAL is the one the user actually asked for: "adjust so per total are
+    # small for that day". A per-version budget alone lets a busy day grow
+    # without limit, which is exactly the complaint - Aug 4 reached 1602 chars
+    # over 6 releases while every per-version number looked healthy at 267.
+    # Across 88 days the median total is 357 and the 90th percentile 914, so
+    # 1000 passes nine days in ten, including tightly-written 6-release days
+    # (Jul 21 = 914 across six).
+    #
+    # PER VERSION catches the opposite hole: a SINGLE release that is bloated on
+    # its own would sit under the day cap (Aug 12 = 828 for one version). Healthy
+    # is 190-270 and a new-node day earns ~300 more, so 600 cannot fire on a
+    # normal release.
+    if chars > 1000:
+        failures.append(
+            "README.md changelog for this day is %d characters (%d bullets, %d release(s)),\n"
+            "        over the 1000 budget for a DAY. Re-read the WHOLE day and condense it -\n"
+            "        merge your change into the bullets already there rather than appending.\n"
+            "        One feature is one bullet, target ~25 words: what changed for the user,\n"
+            "        not how it was built." % (chars, len(bullets), spanned)
+        )
+    elif per_version > 600:
         failures.append(
             "README.md changelog entry for this day is %d characters across %d version(s)\n"
-            "        = %d per version, over the 600 budget. Re-read the WHOLE day and\n"
-            "        condense it: one feature is one bullet, and the target is ~25 words\n"
-            "        per bullet. What changed for the user, not how it was built."
-            % (chars, spanned, per_version)
+            "        = %d per version, over the 600 budget. Condense it: one feature is one\n"
+            "        bullet, and the target is ~25 words per bullet. What changed for the\n"
+            "        user, not how it was built." % (chars, spanned, per_version)
         )
     elif per_bullet > 30:
         # Advisory only: the char budget is the hard line, this is the early
