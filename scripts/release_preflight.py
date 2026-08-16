@@ -15,6 +15,7 @@ Same family as the literal-control-character trap recorded in CLAUDE.md conventi
 """
 
 import os
+import re
 import subprocess
 import sys
 
@@ -159,10 +160,86 @@ def check_version_lockstep(data):
         )
 
 
+def check_changelog(data):
+    """The README changelog must mention THIS version, and the day being shipped
+    must stay inside its size budget.
+
+    Why this is a preflight gate and not a note somewhere: the dual version bump
+    has never once drifted across 110 releases because THIS SCRIPT refuses the
+    release when it does. The changelog rule has drifted five times in four
+    months while living only in a memory note. The difference is not how well
+    the rule is written, it is that one of them is executed and the other has to
+    be remembered.
+
+    Measured drift, median words per bullet by month: Apr 15, May 20, Jun 21,
+    Jul 24, Aug 33 (worst 79). It climbs steadily and each hand-condense resets
+    the totals without changing the writing habit, so it regrows.
+
+    Only the NEWEST day is checked. This is a release gate, not a history audit:
+    it must never block a release over an entry written months ago.
+    """
+    if not data:
+        return
+    version = data.get("project", {}).get("version")
+    path = os.path.join(REPO, "README.md")
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            lines = f.read().splitlines()
+    except OSError as e:
+        failures.append("README.md could not be read: %s" % e)
+        return
+
+    heads = [n for n, l in enumerate(lines)
+             if l.startswith("### **") and re.match(r"^### \*\*\w+ \d+, \d{4}", l)]
+    if not heads:
+        failures.append("README.md has no changelog day headings to check.")
+        return
+
+    start = heads[0]
+    end = heads[1] - 1 if len(heads) > 1 else len(lines) - 1
+    head = lines[start]
+    body = [l for l in lines[start + 1:end + 1] if l.strip()]
+    bullets = [l for l in body if l.startswith("- ")]
+
+    if version and version not in head:
+        failures.append(
+            'README.md changelog does not mention v%s. Its newest entry is "%s".\n'
+            "        Add this release to that day's entry (one heading per DAY, so\n"
+            "        extend its version range and merge into the bullets already there)."
+            % (version, head.strip("# *")[:48])
+        )
+
+    nums = [int(m.group(1)) for m in re.finditer(r"v\d+\.\d+\.(\d+)", head)]
+    spanned = (max(nums) - min(nums) + 1) if nums else 1
+    chars = sum(len(l) for l in body)
+    per_version = chars // max(spanned, 1)
+    words = sum(len(l.split()) for l in bullets)
+    per_bullet = words // max(len(bullets), 1)
+
+    # Healthy is 190-270 chars per version; a day introducing a NEW NODE
+    # legitimately earns roughly 300 more. 600 is comfortably clear of both and
+    # sits well below the days that prompted this (Aug 14 = 975, Aug 12 = 828,
+    # Aug 10 = 749), so it fails bloat without ever nagging a normal release.
+    if per_version > 600:
+        failures.append(
+            "README.md changelog entry for this day is %d characters across %d version(s)\n"
+            "        = %d per version, over the 600 budget. Re-read the WHOLE day and\n"
+            "        condense it: one feature is one bullet, and the target is ~25 words\n"
+            "        per bullet. What changed for the user, not how it was built."
+            % (chars, spanned, per_version)
+        )
+    elif per_bullet > 30:
+        # Advisory only: the char budget is the hard line, this is the early
+        # warning that the writing is getting wordy before the totals show it.
+        print("  note: changelog bullets average %d words (target ~25). %d bullets, "
+              "%d per version." % (per_bullet, len(bullets), per_version))
+
+
 def main():
     check_files()
     data = check_pyproject()
     check_version_lockstep(data)
+    check_changelog(data)
 
     if failures:
         print("RELEASE PREFLIGHT FAILED (%d problem%s)\n"
