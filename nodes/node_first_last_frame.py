@@ -66,7 +66,14 @@ def _first_last_from_images(images):
     if not torch.is_tensor(images):
         return None
     batch = images
-    if batch.ndim == 3:                 # a bare H,W,C frame
+    if batch.ndim == 3:
+        # A bare H,W,C frame - but ONLY if the last axis is a plausible channel
+        # count. A [N,H,W] MASK batch has the same ndim, and promoting one would
+        # build a valid-looking IMAGE with N channels that passes every check
+        # here and only fails much later inside Save Image, by which point the
+        # cause is not recoverable from the error.
+        if batch.shape[-1] not in (1, 3, 4):
+            return None
         batch = batch[None, ...]
     if batch.ndim != 4 or batch.shape[0] == 0:
         return None
@@ -105,8 +112,13 @@ def _plain_file_path(video):
         start, duration = video.get_active_trim_window()
         if start or duration:
             return None
-    except Exception:
+    except AttributeError:
         pass        # older ComfyUI builds have no trim concept at all
+    except Exception:
+        # Something went wrong ASKING about the trim. Fail safe: if we cannot
+        # prove the video is untrimmed, do not read the file, because reading a
+        # trimmed one returns the wrong frames with no error at all.
+        return None
 
     try:
         source = video.get_stream_source()
@@ -125,6 +137,22 @@ def _first_last_from_video(video):
         if grabbed is not None:
             first, last = grabbed
             return _np_to_image(first), _np_to_image(last)
+
+    if not hasattr(video, "get_components"):
+        # Not a video object at all. An any-type passthrough (our own Switch, or
+        # another pack's) bypasses ComfyUI's type matching, so this slot can
+        # receive anything - most usefully an IMAGE batch, which we can simply
+        # answer instead of refusing. Anything else gets our own message rather
+        # than an AttributeError naming a method the user has never heard of.
+        pair = _first_last_from_images(video)
+        if pair is not None:
+            return pair
+        raise ValueError(
+            "[Pixaroma] First Last Frame - the video input received something "
+            "that is not a video (a %s). Wire it to ComfyUI's Load Video, or "
+            "use the video_frames input for a batch of frames."
+            % type(video).__name__
+        )
 
     # Fallback: core's own path. Always correct, always expensive.
     components = video.get_components()
@@ -186,6 +214,16 @@ class PixaromaFirstLastFrame:
             pair = _first_last_from_video(video)
 
         if pair is None:
+            # Reached two ways, and telling someone to connect a wire they are
+            # looking at is worse than saying nothing. A wired `video` never
+            # lands here (it either works or raises its own message above), so
+            # a connected `video_frames` is the only thing left to blame.
+            if video_frames is not None:
+                raise ValueError(
+                    "[Pixaroma] First Last Frame - video_frames is connected "
+                    "but carried no frames this run. Check the node feeding it "
+                    "actually produced images."
+                )
             raise ValueError(
                 "[Pixaroma] First Last Frame - nothing is wired in. Connect "
                 "video_frames (from Load Video Pixaroma, or any image batch) "

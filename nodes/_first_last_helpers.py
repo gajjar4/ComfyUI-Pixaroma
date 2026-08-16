@@ -42,7 +42,28 @@ _TAIL_WINDOWS = (1.0, 5.0)
 
 
 def _png_bytes_to_rgb(data):
-    """PNG bytes -> HxWx3 uint8. Alpha is dropped: a ComfyUI IMAGE is 3-channel."""
+    """PNG bytes -> HxWx3 uint8. Alpha is dropped: a ComfyUI IMAGE is 3-channel.
+
+    Both callers pass `-pix_fmt rgb24`, and that is load-bearing, not tidiness.
+    Without it a 16-bit GRAYSCALE source (gray16le, or a gray10/12le encode -
+    scientific, astro and medical captures look like this) makes ffmpeg emit a
+    16-bit greyscale PNG, which Pillow opens as mode `I;16`. `.convert("RGB")`
+    on that mode CLAMPS every sample above 255 instead of scaling it down, so
+    the frame comes back near-white: measured 2 unique values and mean 225
+    against 151 values and mean 125 for the identical 8-bit source. ffmpeg
+    exits 0 and Pillow raises nothing, so the caller's fallback never engages
+    and the user is handed a white picture with no error anywhere.
+
+    Fixing it here instead would have to cover Pillow's `I`, `I;16`, `I;16B`
+    and `I;16L` spellings, which differ between Pillow versions. Making ffmpeg
+    hand us 8-bit RGB in the first place has no version surface at all, and if
+    ffmpeg ever cannot satisfy rgb24 it exits non-zero, which degrades to the
+    always-correct get_components() path rather than to a wrong picture.
+
+    Verified: ordinary 8-bit yuv420p output is BYTE-IDENTICAL with and without
+    the flag (md5 of all four reference clips unchanged), so the common path
+    cannot regress.
+    """
     from PIL import Image
 
     img = Image.open(io.BytesIO(data)).convert("RGB")
@@ -74,6 +95,7 @@ def grab_first_frame(path, ffmpeg=None):
         ffmpeg, "-nostdin", "-loglevel", "error",
         "-i", path,
         "-frames:v", "1", "-an",
+        "-pix_fmt", "rgb24",            # see _png_bytes_to_rgb
         "-f", "image2pipe", "-c:v", "png", "-",
     ])
     if proc is None or proc.returncode != 0 or not proc.stdout:
@@ -131,6 +153,7 @@ def grab_last_frame(path, ffmpeg=None, temp_dir=None):
                 "-sseof", f"-{window:g}",
                 "-i", path,
                 "-an", "-update", "1",
+                "-pix_fmt", "rgb24",    # see _png_bytes_to_rgb
                 out_path,
             ])
             if proc is None or proc.returncode != 0:
