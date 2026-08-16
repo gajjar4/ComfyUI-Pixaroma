@@ -372,12 +372,12 @@ Master the Pixaroma suite with our video guides and workflow deep-dives:
 
 ## 🛠 Changelog
 
-### **August 16, 2026 · v1.4.109**
-- **Run Timer: make the clock as big as you like.** Drag the corner and the whole clock grows with it: the digits, the little m and s, and the status dot. Drag out, down or diagonally, whichever feels natural. It keeps its shape so the clock always fills the node with no empty black around it, it will not go below its original size, and each timer remembers how big you made it with the workflow.
-- **Pick a font for the clock.** Right-click the timer and choose Clock font. It is the same font list the Text Overlay and Watermark nodes use, so your own .ttf files from ComfyUI/models/fonts show up there too. Condensed faces like Oswald, Bebas Neue and Anton look particularly good on a big clock.
-- **A mute button on the Run Timer settings**, right next to the volume. It is the same switch as Chime on finish, whichever is easier to reach.
-- **The timer now shows you when it is going to stay silent.** The sound and volume rows dim whenever nothing will play, so a volume reading 70% no longer looks like a sound that is about to happen.
-- **No more grey edge down the right of the clock** in the new node interface.
+### **August 16, 2026 · v1.4.109–v1.4.110**
+- **NEW: First Last Frame Pixaroma.** Takes the first and last frame out of a video as two pictures, so the next clip can start where the last one ended. Works with Load Video Pixaroma or ComfyUI's own Load Video.
+- **Run Timer: drag the corner and the whole clock grows with it**, digits and all, and it remembers the size with your workflow. You can also pick the clock font now, your own .ttf files included.
+- **The timer says when it will stay silent** by dimming the sound rows, and there is a mute button beside the volume.
+- **16-bit pictures load properly now** in Load Image, Load Image Mini and Load Images from Folder. Scans and depth maps used to come out almost white.
+- **Plus fixes:** no grey edge down the right of the clock; Load Video Frame handles 16-bit clips.
 
 ### **August 14, 2026 · v1.4.107–v1.4.108**
 - **Your written prompt stays put.** On AI Prompt and Video Prompt it used to vanish the moment you switched workflow tab and came back. It is kept with the workflow now, along with the seed that wrote it, so the number beside the text is the one that made it.
