@@ -495,6 +495,7 @@ function closeEditor() {
   // click - and because it is window+capture and calls stopPropagation, each
   // leaked one swallows the next Escape press for the whole app.
   try { EDITOR?._pixEscOff?.(); } catch (e) { /* already gone */ }
+  try { EDITOR?._pixUndoOff?.(); } catch (e) { /* already gone */ }
   EDITOR?.remove();
   EDITOR = null;
 }
@@ -654,7 +655,8 @@ function askDialog(opts) {
 
     // ⚠️ BLOCK Ctrl+Z WHILE A DIALOG IS UP. Found in review and REPRODUCED: with
     // no text field the focused element is a <button>, and ComfyUI's own undo
-    // handler only steps aside for an INPUT or a textarea - so Ctrl+Z at a
+    // handler steps aside only for an INPUT or a textarea AND only while auto
+    // queue is off or instant (changeTracker.ts 540-549) - so Ctrl+Z at a
     // "Delete this preset?" prompt, which is a natural way to say no, ran
     // app.loadGraphData and rebuilt the whole graph under the open dialog.
     // Measured with loadGraphData intercepted: 1 escape with the dialog open,
@@ -743,6 +745,22 @@ export function openEditor(title, text, onSave, opts) {
   window.addEventListener("keydown", esc, true);
   back._pixEscOff = () => window.removeEventListener("keydown", esc, true);
 
+  // ⚠️ This is a FULLSCREEN EDITOR and it was the only one in the pack without
+  // the guard - every other one installs it (paint, 3D, composer, crop, inpaint
+  // crop, note, audio studio, text overlay, prompt library, mute switch). Found
+  // while reviewing the dialog fix one function up, and REPRODUCED: with the
+  // editor open and a footer button focused, Ctrl+Z ran app.loadGraphData and
+  // rebuilt the graph underneath, leaving the editor floating over a workflow
+  // that had changed under it.
+  //
+  // Focus being in the TEXTAREA is not the protection it looks like. Read the
+  // real handler (this install's changeTracker.ts, lines 540-549): the
+  // input/textarea exemption sits INSIDE
+  // `if (!app.ui.autoQueueEnabled || app.ui.autoQueueMode === 'instant')`, so
+  // for anybody running auto queue in CHANGE mode it is skipped entirely and
+  // typing in a textarea is exposed too.
+  back._pixUndoOff = installGraphUndoGuard(() => !!back.isConnected);
+
   document.body.appendChild(back);
   EDITOR = back;
   ta.focus();
@@ -780,11 +798,17 @@ export function closeAIPromptPanelFor(node) {
   if (node && PANEL_NODE !== node) return;
   closePop();
   closeEditor();
-  // A dialog can outlive its panel: confirm a delete, and while the server round
-  // trip is in flight there is no backdrop up, so the node can be deleted or the
-  // canvas clicked. Without this, a later sayIt() from that continuation puts a
-  // full-screen modal belonging to a dead node over the graph. closeAsk resolves
-  // as well as removes, so the continuation takes its own early-return path.
+  // Take any OPEN dialog with the panel, so a question cannot be left floating
+  // over a graph whose node is gone, and its promise cannot stay pending -
+  // closeAsk resolves as well as removes, so the continuation early-returns.
+  //
+  // Scope, corrected after review: this covers a dialog that is ON SCREEN when
+  // the panel closes. It does NOT cover the narrower race where a delete was
+  // already confirmed and the server round trip is in flight, because that
+  // continuation is awaiting the FETCH with no dialog up - so a later failure
+  // still reports itself with no panel behind it. That is arguably right (the
+  // user should learn the delete failed) and fixing it would mean tracking
+  // dialog ownership, which is new surface for no visible gain.
   closeAsk();
   try { CP_HANDLE?.close?.(); } catch (e) { /* already gone */ }
   CP_HANDLE = null;
