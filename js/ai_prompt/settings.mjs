@@ -163,6 +163,18 @@ function injectCSS() {
       resize:none; }
     .pix-ape-foot { display:flex; gap:8px; justify-content:flex-end; padding:10px 14px; }
     .pix-ape-foot .pix-app-btn { flex:0 0 auto; padding:6px 18px; }
+
+    /* The one-line question box (askName). Deliberately reuses .pix-ape-back
+       for the backdrop: that class is in the panel's outsideClose exempt list,
+       so asking a question cannot dismiss the panel underneath it. */
+    .pix-apk { width:min(460px,92vw); display:flex; flex-direction:column;
+      background:#232325; border:1px solid #3a3a3c; border-radius:8px;
+      color:#e0e0e0; font:12px 'Segoe UI', sans-serif; }
+    .pix-apk-msg { padding:12px 14px 0; font-size:12px; color:#b9b9b9; line-height:1.45; }
+    .pix-apk-in { margin:10px 14px 2px; background:#1d1d1d; color:#e0e0e0;
+      border:1px solid #333; border-radius:4px; padding:6px 8px;
+      font:12px monospace; outline:none; }
+    .pix-apk-in:focus { border-color:var(--pix-acc,#f66744); }
   `;
   document.head.appendChild(style);
 }
@@ -296,6 +308,83 @@ function closeEditor() {
   try { EDITOR?._pixEscOff?.(); } catch (e) { /* already gone */ }
   EDITOR?.remove();
   EDITOR = null;
+}
+
+// ---------------------------------------------------------------------------
+// A themed one-line question. REPLACES window.prompt, which was reported as
+// "the save button doesn't work, in both renderers" (2026-08-16).
+//
+// Two independent ways the native dialog produced that report, both measured:
+//  1. Electron (ComfyUI Desktop) does not implement window.prompt AT ALL - it
+//     returns without ever showing anything, so `name` is empty, the handler
+//     hits `if (!name) return` and the click does nothing with no feedback.
+//     (alert and confirm ARE implemented there, which is why only prompt moved.)
+//  2. Even where it works, the box opens EMPTY on a default-titled node, so
+//     pressing Enter - the natural thing to do - silently cancels.
+// #10 already records one false "doesn't seem to do much" report on this node
+// caused by a native dialog; this is the same trap through a different door.
+// ---------------------------------------------------------------------------
+let ASKER = null;
+function closeAsk() {
+  try { ASKER?._pixEscOff?.(); } catch (e) { /* already gone */ }
+  ASKER?.remove();
+  ASKER = null;
+}
+
+export function askName(title, message, initial) {
+  injectCSS();
+  closeAsk();
+  return new Promise((resolve) => {
+    let settled = false;
+    // Cancel, Escape and the backdrop can all fire for one dismissal, and a
+    // second resolve would be silently ignored - but closeAsk() would then run
+    // against whatever dialog is current, which could be a NEWER one.
+    const finish = (val) => {
+      if (settled) return;
+      settled = true;
+      if (ASKER === back) closeAsk();
+      resolve(val);
+    };
+    const back = el("div", "pix-ape-back pix-apk-back");
+    const box = el("div", "pix-apk");
+    const head = el("div", "pix-ape-head");
+    head.append(el("b", null, title));
+    const msg = el("div", "pix-apk-msg", message || "");
+    const input = el("input", "pix-apk-in");
+    input.type = "text";
+    input.value = initial || "";
+    const foot = el("div", "pix-ape-foot");
+    const cancel = el("button", "pix-app-btn", "Cancel");
+    const ok = el("button", "pix-app-btn is-on", "Save");
+    foot.append(cancel, ok);
+    box.append(head, msg, input, foot);
+    back.appendChild(box);
+
+    // An empty box means "I changed my mind", same as Cancel - never a preset
+    // literally called "".
+    const accept = () => finish(input.value.trim() || null);
+    cancel.addEventListener("click", () => finish(null));
+    ok.addEventListener("click", accept);
+    back.addEventListener("mousedown", (e) => { if (e.target === back) finish(null); });
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") { e.preventDefault(); accept(); }
+    });
+    // Same reasoning as the editor's: released in closeAsk, not on the Escape
+    // path, or a Cancel leaves a window+capture listener that eats the next
+    // Escape for the whole app.
+    const esc = (e) => {
+      if (e.key !== "Escape" || ASKER !== back) return;
+      e.stopPropagation();
+      finish(null);
+    };
+    window.addEventListener("keydown", esc, true);
+    back._pixEscOff = () => window.removeEventListener("keydown", esc, true);
+
+    document.body.appendChild(back);
+    ASKER = back;
+    input.focus();
+    input.select();
+  });
 }
 
 export function openEditor(title, text, onSave, opts) {
@@ -1032,7 +1121,11 @@ function renderPanel(node, body) {
     // is offered ready-made rather than suggesting one that is then refused.
     const known = loadedPreset(node);
     const shipped = !!known && PRESETS.shipped.some((p) => p.name === known.name);
-    const suggested = shipped ? recipe.name + " (mine)" : recipe.name;
+    // Never offer an EMPTY box. currentRecipe returns "" for an untouched node
+    // title on purpose (nobody wants a preset called "AI Prompt Pixaroma"), but
+    // handing that to the dialog means Enter saves nothing and looks broken.
+    const suggested = shipped ? recipe.name + " (mine)"
+      : (recipe.name || "My formula");
     // The ONE overwrite that may pass without a question: re-saving the preset
     // you currently have loaded, and only when it is your own. Keying this on
     // the SUGGESTED STRING was wrong twice over, and both holes were real
@@ -1041,8 +1134,8 @@ function renderPanel(node, body) {
     // falls back to the node TITLE, so a node renamed "My style" replaced an
     // unrelated preset called "My style". Identity, never a string we built.
     const quiet = known && !shipped ? known.name.toLowerCase() : null;
-    let name = (window.prompt("Save this formula and its settings as:",
-      suggested) || "").trim();
+    let name = (await askName("Save preset",
+      "Save this formula and its settings as:", suggested) || "").trim();
     if (!name) return;
     // A shipped preset cannot be replaced, so its name would put two
     // identical-looking rows in the list. Offer the name that WOULD work
@@ -1051,7 +1144,8 @@ function renderPanel(node, body) {
     // case it was meant to help - an edited shipped preset, whose formula no
     // longer matches, so the prefill was empty and people typed the original.
     if (PRESETS.shipped.some((p) => p.name.toLowerCase() === name.toLowerCase())) {
-      name = (window.prompt("Pixaroma already ships a preset called “" + name
+      name = (await askName("That name is taken",
+        "Pixaroma already ships a preset called “" + name
         + "”, and those cannot be replaced. Save yours as:",
         name + " (mine)") || "").trim();
       if (!name || PRESETS.shipped.some(
