@@ -12,6 +12,7 @@
 //     compatibility mouse events, so a `mousedown` guard NEVER fires for a
 //     click on the canvas while working fine on DOM elsewhere.
 
+import { installGraphUndoGuard } from "../shared/graph_undo_guard.mjs";
 import { createAccentSection } from "../shared/node_settings.mjs";
 import { followNode, getNodeScreenRect, makeDraggable, placeBeside } from "../shared/node_panel.mjs";
 import {
@@ -282,10 +283,11 @@ function closePop() {
  * opts.rowDelete - `{ can, title, blockedTitle, onDelete, after }`. Puts a ✕ on
  *   each row: live where `can(row)` is true, dimmed and inert with
  *   `blockedTitle` where it is not. `onDelete` returns whether it happened, and
- *   `after()` hands back the new rows so the list repaints in place - watching
+ *   `after()` hands back the new rows so the list repaints IN PLACE - watching
  *   the row you clicked disappear is the clearest possible receipt.
  *
- * Returns `{ repaint(newValues) }`.
+ * The popup is anchored where it opened and is never re-placed: a list that
+ * jumps under the cursor as it shrinks is worse than one that keeps still.
  */
 function openPop(anchor, values, current, onPick, opts) {
   closePop();
@@ -369,6 +371,14 @@ function openPop(anchor, values, current, onPick, opts) {
               // Repaint in place, keeping whatever filter and kind were set, so
               // the row visibly goes and a second one can follow it.
               values = del.after?.() || values;
+              // ...but NOT a kind that just became empty. Deleting your only
+              // preset while standing on the "Mine" chip left the list reading
+              // "Nothing matches" and that chip both selected AND dimmed-inert,
+              // so the only way back was All - the opposite of the receipt this
+              // is here to give. The text filter is deliberately left alone: it
+              // is visible in the box, so "Nothing matches" explains itself,
+              // whereas a dead chip does not.
+              if (kindKey && !values.some((row) => row[3] === kindKey)) kindKey = null;
               paintChips();
               paint(filter?.value);
             }
@@ -472,17 +482,6 @@ function openPop(anchor, values, current, onPick, opts) {
   if (below > pop.offsetHeight + 8 || below > r.top) pop.style.top = r.bottom + 3 + "px";
   else pop.style.top = Math.max(6, r.top - pop.offsetHeight - 3) + "px";
   POP = pop;
-  // Deliberately does NOT re-place the popup: it is anchored to where it opened,
-  // and a list that jumps under the cursor as it shrinks is worse than one that
-  // keeps still.
-  return {
-    repaint(newValues) {
-      if (POP !== pop) return;
-      values = newValues || values;
-      paintChips();
-      paint(filter?.value);
-    },
-  };
 }
 
 // ---------------------------------------------------------------------------
@@ -527,9 +526,22 @@ function closeEditor() {
 // ---------------------------------------------------------------------------
 let ASKER = null;
 function closeAsk() {
-  try { ASKER?._pixEscOff?.(); } catch (e) { /* already gone */ }
-  ASKER?.remove();
+  const going = ASKER;
+  try { going?._pixEscOff?.(); } catch (e) { /* already gone */ }
+  try { going?._pixUndoOff?.(); } catch (e) { /* already gone */ }
+  going?.remove();
   ASKER = null;
+  // RESOLVE, do not just remove. Anything that closes a dialog from OUTSIDE -
+  // the panel closing because its node was deleted mid-await, or a second dialog
+  // replacing this one - otherwise leaves its promise pending forever, so the
+  // caller's continuation never runs and never releases. `_pixDismiss` is
+  // `settled`-guarded, so this cannot fight a real answer that already landed.
+  //
+  // ⚠️ ASKER is cleared ABOVE this line on purpose. `_pixDismiss` runs `finish`,
+  // which ends in `if (ASKER === back) closeAsk()` - so with ASKER still set this
+  // would recurse. Clearing first makes that test false and the recursion cannot
+  // start. Do not move this line up.
+  try { going?._pixDismiss?.(); } catch (e) { /* already settled */ }
 }
 
 /**
@@ -592,7 +604,17 @@ function askDialog(opts) {
     const accept = () => finish(withInput ? (input.value.trim() || null) : true);
     cancel?.addEventListener("click", dismissed);
     ok.addEventListener("click", accept);
-    back.addEventListener("mousedown", (e) => { if (e.target === back) dismissed(); });
+    back.addEventListener("mousedown", (e) => {
+      if (e.target !== back) return;
+      // ⚠️ Ignore the SECOND press of a double-click. The backdrop is appended
+      // synchronously, so by then it already covers the popup the ✕ was clicked
+      // in - and a double-click on that small ✕ landed its second mousedown on
+      // the backdrop, dismissing the confirm before it could be read. That reads
+      // as "sometimes the ✕ does nothing", which is the exact report shape this
+      // whole change set exists to stop producing.
+      if (e.detail > 1) return;
+      dismissed();
+    });
     (input || box).addEventListener("keydown", (e) => {
       // ComfyUI binds Ctrl+V on the document to paste NODES, so a keystroke
       // that reaches it would drop a copied node onto the canvas instead of
@@ -601,10 +623,20 @@ function askDialog(opts) {
       if (e.key !== "Escape") e.stopPropagation();
       // In the paste box Enter has to make a new line, so that one accepts on
       // Ctrl+Enter instead.
-      if (e.key === "Enter" && (!multi || e.ctrlKey || e.metaKey)) {
-        e.preventDefault();
-        accept();
-      }
+      if (e.key !== "Enter" || (multi && !e.ctrlKey && !e.metaKey)) return;
+      e.preventDefault();
+      // ⚠️ WHICH button Enter means is load-bearing, and getting it wrong was a
+      // DESTRUCTIVE bug (found in review, reproduced: the formula was replaced).
+      // With no field this listener sits on the BOX, which contains BOTH
+      // buttons, so an unconditional accept() ran whichever one had focus -
+      // Shift+Tab to Cancel, press Enter, and "Delete this preset?" DELETED it.
+      // Deciding from focus rather than leaving it to the browser's native
+      // button activation is deliberate: activation could not be verified in
+      // this test environment (a trusted key event arrives there with an empty
+      // e.key), and a rule that is only correct on hosts we cannot check is not
+      // a rule. With a field there is only ever one meaning, so Enter accepts.
+      if (!withInput && cancel && document.activeElement === cancel) dismissed();
+      else accept();
     });
     // Same reasoning as the editor's: released in closeAsk, not on the Escape
     // path, or a Cancel leaves a window+capture listener that eats the next
@@ -616,6 +648,25 @@ function askDialog(opts) {
     };
     window.addEventListener("keydown", esc, true);
     back._pixEscOff = () => window.removeEventListener("keydown", esc, true);
+    // So closeAsk can settle a dialog it tears down from outside, instead of
+    // leaving the caller's continuation pending forever.
+    back._pixDismiss = dismissed;
+
+    // ⚠️ BLOCK Ctrl+Z WHILE A DIALOG IS UP. Found in review and REPRODUCED: with
+    // no text field the focused element is a <button>, and ComfyUI's own undo
+    // handler only steps aside for an INPUT or a textarea - so Ctrl+Z at a
+    // "Delete this preset?" prompt, which is a natural way to say no, ran
+    // app.loadGraphData and rebuilt the whole graph under the open dialog.
+    // Measured with loadGraphData intercepted: 1 escape with the dialog open,
+    // against a verified baseline where the same key does reach it normally.
+    // This is a REGRESSION of moving off window.confirm, which blocked the event
+    // loop so the keydown never reached the page at all; askName was always safe
+    // because it focuses an <input>. Use the sanctioned slot (Vue Compat #6) -
+    // a keydown blocker of our own is measured NOT to work, because ComfyUI's
+    // listener is registered at startup and always runs first.
+    // Keyed on THIS dialog's own element, not the module's current ASKER, so a
+    // token whose uninstall was somehow missed still self-heals on its own.
+    back._pixUndoOff = installGraphUndoGuard(() => !!back.isConnected);
 
     document.body.appendChild(back);
     ASKER = back;
@@ -729,6 +780,12 @@ export function closeAIPromptPanelFor(node) {
   if (node && PANEL_NODE !== node) return;
   closePop();
   closeEditor();
+  // A dialog can outlive its panel: confirm a delete, and while the server round
+  // trip is in flight there is no backdrop up, so the node can be deleted or the
+  // canvas clicked. Without this, a later sayIt() from that continuation puts a
+  // full-screen modal belonging to a dead node over the graph. closeAsk resolves
+  // as well as removes, so the continuation takes its own early-return path.
+  closeAsk();
   try { CP_HANDLE?.close?.(); } catch (e) { /* already gone */ }
   CP_HANDLE = null;
   try { PANEL?._pixCleanup?.(); } catch (e) { /* already gone */ }
@@ -1357,7 +1414,7 @@ function renderPanel(node, body) {
     (anchor) => {
       // Each row carries its model in the hover, so you can see what a preset
       // was measured with BEFORE you load it, without cluttering the list.
-      const handle = openPop(anchor, presetRows(), loaded ? loaded.name : null, async (name) => {
+      openPop(anchor, presetRows(), loaded ? loaded.name : null, async (name) => {
         const preset = allPresets().find((p) => p.name === name);
         if (!preset) return;
         // A dialog earns its place only when something would be LOST. Switching
