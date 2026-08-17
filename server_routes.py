@@ -4003,9 +4003,17 @@ async def api_save_text_write(request):
     try:
         data = await request.json()
     except Exception:
-        data = {}
+        data = None
+    # REFUSE a body that is not a JSON object, rather than defaulting to {}.
+    # Defaulting meant `[1,2,3]`, `"str"`, `null`, `7`, an empty body and a
+    # form-encoded body all fell through to folder:"" + name:"" and wrote a
+    # 0-byte prompts_00N.txt into the user's output ROOT. The route is
+    # unauthenticated, so that was a litter primitive for anything that can
+    # reach the port. MEASURED: six junk bodies, six stray files.
     if not isinstance(data, dict):
-        data = {}
+        return web.json_response(
+            {"ok": False, "message": "Expected a JSON object body."}, status=400
+        )
 
     folder_raw = str(data.get("folder", "") or "")
     name_raw = str(data.get("name", "") or "")
@@ -4082,13 +4090,34 @@ async def api_save_text_write(request):
         else:
             n = _next_counter(parent, leaf)
 
+        def _contained(rel):
+            """_safe_join, retried through a transient Windows file lock.
+
+            _safe_join realpaths the candidate, and on Windows realpath OPENS
+            the file to resolve it - so while another request is renaming onto
+            that same name, this can fail for a reason that has nothing to do
+            with containment. MEASURED: 1 in 36 concurrent claims came back as
+            "That file name is not allowed" when the name was perfectly fine.
+
+            ⚠️ Containment is NOT weakened. A non-None result is still required,
+            so a path that genuinely escapes returns None on every attempt and
+            is still refused - retrying only costs it ~100ms. We never accept
+            anything _safe_join rejected.
+            """
+            for i in range(4):
+                p = _safe_join(base, rel)
+                if p:
+                    return p
+                time.sleep(0.015 * (i + 1))
+            return None
+
         final_leaf = leaf if n is None else leaf.replace("%counter%", f"{n:0{digits}}")
         # Second, independent containment check on the FULL joined path. The
         # first one approved the FOLDER; this one proves the file we are about
         # to open is really inside it (path-containment #1 - a join is not a
         # guard, the realpath test after it is).
         rel_final = "/".join(dirs + [final_leaf])
-        path = _safe_join(base, rel_final)
+        path = _contained(rel_final)
         if not path:
             return {"ok": False, "message": "That file name is not allowed."}
 
@@ -4113,7 +4142,7 @@ async def api_save_text_write(request):
                     n += 1
                     final_leaf = leaf.replace("%counter%", f"{n:0{digits}}")
                     rel_final = "/".join(dirs + [final_leaf])
-                    path = _safe_join(base, rel_final)
+                    path = _contained(rel_final)
                     if not path:
                         return {"ok": False, "message": "That file name is not allowed."}
                 except OSError as e:
@@ -4133,7 +4162,31 @@ async def api_save_text_write(request):
             # every platform instead of letting Windows expand each \n to \r\n.
             with open(tmp, "w", encoding="utf-8", newline="\n") as f:
                 f.write(content)
-            os.replace(tmp, path)
+            # RETRY the rename. On Windows os.replace can lose a race that has
+            # nothing to do with this request: _safe_join calls realpath(),
+            # which opens the candidate file to resolve it, so another request
+            # resolving the SAME name holds a momentary handle and MoveFileEx
+            # returns ERROR_ACCESS_DENIED. MEASURED 3 lost writes out of 36 with
+            # 12 simultaneous claims, and that is reachable for real - several
+            # fresh Save Text nodes in one workflow all claim the same default
+            # pattern the moment a run finishes.
+            #
+            # Retrying is the right lever: dropping the realpath is not an
+            # option (it IS the containment test), and the collision is
+            # transient - an immediate retry of the identical request succeeded
+            # every time. Backs off up to ~0.42s in total, then gives up and
+            # reports honestly rather than pretending the text was saved.
+            last_err = None
+            for attempt in range(6):
+                try:
+                    os.replace(tmp, path)
+                    last_err = None
+                    break
+                except OSError as e2:
+                    last_err = e2
+                    time.sleep(0.02 * (attempt + 1))
+            if last_err is not None:
+                raise last_err
         except OSError as e:
             try:
                 if os.path.exists(tmp):

@@ -247,7 +247,9 @@ export function openSettingsPanel(node, onChange) {
   // ── how entries are added ──
   const sepWrap = section(body, "Separator",
     "What goes between two entries. A blank line is Prompt Pack's format, so a " +
-    "saved file drops straight back into it.");
+    "saved file drops straight back into it. If your prompts themselves contain " +
+    "blank lines, pick --- line instead: entries are split on whatever you " +
+    "choose here, so a separator that appears inside a prompt splits it in two.");
   sepWrap.appendChild(chipRow(node, "separator", SEPARATOR_LABELS));
 
   const newWrap = section(body, "New entry goes",

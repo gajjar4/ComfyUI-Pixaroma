@@ -121,7 +121,12 @@ function uiOf(node) {
 // This is safe on the LOAD path (Vue Compat #18) because it only writes when it
 // finds a genuine collision. Two nodes in a cleanly saved workflow hold
 // different names, so the loop is a no-op and nothing is written - verified by
-// a serialize/reload diff. A collision IS a real change worth recording.
+// a serialize/reload diff with five of these nodes on the canvas.
+//
+// It deliberately does NOT call notifyGraphChanged(): a workflow saved with a
+// collision (cloned under an older build) is repaired on every open, and the
+// repair is idempotent, so there is nothing that must be captured. Flagging a
+// workflow modified during a load is the very thing Vue Compat #18 forbids.
 function dedupeCurrentFile(node) {
   const st = readState(node);
   if (!st.currentFile) return;
@@ -133,6 +138,9 @@ function dedupeCurrentFile(node) {
     if (o.currentFile === st.currentFile && (o.folder || "") === (st.folder || "")) {
       st.currentFile = "";
       writeState(node, st);
+      // Invalidate any save already in flight, or its response would hand this
+      // node straight back the filename it has just given up.
+      node._pixStxGen = (node._pixStxGen || 0) + 1;
       node._pixStxCntKey = null;
       node._pixStxNextName = null;
       return;
@@ -289,6 +297,10 @@ async function saveToFile(node, { quiet } = {}) {
   const st = readState(node);
   const buf = readBuffer(node);
   if (!buf.trim() && !st.currentFile) return false; // nothing worth a file yet
+  // Which "collection" this write belongs to. Clear (and the copied-node
+  // dedupe) bump it, so a save that was already in flight when the user cleared
+  // knows not to write its result back - see the check after the await.
+  const gen = node._pixStxGen || 0;
 
   let j = null;
   try {
@@ -315,6 +327,13 @@ async function saveToFile(node, { quiet } = {}) {
     say(node, shorten(j?.message) || "Could not save.", "bad", j?.message);
     return false;
   }
+  // The collection this save belonged to is GONE - the user pressed Clear (or a
+  // copied node gave up the name) while the request was in flight. Writing
+  // j.file back would re-adopt the very file Clear promised to keep, and the
+  // next run or Save would then overwrite it. That is the node's headline
+  // promise broken, so bail without touching state; the file we just wrote is
+  // complete and correct, it simply is not this node's file any more.
+  if ((node._pixStxGen || 0) !== gen) return false;
   // Re-read rather than reusing `st`: the user can change a setting while the
   // request is in flight, and writing the stale object back would revert it.
   const s2 = readState(node);
@@ -378,7 +397,28 @@ function installCacheTracker() {
 async function collectRun(node, text) {
   const ui = uiOf(node);
   if (!ui) return;
-  if (_cachedThisRun.has(String(node.id))) return; // replayed, not re-run
+  // Drop a REPLAYED result from a node ComfyUI did not actually re-run - but
+  // fail OPEN on both counts below, because the cost of suppressing a genuine
+  // run (a lost entry) is far worse than the duplicate this prevents.
+  //
+  //  * `readBuffer(...).trim()` - with nothing collected there is nothing to
+  //    duplicate, so take the replay. Without this the gate REGRESSED "Clear,
+  //    then Run": this node has no graphToPrompt hook by design, so clearing
+  //    the box never reaches the prompt, the node stays cached, and the replay
+  //    was the only thing that would have refilled it. MEASURED - Run collected
+  //    nothing at all, with no message. Cannot double-collect: the first replay
+  //    makes the buffer non-empty, so a second queue is suppressed normally.
+  //
+  //  * the root-graph test - `cached_nodes` carries EXECUTION ids, which are
+  //    composite ("5:12") for a node inside a subgraph, while `node.id` is the
+  //    bare local id. So a subgraph node with local id N could be silenced by an
+  //    unrelated CACHED root node that happens to have id N, and subgraph local
+  //    ids start at 1 just like root ids. Bare prompt ids only ever name
+  //    root-graph nodes, so restricting the gate to those is precise; a build
+  //    with no rootGraph degrades to the previous behaviour.
+  const rootGraph = app.rootGraph || app.graph;
+  const isRootNode = !node.graph || node.graph === rootGraph;
+  if (isRootNode && readBuffer(node).trim() && _cachedThisRun.has(String(node.id))) return;
 
   // The two delivery paths (socket `executed` and the per-node onExecuted hook)
   // both fire on standard ComfyUI, and unlike a preview an APPEND is not
@@ -420,6 +460,10 @@ async function collectRun(node, text) {
       const s2 = readState(node);
       s2.currentFile = "";
       writeState(node, s2);
+      // The rescue above is already awaited, so this only invalidates OTHER
+      // saves still in flight - which must not re-adopt the file we just
+      // closed off.
+      node._pixStxGen = (node._pixStxGen || 0) + 1;
       buf = "";
       node._pixStxCntKey = null;
     }
@@ -537,6 +581,11 @@ function wireEvents(node, ui) {
     s2.currentFile = "";
     writeState(node, s2);
     writeBuffer(node, "", false);
+    // THE important one. A run can land while the confirm dialog is open, and
+    // its autoSave POST would resolve after this and write j.file back - so the
+    // node would silently re-adopt the file Clear had just promised to keep,
+    // and the next save would overwrite it.
+    node._pixStxGen = (node._pixStxGen || 0) + 1;
     node._pixStxCntKey = null;
     node._pixStxLastApplied = null;
     syncFace(node);
@@ -810,7 +859,7 @@ registerNodeHelp(COMFY_CLASS, {
         ["Folder", "Empty means ComfyUI's output folder. For anywhere else, click Browse and pick it once - that is what approves it."],
         ["File name", "Always saved as .txt. %counter% keeps the numbering going so a new collection never overwrites an old one."],
         ["Save after every run", "On by default. A save you have to remember is a save you forget."],
-        ["Separator", "A blank line by default, which is exactly Prompt Pack Pixaroma's paragraph format, so a saved file drops straight back into it."],
+        ["Separator", "A blank line by default, which is exactly Prompt Pack Pixaroma's paragraph format, so a saved file drops straight back into it. Entries are split on whatever you pick, so if your prompts contain blank lines of their own, choose --- line instead or one prompt will be counted as several."],
         ["New entry goes", "At the top puts the newest prompt where you can read it without scrolling."],
         ["Skip repeats", "A second belt. The node already ignores a run where nothing changed, so this is for the case that slips past it: reopening a workflow, where the first run afterwards would otherwise re-add the prompt that is already last. Same as last is the default; Any repeat also catches a prompt you used earlier in the session."],
         ["Timestamp each entry", "Adds a # comment line above each one. Off keeps the file clean for reuse."],
