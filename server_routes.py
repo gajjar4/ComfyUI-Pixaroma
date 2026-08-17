@@ -4101,8 +4101,8 @@ async def api_save_text_write(request):
 
             ⚠️ Containment is NOT weakened. A non-None result is still required,
             so a path that genuinely escapes returns None on every attempt and
-            is still refused - retrying only costs it ~100ms. We never accept
-            anything _safe_join rejected.
+            is still refused - retrying only costs it ~150ms (the loop sleeps on
+            its last pass too). We never accept anything _safe_join rejected.
             """
             for i in range(4):
                 p = _safe_join(base, rel)
