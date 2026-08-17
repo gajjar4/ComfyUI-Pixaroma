@@ -17,8 +17,9 @@ import { registerNodeSettings, repaintAccent } from "../shared/node_settings.mjs
 import { isVueNodes } from "../shared/nodes2.mjs";
 import {
   CLASS, DEFAULT_H, DEFAULT_W, HIDDEN_INPUT, MIN_H, MIN_W,
-  injectedState, readState, writeState,
+  injectedState, readState, rollSeed, writeState,
 } from "./core.mjs";
+import { registerSeedRoller } from "../shared/seed_roll.mjs";
 // The renderer hook here TOGGLES ONE CSS CLASS. It does NOT rebuild the face:
 // this node has one DOM widget in both renderers, and a rebuild hook on Video
 // Prompt leaked a widget root per flip and was reverted (video-prompt.md #13).
@@ -39,6 +40,19 @@ import {
 import { AI_PROMPT_HELP } from "./help.mjs";
 
 registerNodeHelp(CLASS, AI_PROMPT_HELP);
+
+// Pause Text's Regenerate re-rolls every upstream widget called /seed/i. This
+// node's seed is not a widget - it lives in the injected state (Vue Compat #9)
+// - so that walk used to pass straight over it and, with the mode on Fixed, the
+// model stayed cached and handed back the SAME text (reported 2026-08-16).
+//
+// Writing the stored number is the right move rather than a one-shot override:
+// it is exactly what the walk already does to a Seed Pixaroma widget, and in
+// Random mode seedForRun rolls per run anyway, so this only has to rescue Fixed.
+registerSeedRoller(CLASS, (node) => {
+  writeState(node, { seed: rollSeed() });
+  renderFace(node);
+});
 
 function openPanel(node) {
   openAIPromptPanel(node, (n) => {

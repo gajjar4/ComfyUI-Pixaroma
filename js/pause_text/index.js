@@ -5,6 +5,7 @@ import { installResizeFloor } from "../shared/resize_floor.mjs";
 import { installCanvasZoomPassthrough } from "../shared/canvas_zoom.mjs";
 import { installNativeTextMenu } from "../shared/native_text_menu.mjs";
 import { installNodeAccent, registerNodeAccent } from "../shared/node_settings.mjs";
+import { rollNodeSeed } from "../shared/seed_roll.mjs";
 import {
   getState, setGate, setText, setModelText, revertText, STATE_PROP,
 } from "./state.mjs";
@@ -200,6 +201,12 @@ function randomizeUpstreamSeeds(node) {
     for (const w of n.widgets || []) {
       if (isSeedWidget(w)) { setRandomSeed(n, w); count++; }
     }
+    // A node can keep its seed in a hidden state blob instead of a widget
+    // (Vue Compat #9), and the widget scan above walks straight past it. AI
+    // Prompt is built that way, so with its mode on Fixed the model stayed
+    // cached and Regenerate handed back the SAME text. Such a node registers a
+    // roller for itself; anything that has not is untouched.
+    if (rollNodeSeed(n)) count++;
     for (const ni of n.inputs || []) {
       if (ni.link == null) continue;
       const l = getLink(graph, ni.link);
