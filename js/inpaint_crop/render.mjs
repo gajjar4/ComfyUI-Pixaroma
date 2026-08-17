@@ -353,6 +353,10 @@ proto._save = async function () {
     };
     const preview = this._buildPreview();
     if (this.onSave) this.onSave(JSON.stringify(state), extra, preview);
+    // The mask is on disk and its path is on the node, so there is nothing
+    // unsaved left to warn about. Cleared BEFORE setSaved() below, which
+    // auto-unmounts after 500ms.
+    this._dirty = false;
     if (this._diskSavePending) {
       this._diskSavePending = false;
       if (this.onSaveToDisk && preview) this.onSaveToDisk(preview);

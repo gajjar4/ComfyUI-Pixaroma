@@ -165,6 +165,10 @@ proto._endStroke = function () {
     this._compositeStroke(this._mctx);   // bake into the mask
     this._sctx.clearRect(0, 0, this.imgW, this.imgH);
     this._strokeHasContent = false;
+    // Inside this branch on purpose: _endStroke also runs on a bare pointerup
+    // with nothing painted, and a stray click must not make the editor ask
+    // "close without saving?" on the way out.
+    this._markDirty();
   }
   this._rescanBBox();
   this._recomputeRegion();
@@ -240,10 +244,19 @@ proto._drawCursor = function (p) {
 };
 
 // ── mask ops ────────────────────────────────────────────────────────────────
+// "There is painting here that has not been saved." Set by every real mask
+// change, cleared by open / a successful save / restoring a saved mask. _close
+// asks before throwing it away - painting used to vanish silently, which is what
+// two users reported as "it doesn't keep the mask".
+proto._markDirty = function () {
+  this._dirty = true;
+};
+
 proto._clearMask = function () {
   if (!this._mask) return;
   this._pushUndo();
   this._mctx.clearRect(0, 0, this.imgW, this.imgH);
+  this._markDirty();          // clearing a SAVED mask is itself a change to keep
   this._endStroke();
 };
 
@@ -254,6 +267,7 @@ proto._invertMask = function () {
   const d = id.data;
   for (let i = 0; i < d.length; i += 4) { d[i] = 255; d[i + 1] = 255; d[i + 2] = 255; d[i + 3] = 255 - d[i + 3]; }
   this._mctx.putImageData(id, 0, 0);
+  this._markDirty();
   this._endStroke();
 };
 
@@ -283,6 +297,8 @@ proto._loadMaskFromURL = function (url) {
     }
     this._mctx.putImageData(id, 0, 0);
     this._undo = []; this._redo = [];
+    // Restoring the mask that is already on disk is not an unsaved change.
+    this._dirty = false;
     this.layout?.setUndoState({ canUndo: false, canRedo: false });
     this._rescanBBox();
     this._recomputeRegion();
@@ -317,6 +333,7 @@ proto._doUndo = function () {
   if (!this._mask || !this._undo.length) return;
   this._redo.push(this._mctx.getImageData(0, 0, this.imgW, this.imgH));
   this._mctx.putImageData(this._undo.pop(), 0, 0);
+  this._markDirty();
   this._abandonStroke();
   this._rescanBBox(); this._recomputeRegion(); this._draw();
   this.layout?.setUndoState({ canUndo: this._undo.length > 0, canRedo: this._redo.length > 0 });
@@ -326,6 +343,7 @@ proto._doRedo = function () {
   if (!this._mask || !this._redo.length) return;
   this._undo.push(this._mctx.getImageData(0, 0, this.imgW, this.imgH));
   this._mctx.putImageData(this._redo.pop(), 0, 0);
+  this._markDirty();
   this._abandonStroke();
   this._rescanBBox(); this._recomputeRegion(); this._draw();
   this.layout?.setUndoState({ canUndo: this._undo.length > 0, canRedo: this._redo.length > 0 });

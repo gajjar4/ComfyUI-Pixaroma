@@ -10,6 +10,7 @@ import {
   createSliderRow,
   createInfo,
 } from "../framework/index.mjs";
+import { pixConfirm } from "../shared/confirm_dialog.mjs";
 import { installGraphUndoGuard } from "../shared/graph_undo_guard.mjs";
 
 import { pixApiUrl, pixAsset } from "../shared/api_url.mjs";
@@ -76,6 +77,8 @@ export class InpaintCropEditor {
     this._cropBoxColor = null;       // crop-box stroke override (white when orange tint)
     this._painting = false;
     this._lastPt = null;
+    this._dirty = false;         // unsaved painting? see _close
+    this._closeAsking = false;   // a close confirm is already on screen
 
     // geometry params (snapshot of the node knobs)
     this.params = {};
@@ -134,7 +137,38 @@ export class InpaintCropEditor {
     this._bindDropPaste();   // paste / drag-drop an image straight into the editor
   }
 
-  _close() { this.layout?.unmount(); }
+  // ⚠️ ASK before throwing painting away. Reported by two users as "Inpaint Crop
+  // doesn't keep the mask" (2026-08-17) and reproduced: paint, press ✕ Close (or
+  // Escape), and the mask was gone with no warning and nothing written - the
+  // editor only persists on SAVE. Everything else about persistence was measured
+  // healthy (save writes the PNG + mask_path; reopening restores it; it survives
+  // a full workflow reload), so the silent discard on close was the whole defect.
+  //
+  // The confirm is raised BEFORE unmount on purpose: the editor stays mounted
+  // while the question is on screen, so its graph-undo guard is still armed and
+  // a stray Ctrl+Z cannot reach the workflow behind it.
+  //
+  // The Save path does NOT come through here - layout.setSaved() unmounts itself
+  // - so saving never asks.
+  _close() {
+    if (!this._dirty) { this.layout?.unmount(); return; }
+    // Escape reaches the editor's own key handler BEFORE the dialog's (both are
+    // window+capture, and ours was registered first), so without this a second
+    // Escape would stack a second dialog.
+    if (this._closeAsking) return;
+    this._closeAsking = true;
+    pixConfirm({
+      title: "Close without saving?",
+      message: "Your painted mask has not been saved, so it will be lost.\n\n"
+        + "Save keeps it on this node and closes the editor.",
+      okText: "Discard the mask",
+      cancelText: "Keep editing",
+      danger: true,        // Enter keeps your painting; discarding takes a click
+    }).then((discard) => {
+      this._closeAsking = false;
+      if (discard) { this._dirty = false; this.layout?.unmount(); }
+    }).catch(() => { this._closeAsking = false; });
+  }
 
   _buildUI() {
     const layout = createEditorLayout({
