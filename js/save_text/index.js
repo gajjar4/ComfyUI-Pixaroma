@@ -274,8 +274,15 @@ async function saveToFile(node, { quiet } = {}) {
   writeState(node, s2);
   writeBuffer(node, readBuffer(node), false); // matches the file now
   node._pixStxSavedPath = j.path || "";
-  node._pixStxCntKey = null; // the counter has moved on
+  // The counter has moved on, so drop the cached key AND re-resolve. Clearing
+  // the key alone was not enough: nothing re-ran the lookup after a manual
+  // Save, so the cached "next file" stayed at the name this save had just
+  // taken - and the Clear dialog then offered the same file as both the one
+  // being kept and the new one being started. Found by reading the dialog.
+  node._pixStxCntKey = null;
+  node._pixStxNextName = null;
   syncFace(node);
+  updatePreview(node);
   if (!quiet) {
     ui.file.title = j.path || "";
   }
@@ -393,17 +400,28 @@ function wireEvents(node, ui) {
     const buf = readBuffer(node);
     const n = countEntries(buf, st.separator);
     if (!n) return;
+    // Say WHAT is being counted, and end on what actually happens. The first
+    // wording was "All 2 are already saved in prompts_001.txt", which drops the
+    // noun and reads as a riddle - reported straight off a screenshot.
+    const things = n === 1 ? "1 entry" : `${n} entries`;
+    // Belt against a momentarily stale preview: never name the file being kept
+    // as the file being started, even if the lookup has not come back yet.
+    const nx = node._pixStxNextName;
+    const nextFile = nx && nx !== st.currentFile ? ` (${nx})` : "";
     let message;
     if (st.currentFile && !isDirty(node)) {
       message =
-        `All ${n} are already saved in ${st.currentFile}. That file is kept as it is, ` +
-        `and the node starts a new one.`;
+        `Your ${things} are already saved in ${st.currentFile}, and that file is kept. ` +
+        `The node empties and starts a new file${nextFile}. Nothing is lost.`;
     } else if (st.currentFile) {
       message =
-        `${st.currentFile} holds the version saved earlier and is kept, but the edits ` +
-        `you have made since have not been written and will be lost.`;
+        `${st.currentFile} still holds what was saved earlier and is kept. But you have ` +
+        `edited the list since, and those edits have never been written - clearing loses them. ` +
+        `Press Keep, then Save .txt, if you want them.`;
     } else {
-      message = `These ${n} have never been written to a file. Clearing loses them.`;
+      message =
+        `Your ${things} have never been written to a file, so clearing loses them. ` +
+        `Press Keep, then Save .txt, if you want them.`;
     }
     const yes = await pixConfirm({
       title: "Clear the list?",
