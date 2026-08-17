@@ -466,6 +466,15 @@ async function collectRun(node, text) {
       node._pixStxGen = (node._pixStxGen || 0) + 1;
       buf = "";
       node._pixStxCntKey = null;
+    } else {
+      // The rescue did not happen, so re-read instead of appending to `buf` -
+      // which was snapshotted BEFORE an await that may have lasted seconds.
+      // With the generation counter this stopped being cosmetic: pressing Clear
+      // during the rescue makes saveToFile return false, and writing the stale
+      // snapshot back would RESURRECT everything the user had just cleared.
+      // Also covers the plain failed-save case, where it silently reverted
+      // anything typed meanwhile.
+      buf = readBuffer(node);
     }
   }
 
