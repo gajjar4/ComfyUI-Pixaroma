@@ -195,6 +195,24 @@ async function fetchMeta(node) {
   }
 }
 
+// A browser <video> decodes WEB codecs only. A professional codec (ProRes,
+// DNxHR) is perfectly normal input for this node - the FRAME still comes out,
+// because that is grabbed server-side with ffmpeg - but the preview element
+// simply fails on it. It used to fail SILENTLY: the video stayed display:block
+// over its own black background, so the node showed a black rectangle with
+// nothing said, and read as broken (reported 2026-08-14 against ProRes).
+//
+// The scrubber keeps working in this state ON PURPOSE: fps and frame_count come
+// from the /meta route, not from the video element, so picking a frame by
+// number is still correct. That is why the message says so rather than
+// disabling the node.
+const PLACEHOLDER_EMPTY =
+  "(no video — click 'choose video to upload' or pick one above)";
+const PLACEHOLDER_NO_PREVIEW =
+  "No preview for this format. ProRes and DNxHR cannot be shown by the "
+  + "browser, but picking a frame still works: set the frame number above "
+  + "and run.";
+
 // Point the <video> at the selected file + fetch its frame info. Guarded so
 // re-entrant calls don't reload the same clip.
 function setPreview(node) {
@@ -217,7 +235,12 @@ function setPreview(node) {
   node._pixLvfName = val.replace(/\\/g, "/").split("/").pop() || "video.mp4";
   video.src = url;
   video.style.display = "block";
-  if (node._pixLvfPlaceholder?.isConnected) node._pixLvfPlaceholder.style.display = "none";
+  if (node._pixLvfPlaceholder?.isConnected) {
+    // Clear a previous clip's "no preview" message, or it sticks over a file
+    // that decodes perfectly well.
+    node._pixLvfPlaceholder.textContent = PLACEHOLDER_EMPTY;
+    node._pixLvfPlaceholder.style.display = "none";
+  }
   video.load();
   updateBar(node);
   fetchMeta(node);
@@ -325,10 +348,19 @@ app.registerExtension({
 
       const placeholder = document.createElement("div");
       placeholder.className = "pix-lvf-placeholder";
-      placeholder.textContent = "(no video — click 'choose video to upload' or pick one above)";
+      placeholder.textContent = PLACEHOLDER_EMPTY;
       placeholder.style.cssText =
         "position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#888;font-size:12px;text-align:center;padding:16px;box-sizing:border-box;background:#1a1a1a;";
       media.appendChild(placeholder);
+
+      // The browser could not decode this file. Say so instead of showing the
+      // video element's own black background, which looks like a broken node.
+      video.addEventListener("error", () => {
+        if (!video.getAttribute("src")) return;   // a cleared src is not a failure
+        video.style.display = "none";
+        placeholder.textContent = PLACEHOLDER_NO_PREVIEW;
+        placeholder.style.display = "flex";
+      });
 
       const bar = document.createElement("div");
       bar.className = "pix-lvf-bar is-disabled";
