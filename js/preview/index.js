@@ -1360,6 +1360,27 @@ app.registerExtension({
   async beforeRegisterNodeDef(nodeType, nodeData) {
     if (nodeData.name !== "PixaromaPreview") return;
 
+    // Stand ComfyUI's preview machinery down for THIS node type. Everything it
+    // would do here is either already suppressed or unwanted: we draw our own
+    // strip, node.imgs is null so both the canvas-image-preview and the
+    // animated-preview gates fail, and nothing of ours reads `preview` /
+    // `animatedImages`. Read out of the bundle rather than assumed - core's hook
+    // is exactly `updatePreviews(this)` plus a branch that only runs for a
+    // SubgraphNode, which this never is.
+    //
+    // ⚠️ REQUIRED by the swallowing `images` setter installed below. Leaving it
+    // out cost a runaway loop that a review caught AFTER I had called the fix
+    // verified. `unsafeUpdatePreviews` guards its work with
+    // `changed = outputs && this.images !== outputs.images`, and the only thing
+    // that ever clears that flag is the write we swallow - so in the LEGACY
+    // renderer with save_mode=save it stayed true on every repaint:
+    // showPreview -> loadElements -> setDirtyCanvas -> repaint -> showPreview,
+    // each pass building fresh Images against a cache-busted /view. MEASURED:
+    // 277 /view requests in 2 seconds against 6 before the change. It is
+    // INVISIBLE in Nodes 2.0 (drawNode early-returns before onDrawBackground),
+    // which is exactly why a check done there said everything was fine.
+    nodeType.prototype.onDrawBackground = function () { /* core preview machinery off */ };
+
     const origNodeCreated = nodeType.prototype.onNodeCreated;
     nodeType.prototype.onNodeCreated = function () {
       if (origNodeCreated) origNodeCreated.apply(this, arguments);

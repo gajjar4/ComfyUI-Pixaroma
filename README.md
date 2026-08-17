@@ -373,10 +373,10 @@ Master the Pixaroma suite with our video guides and workflow deep-dives:
 ## 🛠 Changelog
 
 ### **August 17, 2026 · v1.4.111–v1.4.113**
-- **Paste (Clipspace) shows the picture again** on Load Image and Load Image Mini. ComfyUI's own loader is blank there too, in the classic node look.
+- **Copy and Paste (Clipspace) work again** on Load Image, Load Image Mini and Preview Image: copying from a preview did nothing, and pasting showed no picture.
 - **Inpaint Crop asks before it throws your mask away.** Closing with ✕ or Escape used to discard your painting, which is only kept by Save.
 - **AI Prompt: the buttons work on the desktop app.** Its questions were never shown there, so Delete, Save as preset, loading a preset, importing a recipe and the seed box did nothing.
-- **AI Prompt: find a preset by typing**, delete one from its row, and tell them apart: an orange dot is ours, a grey one is yours.
+- **AI Prompt: find a preset by typing**, delete one from its row, and tell them apart: orange dot is ours, grey is yours.
 - **Ctrl+Z no longer undoes your whole workflow** when a Pixaroma question or the AI Prompt editor is open.
 - **Pause Text: Regenerate gives you a fresh prompt** from an AI Prompt node, even when its seed is fixed.
 - **Plus:** paste a recipe when the browser blocks clipboard reads; Load Video Frame explains a blank ProRes preview; Inpaint Crop says when it shows the un-resized original.
