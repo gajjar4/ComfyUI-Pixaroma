@@ -21,7 +21,7 @@ proto._loadImageFromURL = function (url, onDone) {
     this._rescanBBox();
     this._recomputeRegion();
     this._draw();
-    this._setStatus(`Loaded: ${this.imgW}×${this.imgH}`);
+    this._setStatus(`Loaded: ${this.imgW}×${this.imgH}${this._pixResizeNote || ""}`);
     onDone?.();
   };
   img.onerror = () => this._setStatus("Failed to load the source image.");
@@ -44,7 +44,7 @@ proto._loadImageFromDataURL = function (dataURL) {
     this._rescanBBox();
     this._recomputeRegion();
     this._draw();
-    this._setStatus(`Loaded: ${this.imgW}×${this.imgH}`);
+    this._setStatus(`Loaded: ${this.imgW}×${this.imgH}${this._pixResizeNote || ""}`);
   };
   img.src = dataURL;
 };

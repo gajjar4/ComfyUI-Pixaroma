@@ -137,6 +137,38 @@ function parseAnnotatedImageValue(value) {
   };
 }
 
+// Load Image Pixaroma resizes in PYTHON, at execute time, so the resized pixels
+// do not exist in the browser at all before a run - the editor can only open the
+// file on disk. That is fine for a plain loader, but it is NOT harmless here:
+// with an aspect-changing mode (crop / cover) the mask would be painted against
+// geometry the run never sees, and the node reads as "it ignored my resize"
+// (reported 2026-08-15).
+//
+// getUpstreamImageURL has a branch for core LoadImage and otherwise falls back
+// to src.imgs, which for this node is the /view URL of the INPUT file - i.e.
+// always the original. Rather than guess a resized preview we cannot produce,
+// say plainly which picture is on screen.
+function upstreamResizeNote(node) {
+  const graph = node.graph;
+  const input = (node.inputs || []).find((i) => i.name === "image");
+  if (!input || input.link == null || !graph) return "";
+  let link = graph.links?.[input.link];
+  if (!link && typeof graph.links?.get === "function") link = graph.links.get(input.link);
+  const src = link && graph.getNodeById(link.origin_id);
+  if (!src || src.comfyClass !== "PixaromaLoadImage") return "";
+  let st = null;
+  try {
+    const raw = src.properties?.loadImagePixState;
+    st = typeof raw === "string" ? JSON.parse(raw || "{}") : raw;
+  } catch (e) {
+    return "";                       // unreadable state is not worth a warning
+  }
+  const mode = st && typeof st.mode === "string" ? st.mode : "";
+  if (!mode || mode === "off") return "";
+  return ` — this is the ORIGINAL. The Load Image above resizes it (${mode}), `
+    + "and the resized picture only exists after a run.";
+}
+
 function getUpstreamImageURL(node) {
   // Prefer the LIVE wired source so a just-changed Load Image (or any live
   // preview) is what the editor opens. The cached executed-source URL below is
@@ -313,6 +345,9 @@ app.registerExtension({
       };
       editor.onClose = () => { captureBrush(); node._pixInpaintEditor = null; node.setDirtyCanvas(true, true); };
 
+      // Read BEFORE open: the loader's onload appends it to the "Loaded: W×H"
+      // status, so it has to be on the editor by the time the image lands.
+      editor._pixResizeNote = upstreamResizeNote(node);
       editor.open(stateJson, getUpstreamImageURL(node),
         readParams(node), node._pixInpaintBrush);
     });
