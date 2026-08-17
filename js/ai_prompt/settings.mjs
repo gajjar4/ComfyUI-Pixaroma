@@ -147,6 +147,34 @@ function injectCSS() {
        the only file in the list that can use the audio input at all. */
     .pix-app-poplist > div.is-ears::after { content:" (sees + hears)"; font-size:10px; opacity:.7; }
 
+    /* Which presets came with Pixaroma and which are the user's own. The same
+       dot sits inside its own chip, so the chip row IS the legend and no line
+       has to explain what a colour means. */
+    .pix-app-popkinds { display:flex; gap:4px; margin-bottom:4px; }
+    .pix-app-kind { flex:1 1 0; min-width:0; display:flex; align-items:center;
+      justify-content:center; gap:5px; padding:3px 6px; border-radius:4px;
+      background:rgba(255,255,255,.05); border:1px solid rgba(255,255,255,.13);
+      color:rgba(255,255,255,.62); font:10.5px 'Segoe UI', sans-serif;
+      cursor:pointer; white-space:nowrap; overflow:hidden; }
+    .pix-app-kind:hover { border-color:var(--pix-acc,#f66744); color:#ddd; }
+    .pix-app-kind.is-on { background:var(--pix-acc,#f66744);
+      border-color:var(--pix-acc,#f66744); color:#fff; }
+    /* A kind with no rows is a label, not a control - it says "you have none of
+       your own yet" and does not pretend to be clickable. */
+    .pix-app-kind.is-empty { opacity:.4; cursor:default; }
+    .pix-app-kind.is-empty:hover { border-color:rgba(255,255,255,.13);
+      color:rgba(255,255,255,.62); }
+    .pix-app-dot { flex:0 0 auto; width:7px; height:7px; border-radius:50%; }
+    /* !important is doing real work here: each dot's colour is an INLINE style
+       (openPop stays generic about the kinds it is given), and an orange dot on
+       the selected chip's orange fill would be invisible. */
+    .pix-app-kind.is-on .pix-app-dot { background:#fff !important; }
+    .pix-app-poplist > div.has-dot { display:flex; align-items:center; gap:7px; }
+    /* The ellipsis has to move to the inner span once the row is a flex
+       container, and preset names are long enough to need it. */
+    .pix-app-poplist > div.has-dot > .nm { flex:1 1 auto; min-width:0;
+      overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+
     .pix-ape-back { position:fixed; inset:0; z-index:1500; background:rgba(0,0,0,.72);
       display:flex; align-items:center; justify-content:center; }
     .pix-ape { width:min(1100px,94vw); height:94vh; display:flex; flex-direction:column;
@@ -209,18 +237,54 @@ function looksAudio(name) {
   return /gemma\W?4/i.test(String(name || ""));
 }
 
+// The two kinds of preset, and the colour that says which is which. Orange is
+// the pack's own accent, so an orange dot reading "this one came with Pixaroma"
+// speaks the same colour language as the rest of the panel, and the user's own
+// take a neutral grey. Both are only ever shown when BOTH kinds exist - see the
+// note in openPop.
+const KIND_SHIPPED = "shipped";
+const KIND_MINE = "mine";
+const PRESET_KINDS = [
+  { key: KIND_SHIPPED, label: "Pixaroma", dot: "var(--pix-acc,#f66744)" },
+  { key: KIND_MINE, label: "Mine", dot: "#b9b9b9" },
+];
+
 let POP = null;
 function closePop() {
   POP?.remove();
   POP = null;
 }
 
+/**
+ * A row is `[value, label, hoverTitle?, kind?]`.
+ *
+ * opts.filterFrom - how many rows before the filter box appears (default 9).
+ *   The preset pickers pass 2: a library only ever grows, and hunting a name by
+ *   eye in a list that cannot be filtered is what was reported.
+ * opts.kinds - `[{ key, label, dot }]`. Paints a chip row that narrows the list
+ *   to one kind, plus a matching coloured dot on every row, so which presets
+ *   came with Pixaroma and which are the user's own reads at a glance instead
+ *   of only in the hover text.
+ * opts.filterHint - placeholder for the filter box.
+ */
 function openPop(anchor, values, current, onPick, opts) {
   closePop();
   const pop = el("div", "pix-app-pop");
   const mark = opts?.markVision !== false;
+  // Every kind is listed even when it has no rows, and the empty one is dimmed
+  // rather than dropped. Hiding it was the first version and it was worse: on a
+  // fresh install nothing appeared at all, so the marking looked broken, and
+  // then the dots' meaning arrived unannounced the day the user saved their
+  // first preset. A dimmed "Mine (0)" answers "have I saved any of my own yet"
+  // in one glance, which is a real question, unlike a chip that filters to an
+  // empty list - so it is inert instead of clickable.
+  const kinds = opts?.kinds || [];
+  const dotOf = (kind) => kinds.find((k) => k.key === kind)?.dot || null;
+  let kindKey = null;                 // null = every kind
   let filter = null;
+  let shown = [];                     // what is listed now, for Enter-to-pick
   const list = el("div", "pix-app-poplist");
+  const chips = kinds.length ? el("div", "pix-app-popkinds") : null;
 
   const paint = (q) => {
     list.replaceChildren();
@@ -228,16 +292,18 @@ function openPop(anchor, values, current, onPick, opts) {
     // Every space-separated word must appear, so "vl 8b" finds the 8B VL build
     // whatever order the filename puts them in.
     const words = needle ? needle.split(/\s+/) : [];
-    const hits = values.filter(([value, label]) => {
-      const hay = (String(label) + " " + String(value)).toLowerCase();
+    const hits = values.filter((row) => {
+      if (kindKey && row[3] !== kindKey) return false;
+      const hay = (String(row[1]) + " " + String(row[0])).toLowerCase();
       return words.every((w) => hay.includes(w));
     });
+    shown = hits;
     if (!hits.length) {
       const none = el("div", null, values.length ? "Nothing matches" : "Nothing to choose");
       none.style.color = "#888";
       list.appendChild(none);
     }
-    for (const [value, label, hoverTitle] of hits) {
+    for (const [value, label, hoverTitle, kind] of hits) {
       // The empty value is the "None" sentinel, not a file. Without this it got
       // marked "(no vision)" - nonsense for a state the node documents as a
       // working one - and because .is-blind is declared after .is-on at equal
@@ -245,9 +311,18 @@ function openPop(anchor, values, current, onPick, opts) {
       // most common state showed no selection at all.
       const vision = !mark || value === "" || looksVision(value);
       const ears = mark && value !== "" && looksAudio(value);
+      const dot = dotOf(kind);
       const row = el("div", (value === current ? "is-on" : "") +
                             (vision ? "" : " is-blind") +
-                            (ears ? " is-ears" : ""), label);
+                            (ears ? " is-ears" : "") +
+                            (dot ? " has-dot" : ""));
+      if (dot) {
+        const bullet = el("span", "pix-app-dot");
+        bullet.style.background = dot;
+        row.append(bullet, el("span", "nm", label));
+      } else {
+        row.textContent = label;
+      }
       // Marking matters more than it looks: every tokenizer in the chain ends
       // in **kwargs, so image= is accepted and IGNORED by a text-only model,
       // and .generate exists on the wrapper - so picking one is completely
@@ -268,21 +343,71 @@ function openPop(anchor, values, current, onPick, opts) {
     }
   };
 
-  if (values.length > 8) {
+  // The chips repaint themselves as well as the list, so the selected one is
+  // obvious. Counts are on them because "how many of these are mine" is the
+  // same question as "where did my preset go".
+  const paintChips = () => {
+    if (!chips) return;
+    chips.replaceChildren();
+    const entries = [[null, "All", null, values.length]].concat(
+      kinds.map((k) => [k.key, k.label, k.dot,
+                        values.filter((row) => row[3] === k.key).length]));
+    for (const [key, label, dot, count] of entries) {
+      const empty = count === 0;
+      const chip = el("div", "pix-app-kind" + (kindKey === key ? " is-on" : "")
+                             + (empty ? " is-empty" : ""));
+      if (dot) {
+        const bullet = el("span", "pix-app-dot");
+        bullet.style.background = dot;
+        chip.appendChild(bullet);
+      }
+      chip.appendChild(el("span", null, label + " (" + count + ")"));
+      chip.title = key === null ? "Show every preset"
+        : (key === KIND_SHIPPED
+            ? (empty ? "None of the presets that ship with Pixaroma could be read."
+                     : "Show only the presets that ship with Pixaroma")
+            : (empty ? "You have not saved any presets of your own yet. "
+                       + "Save current makes one."
+                     : "Show only the presets you saved yourself"));
+      // An empty kind is a label, not a control: clicking it would blank the
+      // list and leave the user wondering what they broke.
+      if (!empty) {
+        chip.addEventListener("click", (e) => {
+          e.stopPropagation();
+          kindKey = key;
+          paintChips();
+          paint(filter?.value);
+        });
+      }
+      chips.appendChild(chip);
+    }
+  };
+
+  if (values.length >= (opts?.filterFrom ?? 9)) {
     filter = document.createElement("input");
     filter.type = "text";
     filter.className = "pix-app-popfilter";
-    filter.placeholder = "Filter, e.g. vl 8b";
+    filter.placeholder = opts?.filterHint || "Filter, e.g. vl 8b";
     filter.addEventListener("input", () => paint(filter.value));
     // Never let a keystroke reach the canvas: ComfyUI binds single letters to
     // commands, so typing "b" here would otherwise also toggle bypass.
     filter.addEventListener("keydown", (e) => {
       e.stopPropagation();
-      if (e.key === "Escape") { e.preventDefault(); closePop(); }
+      if (e.key === "Escape") { e.preventDefault(); closePop(); return; }
+      // Typing until one row is left and pressing Enter is the natural way to
+      // use a filter, and without this it does nothing at all.
+      if (e.key === "Enter" && shown.length === 1) {
+        e.preventDefault();
+        const value = shown[0][0];
+        closePop();
+        onPick(value);
+      }
     });
     pop.appendChild(filter);
   }
+  if (chips) pop.appendChild(chips);
   pop.appendChild(list);
+  paintChips();
   paint("");
   document.body.appendChild(pop);
   if (filter) setTimeout(() => filter.focus(), 0);
@@ -612,6 +737,14 @@ function toggleRow(label, on, onFlip, title) {
 function pickRow(label, onOpen, opts) {
   const row = el("div", "pix-app-pick" + (opts?.locked ? " is-locked" : ""));
   const v = el("span", "v" + (opts?.none ? " none" : ""), label);
+  // The closed row carries the same dot as the list it opens, so the panel says
+  // whether the loaded preset is one of ours or one of yours without being
+  // opened at all.
+  if (opts?.dot) {
+    const bullet = el("span", "pix-app-dot");
+    bullet.style.background = opts.dot;
+    row.appendChild(bullet);
+  }
   row.append(v, el("span", "c", "▼"));
   if (opts?.title) row.title = opts.title;
   if (!opts?.locked) row.addEventListener("click", () => onOpen(row));
@@ -621,6 +754,21 @@ function pickRow(label, onOpen, opts) {
 /** Every preset the picker knows about, shipped first. */
 function allPresets() {
   return PRESETS.shipped.concat(PRESETS.user);
+}
+
+/** Ours or the user's own, decided by IDENTITY: allPresets() hands out the very
+ *  objects in PRESETS.shipped, so this stays right even if one of the user's
+ *  presets somehow carries a shipped name - which a name test would get wrong,
+ *  and which #17 already learned the hard way about the "(mine)" suggestion. */
+function isShipped(preset) {
+  return PRESETS.shipped.includes(preset);
+}
+
+/** The dot colour for one preset. Kept beside isShipped so the closed picker
+ *  row, the list rows and the chips can never disagree about a preset's kind. */
+function presetDot(preset) {
+  if (!preset) return null;
+  return (isShipped(preset) ? PRESET_KINDS[0] : PRESET_KINDS[1]).dot;
 }
 
 /**
@@ -1064,22 +1212,21 @@ function renderPanel(node, body) {
     (anchor) => {
       // Each row carries its model in the hover, so you can see what a preset
       // was measured with BEFORE you load it, without cluttering the list.
-      const rows = all.map((p, i) => [p.name, p.name,
+      const rows = all.map((p) => [p.name, p.name,
         p.name
         // Which of the two kinds this is, because "where did my preset go" and
         // "does my friend already have this one" are the same question asked
-        // from either end, and the list itself cannot show it. By INDEX rather
-        // than by name: shipped ones come first, so this stays correct even if
-        // a user preset somehow shares a name with one.
-        + (i < PRESETS.shipped.length
-             ? "\nShips with Pixaroma" : "\nYour own preset")
+        // from either end. The dot on the row says it at a glance now; this
+        // spells it out, and the two read the same answer from isShipped.
+        + (isShipped(p) ? "\nShips with Pixaroma" : "\nYour own preset")
         + (p.model_hint ? "\nMeasured with " + p.model_hint
                                  + (MODELS.models.includes(p.model_hint)
                                     ? " (you have it)" : " (you do NOT have it)")
                                : "\nNo model recorded")
         + (p.settings && p.settings.temperature != null
            ? "\nTemperature " + p.settings.temperature : "")
-        + (p.note ? "\n\n" + p.note : "")]);
+        + (p.note ? "\n\n" + p.note : ""),
+        isShipped(p) ? KIND_SHIPPED : KIND_MINE]);
       openPop(anchor, rows, loaded ? loaded.name : null, (name) => {
         const preset = all.find((p) => p.name === name);
         if (!preset) return;
@@ -1112,10 +1259,13 @@ function renderPanel(node, body) {
           patch.model = hint;
         }
         set(patch);
-      }, { markVision: false });
+      }, { markVision: false, filterFrom: 2, kinds: PRESET_KINDS,
+           filterHint: "Filter, e.g. krea image" });
     },
-    { title: "Load a saved formula, with the settings it was measured at. "
-             + "Hover a name to see which model it was written for." },
+    { dot: presetDot(loaded),
+      title: "Load a saved formula, with the settings it was measured at. "
+             + "Type to filter the list, and hover a name to see which model it "
+             + "was written for." },
   ));
 
   const withSettings = node._pixApPresetSettings !== false;
@@ -1216,6 +1366,8 @@ function renderPanel(node, body) {
       : "You have no presets of your own yet.");
   delBtn.disabled = !PRESETS.user.length;
   delBtn.addEventListener("click", () => {
+    // Every row here is one of the user's own, so there is no kind to mark -
+    // just the filter, for a library that has grown.
     openPop(delBtn, PRESETS.user.map((p) => [p.name, p.name]), null, async (name) => {
       if (!window.confirm("Delete your preset \"" + name + "\"?")) return;
       const res = await deletePreset(name);
@@ -1227,7 +1379,7 @@ function renderPanel(node, body) {
       }
       await refreshPresets();
       refreshAIPromptPanel(node);
-    }, { markVision: false });
+    }, { markVision: false, filterFrom: 2, filterHint: "Filter your presets" });
   });
 
   prow.append(saveBtn, delBtn);

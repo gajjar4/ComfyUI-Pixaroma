@@ -138,7 +138,10 @@ export const AI_PROMPT_HELP = {
         + "Everything below is in the settings, under Presets.",
       defs: [
         ["Pick one from the list", "Fills in the formula, the temperature and the sampling values in one go. Turn off \"Bring its settings too\" first if you want the wording only."],
-        ["Hover a name", "Shows whether it is yours or one that ships with Pixaroma, which model it was written for, whether you have that model, and its temperature. All before you load it."],
+        ["The orange and grey dots", "An orange dot means the preset ships with Pixaroma. A grey one means you saved it yourself. The picker row at the top wears the same dot, so it says which kind is loaded without being opened."],
+        ["Type to filter", "The box at the top of the list narrows it as you type. Every word you type has to appear in the name but the order does not matter, so \"krea image\" finds the image one. When one name is left, Enter loads it."],
+        ["All, Pixaroma, Mine", "The three buttons under the filter show everything, only the ones that ship with Pixaroma, or only your own, with a count on each. Mine stays greyed out until you have saved one."],
+        ["Hover a name", "Shows which model it was written for, whether you have that model, and its temperature. All before you load it."],
         ["Save current", "Keeps whatever this node has right now under a name you choose, so your own recipes sit in the same list."],
         ["Delete", "Only ever offers your own. The ones that ship with Pixaroma stay put."],
         ["Reset", "On the Advanced sampling line. Puts the sampling values back to the defaults and leaves your formula and model alone. It covers everything a preset can carry, so the two Behaviour switches at the bottom go back too. It wakes up only when something has really changed, and its tooltip names what."],
@@ -162,7 +165,9 @@ export const AI_PROMPT_HELP = {
     {
       heading: "Where your presets are kept",
       body:
-        "The list holds two kinds, and hovering a name tells you which.\n\n"
+        "The list holds two kinds, and a dot on each name says which: orange for "
+        + "the ones that ship with Pixaroma, grey for your own. The buttons under "
+        + "the filter can show just one kind or the other.\n\n"
         + "The ones that ship with Pixaroma are on every machine that installs "
         + "it, so a formula like Krea 2 is already there for everybody and you "
         + "never need to send it to anyone. New ones arrive with a Pixaroma "
