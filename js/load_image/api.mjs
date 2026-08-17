@@ -186,8 +186,14 @@ function syncCoreImageStore(node, filename) {
  *   - `_pixLiPreviewReqId` unchanged since the write == none of our own pick
  *     paths started a fetch, so a normal pick never double-fetches (they write
  *     the value and THEN call updateNativePreview, which bumps the id).
- *   - `previewMatches` == the right picture is already loaded, so Nodes 2.0
- *     (where core's own repopulate works) and the Mask Editor are no-ops.
+ *   - `previewMatches` == the right picture is already loaded, so a paste whose
+ *     source carried no `image` widget (a Save Image node: no callback fires, so
+ *     core's own assignment survives) and the Mask Editor are left alone.
+ *     MEASURED: this does NOT make us a no-op in Nodes 2.0 - core clears
+ *     `node.imgs` there too, so at +0ms there is nothing to match and we fetch
+ *     as well. Both fetches name the same file, so the picture is right either
+ *     way; the cost is one extra local request per paste, and the benefit is
+ *     that a regression in core's Nodes-2.0 repopulate cannot blank our nodes.
  *   - Never on the load path: node SETUP already reconciles the preview there,
  *     and the load path is the one place a stray write does damage.
  * A 0ms timer is enough because core's whole paste is synchronous; the measured
