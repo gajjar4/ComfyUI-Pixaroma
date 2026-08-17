@@ -372,6 +372,14 @@ Master the Pixaroma suite with our video guides and workflow deep-dives:
 
 ## 🛠 Changelog
 
+### **August 17, 2026 · v1.4.111**
+- **AI Prompt: saving your own formula as a preset works again.** On the ComfyUI desktop app the Save button did nothing at all, because the little name box it asks for is not available there. It now uses its own name box, and it suggests a name so you can just press Enter.
+- **AI Prompt: the seed box on the node opens too**, for the same reason.
+- **AI Prompt: you can paste a recipe someone sent you** even when your browser will not let a page read your clipboard, which is normal when you open ComfyUI by its network address. It now gives you a box to paste into.
+- **Pause Text: Regenerate gives you a fresh prompt from an AI Prompt node.** Before, it only worked if that node was set to a random seed; with a fixed seed you kept getting the same text back.
+- **Load Video Frame says why a ProRes file shows no picture.** Browsers cannot play ProRes or DNxHR, so the preview stayed black and looked broken. It now explains, and picking a frame still works exactly as before.
+- **Inpaint Crop tells you when it is showing the original picture.** If the Load Image above it is set to resize, the mask editor was quietly showing the un-resized version, which matters when the resize changes the shape.
+
 ### **August 16, 2026 · v1.4.109–v1.4.110**
 - **NEW: First Last Frame Pixaroma.** Takes the first and last frame out of a video as two pictures, so the next clip can start where the last one ended. Works with Load Video Pixaroma or ComfyUI's own Load Video.
 - **Run Timer: drag the corner and the whole clock grows with it**, digits and all, and it remembers the size with your workflow. You can also pick the clock font now, your own .ttf files included.
