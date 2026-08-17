@@ -255,8 +255,8 @@ export function openSettingsPanel(node, onChange) {
   newWrap.appendChild(chipRow(node, "newest", [["bottom", "At the bottom"], ["top", "At the top"]]));
 
   const dupWrap = section(body, "Skip repeats",
-    "ComfyUI already skips a run where nothing changed. This covers reopening a " +
-    "workflow, where the first run would otherwise re-add the last prompt.");
+    "A second belt: the node already ignores a run where nothing changed. This " +
+    "covers what slips past that, mainly reopening a workflow.");
   dupWrap.appendChild(chipRow(node, "skipDupes", [
     ["off", "Keep all"], ["last", "Same as last"], ["any", "Any repeat"],
   ]));
@@ -341,8 +341,14 @@ export function openSettingsPanel(node, onChange) {
 
 // index.js calls this after it resolves the next file name, so the panel's
 // preview line stays in step with the node's footer.
-export function setPanelPreview(text, denied) {
-  const p = _panel?._pixStxPrev;
+export function setPanelPreview(node, text, denied) {
+  // The panel is a SINGLETON, but the callers are per-node async continuations
+  // (a debounced counter lookup that resolves ~350ms later). Without this owner
+  // check, node A's resolved file name could land in a panel that by then
+  // belongs to node B - showing one node's next filename while editing
+  // another's settings.
+  if (!_panel || _panelNode !== node) return;
+  const p = _panel._pixStxPrev;
   if (!p) return;
   p.textContent = text || "...";
   p.classList.toggle("denied", !!denied);

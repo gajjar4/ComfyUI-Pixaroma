@@ -14,13 +14,21 @@ WHY the buffer is not handled here (this is the load-bearing design decision):
   queue. The whole point of the `text` passthrough is that you CAN put it
   mid-chain, so that had to stay free.
 
-  Keeping Python stateless also means this node caches normally, and that turns
-  out to do the duplicate handling for free: queue the same prompt twice and the
-  second run is cached, so no `executed` event fires and nothing is collected
-  twice. Change the prompt and it runs. That is exactly the wanted behaviour and
-  it costs no code. (The browser still has its own duplicate check, because a
-  workflow reload clears ComfyUI's cache and the first run afterwards would
-  otherwise re-add the last prompt.)
+  Keeping Python stateless also means this node caches normally.
+
+  ⚠️ Caching does NOT stop a duplicate on its own, and an earlier version of
+  this comment claimed it did. MEASURED against the installed ComfyUI: a cached
+  node does not re-execute, but execution.py's `_send_cached_ui` still replays
+  an IDENTICAL `executed` event to the browser (the same mechanism that makes
+  Preview Image re-show its picture on an unchanged re-queue). Two queues of an
+  unchanged graph produced two events, and with Skip repeats set to "Keep all"
+  the same prompt was collected twice.
+
+  What actually prevents it lives in the browser: `execution_cached` names the
+  cached node ids before the replay, so js/save_text/index.js skips those, and
+  `shouldCollect` is a second belt for the case ComfyUI cannot help with (a
+  workflow reload clears the cache, so the first run afterwards would otherwise
+  re-add the prompt that is already last).
 
   Consequence, stated honestly: collecting happens while the workflow is open in
   a browser. A headless API run passes text through and writes no file.
@@ -56,9 +64,9 @@ class PixaromaSaveText:
                         "tooltip": (
                             "The text to collect. Wire a prompt node, a Show "
                             "Text, or an LLM prompt generator here. Each run "
-                            "adds one entry. If a run is cached because nothing "
-                            "changed, nothing is added, so re-running the same "
-                            "prompt does not fill the list with copies."
+                            "adds one entry. Running again without changing "
+                            "anything adds nothing, so re-running does not fill "
+                            "the list with copies."
                         ),
                     },
                 ),

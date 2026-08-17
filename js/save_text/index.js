@@ -103,6 +103,43 @@ function uiOf(node) {
   return node?._pixStxUI || null;
 }
 
+// Two Save Text nodes must never write to the SAME file, or each would
+// overwrite the other's collection with its own - the node's whole promise is
+// that the file matches what you see.
+//
+// Two independent nodes are already safe: each claims its own name through the
+// route's O_EXCL loop, so the same default pattern gives 001 and 002. The hole
+// is COPYING a node: clone/paste duplicates node.properties, so the copy
+// inherits currentFile and starts writing over the original's file. MEASURED:
+// cloning a node holding prompts_003.txt produced a second node also claiming
+// prompts_003.txt.
+//
+// So the newcomer gives up the name and claims a fresh one on its next write.
+// It keeps its buffer (a copy of a collection is a reasonable starting point);
+// the footer just says "not saved yet" until it is written.
+//
+// This is safe on the LOAD path (Vue Compat #18) because it only writes when it
+// finds a genuine collision. Two nodes in a cleanly saved workflow hold
+// different names, so the loop is a no-op and nothing is written - verified by
+// a serialize/reload diff. A collision IS a real change worth recording.
+function dedupeCurrentFile(node) {
+  const st = readState(node);
+  if (!st.currentFile) return;
+  const graph = node.graph || app.graph;
+  const nodes = graph?._nodes || graph?.nodes || [];
+  for (const other of nodes) {
+    if (other === node || other.comfyClass !== COMFY_CLASS) continue;
+    const o = readState(other);
+    if (o.currentFile === st.currentFile && (o.folder || "") === (st.folder || "")) {
+      st.currentFile = "";
+      writeState(node, st);
+      node._pixStxCntKey = null;
+      node._pixStxNextName = null;
+      return;
+    }
+  }
+}
+
 // ── the face ────────────────────────────────────────────────────────────────
 
 // DOM ONLY. Called from the load path, so it must never write node.properties,
@@ -144,13 +181,17 @@ function syncFace(node) {
 }
 
 function flash(ui, btn, label) {
-  const old = btn.textContent;
+  // Cache the REAL label once per button. Reading btn.textContent on every call
+  // captured the FLASHED text on a second click inside the 700ms window, so a
+  // double click on Copy all left the button reading "Copied" for good - until
+  // a workflow reload or a renderer flip rebuilt the DOM.
+  if (btn._pixStxLabel == null) btn._pixStxLabel = btn.textContent;
   btn.textContent = label;
   btn.classList.add("is-flashing");
   clearTimeout(btn._pixStxFlash);
   btn._pixStxFlash = setTimeout(() => {
     btn.classList.remove("is-flashing");
-    btn.textContent = old;
+    btn.textContent = btn._pixStxLabel;
   }, 700);
 }
 
@@ -218,15 +259,22 @@ function updatePreview(node) {
     }
     // RE-QUERY after the await: the node can be deleted while a fetch is in
     // flight, and writing into a detached face is how a leak starts.
-    if (!uiOf(node)) return;
+    //
+    // The KEY check is the other half, and Save Video already had it while this
+    // did not: editing the folder or the pattern starts a second lookup, and
+    // whichever resolves last wins, so an out-of-order response can leave the
+    // node showing a filename for settings the user has already changed. That
+    // name is not decoration - it feeds the footer, the settings panel and the
+    // Clear dialog's "starts a new file (...)" line.
+    if (!uiOf(node) || node._pixStxCntKey !== key) return; // superseded
     if (j?.denied) {
       node._pixStxNextName = null;
-      setPanelPreview(j.message || "That folder is not approved yet.", true);
+      setPanelPreview(node, j.message || "That folder is not approved yet.", true);
       say(node, shorten(j.message), "bad", j.message);
       return;
     }
     node._pixStxNextName = j?.resolved || name;
-    setPanelPreview(node._pixStxNextName, false);
+    setPanelPreview(node, node._pixStxNextName, false);
     if (!readState(node).currentFile) syncFace(node);
   }, 350);
 }
@@ -272,7 +320,14 @@ async function saveToFile(node, { quiet } = {}) {
   const s2 = readState(node);
   s2.currentFile = j.file;
   writeState(node, s2);
-  writeBuffer(node, readBuffer(node), false); // matches the file now
+  // Clear the dirty flag ONLY if the buffer is still what we actually sent.
+  // `buf` was snapshotted before the fetch; if the user typed while it was in
+  // flight, the file does NOT contain what the node now holds, and marking it
+  // clean would put a green "saved" under text that was never written - a
+  // direct breach of this node's one promise. Re-reading the buffer (rather
+  // than writing `buf` back) is still right: it preserves that in-flight edit.
+  const nowBuf = readBuffer(node);
+  writeBuffer(node, nowBuf, nowBuf !== buf);
   node._pixStxSavedPath = j.path || "";
   // The counter has moved on, so drop the cached key AND re-resolve. Clearing
   // the key alone was not enough: nothing re-ran the lookup after a manual
@@ -289,10 +344,41 @@ async function saveToFile(node, { quiet } = {}) {
   return true;
 }
 
+// Node ids ComfyUI reported as CACHED for the run currently in flight.
+//
+// A CACHED node does NOT re-execute, but ComfyUI still replays its stored ui
+// payload to the browser (execution.py's _send_cached_ui sends an identical
+// "executed" event - this is the same mechanism that makes Preview Image
+// re-show its picture on an unchanged re-queue). MEASURED here: two queues of
+// an unchanged graph produced two `executed` events and, with Skip repeats set
+// to "Keep all", the same prompt was collected twice and written to the file.
+//
+// So a cached run must not collect. By definition it produced nothing new -
+// and this also covers the more confusing case where the user changes something
+// ELSEWHERE in the graph, re-queues, and Save Text's own input is unchanged.
+//
+// The event order is MEASURED and reliable: execution_start, then
+// execution_cached carrying the id list, then executed. Cleared on
+// execution_start so a stale set can never suppress a later genuine run - the
+// failure mode of over-suppression is a LOST entry, which is far worse than the
+// duplicate it prevents. A host that never sends execution_cached simply leaves
+// the set empty and behaves exactly as before.
+const _cachedThisRun = new Set();
+
+function installCacheTracker() {
+  if (app._pixStxCachePatched) return;
+  app._pixStxCachePatched = true;
+  api.addEventListener("execution_start", () => _cachedThisRun.clear());
+  api.addEventListener("execution_cached", ({ detail }) => {
+    for (const id of detail?.nodes || []) _cachedThisRun.add(String(id));
+  });
+}
+
 // ── collecting one run ──────────────────────────────────────────────────────
 async function collectRun(node, text) {
   const ui = uiOf(node);
   if (!ui) return;
+  if (_cachedThisRun.has(String(node.id))) return; // replayed, not re-run
 
   // The two delivery paths (socket `executed` and the per-node onExecuted hook)
   // both fire on standard ComfyUI, and unlike a preview an APPEND is not
@@ -314,13 +400,29 @@ async function collectRun(node, text) {
   let buf = readBuffer(node);
   const max = st.maxEntries || 0;
   if (max > 0 && countEntries(buf, st.separator) >= max) {
-    if (st.currentFile && isDirty(node)) await saveToFile(node, { quiet: true });
-    if (!uiOf(node)) return;
-    const s2 = readState(node);
-    s2.currentFile = "";
-    writeState(node, s2);
-    buf = "";
-    node._pixStxCntKey = null;
+    // Rescue the full collection to disk BEFORE emptying it, and only roll over
+    // if that actually succeeded. Two bugs lived here:
+    //   * the old guard was `st.currentFile && isDirty(node)`, so a collection
+    //     that had NEVER been written (autoSave off, Save never pressed) skipped
+    //     the rescue entirely and was then wiped. saveToFile handles that case
+    //     perfectly well - it claims a file when currentFile is empty.
+    //   * the return value was ignored, so a failed save (folder no longer
+    //     approved, disk full, server down) fell straight through to the wipe.
+    // If the rescue fails we deliberately do NOT roll over: the buffer keeps
+    // growing past max, which is untidy but keeps the user's text. The footer
+    // is already showing why the save failed.
+    let rescued = true;
+    if (isDirty(node) || !st.currentFile) {
+      rescued = await saveToFile(node, { quiet: true });
+      if (!uiOf(node)) return;
+    }
+    if (rescued) {
+      const s2 = readState(node);
+      s2.currentFile = "";
+      writeState(node, s2);
+      buf = "";
+      node._pixStxCntKey = null;
+    }
   }
 
   writeBuffer(node, appendEntry(buf, text, readState(node)), true);
@@ -471,7 +573,7 @@ function openSaveTextPanel(node) {
   // early-returns when the folder/name/digits key has not changed - which it
   // has not, since the node resolved it before the panel ever existed. Found by
   // opening the panel and reading it, which is the only way this shows up.
-  setPanelPreview(node._pixStxNextName || "", false);
+  setPanelPreview(node, node._pixStxNextName || "", false);
   node._pixStxCntKey = null;
   updatePreview(node);
 }
@@ -567,6 +669,7 @@ app.registerExtension({
   name: "Pixaroma.SaveText",
 
   setup() {
+    installCacheTracker();
     installExecutedListener();
   },
 
@@ -604,6 +707,10 @@ app.registerExtension({
       const r = origConfigure?.apply(this, arguments);
       queueMicrotask(() => {
         if (!uiOf(this)) return;
+        // Runs here rather than in onNodeCreated because properties are only
+        // restored by the time configure returns. LiteGraph's clone() also
+        // routes through configure, which is what makes it catch a copied node.
+        dedupeCurrentFile(this);
         syncFace(this); // DOM only - never writes serialized state
         updatePreview(this);
       });
@@ -705,7 +812,7 @@ registerNodeHelp(COMFY_CLASS, {
         ["Save after every run", "On by default. A save you have to remember is a save you forget."],
         ["Separator", "A blank line by default, which is exactly Prompt Pack Pixaroma's paragraph format, so a saved file drops straight back into it."],
         ["New entry goes", "At the top puts the newest prompt where you can read it without scrolling."],
-        ["Skip repeats", "ComfyUI already skips a run where nothing changed. This covers reopening a workflow, where the first run would otherwise re-add the prompt that is already last."],
+        ["Skip repeats", "A second belt. The node already ignores a run where nothing changed, so this is for the case that slips past it: reopening a workflow, where the first run afterwards would otherwise re-add the prompt that is already last. Same as last is the default; Any repeat also catches a prompt you used earlier in the session."],
         ["Timestamp each entry", "Adds a # comment line above each one. Off keeps the file clean for reuse."],
         ["Start a new file after", "Stops one workflow growing an enormous collection inside its own file."],
       ],
@@ -714,7 +821,7 @@ registerNodeHelp(COMFY_CLASS, {
       heading: "Good to know",
       bullets: [
         "Collecting happens while the workflow is open in a browser. A run started from the API passes the text through but writes no file.",
-        "Run the same prompt twice and nothing is added the second time: ComfyUI caches the run, so there is nothing new to collect.",
+        "Run the same prompt twice and nothing is added the second time. ComfyUI does not re-run a node whose input has not changed, and the node ignores the replayed result, so there is nothing new to collect.",
         "Files are only ever written as .txt, wherever you point it.",
         "A saved file is a plain list separated by blank lines, so you can paste it straight into Prompt Pack Pixaroma or Prompt Multi Pixaroma to run those prompts again.",
       ],

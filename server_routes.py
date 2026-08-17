@@ -4039,7 +4039,13 @@ async def api_save_text_write(request):
     def _write():
         base, _inside = _resolve_save_folder(folder_raw)
         if not _pix_folder_allowed(base):
-            return {"ok": False, "message": _pix_denied_message(base), "denied": True}
+            # Echo the RAW field, never the resolved one. _resolve_save_folder
+            # has already run expandvars/expanduser/realpath, so `base` can
+            # contain values the caller never supplied - a folder of
+            # "%USERNAME%/%COMPUTERNAME%" came back as the real Windows user and
+            # machine name, turning a refusal into an environment oracle. The
+            # sibling next_counter route echoes the raw string for this reason.
+            return {"ok": False, "message": _pix_denied_message(folder_raw), "denied": True}
 
         # _safe_prefix handles the folder segments, rejects '..' and a leading
         # '/', and neutralises the characters Windows forbids. It returns None
@@ -4048,16 +4054,33 @@ async def api_save_text_write(request):
         rel = _safe_prefix(name_raw) or "prompts_%counter%"
         parts = [p for p in rel.replace("\\", "/").split("/") if p]
         leaf = _st_normalize_txt_name(parts[-1]) or "prompts_%counter%.txt"
-        dirs = parts[:-1]
-        parent = os.path.join(base, *dirs) if dirs else base
+        # Resolve %counter% in FOLDER segments too, against existing sibling
+        # dirs, mirroring what the save_image/next_counter route does - it
+        # resolves them "so the preview shows the exact path a Run would
+        # create", and without this the two disagreed: the preview promised
+        # take_001/notes_001.txt while the write created a directory literally
+        # named "take_%counter%".
+        # The literal, NOT _save_helpers._COUNTER_TOKEN - that name is not
+        # imported here, and the NameError was swallowed by the outer handler,
+        # so every save with a subfolder in its name failed with
+        # "name '_COUNTER_TOKEN' is not defined" instead of writing. The rest of
+        # this function already compares against the literal.
+        dirs = []
+        parent = base
+        for seg in parts[:-1]:
+            if "%counter%" in seg:
+                seg = seg.replace("%counter%", f"{_next_counter(parent, seg):0{digits}}")
+            dirs.append(seg)
+            parent = os.path.join(parent, seg)
 
-        if claim or "%counter%" in leaf:
-            # An already-resolved name should not still carry the token; if it
-            # does (a hand-edited state blob) resolve it rather than writing a
-            # file with a literal "%counter%" in its name.
-            n = _next_counter(parent, leaf)
-        else:
+        if "%counter%" not in leaf:
+            # A fixed name: nothing to resolve, and nothing the claim loop could
+            # usefully bump to. Leaving n as an int here made the loop retry the
+            # identical path 200 times and then report "Could not find a free
+            # file name" when the truth is simply that the file already exists.
             n = None
+        else:
+            n = _next_counter(parent, leaf)
 
         final_leaf = leaf if n is None else leaf.replace("%counter%", f"{n:0{digits}}")
         # Second, independent containment check on the FULL joined path. The
@@ -4117,6 +4140,21 @@ async def api_save_text_write(request):
                     os.remove(tmp)
             except OSError:
                 pass
+            # Also drop the EMPTY file the claim loop created a moment ago.
+            # Without this a failed write leaves a 0-byte .txt behind AND burns
+            # that counter value, so repeated failures walk a trail of empty
+            # files up the sequence (the same orphan shape Save Mp4 hit).
+            #
+            # The size check is what makes this safe: only remove it if it is
+            # still empty, so a concurrent writer that got there first keeps its
+            # data. Guarded by `claim` so we never delete a file we did not
+            # create in this request.
+            if claim:
+                try:
+                    if os.path.exists(path) and os.path.getsize(path) == 0:
+                        os.remove(path)
+                except OSError:
+                    pass
             return {"ok": False, "message": f"Could not write the file: {e}"}
 
         return {

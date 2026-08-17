@@ -58,7 +58,20 @@ export const SEPARATOR_LABELS = [
 ];
 
 export function separatorStr(id) {
-  return SEPARATORS[id] || SEPARATORS.blank;
+  // Type-check the LOOKUP, do not just test it for truthiness. A plain-object
+  // index walks the prototype chain, and every Object.prototype member is
+  // truthy, so `SEPARATORS[id] || blank` handed back a FUNCTION for ids like
+  // "constructor", "toString" or "__proto__". appendEntry then joined entries
+  // with a stringified function and wrote that into the user's .txt - MEASURED:
+  // "a" + "b" came out as `afunction Object() { [native code] }b`. It also made
+  // splitEntries collapse the whole buffer to one entry, silently disabling the
+  // duplicate guard.
+  //
+  // Only reachable from a hand-edited or third-party workflow JSON, but a
+  // workflow is a shared artefact. This also restores parity with the Python
+  // side, which was already safe via isinstance(str) + .get(default).
+  const s = SEPARATORS[id];
+  return typeof s === "string" ? s : SEPARATORS.blank;
 }
 
 // Mirror of _save_text_helpers.count_entries. Blank pieces are dropped so a
@@ -134,20 +147,41 @@ export function timestampLine(fmtId, when) {
 
 // Should this incoming text be collected at all?
 //
-// ComfyUI's own cache already stops the common duplicate (re-queue the same
-// prompt and the node does not execute, so no event arrives). This covers the
-// case the cache cannot: a workflow reload clears the cache, so the first run
-// afterwards would otherwise re-add the prompt that is already the last entry.
+// The SECOND belt. The first is the execution_cached gate in index.js, which
+// drops the replayed result of a node ComfyUI did not actually re-run. (Note
+// that the cache alone is NOT enough - a cached node still has its ui payload
+// replayed to the browser; see the comment on _cachedThisRun.) This covers what
+// that cannot: a workflow reload clears ComfyUI's cache, so the first run
+// afterwards genuinely executes and would otherwise re-add the prompt that is
+// already the last entry.
 export function shouldCollect(buffer, entry, st) {
   if (typeof entry !== "string" || !entry.trim()) return false;
   const mode = st.skipDupes || "last";
   if (mode === "off") return true;
   const entries = splitEntries(buffer, st.separator);
   if (!entries.length) return true;
-  const norm = (s) => s.trim();
-  const target = norm(entry);
-  if (mode === "any") return !entries.some((e) => norm(e) === target);
-  return norm(entries[st.newest === "top" ? 0 : entries.length - 1]) !== target;
+
+  // appendEntry stores the timestamp INSIDE the entry, so a STORED entry reads
+  // "# 2026-08-17\nHello" while the incoming text is still bare "Hello".
+  // Comparing them raw could never match, which made "Skip repeats" silently
+  // dead for anyone with timestamps on - exactly the reopen-a-workflow case the
+  // help advertises. MEASURED before this fix: shouldCollect returned true for
+  // an entry identical to the last one.
+  //
+  // The normalisation is ASYMMETRIC on purpose: strip only from the STORED
+  // side, because the incoming text never carries a timestamp. That keeps a
+  // prompt whose OWN first line starts with "#" comparing correctly - stored is
+  // "# 2026-08-17\n# my note\nbody", one line comes off, and it matches the
+  // incoming "# my note\nbody". Stripping both sides would have made two
+  // prompts differing only in a leading "#" line look identical.
+  const stamped = !!st.timestamp && st.timestamp !== "off";
+  const stored = (s) => {
+    const t = String(s).trim();
+    return stamped ? t.replace(/^#[^\n]*\n/, "").trim() : t;
+  };
+  const target = String(entry).trim();
+  if (mode === "any") return !entries.some((e) => stored(e) === target);
+  return stored(entries[st.newest === "top" ? 0 : entries.length - 1]) !== target;
 }
 
 export {
