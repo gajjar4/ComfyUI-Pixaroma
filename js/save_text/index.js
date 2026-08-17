@@ -34,6 +34,8 @@ import {
   splitEntries,
   appendEntry,
   shouldCollect,
+  separatorStr,
+  SEPARATOR_LABELS,
   resolveDateTokens,
   expandNativeTokens,
   sanitizePrefixMirror,
@@ -215,7 +217,7 @@ function shorten(msg) {
   return first.length > 90 ? first.slice(0, 87) + "..." : first;
 }
 
-function say(node, msg, kind, fullTitle) {
+function say(node, msg, kind, fullTitle, ms) {
   const ui = uiOf(node);
   if (!ui) return;
   clearTimeout(node._pixStxSayTimer);
@@ -223,7 +225,43 @@ function say(node, msg, kind, fullTitle) {
   if (kind) ui.file.classList.add(kind);
   ui.file.textContent = msg;
   ui.file.title = fullTitle || msg;
-  node._pixStxSayTimer = setTimeout(() => syncFace(node), 3200);
+  node._pixStxSayTimer = setTimeout(() => syncFace(node), ms || 3200);
+}
+
+// Warn when a collected prompt CONTAINS the separator, because it is then
+// stored as several entries: the count is wrong, the repeat guard compares
+// against only the tail of it, and pasting the .txt into Prompt Pack splits it
+// too. The user cannot know in advance that their model emits blank lines, so
+// the node has to say so the moment it happens.
+//
+// Detection MUST be here, at collect time, while the raw incoming text is still
+// separate. Once it is in the buffer the information is gone - "a\n\nb" could
+// equally be one paragraph prompt or two prompts.
+//
+// Runtime-only (`_pixStxSplitWarnFor`), never node.properties: it describes what
+// just happened rather than saved state, so it cannot dirty a workflow or touch
+// the load path. Warned once per separator SETTING - repeating it on every run
+// would be noise, and changing the setting re-arms it so a still-wrong choice
+// gets flagged again.
+function warnIfEntryContainsSeparator(node, text) {
+  const st = readState(node);
+  const sep = separatorStr(st.separator);
+  if (!sep || !String(text).includes(sep)) return;
+  if (node._pixStxSplitWarnFor === st.separator) return;
+  node._pixStxSplitWarnFor = st.separator;
+  const label = (SEPARATOR_LABELS.find((p) => p[0] === st.separator) || [, st.separator])[1];
+  const alt = st.separator === "rule" ? "another separator" : "--- line";
+  say(
+    node,
+    "That prompt contains the separator, so it counts as more than one.",
+    "bad",
+    `Your prompt has a "${label}" inside it, and that is what marks the end of ` +
+      `one entry - so it is stored, counted and re-loaded as several prompts, ` +
+      `and Skip repeats stops working for it.\n\n` +
+      `Fix: open the settings gear and set Separator to ${alt}.\n\n` +
+      `Nothing has been lost - the text is all there, it is only split.`,
+    9000,
+  );
 }
 
 // ── the live "next new file" line ───────────────────────────────────────────
@@ -486,6 +524,9 @@ async function collectRun(node, text) {
 
   if (readState(node).autoSave) await saveToFile(node, { quiet: true });
   updatePreview(node);
+  // LAST, so the warning is what stays on the footer rather than being
+  // overwritten by the save's own "✓ saved" a moment later.
+  if (uiOf(node)) warnIfEntryContainsSeparator(node, text);
 }
 
 // ── events ──────────────────────────────────────────────────────────────────
@@ -623,6 +664,12 @@ function wireEvents(node, ui) {
 function openSaveTextPanel(node) {
   openSettingsPanel(node, () => {
     if (!uiOf(node)) return;
+    // Re-arm the split warning if the separator changed, so a choice that is
+    // still wrong for these prompts gets flagged again on the next run rather
+    // than staying silent because we warned once under the old setting.
+    if (node._pixStxSplitWarnFor && node._pixStxSplitWarnFor !== readState(node).separator) {
+      node._pixStxSplitWarnFor = null;
+    }
     syncFace(node);
     updatePreview(node);
   });
