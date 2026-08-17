@@ -373,18 +373,12 @@ Master the Pixaroma suite with our video guides and workflow deep-dives:
 ## 🛠 Changelog
 
 ### **August 17, 2026 · v1.4.111–v1.4.112**
-- **Inpaint Crop asks before it throws your mask away.** If you painted a mask and then closed the editor with the ✕ or Escape, it was gone with no warning, because painting is only kept when you press Save. It now asks, and the safe answer is the default one.
-- **AI Prompt: deleting a preset works.** On the ComfyUI desktop app the question it asked was never actually shown, so pressing Delete did nothing at all. The same silence was quietly stopping two other things: loading a preset over a formula you had written yourself, and importing a recipe.
-- **AI Prompt: delete a preset from its own row.** Hover a name in the list and a ✕ appears. The ones that come with Pixaroma show it greyed out, since those cannot be deleted.
-- **AI Prompt: find a preset by typing.** The list has a filter box, and words can be in any order, so "krea image" finds the image one. Press Enter when one name is left.
-- **AI Prompt: you can see which presets are yours.** An orange dot means it came with Pixaroma, a grey dot means you saved it, and three buttons show all of them, only ours, or only yours with a count on each.
-- **Ctrl+Z no longer undoes your whole workflow** when a Pixaroma question or the AI Prompt text editor is open. Pressing it there, which is a natural way to say no, could rebuild the graph underneath you.
-- **AI Prompt: saving your own formula as a preset works again.** On the ComfyUI desktop app the Save button did nothing at all, because the little name box it asks for is not available there. It now uses its own name box, and it suggests a name so you can just press Enter.
-- **AI Prompt: the seed box on the node opens too**, for the same reason.
-- **AI Prompt: you can paste a recipe someone sent you** even when your browser will not let a page read your clipboard, which is normal when you open ComfyUI by its network address. It now gives you a box to paste into.
-- **Pause Text: Regenerate gives you a fresh prompt from an AI Prompt node.** Before, it only worked if that node was set to a random seed; with a fixed seed you kept getting the same text back.
-- **Load Video Frame says why a ProRes file shows no picture.** Browsers cannot play ProRes or DNxHR, so the preview stayed black and looked broken. It now explains, and picking a frame still works exactly as before.
-- **Inpaint Crop tells you when it is showing the original picture.** If the Load Image above it is set to resize, the mask editor was quietly showing the un-resized version, which matters when the resize changes the shape.
+- **Inpaint Crop asks before it throws your mask away.** Closing with ✕ or Escape used to discard your painting silently, since it is only kept when you press Save.
+- **AI Prompt: the buttons work on the desktop app.** Its questions were never shown there, so Delete, Save as preset, loading a preset over your own formula, importing a recipe and the seed box all did nothing.
+- **AI Prompt: find a preset by typing**, delete one from its own row, and tell them apart at a glance: an orange dot is ours, a grey one is yours.
+- **Ctrl+Z no longer undoes your whole workflow** when a Pixaroma question or the AI Prompt text editor is open.
+- **Pause Text: Regenerate gives you a fresh prompt** from an AI Prompt node, not only when that node is set to a random seed.
+- **Plus:** paste a recipe even when the browser blocks clipboard reads; Load Video Frame says why a ProRes file shows no picture; Inpaint Crop says when it is showing the un-resized original.
 
 ### **August 16, 2026 · v1.4.109–v1.4.110**
 - **NEW: First Last Frame Pixaroma.** Takes the first and last frame out of a video as two pictures, so the next clip can start where the last one ended. Works with Load Video Pixaroma or ComfyUI's own Load Video.
