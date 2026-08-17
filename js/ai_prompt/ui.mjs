@@ -23,6 +23,8 @@ import { installCanvasZoomPassthrough } from "../shared/canvas_zoom.mjs";
 import { installNativeTextMenu } from "../shared/native_text_menu.mjs";
 import { installResizeFloor } from "../shared/resize_floor.mjs";
 import { notifyGraphChanged } from "../shared/graph_changed.mjs";
+// Safe: settings.mjs does not import this file, so there is no cycle.
+import { askName } from "./settings.mjs";
 import {
   IDEA_SHARE_DEFAULT,
   IDEA_SHARE_MAX,
@@ -419,9 +421,12 @@ export function buildFace(node, openPanel, openIdeaEditor) {
 
   expand.addEventListener("click", () => openIdeaEditor(node));
 
-  seed.addEventListener("click", () => {
+  // Themed, not window.prompt: Electron (ComfyUI Desktop) does not implement
+  // that at all, so the chip was simply dead there with nothing shown.
+  seed.addEventListener("click", async () => {
     const current = readState(node);
-    const typed = window.prompt("Seed", String(current.seed));
+    const typed = await askName("Seed", "Type the seed number to use:",
+      String(current.seed));
     if (typed == null) return;
     const value = parseInt(typed, 10);
     if (!Number.isFinite(value)) return;
