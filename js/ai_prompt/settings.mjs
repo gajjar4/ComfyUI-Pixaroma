@@ -175,6 +175,7 @@ function injectCSS() {
       border:1px solid #333; border-radius:4px; padding:6px 8px;
       font:12px monospace; outline:none; }
     .pix-apk-in:focus { border-color:var(--pix-acc,#f66744); }
+    .pix-apk-ta { height:190px; resize:none; line-height:1.45; }
   `;
   document.head.appendChild(style);
 }
@@ -331,9 +332,10 @@ function closeAsk() {
   ASKER = null;
 }
 
-export function askName(title, message, initial) {
+export function askName(title, message, initial, opts) {
   injectCSS();
   closeAsk();
+  const multi = opts?.multiline === true;
   return new Promise((resolve) => {
     let settled = false;
     // Cancel, Escape and the backdrop can all fire for one dismissal, and a
@@ -350,12 +352,14 @@ export function askName(title, message, initial) {
     const head = el("div", "pix-ape-head");
     head.append(el("b", null, title));
     const msg = el("div", "pix-apk-msg", message || "");
-    const input = el("input", "pix-apk-in");
-    input.type = "text";
+    const input = multi ? el("textarea", "pix-apk-in pix-apk-ta")
+                        : el("input", "pix-apk-in");
+    if (!multi) input.type = "text";
     input.value = initial || "";
+    if (opts?.placeholder) input.placeholder = opts.placeholder;
     const foot = el("div", "pix-ape-foot");
     const cancel = el("button", "pix-app-btn", "Cancel");
-    const ok = el("button", "pix-app-btn is-on", "Save");
+    const ok = el("button", "pix-app-btn is-on", opts?.okText || "Save");
     foot.append(cancel, ok);
     box.append(head, msg, input, foot);
     back.appendChild(box);
@@ -367,7 +371,17 @@ export function askName(title, message, initial) {
     ok.addEventListener("click", accept);
     back.addEventListener("mousedown", (e) => { if (e.target === back) finish(null); });
     input.addEventListener("keydown", (e) => {
-      if (e.key === "Enter") { e.preventDefault(); accept(); }
+      // ComfyUI binds Ctrl+V on the document to paste NODES, so a keystroke
+      // that reaches it would drop a copied node onto the canvas instead of
+      // pasting text here. Escape is deliberately let through: its handler is
+      // window+capture and has already run by now.
+      if (e.key !== "Escape") e.stopPropagation();
+      // In the paste box Enter has to make a new line, so that one accepts on
+      // Ctrl+Enter instead.
+      if (e.key === "Enter" && (!multi || e.ctrlKey || e.metaKey)) {
+        e.preventDefault();
+        accept();
+      }
     });
     // Same reasoning as the editor's: released in closeAsk, not on the Escape
     // path, or a Cancel leaves a window+capture listener that eats the next
@@ -983,13 +997,23 @@ function renderPanel(node, body) {
        "Load a recipe somebody sent you, straight from the clipboard."],
     ], null, async (which) => {
       if (which === "clip") {
-        const text = await readClipboard();
+        let text = await readClipboard();
         if (text == null) {
-          // Honest about WHY: there is no fallback for reading a clipboard, and
-          // this is the common case on a plain http LAN address.
-          window.alert("This browser will not let a page read the clipboard "
-            + "here. Save the recipe as a .txt and use Open a file instead.");
-          return;
+          // There is no execCommand fallback for READING a clipboard, and
+          // navigator.clipboard is absent on a plain http LAN address, which
+          // is how a lot of people reach their own ComfyUI. Telling them to go
+          // and save a .txt was a dead end for someone who simply has the
+          // recipe on the clipboard (reported 2026-08-16).
+          //
+          // Ctrl+V INTO a focused box needs no permission at all - the paste
+          // is a user gesture that hands the data straight to the field - so
+          // offer the box rather than refusing.
+          text = await askName("Paste the recipe",
+            "This browser will not let the page read your clipboard. Click in "
+            + "the box and press Ctrl+V, then choose Load.",
+            "", { multiline: true, okText: "Load",
+                  placeholder: "Press Ctrl+V here" });
+          if (text == null) return;
         }
         applyRecipeText(node, text, "the clipboard");
         return;
