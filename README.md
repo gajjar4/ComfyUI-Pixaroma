@@ -184,6 +184,9 @@ Repeat a section of your workflow a set number of times. Put your nodes **betwee
 ### 💬 Show Text Pixaroma
 See what text or data is flowing through your nodes, with a real read-only text box you can **select and copy** from. **Resize the node freely** in any direction; long text scrolls with a scrollbar instead of forcing the node to grow. New **STRING output** lets you chain it into other nodes (great for inspecting a prompt before passing it on). Saves and restores with your workflow.
 
+### 🗒️ Save Text Pixaroma
+For when you try a lot of prompts and the good ones get lost. Wire any text in - your own, or whatever an LLM prompt generator hands back - and **every run adds it to a list on the node**, one under the other. The list is also written to a **.txt file**, so what you tried today is still there tomorrow. The text passes straight out of the output unchanged, so the node can sit in the middle of a chain or off to the side quietly collecting. The line under the box always tells you where you stand: green and **saved** means the file matches what you see, orange and **not saved yet** means you have edited it since. Edit or delete freely in the box, **Copy all** puts the lot on your clipboard, and **Clear never deletes your file** - it keeps it and starts a new one, so clearing is turning a page, not throwing anything away. Choose any folder with **Browse**, name the file how you like (`%counter%` keeps the numbering going so nothing is ever overwritten), and it saves after every run unless you tell it not to. Entries are separated by a blank line, which is exactly Prompt Pack Pixaroma's format, so a saved file pastes straight back in to re-run your best ones. If one of your prompts happens to contain a blank line of its own, the node says so and tells you which setting to change.
+
 ### 🔍 Prompt Reader Pixaroma
 Load any PNG that was generated with ComfyUI (or Automatic1111 / Forge) and read the **positive prompt** saved inside its metadata. No image preview - just the text. Drag-drop a file, click **Upload Image**, or pick from the file combo; the prompt appears the moment you choose a file, so you see it before running. One orange **Copy** button puts the prompt on your clipboard. The **STRING output** wires straight into CLIPTextEncode (or any text input) so you can re-use the prompt without retyping. Handles complex workflows with chained text nodes (ConditioningCombine, StringConcatenate, SDXL dual-text encoders). If the image has no prompt (JPG, screenshot, or a PNG whose metadata was stripped), you get a short clear message instead of a silent fail.
 
@@ -372,14 +375,14 @@ Master the Pixaroma suite with our video guides and workflow deep-dives:
 
 ## 🛠 Changelog
 
-### **August 17, 2026 · v1.4.111–v1.4.113**
-- **Copy and Paste (Clipspace) work again** on Load Image, Load Image Mini and Preview Image: copying from a preview did nothing, and pasting showed no picture.
-- **Inpaint Crop asks before it throws your mask away.** Closing with ✕ or Escape used to discard your painting, which is only kept by Save.
-- **AI Prompt: the buttons work on the desktop app.** Its questions were never shown there, so Delete, Save as preset, loading a preset, importing a recipe and the seed box did nothing.
-- **AI Prompt: find a preset by typing**, delete one from its row, and tell them apart: orange dot is ours, grey is yours.
+### **August 17, 2026 · v1.4.111–v1.4.114**
+- **NEW: Save Text Pixaroma.** Keeps every run's text in one list on the node and in a .txt file, so tried prompts are not lost. Clear starts a new file instead of deleting the old one.
+- **Copy and Paste (Clipspace) work again** on Load Image, Load Image Mini and Preview Image.
+- **Inpaint Crop asks before throwing your mask away.** Closing with ✕ or Escape used to discard your painting.
+- **AI Prompt works on the desktop app**, where its questions never appeared, so presets, recipes and the seed box did nothing. You can also find a preset by typing and delete one from its row.
 - **Ctrl+Z no longer undoes your whole workflow** when a Pixaroma question or the AI Prompt editor is open.
-- **Pause Text: Regenerate gives you a fresh prompt** from an AI Prompt node, even when its seed is fixed.
-- **Plus:** paste a recipe when the browser blocks clipboard reads; Load Video Frame explains a blank ProRes preview; Inpaint Crop says when it shows the un-resized original.
+- **Pause Text: Regenerate gives you a fresh prompt** from an AI Prompt node, even with a fixed seed.
+- **Plus:** paste a recipe when the browser blocks clipboard reads; Load Video Frame explains a blank ProRes preview.
 
 ### **August 16, 2026 · v1.4.109–v1.4.110**
 - **NEW: First Last Frame Pixaroma.** Takes the first and last frame out of a video as two pictures, so the next clip can start where the last one ended. Works with Load Video Pixaroma or ComfyUI's own Load Video.
