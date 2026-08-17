@@ -1397,6 +1397,23 @@ app.registerExtension({
       // so locking imgs to an empty array prevents the widget from ever
       // being added. Same pattern Prompt Reader Pixaroma uses; see
       // Prompt Reader Pixaroma Pattern #2 in CLAUDE.md.
+      //
+      // It returns NULL, not an empty array, and that distinction is the whole
+      // of a user bug report (2026-08-17: "copy/paste clipspace is not working
+      // in Load Image and Load Image Mini"). Both values keep the
+      // `node.imgs?.length` gate falsy, so suppression is identical, but core's
+      // `copyToClipspace` reads `if (node.imgs != null)` and an EMPTY ARRAY
+      // passes that test - so copying from this node used to fill the clipspace
+      // with an empty `imgs` list. `pasteFromClipspace` then takes the
+      // `clipspace.imgs && target.imgs` branch and dereferences
+      // `clipspace.imgs[selectedIndex].src`, which throws
+      // "Cannot read properties of undefined (reading 'src')" and ABORTS the
+      // paste before it ever writes the filename. Measured: one Copy (Clipspace)
+      // from this node poisoned every later paste, into our loaders AND into
+      // ComfyUI's own LoadImage. With null, core skips that branch entirely and
+      // pastes from `clipspace.images` (kept in step by hydrateFrames) instead.
+      // An earlier version of pattern #15 assumed these menu items were merely
+      // "no-ops" for this node - they were not, they were a hard failure.
       const imgsDesc = Object.getOwnPropertyDescriptor(this, "imgs");
       if (imgsDesc && imgsDesc.configurable === false) {
         console.warn("[PixaromaPreview] cannot suppress node.imgs - existing descriptor is non-configurable");
@@ -1404,12 +1421,60 @@ app.registerExtension({
         try {
           Object.defineProperty(this, "imgs", {
             configurable: true,
-            get() { return []; },
+            get() { return null; },
             set(_v) { /* swallow */ },
           });
         } catch (e) {
           console.warn("[PixaromaPreview] node.imgs suppression failed:", e.message);
         }
+      }
+
+      // Give Copy (Clipspace) something to carry. Core's copyToClipspace reads
+      // `node.images ?? getNodeOutputs(node)?.images`, and for this node NEITHER
+      // is populated: preview mode emits a custom ui key (pattern #3), so core's
+      // output store stays empty, and node.imgs is suppressed above. The result
+      // was an empty clipspace and a paste that did nothing.
+      //
+      // It MUST be an accessor, not a plain assignment in hydrateFrames - that
+      // was the first attempt and it silently lost every time. MEASURED order on
+      // one run: our write lands (3 frames), then core's
+      // `ComfyNode.unsafeUpdatePreviews` sets `node.images = undefined`, because
+      // core sees no `ui.images` for this node. Ours ran FIRST, so it always
+      // lost; the restore-from-properties path had no core clear after it, which
+      // is what made a first check look like it worked. The setter swallows that
+      // clear. In save_mode=save our frames ARE the same output files core would
+      // have put there (verified: both name img_00003_.png|output), so serving
+      // ours is never a divergence.
+      try {
+        const imagesDesc = Object.getOwnPropertyDescriptor(this, "images");
+        if (!imagesDesc || imagesDesc.configurable) {
+          Object.defineProperty(this, "images", {
+            configurable: true,
+            get() { return this._pixaromaImagesMeta; },
+            set(_v) { /* swallow - hydrateFrames owns this list */ },
+          });
+        }
+      } catch (e) {
+        console.warn("[PixaromaPreview] node.images sync failed:", e.message);
+      }
+
+      // Copy (Clipspace) must carry the frame the user SELECTED, matching what
+      // the Save / Copy / Open buttons already do (pattern #12). Core reads
+      // `node.imageIndex`; our selection lives in `_pixaromaSelectedFrame` and
+      // is written from six places, so an accessor is the only form that cannot
+      // go stale. The setter is swallowed like the imgs one: this node has no
+      // image widget, so it is never a paste TARGET, and the selection is ours.
+      try {
+        const idxDesc = Object.getOwnPropertyDescriptor(this, "imageIndex");
+        if (!idxDesc || idxDesc.configurable) {
+          Object.defineProperty(this, "imageIndex", {
+            configurable: true,
+            get() { return this._pixaromaSelectedFrame || 0; },
+            set(_v) { /* swallow - the strip owns the selection */ },
+          });
+        }
+      } catch (e) {
+        console.warn("[PixaromaPreview] imageIndex sync failed:", e.message);
       }
 
       // Apply user's preferred default save_mode for fresh nodes.
@@ -1533,6 +1598,17 @@ function hydrateFrames(node, framesMeta) {
   if ((node._pixaromaSelectedFrame ?? 0) >= framesMeta.length) {
     node._pixaromaSelectedFrame = 0;
   }
+  // What "Copy (Clipspace)" carries. Core reads `node.images`, which is served
+  // by the accessor installed in beforeRegisterNodeDef - this is the backing
+  // field it returns. Built here (once per hydrate) rather than in the getter so
+  // a per-render read costs nothing. Runtime-only: never persisted to
+  // node.properties, and LGraphNode.serialize does not write it (verified by a
+  // save/load round trip), so it cannot dirty a workflow.
+  node._pixaromaImagesMeta = framesMeta.map((f) => ({
+    filename: f.filename,
+    subfolder: f.subfolder || "",
+    type: f.type || "temp",
+  }));
   repaint(node);
 }
 

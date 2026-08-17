@@ -372,13 +372,14 @@ Master the Pixaroma suite with our video guides and workflow deep-dives:
 
 ## 🛠 Changelog
 
-### **August 17, 2026 · v1.4.111–v1.4.112**
-- **Inpaint Crop asks before it throws your mask away.** Closing with ✕ or Escape used to discard your painting silently, since it is only kept when you press Save.
-- **AI Prompt: the buttons work on the desktop app.** Its questions were never shown there, so Delete, Save as preset, loading a preset over your own formula, importing a recipe and the seed box all did nothing.
-- **AI Prompt: find a preset by typing**, delete one from its own row, and tell them apart at a glance: an orange dot is ours, a grey one is yours.
-- **Ctrl+Z no longer undoes your whole workflow** when a Pixaroma question or the AI Prompt text editor is open.
-- **Pause Text: Regenerate gives you a fresh prompt** from an AI Prompt node, not only when that node is set to a random seed.
-- **Plus:** paste a recipe even when the browser blocks clipboard reads; Load Video Frame says why a ProRes file shows no picture; Inpaint Crop says when it is showing the un-resized original.
+### **August 17, 2026 · v1.4.111–v1.4.113**
+- **Paste (Clipspace) shows the picture again** on Load Image and Load Image Mini. ComfyUI's own loader is blank there too, in the classic node look.
+- **Inpaint Crop asks before it throws your mask away.** Closing with ✕ or Escape used to discard your painting, which is only kept by Save.
+- **AI Prompt: the buttons work on the desktop app.** Its questions were never shown there, so Delete, Save as preset, loading a preset, importing a recipe and the seed box did nothing.
+- **AI Prompt: find a preset by typing**, delete one from its row, and tell them apart: an orange dot is ours, a grey one is yours.
+- **Ctrl+Z no longer undoes your whole workflow** when a Pixaroma question or the AI Prompt editor is open.
+- **Pause Text: Regenerate gives you a fresh prompt** from an AI Prompt node, even when its seed is fixed.
+- **Plus:** paste a recipe when the browser blocks clipboard reads; Load Video Frame explains a blank ProRes preview; Inpaint Crop says when it shows the un-resized original.
 
 ### **August 16, 2026 · v1.4.109–v1.4.110**
 - **NEW: First Last Frame Pixaroma.** Takes the first and last frame out of a video as two pictures, so the next clip can start where the last one ended. Works with Load Video Pixaroma or ComfyUI's own Load Video.
