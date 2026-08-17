@@ -21,6 +21,10 @@ from .nodes._save_helpers import (
     _resolve_save_folder,
     _safe_prefix,
 )
+from .nodes._save_text_helpers import (
+    count_entries as _st_count_entries,
+    normalize_txt_name as _st_normalize_txt_name,
+)
 from .nodes._prompt_reader_helpers import read_prompt_from_image, resolve_input_image_name
 from .nodes import _video_prompt_helpers as _vp
 from .nodes import _ai_prompt_presets as _aip
@@ -3953,3 +3957,180 @@ async def api_ai_prompt_preset_delete(request):
     ok, message = _aip.delete_user(data.get("name"))
     return web.json_response({"ok": bool(ok), "message": message},
                              headers=_vp_no_store())
+
+
+# ---------------------------------------------------------------------------
+# Save Text Pixaroma - write the node's collected text to a .txt file.
+#
+# ONE route, and it always writes the WHOLE buffer, never an append. That is the
+# node's design: what you see on the node IS what is in the file, so there is no
+# second copy to drift out of step. A full write of a text file is cheap, and it
+# means the run path and the manual Save button take the identical code path, so
+# the class of bug where "it saves after a run but not after an edit" cannot
+# exist.
+#
+# Browse reuses /pixaroma/api/load_images_folder/pick_native and Open folder
+# reuses /pixaroma/api/save_image/open_folder; the live counter preview reuses
+# /pixaroma/api/save_image/next_counter (its `name` is a free-form template, so
+# it scans .txt files just as happily as .png).
+# ---------------------------------------------------------------------------
+
+# A prompt is a few hundred bytes and a big collection a few hundred KB. The cap
+# is here because this route is unauthenticated and writes caller-supplied bytes
+# to disk (path-containment #0) - without it one request could fill a drive.
+_SAVE_TEXT_MAX_BYTES = 5 * 1024 * 1024
+
+
+@PromptServer.instance.routes.post("/pixaroma/api/save_text/write")
+async def api_save_text_write(request):
+    """Write Save Text Pixaroma's collected buffer to a .txt file.
+
+    Body:
+      folder   raw folder field, empty = ComfyUI's output dir. Resolved exactly
+               the way Save Image resolves it, so the two agree about where a
+               typed path lands.
+      name     file name. With claim=true it may still contain %counter% and
+               '/' folder segments; with claim=false it is the already-resolved
+               name we handed back earlier.
+      content  the whole buffer.
+      claim    true starts a NEW file (resolve %counter%, create with O_EXCL so
+               two nodes racing cannot land on the same name); false overwrites
+               the named file.
+
+    The extension is forced to .txt and is NOT the caller's choice - see
+    _save_text_helpers.normalize_txt_name for why.
+    """
+    try:
+        data = await request.json()
+    except Exception:
+        data = {}
+    if not isinstance(data, dict):
+        data = {}
+
+    folder_raw = str(data.get("folder", "") or "")
+    name_raw = str(data.get("name", "") or "")
+    content = data.get("content", "")
+    if not isinstance(content, str):
+        content = "" if content is None else str(content)
+    claim = bool(data.get("claim"))
+    try:
+        digits = max(1, min(8, int(data.get("digits", 3))))
+    except Exception:
+        digits = 3
+
+    payload_len = len(content.encode("utf-8"))
+    if payload_len > _SAVE_TEXT_MAX_BYTES:
+        return web.json_response({
+            "ok": False,
+            "message": "That is more text than this node will write (limit 5 MB).",
+        })
+
+    # ORDER IS THE INVARIANT (path-containment #5): prescreen the RAW field
+    # first, because _resolve_save_folder expands %VARS% and ~ and then
+    # realpaths, and on Windows a realpath of a UNC path is itself the attack -
+    # it hands over an NTLM hash before any check has run. The _field variant is
+    # the expansion-aware one, and this route expands downstream, so it is the
+    # one required here (path-containment #11b).
+    if not _pix_prescreen_field(folder_raw):
+        return web.json_response(
+            {"ok": False, "message": _pix_denied_message(folder_raw), "denied": True}
+        )
+
+    def _write():
+        base, _inside = _resolve_save_folder(folder_raw)
+        if not _pix_folder_allowed(base):
+            return {"ok": False, "message": _pix_denied_message(base), "denied": True}
+
+        # _safe_prefix handles the folder segments, rejects '..' and a leading
+        # '/', and neutralises the characters Windows forbids. It returns None
+        # for anything unrecoverable, so we supply our own fallback rather than
+        # letting a blank name write a file called ".txt".
+        rel = _safe_prefix(name_raw) or "prompts_%counter%"
+        parts = [p for p in rel.replace("\\", "/").split("/") if p]
+        leaf = _st_normalize_txt_name(parts[-1]) or "prompts_%counter%.txt"
+        dirs = parts[:-1]
+        parent = os.path.join(base, *dirs) if dirs else base
+
+        if claim or "%counter%" in leaf:
+            # An already-resolved name should not still carry the token; if it
+            # does (a hand-edited state blob) resolve it rather than writing a
+            # file with a literal "%counter%" in its name.
+            n = _next_counter(parent, leaf)
+        else:
+            n = None
+
+        final_leaf = leaf if n is None else leaf.replace("%counter%", f"{n:0{digits}}")
+        # Second, independent containment check on the FULL joined path. The
+        # first one approved the FOLDER; this one proves the file we are about
+        # to open is really inside it (path-containment #1 - a join is not a
+        # guard, the realpath test after it is).
+        rel_final = "/".join(dirs + [final_leaf])
+        path = _safe_join(base, rel_final)
+        if not path:
+            return {"ok": False, "message": "That file name is not allowed."}
+
+        try:
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+        except OSError as e:
+            return {"ok": False, "message": f"Could not create the folder: {e}"}
+
+        if claim:
+            # Claim the name before writing, bumping on collision, so two nodes
+            # (or two Clears in quick succession) cannot silently share a file.
+            claimed = False
+            for _ in range(200):
+                try:
+                    fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+                    os.close(fd)
+                    claimed = True
+                    break
+                except FileExistsError:
+                    if n is None:
+                        return {"ok": False, "message": "That file already exists."}
+                    n += 1
+                    final_leaf = leaf.replace("%counter%", f"{n:0{digits}}")
+                    rel_final = "/".join(dirs + [final_leaf])
+                    path = _safe_join(base, rel_final)
+                    if not path:
+                        return {"ok": False, "message": "That file name is not allowed."}
+                except OSError as e:
+                    return {"ok": False, "message": f"Could not create the file: {e}"}
+            if not claimed:
+                return {"ok": False, "message": "Could not find a free file name."}
+
+        # Write to a temp file and rename over the target, so a crash or a full
+        # disk part way through cannot leave a truncated collection behind. Not
+        # losing prompts is the entire point of this node.
+        # pid AND thread id in the temp name: pid alone collides when two
+        # requests are in flight in the same process.
+        tmp = "%s.%d.%d.tmp" % (path, os.getpid(), threading.get_ident())
+        try:
+            # encoding="utf-8" writes NO byte-order mark (that would be
+            # "utf-8-sig"), and newline="\n" keeps the file byte-identical on
+            # every platform instead of letting Windows expand each \n to \r\n.
+            with open(tmp, "w", encoding="utf-8", newline="\n") as f:
+                f.write(content)
+            os.replace(tmp, path)
+        except OSError as e:
+            try:
+                if os.path.exists(tmp):
+                    os.remove(tmp)
+            except OSError:
+                pass
+            return {"ok": False, "message": f"Could not write the file: {e}"}
+
+        return {
+            "ok": True,
+            "file": rel_final,
+            "path": path,
+            "folder": base,
+            "bytes": payload_len,
+            "entries": _st_count_entries(content, str(data.get("separator") or "blank")),
+        }
+
+    try:
+        loop = asyncio.get_running_loop()
+        out = await loop.run_in_executor(None, _write)
+        return web.json_response(out)
+    except Exception as e:
+        return web.json_response({"ok": False, "message": str(e)})
