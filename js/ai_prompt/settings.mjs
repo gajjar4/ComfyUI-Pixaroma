@@ -169,11 +169,24 @@ function injectCSS() {
        (openPop stays generic about the kinds it is given), and an orange dot on
        the selected chip's orange fill would be invisible. */
     .pix-app-kind.is-on .pix-app-dot { background:#fff !important; }
-    .pix-app-poplist > div.has-dot { display:flex; align-items:center; gap:7px; }
+    .pix-app-poplist > div.is-flex { display:flex; align-items:center; gap:7px; }
     /* The ellipsis has to move to the inner span once the row is a flex
        container, and preset names are long enough to need it. */
-    .pix-app-poplist > div.has-dot > .nm { flex:1 1 auto; min-width:0;
+    .pix-app-poplist > div.is-flex > .nm { flex:1 1 auto; min-width:0;
       overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+
+    /* Delete, on the row it deletes. Hidden until the row is hovered, so six
+       shipped presets are not six ✕ glyphs at rest, and it turns amber only
+       where it will actually do something. */
+    .pix-app-popx { flex:0 0 auto; width:15px; text-align:center; font-size:11px;
+      line-height:1; color:#8b8b8e; opacity:0; cursor:pointer; border-radius:3px; }
+    .pix-app-poplist > div:hover .pix-app-popx { opacity:1; }
+    .pix-app-popx:hover { color:#fff; background:#c2452f; }
+    /* Greyed out rather than absent on a preset that ships with Pixaroma: an
+       explanation you can hover beats a control that silently is not there. */
+    .pix-app-popx.is-off { cursor:default; color:#5c5a57; }
+    .pix-app-poplist > div:hover .pix-app-popx.is-off { opacity:.55; }
+    .pix-app-popx.is-off:hover { color:#5c5a57; background:none; }
 
     .pix-ape-back { position:fixed; inset:0; z-index:1500; background:rgba(0,0,0,.72);
       display:flex; align-items:center; justify-content:center; }
@@ -266,6 +279,13 @@ function closePop() {
  *   came with Pixaroma and which are the user's own reads at a glance instead
  *   of only in the hover text.
  * opts.filterHint - placeholder for the filter box.
+ * opts.rowDelete - `{ can, title, blockedTitle, onDelete, after }`. Puts a ✕ on
+ *   each row: live where `can(row)` is true, dimmed and inert with
+ *   `blockedTitle` where it is not. `onDelete` returns whether it happened, and
+ *   `after()` hands back the new rows so the list repaints in place - watching
+ *   the row you clicked disappear is the clearest possible receipt.
+ *
+ * Returns `{ repaint(newValues) }`.
  */
 function openPop(anchor, values, current, onPick, opts) {
   closePop();
@@ -280,6 +300,7 @@ function openPop(anchor, values, current, onPick, opts) {
   // empty list - so it is inert instead of clickable.
   const kinds = opts?.kinds || [];
   const dotOf = (kind) => kinds.find((k) => k.key === kind)?.dot || null;
+  const del = opts?.rowDelete || null;
   let kindKey = null;                 // null = every kind
   let filter = null;
   let shown = [];                     // what is listed now, for Enter-to-pick
@@ -312,16 +333,48 @@ function openPop(anchor, values, current, onPick, opts) {
       const vision = !mark || value === "" || looksVision(value);
       const ears = mark && value !== "" && looksAudio(value);
       const dot = dotOf(kind);
+      // A row with anything beside its label has to become a flex container, and
+      // then the ellipsis has to move onto the label span with it.
+      const rich = !!dot || !!del;
       const row = el("div", (value === current ? "is-on" : "") +
                             (vision ? "" : " is-blind") +
                             (ears ? " is-ears" : "") +
-                            (dot ? " has-dot" : ""));
-      if (dot) {
-        const bullet = el("span", "pix-app-dot");
-        bullet.style.background = dot;
-        row.append(bullet, el("span", "nm", label));
+                            (rich ? " is-flex" : ""));
+      if (rich) {
+        if (dot) {
+          const bullet = el("span", "pix-app-dot");
+          bullet.style.background = dot;
+          row.appendChild(bullet);
+        }
+        row.appendChild(el("span", "nm", label));
       } else {
         row.textContent = label;
+      }
+      if (del) {
+        const rowRef = [value, label, hoverTitle, kind];
+        const can = !!del.can?.(rowRef);
+        const x = el("span", "pix-app-popx" + (can ? "" : " is-off"), "✕");
+        x.title = can ? (del.title?.(rowRef) || "Delete this")
+                      : (del.blockedTitle?.(rowRef) || "This one cannot be deleted.");
+        // ⚠️ BOTH branches must stop the click, and the disabled one is the
+        // branch that bites: with no listener at all the click bubbled to the
+        // ROW, so aiming at a shipped preset's greyed ✕ silently LOADED that
+        // preset (measured: clicking Z-Image's ✕ replaced the node's formula
+        // with its 2003 characters and closed the popup). A dead control has to
+        // be dead, not a differently-labelled version of its neighbour.
+        x.addEventListener("click", (e) => e.stopPropagation());
+        if (can) {
+          x.addEventListener("click", async (e) => {
+            if (await del.onDelete?.(value) === true && POP === pop) {
+              // Repaint in place, keeping whatever filter and kind were set, so
+              // the row visibly goes and a second one can follow it.
+              values = del.after?.() || values;
+              paintChips();
+              paint(filter?.value);
+            }
+          });
+        }
+        row.appendChild(x);
       }
       // Marking matters more than it looks: every tokenizer in the chain ends
       // in **kwargs, so image= is accepted and IGNORED by a text-only model,
@@ -419,6 +472,17 @@ function openPop(anchor, values, current, onPick, opts) {
   if (below > pop.offsetHeight + 8 || below > r.top) pop.style.top = r.bottom + 3 + "px";
   else pop.style.top = Math.max(6, r.top - pop.offsetHeight - 3) + "px";
   POP = pop;
+  // Deliberately does NOT re-place the popup: it is anchored to where it opened,
+  // and a list that jumps under the cursor as it shrinks is worse than one that
+  // keeps still.
+  return {
+    repaint(newValues) {
+      if (POP !== pop) return;
+      values = newValues || values;
+      paintChips();
+      paint(filter?.value);
+    },
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -437,18 +501,29 @@ function closeEditor() {
 }
 
 // ---------------------------------------------------------------------------
-// A themed one-line question. REPLACES window.prompt, which was reported as
-// "the save button doesn't work, in both renderers" (2026-08-16).
+// THREE themed dialogs - a question, a yes/no and a statement - which between
+// them REPLACE every window.prompt / confirm / alert in this file.
 //
-// Two independent ways the native dialog produced that report, both measured:
-//  1. Electron (ComfyUI Desktop) does not implement window.prompt AT ALL - it
-//     returns without ever showing anything, so `name` is empty, the handler
-//     hits `if (!name) return` and the click does nothing with no feedback.
-//     (alert and confirm ARE implemented there, which is why only prompt moved.)
-//  2. Even where it works, the box opens EMPTY on a default-titled node, so
-//     pressing Enter - the natural thing to do - silently cancels.
-// #10 already records one false "doesn't seem to do much" report on this node
-// caused by a native dialog; this is the same trap through a different door.
+// ⚠️ The first version of this only replaced window.prompt, on the recorded
+// belief that "alert and confirm ARE implemented in Electron, which is why only
+// prompt moved". That belief was WRONG, and it produced the THIRD false "the
+// button does nothing" report on this node (2026-08-17: "i created one my
+// formula but i can not delete it"). MEASURED in the reporter's own Electron
+// host: `window.confirm(...)` returned **false in 1ms with nothing shown**,
+// because Chromium suppresses modal dialogs for a document whose
+// visibilityState is "hidden". So `if (!window.confirm(...)) return;` was a
+// silent, unconditional early return.
+//
+// It was never only Delete. The same suppression silently killed loading a
+// preset over your own writing, the overwrite check on Save, the whole of
+// Import, AND every window.alert error message - so a refusal reported nothing
+// at all. That is why all nine moved in one change rather than just the one
+// that was reported.
+//
+// THE RULE, now paid for three times: a native dialog is the one UI primitive a
+// host can simply refuse, and it refuses SILENTLY. Never gate a Pixaroma action
+// on one. `grep -n "window\.\(confirm\|alert\|prompt\)(" ` in this file must
+// stay empty.
 // ---------------------------------------------------------------------------
 let ASKER = null;
 function closeAsk() {
@@ -457,10 +532,19 @@ function closeAsk() {
   ASKER = null;
 }
 
-export function askName(title, message, initial, opts) {
+/**
+ * The shared dialog. `opts.input` false makes it a question with no box, which
+ * is what turns it into a confirm; `opts.cancelText` null drops the second
+ * button, which turns it into a statement.
+ *
+ * Resolves: the trimmed text or null with an input; true or false without one.
+ */
+function askDialog(opts) {
   injectCSS();
   closeAsk();
   const multi = opts?.multiline === true;
+  const withInput = opts?.input !== false;
+  const noCancel = opts?.cancelText === null;
   return new Promise((resolve) => {
     let settled = false;
     // Cancel, Escape and the backdrop can all fire for one dismissal, and a
@@ -472,30 +556,44 @@ export function askName(title, message, initial, opts) {
       if (ASKER === back) closeAsk();
       resolve(val);
     };
+    // A dismissal means "no": null when there is text to give back, false when
+    // the question was yes/no. A statement has nothing to refuse, so dismissing
+    // it is the same as reading it.
+    const dismissed = () => finish(withInput ? null : noCancel);
     const back = el("div", "pix-ape-back pix-apk-back");
     const box = el("div", "pix-apk");
     const head = el("div", "pix-ape-head");
-    head.append(el("b", null, title));
-    const msg = el("div", "pix-apk-msg", message || "");
-    const input = multi ? el("textarea", "pix-apk-in pix-apk-ta")
-                        : el("input", "pix-apk-in");
-    if (!multi) input.type = "text";
-    input.value = initial || "";
-    if (opts?.placeholder) input.placeholder = opts.placeholder;
+    head.append(el("b", null, opts?.title || ""));
+    const msg = el("div", "pix-apk-msg", opts?.message || "");
+    box.append(head, msg);
+    let input = null;
+    if (withInput) {
+      input = multi ? el("textarea", "pix-apk-in pix-apk-ta")
+                    : el("input", "pix-apk-in");
+      if (!multi) input.type = "text";
+      input.value = opts?.initial || "";
+      if (opts?.placeholder) input.placeholder = opts.placeholder;
+      box.appendChild(input);
+    } else {
+      // Without a field the message IS the dialog, so it needs the bottom
+      // padding the input was providing.
+      msg.style.paddingBottom = "4px";
+    }
     const foot = el("div", "pix-ape-foot");
-    const cancel = el("button", "pix-app-btn", "Cancel");
+    const cancel = noCancel ? null
+      : el("button", "pix-app-btn", opts?.cancelText || "Cancel");
     const ok = el("button", "pix-app-btn is-on", opts?.okText || "Save");
-    foot.append(cancel, ok);
-    box.append(head, msg, input, foot);
+    if (cancel) foot.append(cancel, ok); else foot.append(ok);
+    box.appendChild(foot);
     back.appendChild(box);
 
     // An empty box means "I changed my mind", same as Cancel - never a preset
     // literally called "".
-    const accept = () => finish(input.value.trim() || null);
-    cancel.addEventListener("click", () => finish(null));
+    const accept = () => finish(withInput ? (input.value.trim() || null) : true);
+    cancel?.addEventListener("click", dismissed);
     ok.addEventListener("click", accept);
-    back.addEventListener("mousedown", (e) => { if (e.target === back) finish(null); });
-    input.addEventListener("keydown", (e) => {
+    back.addEventListener("mousedown", (e) => { if (e.target === back) dismissed(); });
+    (input || box).addEventListener("keydown", (e) => {
       // ComfyUI binds Ctrl+V on the document to paste NODES, so a keystroke
       // that reaches it would drop a copied node onto the canvas instead of
       // pasting text here. Escape is deliberately let through: its handler is
@@ -514,16 +612,35 @@ export function askName(title, message, initial, opts) {
     const esc = (e) => {
       if (e.key !== "Escape" || ASKER !== back) return;
       e.stopPropagation();
-      finish(null);
+      dismissed();
     };
     window.addEventListener("keydown", esc, true);
     back._pixEscOff = () => window.removeEventListener("keydown", esc, true);
 
     document.body.appendChild(back);
     ASKER = back;
-    input.focus();
-    input.select();
+    if (input) { input.focus(); input.select(); }
+    // Focus the primary so Enter works with no field to type in. Escape still
+    // cancels, so the fast paths both exist.
+    else ok.focus();
   });
+}
+
+export function askName(title, message, initial, opts) {
+  return askDialog({ ...opts, title, message, initial });
+}
+
+/** A themed yes/no. Resolves true only if the user really said yes. */
+export function askConfirm(title, message, opts) {
+  return askDialog({ ...opts, title, message, input: false,
+                     okText: opts?.okText || "Yes" });
+}
+
+/** A themed statement. Replaces window.alert, which is suppressed in the same
+ *  hosts and the same way - so an error the user needed to read said nothing. */
+export function sayIt(title, message) {
+  return askDialog({ title, message, input: false,
+                     okText: "OK", cancelText: null });
 }
 
 export function openEditor(title, text, onSave, opts) {
@@ -637,7 +754,15 @@ export function closeAIPromptPanelFor(node) {
 
 function outsideClose(e) {
   if (!PANEL) return;
-  if (POP && !POP.contains(e.target) && !e.target?.closest?.(".pix-app-pick")) {
+  // A dialog (and the full-screen editor) sits ON TOP of the popup, so a click
+  // inside one must not close the list underneath it. Measured: without this the
+  // confirm raised by a row's ✕ took the popup down with it the moment it was
+  // answered, so the row could never be SEEN to go and the repaint was dead
+  // code. This is the same exemption the panel gives itself four lines down, and
+  // it has to come first because that check is only reached after this one.
+  const overlay = !!e.target?.closest?.(".pix-ape-back");
+  if (!overlay && POP && !POP.contains(e.target)
+      && !e.target?.closest?.(".pix-app-pick")) {
     closePop();
   }
   if (PANEL.contains(e.target)) return;
@@ -881,7 +1006,8 @@ async function readClipboard() {
 async function applyRecipeText(node, raw, sourceName) {
   const recipe = parseRecipe(raw);
   if (!recipe.formula.trim()) {
-    window.alert("There is nothing to import from " + sourceName + ".");
+    await sayIt("Nothing to import",
+      "There is nothing to import from " + sourceName + ".");
     return;
   }
 
@@ -901,9 +1027,10 @@ async function applyRecipeText(node, raw, sourceName) {
   // enough - including the fact that it joins their presets.
   if (readState(node).formula.trim()) {
     const what = hasSettings ? "formula and sampling settings" : "formula";
-    if (!window.confirm(
+    if (!await askConfirm("Replace what is on this node?",
       "Replace this node's " + what + " with " + label + "?"
-      + (willSave ? "\n\nIt will also be added to your presets." : ""))) return;
+      + (willSave ? "\n\nIt will also be added to your presets." : ""),
+      { okText: "Replace" })) return;
   }
 
   const patch = { formula: recipe.formula };
@@ -938,7 +1065,8 @@ async function applyRecipeText(node, raw, sourceName) {
     // model line, which reads off the preset list. Worded so it cannot be
     // mistaken for the import itself failing - that part already succeeded.
     if (!res.ok) {
-      window.alert("The recipe is on the node, but it could not be added to "
+      await sayIt("It is loaded, but not saved",
+        "The recipe is on the node, but it could not be added to "
         + "your presets.\n\n" + (res.message || ""));
     }
     // AWAITED. Without it the re-render one line down paints from the list as
@@ -1175,7 +1303,7 @@ function renderPanel(node, body) {
         try {
           applyRecipeText(node, await file.text(), file.name);
         } catch (e) {
-          window.alert("Could not read that file.");
+          await sayIt("Could not read it", "Could not read that file.");
         }
       });
       input.click();
@@ -1207,28 +1335,30 @@ function renderPanel(node, body) {
   // The row shows the preset that is on the node, so reopening the panel tells
   // you what you are looking at without having to remember.
   const loaded = loadedPreset(node);
+  // Rebuilt on demand rather than captured once, because deleting from inside
+  // the popup has to repaint it from a list that has just changed.
+  const presetRows = () => allPresets().map((p) => [p.name, p.name,
+    p.name
+    // Which of the two kinds this is, because "where did my preset go" and
+    // "does my friend already have this one" are the same question asked
+    // from either end. The dot on the row says it at a glance now; this
+    // spells it out, and the two read the same answer from isShipped.
+    + (isShipped(p) ? "\nShips with Pixaroma" : "\nYour own preset")
+    + (p.model_hint ? "\nMeasured with " + p.model_hint
+                             + (MODELS.models.includes(p.model_hint)
+                                ? " (you have it)" : " (you do NOT have it)")
+                           : "\nNo model recorded")
+    + (p.settings && p.settings.temperature != null
+       ? "\nTemperature " + p.settings.temperature : "")
+    + (p.note ? "\n\n" + p.note : ""),
+    isShipped(p) ? KIND_SHIPPED : KIND_MINE]);
   body.appendChild(pickRow(
     loaded ? loaded.name : (all.length ? "Load a preset…" : "No presets yet"),
     (anchor) => {
       // Each row carries its model in the hover, so you can see what a preset
       // was measured with BEFORE you load it, without cluttering the list.
-      const rows = all.map((p) => [p.name, p.name,
-        p.name
-        // Which of the two kinds this is, because "where did my preset go" and
-        // "does my friend already have this one" are the same question asked
-        // from either end. The dot on the row says it at a glance now; this
-        // spells it out, and the two read the same answer from isShipped.
-        + (isShipped(p) ? "\nShips with Pixaroma" : "\nYour own preset")
-        + (p.model_hint ? "\nMeasured with " + p.model_hint
-                                 + (MODELS.models.includes(p.model_hint)
-                                    ? " (you have it)" : " (you do NOT have it)")
-                               : "\nNo model recorded")
-        + (p.settings && p.settings.temperature != null
-           ? "\nTemperature " + p.settings.temperature : "")
-        + (p.note ? "\n\n" + p.note : ""),
-        isShipped(p) ? KIND_SHIPPED : KIND_MINE]);
-      openPop(anchor, rows, loaded ? loaded.name : null, (name) => {
-        const preset = all.find((p) => p.name === name);
+      const handle = openPop(anchor, presetRows(), loaded ? loaded.name : null, async (name) => {
+        const preset = allPresets().find((p) => p.name === name);
         if (!preset) return;
         // A dialog earns its place only when something would be LOST. Switching
         // away from a preset you have not edited loses nothing - the preset is
@@ -1240,8 +1370,10 @@ function renderPanel(node, body) {
         // still gets the question.
         const current = readState(node).formula;
         const yourOwnWriting = current.trim() && !loadedPreset(node);
-        if (yourOwnWriting &&
-            !window.confirm("Replace this node's formula with \"" + name + "\"?")) return;
+        if (yourOwnWriting && !await askConfirm("Replace your formula?",
+              "This node's formula is not one of the presets, so it is writing of "
+              + "your own. Replace it with “" + name + "”?",
+              { okText: "Replace" })) return;
         const patch = { formula: preset.formula };
         // The user's choice: the wording alone, or the whole recipe.
         if (node._pixApPresetSettings !== false && preset.settings) {
@@ -1260,7 +1392,38 @@ function renderPanel(node, body) {
         }
         set(patch);
       }, { markVision: false, filterFrom: 2, kinds: PRESET_KINDS,
-           filterHint: "Filter, e.g. krea image" });
+           filterHint: "Filter, e.g. krea image",
+           // Delete lives ON the row, which is what the user asked for: "for
+           // pixaroma ones why you just not gray out delete and leave it only
+           // for the custom ones". A shipped row still shows the ✕, dimmed and
+           // inert with a hover saying why - the same reasoning as the dimmed
+           // "Mine (0)" chip. Hiding it would leave people hunting for a
+           // control that is deliberately absent.
+           rowDelete: {
+             can: (row) => row[3] === KIND_MINE,
+             title: (row) => "Delete your preset “" + row[1] + "”",
+             blockedTitle: () => "This one ships with Pixaroma, so it cannot be "
+               + "deleted. It comes back with every update.",
+             onDelete: async (name) => {
+               if (!await askConfirm("Delete this preset?",
+                     "Delete your preset “" + name + "”?\n\nIt is a file on "
+                     + "disk, so this cannot be undone with Ctrl+Z.",
+                     { okText: "Delete" })) return false;
+               const res = await deletePreset(name);
+               // Re-read either way: a refusal usually means the file went
+               // unreadable underneath us, and leaving the panel listing what
+               // the server can no longer read teaches the opposite of true.
+               await refreshPresets();
+               refreshAIPromptPanel(node);
+               if (!res.ok) {
+                 await sayIt("Could not delete it",
+                   res.message || "Could not delete that preset.");
+                 return false;
+               }
+               return true;
+             },
+             after: () => presetRows(),
+           } });
     },
     { dot: presetDot(loaded),
       title: "Load a saved formula, with the settings it was measured at. "
@@ -1332,8 +1495,9 @@ function renderPanel(node, body) {
     // from reintroducing the friction just removed from Clear and the picker.
     if (name.toLowerCase() !== quiet
         && PRESETS.user.some((p) => p.name.toLowerCase() === name.toLowerCase())
-        && !window.confirm("You already have a preset called “" + name
-          + "”. Replace it?")) return;
+        && !await askConfirm("That name is already yours",
+             "You already have a preset called “" + name + "”. Replace it?",
+             { okText: "Replace" })) return;
     const res = await savePreset({
       name,
       note: recipe.note,
@@ -1342,47 +1506,26 @@ function renderPanel(node, body) {
       model_hint: recipe.model,
     });
     if (!res.ok) {
-      // Re-read BEFORE the alert. A refusal usually means the file went
+      // Re-read BEFORE saying so. A refusal usually means the file went
       // unreadable underneath us, and returning early left the panel still
       // listing presets the server can no longer read - teaching the user
       // "the list is fine, only saving is broken", which is the opposite of
       // true. This is what makes the amber note reachable when it matters.
       await refreshPresets();
       refreshAIPromptPanel(node);
-      window.alert(res.message || "Could not save that preset.");
+      await sayIt("Could not save it", res.message || "Could not save that preset.");
       return;
     }
     await refreshPresets();
     refreshAIPromptPanel(node);
   });
 
-  const delBtn = el("button", "pix-app-btn", "Delete");
-  delBtn.title = PRESETS.userError
-    // Otherwise this flatly contradicts the amber note directly below it: the
-    // user's presets exist, they just could not be read.
-    ? "Your own presets could not be read, so they cannot be listed."
-    : (PRESETS.user.length
-      ? "Delete one of your own presets. The ones that ship with Pixaroma stay."
-      : "You have no presets of your own yet.");
-  delBtn.disabled = !PRESETS.user.length;
-  delBtn.addEventListener("click", () => {
-    // Every row here is one of the user's own, so there is no kind to mark -
-    // just the filter, for a library that has grown.
-    openPop(delBtn, PRESETS.user.map((p) => [p.name, p.name]), null, async (name) => {
-      if (!window.confirm("Delete your preset \"" + name + "\"?")) return;
-      const res = await deletePreset(name);
-      if (!res.ok) {
-        await refreshPresets();          // same reason as Save current above
-        refreshAIPromptPanel(node);
-        window.alert(res.message || "Could not delete that preset.");
-        return;
-      }
-      await refreshPresets();
-      refreshAIPromptPanel(node);
-    }, { markVision: false, filterFrom: 2, filterHint: "Filter your presets" });
-  });
-
-  prow.append(saveBtn, delBtn);
+  // There is no Delete BUTTON any more: deleting lives on the row it deletes,
+  // in the picker above (the rowDelete opt). One list, one ✕, and the ones that
+  // ship with Pixaroma show it greyed out with a hover saying why, instead of a
+  // separate button whose popup could only ever list half the library and left
+  // people wondering why the shipped ones were missing from it.
+  prow.appendChild(saveBtn);
   body.appendChild(prow);
 
   // ONE line about the loaded preset, not two. It answers the only question

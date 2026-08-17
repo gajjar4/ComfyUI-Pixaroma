@@ -143,7 +143,7 @@ export const AI_PROMPT_HELP = {
         ["All, Pixaroma, Mine", "The three buttons under the filter show everything, only the ones that ship with Pixaroma, or only your own, with a count on each. Mine stays greyed out until you have saved one."],
         ["Hover a name", "Shows which model it was written for, whether you have that model, and its temperature. All before you load it."],
         ["Save current", "Keeps whatever this node has right now under a name you choose, so your own recipes sit in the same list."],
-        ["Delete", "Only ever offers your own. The ones that ship with Pixaroma stay put."],
+        ["Deleting one", "Hover a name in the list and a ✕ appears at the end of the row. It works on your own presets and asks first, because they are files on disk. On the ones that ship with Pixaroma it is greyed out: those come back with every update, so they cannot be deleted."],
         ["Reset", "On the Advanced sampling line. Puts the sampling values back to the defaults and leaves your formula and model alone. It covers everything a preset can carry, so the two Behaviour switches at the bottom go back too. It wakes up only when something has really changed, and its tooltip names what."],
       ],
     },
