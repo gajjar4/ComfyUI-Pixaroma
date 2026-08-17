@@ -9,7 +9,7 @@ import {
   injectCSS, buildRoot, hideNativeImageCombo, openImageDropdown,
   renderChips, renderGlobalControls,
 } from "./ui.mjs";
-import { pickAndUploadFile, pasteFromClipboard, uploadImageToInput, setSelectedImage, updateNativePreview, previewMatches, splitFilenameSubfolder, splitTypeAnnotation } from "./api.mjs";
+import { pickAndUploadFile, pasteFromClipboard, uploadImageToInput, setSelectedImage, updateNativePreview, previewMatches, schedulePreviewRepair, splitFilenameSubfolder, splitTypeAnnotation } from "./api.mjs";
 import { buildModePanel, previewResize } from "./resize_modes.mjs";
 import { applyInlineLabel, applyWHLayout, applyCoverControls } from "./panel_polish.mjs";
 
@@ -867,6 +867,10 @@ function setupLoadImageNode(node) {
               // real filename — keep the last real pick so the Filename output
               // stays the original (issue #51).
               if (!/clipspace/i.test(v)) node._pixLiOrigName = v;
+              // Paste (Clipspace) leaves the node with NO picture in the Classic
+              // renderer, because core clears node.imgs and only repopulates it
+              // in Nodes 2.0 - see schedulePreviewRepair.
+              schedulePreviewRepair(node);
             }
           },
         });

@@ -22,7 +22,7 @@ import { applyAdaptiveCanvasOnly, isVueNodes, canvasBackingScale, installZoomRep
 import {
   setSelectedImage, updateNativePreview, previewMatches, pickAndUploadFile,
   pasteFromClipboard, uploadImageToInput, splitFilenameSubfolder,
-  splitTypeAnnotation,
+  splitTypeAnnotation, schedulePreviewRepair,
 } from "../load_image/api.mjs";
 import { openImageDropdown, injectCSS as injectLiCSS } from "../load_image/ui.mjs";
 import { previewResize } from "../load_image/resize_modes.mjs";
@@ -644,6 +644,10 @@ function setupNode(node) {
             if (v && !isGraphLoading()) {
               node._pixLiSelectedFilename = v;
               if (!/clipspace/i.test(v)) node._pixLiOrigName = v;
+              // Paste (Clipspace) leaves the node with NO picture in the Classic
+              // renderer (core clears node.imgs and only repopulates it in Nodes
+              // 2.0) - see schedulePreviewRepair in ../load_image/api.mjs.
+              schedulePreviewRepair(node);
             }
           },
         });

@@ -1,6 +1,7 @@
 import { app } from "/scripts/app.js";
 import { pixApiUrl } from "../shared/api_url.mjs";
 import { notifyGraphChanged } from "../shared/graph_changed.mjs";
+import { isGraphLoading } from "../shared/graph_loading.mjs";
 
 // Split "Studio1/cat.png" into {subfolder:"Studio1", filename:"cat.png"}.
 // ComfyUI's input/ folder can hold subfolders; the native image_upload combo
@@ -156,6 +157,61 @@ function syncCoreImageStore(node, filename) {
     // restore) rather than breaking the pick itself.
     console.warn("[Pixaroma] could not sync ComfyUI's preview store", e);
   }
+}
+
+/**
+ * Put the picture back after an EXTERNAL write left the node blank.
+ *
+ * MEASURED on frontend 1.47.12 in the CLASSIC renderer, from a user report that
+ * "Copy/Paste (Clipspace) is not working" on both loaders. Instrumenting every
+ * `node.imgs` write across one paste gives the whole story in three lines:
+ *
+ *   pasteFromClipspace   node.imgs = [the pasted picture]
+ *   m.callback           node.imgs = undefined
+ *   (nothing, ever)
+ *
+ * Core's paste assigns the picture, then fires the image widget's own callback,
+ * whose first act is `node.imgs = undefined` before it re-derives the preview
+ * from `app.nodeOutputs`. That re-derive is `syncLegacyNodeImgs`, and its first
+ * line is `if (!vueNodesMode) return` - so in Classic nothing ever repopulates
+ * it and the node is left naming the pasted file with no picture at all. It is
+ * NOT our bug: ComfyUI's own LoadImage does exactly the same thing on the same
+ * paste (verified with a real right-click, both directions), and in Nodes 2.0
+ * both nodes are fine. We repair it anyway because the report lands on us, and
+ * because a blank preview here is not cosmetic - `node.imgs` feeds the INPUT
+ * size card and is what Mask Editor and a later Copy (Clipspace) read.
+ *
+ * Deliberately narrow, since it rides the widget-value setter that fires on
+ * EVERY write:
+ *   - `_pixLiPreviewReqId` unchanged since the write == none of our own pick
+ *     paths started a fetch, so a normal pick never double-fetches (they write
+ *     the value and THEN call updateNativePreview, which bumps the id).
+ *   - `previewMatches` == the right picture is already loaded, so Nodes 2.0
+ *     (where core's own repopulate works) and the Mask Editor are no-ops.
+ *   - Never on the load path: node SETUP already reconciles the preview there,
+ *     and the load path is the one place a stray write does damage.
+ * A 0ms timer is enough because core's whole paste is synchronous; the measured
+ * trace shows no further `node.imgs` write for at least 3 seconds after it.
+ */
+export function schedulePreviewRepair(node) {
+  if (!node) return;
+  const reqAtWrite = node._pixLiPreviewReqId | 0;
+  clearTimeout(node._pixLiPreviewRepairT);
+  node._pixLiPreviewRepairT = setTimeout(() => {
+    node._pixLiPreviewRepairT = null;
+    try {
+      if (!node.graph) return;                                  // node removed
+      if (isGraphLoading()) return;                             // setup owns the load path
+      if ((node._pixLiPreviewReqId | 0) !== reqAtWrite) return;  // one of ours is already fetching
+      const want = node._pixLiImageWidget?.value
+        || (node.widgets || []).find((w) => w.name === "image")?.value;
+      if (!want) return;
+      if (previewMatches(node, want)) return;                    // right picture already there
+      updateNativePreview(node, want);
+    } catch (e) {
+      console.warn("[Pixaroma] could not restore the node preview", e);
+    }
+  }, 0);
 }
 
 // Single source of truth for picking an image (dropdown click, arrow nav,
