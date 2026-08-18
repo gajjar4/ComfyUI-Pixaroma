@@ -137,7 +137,22 @@ let _build = 0;
 // the un-queued build's picks and dropped the accepted run's own. Measured inversion of
 // both halves at once: the run's list repeated while the export's list skipped.
 const _buildOf = new WeakMap();
+// IDEMPOTENT PER PROMPT OBJECT, and that is load-bearing now that TWO nodes roll
+// picks. Prompt Pixaroma and AI Prompt each wrap app.graphToPrompt, so both hooks run
+// for one build - and extension load order is not stable, so neither can assume it
+// goes first. If this incremented twice, the hook that ran FIRST would stamp its picks
+// with build N while the prompt object ended up carrying N+1, and commitPicks would
+// skip those picks forever: that node's "In order" list would never advance.
+// One graphToPrompt call creates one fresh output object, so object identity IS the
+// build. Whichever hook sees it first opens the build; the second reuses it, and both
+// nodes' picks are spent together by the one commit.
+// Callers MUST call this BEFORE rolling anything, or they roll under the previous
+// build's number.
 export function beginPickBuild(promptObj) {
+  if (promptObj && typeof promptObj === "object") {
+    const already = _buildOf.get(promptObj);
+    if (already != null) return already;
+  }
   _build++;
   if (promptObj && typeof promptObj === "object") {
     try { _buildOf.set(promptObj, _build); } catch { /* not weak-mappable, fall back */ }

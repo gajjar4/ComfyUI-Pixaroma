@@ -9,9 +9,12 @@ import {
   getTags, getCategories, findTag, subscribe, tagLines, isListTag, isListCat, catOf,
   tagMode, catMode, TEXT_BUCKET, LIST_BUCKET,
 } from "./library.mjs";
-import { nextIndex, listKey, catKey, commitPicks, beginPickBuild } from "./cursors.mjs";
+import { nextIndex, listKey, catKey, beginPickBuild } from "./cursors.mjs";
+// Side effect: installs the api.queuePrompt wrap that SPENDS a held pick once a queue
+// is accepted. It used to sit at the bottom of this file; it moved so a second node
+// that rolls picks does not depend on this one having loaded (see the module header).
+import "./pick_commit.mjs";
 import { registerRunWorkflowPatcher, readNodeProp, writeNodeProp } from "../shared/run_seed_embed.mjs";
-import { api } from "/scripts/api.js";
 import { expandAll, hasTags, hasWilds, hasLists, scanTokens, prevCodePoint } from "./expand.mjs";
 import { openLibraryEditor, closeLibraryEditorFor } from "./library_editor.mjs";
 import { openPromptSettings, closePromptSettingsFor, accentOf, getDefaultOrder } from "./settings.mjs";
@@ -1429,29 +1432,9 @@ function findPromptNode(index, promptId) {
 // URL, a hot reload). Wrapping twice would roll every random slot TWICE per queue, so
 // an "In order" list would silently skip every other entry and a shuffle deck would
 // drain at double rate. Same flag convention as the other Pixaroma nodes.
-// A pick is only SPENT when a queue is actually accepted. graphToPrompt runs for
-// Workflow > Export, for workflow sharing and for several Save buttons too, and it
-// also runs for a queue that then fails validation - none of those should move an
-// "In order" list on. Until this fires, the same pick is handed out again.
-if (!app._pixPromptQueuePatched && api && typeof api.queuePrompt === "function") {
-  app._pixPromptQueuePatched = true;
-  const _origQueuePrompt = api.queuePrompt.bind(api);
-  api.queuePrompt = async function (...args) {
-    const res = await _origQueuePrompt(...args);   // throws on a rejected queue -> pick kept
-    try {
-      // Hand the commit the exact prompt object that was POSTed, so it spends THAT
-      // build's picks. Searching the args rather than assuming a position keeps this
-      // working if the signature ever moves. `output` is the object our graphToPrompt
-      // hook stamped.
-      let queued = null;
-      for (const a of args) {
-        if (a && typeof a === "object" && a.output && typeof a.output === "object") { queued = a.output; break; }
-      }
-      commitPicks(queued);
-    } catch (err) { console.error("Pixaroma.Prompt: commitPicks failed", err); }
-    return res;
-  };
-}
+// The api.queuePrompt wrap that SPENDS a held pick moved into cursors.mjs (imported
+// above), so every node that rolls picks gets it by importing that module rather than
+// depending on this file having loaded.
 
 if (!app._pixPromptToPromptPatched) {
 app._pixPromptToPromptPatched = true;
