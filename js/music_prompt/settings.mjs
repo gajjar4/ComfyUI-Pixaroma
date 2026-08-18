@@ -21,10 +21,15 @@
 // work, under a name saying what it is for - so a second model becomes another
 // entry rather than a rewrite.
 //
-// ⚠️ The PICKER is not folded, and it was at first. That was wrong for a reason
-// worth keeping: the picker is how you go BACK to the wording that ships with
-// the node, so folding it hides the way out of a change. Only the two
-// full-screen editors and the four numbers fold.
+// ⚠️ NOTHING IN HERE IS FOLDED. The fold was tried twice and removed twice, and
+// the house rule behind that is worth stating because it is easy to get
+// backwards: WE HIDE THINGS ON THE NODE, NOT IN A PANEL. A node shares a canvas
+// with everything else, so it stays compact; a settings panel is its own window
+// with room to spare, so folding there only buys an extra click. Fold in a panel
+// only when it genuinely will not fit.
+//
+// The picker in particular is how you get BACK to what ships with the node, so
+// hiding it hid the way out of a change.
 
 import { fetchModels } from "../ai_prompt/api.mjs";
 import { deletePreset, fetchPresets, savePreset } from "./api.mjs";
@@ -157,14 +162,15 @@ function injectCSS() {
     .pix-mps-tog.on { background:${ACC}; }
     .pix-mps-tog.on .knob { left:18px; background:#fff; }
 
-    /* ---- the advanced section ------------------------------------------- */
-    .pix-mps-adv { margin-top:2px; }
-    .pix-mps-advhead { display:flex; align-items:center; gap:6px; cursor:pointer;
-      user-select:none; font-size:11.5px; color:#bbb; padding:3px 0; }
-    .pix-mps-advhead:hover { color:${ACC}; }
-    .pix-mps-advhead .caret { color:${ACC}; font-size:9px; width:9px; }
-    .pix-mps-advhead .n { margin-left:auto; font:10.5px monospace; color:#7d7a76; }
-    .pix-mps-advbody { padding-top:7px; }
+    /* ---- instructions and sampling --------------------------------------- */
+    /* A plain sub-heading, NOT a fold. It was folded twice and unfolded twice:
+       a control nobody can see is a control nobody knows they have. */
+    .pix-mps-subhead { display:flex; align-items:baseline; gap:6px;
+      margin-top:13px; font-size:10px; letter-spacing:.09em;
+      text-transform:uppercase; color:${ACC}; }
+    .pix-mps-subhead .n { margin-left:auto; font:10.5px monospace; color:#7d7a76;
+      letter-spacing:0; text-transform:none; }
+    .pix-mps-advbody { padding-top:2px; }
 
     .pix-mps-frow { display:flex; align-items:center; gap:7px; margin-top:7px; }
     .pix-mps-frow .t { flex:1 1 auto; min-width:0; font-size:11.5px; color:#ccc;
@@ -332,8 +338,6 @@ function openPop(anchor, values, current, onPick, opts = {}) {
 // EMPTY MEANS THE MEASURED ONE. A blank box cannot be mistaken for a formula,
 // Reset is just clearing it, and nothing has to store a copy of the built-in
 // text to compare against.
-let ADV_OPEN = false;
-
 // MUST match SETTING_KEYS in nodes/_music_prompt_presets.py, or a set saves
 // numbers the server drops and loads numbers the panel ignores.
 const SETTING_KEYS = [
@@ -542,10 +546,11 @@ function buildFormulaSet(node, body) {
   acts.append(saveAs, del);
   wrap.appendChild(acts);
 
-  // ---- the fine detail, FOLDED -------------------------------------------
-  // Only this part hides: two full-screen editors and four numbers is a lot of
-  // panel for something most people never touch, and none of it is the way back
-  // to the shipped wording.
+  // ---- the instructions and the numbers, ALWAYS VISIBLE -------------------
+  // These were folded twice and unfolded twice. The user's line, and it is the
+  // right one: a control nobody can see is a control nobody knows they have,
+  // and hiding the wording reads as not wanting people to change it. The panel
+  // body scrolls; that is what it is for.
   const st0 = readState(node);
   const drift = [
     st0.caption_formula.trim() && "caption wording",
@@ -556,21 +561,14 @@ function buildFormulaSet(node, body) {
     st0.lyrics_max_length !== 900 && "lyrics length",
   ].filter(Boolean);
 
-  const head = el("div", "pix-mps-advhead");
-  head.append(
-    el("span", "caret", ADV_OPEN ? "▼" : "▶"),
+  const subhead = el("div", "pix-mps-subhead");
+  subhead.append(
     el("span", null, "Instructions and sampling"),
     el("span", "n", drift.length ? `${drift.length} changed` : ""),
   );
-  head.title = drift.length ? "Changed: " + drift.join(", ")
-                            : "Everything is at the value the set carries.";
-  head.addEventListener("click", (e) => {
-    e.stopPropagation();
-    ADV_OPEN = !ADV_OPEN;
-    renderPanel(node, body);
-  });
-  wrap.appendChild(head);
-  if (!ADV_OPEN) return wrap;
+  subhead.title = drift.length ? "Changed: " + drift.join(", ")
+                               : "Everything is at the value this set carries.";
+  wrap.appendChild(subhead);
 
   const inner = el("div", "pix-mps-advbody");
   wrap.appendChild(inner);

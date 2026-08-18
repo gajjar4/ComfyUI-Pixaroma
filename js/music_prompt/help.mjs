@@ -84,6 +84,75 @@ registerNodeHelp(CLASS, {
       ],
     },
     {
+      heading: "Using a different model",
+      body:
+        "Everything this node writes comes from a FORMULA SET: the two "
+        + "instructions, plus the sampling that makes them work, under a name "
+        + "saying what they are for. The one that ships is `MiniMax Music 3 "
+        + "(Qwen3.5 4B int8)`, which names the music model it writes for and the "
+        + "language model it was measured on.\n\n"
+        + "On a different language model the wording may need changing. Press the "
+        + "gear and you will find it all there, nothing hidden.",
+      defs: [
+        ["The set picker", "Every set you have. An orange dot ships with "
+          + "Pixaroma, a grey one is yours. Picking one copies its wording AND "
+          + "its numbers onto the node, so this is also how you go back after "
+          + "changing something."],
+        ["Edit", "Opens that instruction in a full screen box. It starts from "
+          + "whatever the node is using now, so you can change a line rather "
+          + "than write from nothing. Save it back unchanged and the node keeps "
+          + "following the built-in one."],
+        ["Save as", "Keeps the current wording and numbers under a name of your "
+          + "own. It suggests `(mine)` on the end when you started from the "
+          + "shipped set. Your sets live in one file in your ComfyUI user "
+          + "folder, so a reinstall of the node does not touch them."],
+        ["Delete", "Removes one of yours. The set that ships with Pixaroma "
+          + "cannot be deleted or overwritten, so there is always a way back."],
+        ["temp", "How much the model improvises. The caption wants a low number "
+          + "so it states facts; the lyrics want a high one or every song rhymes "
+          + "the same way."],
+        ["max len", "How much it may write before stopping. Raise it a lot for a "
+          + "model that thinks out loud before answering, or it spends the whole "
+          + "budget thinking and writes nothing."],
+      ],
+    },
+    {
+      heading: "Writing your own instruction",
+      body:
+        "The two instructions do different jobs and each has a few things it "
+        + "must keep saying, whatever else you change.\n\n"
+        + "THE CAPTION describes the SOUND and never the words. It has to come "
+        + "back as three labelled parts, in this order: Global Metadata (genre, "
+        + "a tempo in BPM, a key, the mood, how the recording should sound), "
+        + "Vocal Details (whose voice, what it is like, any harmonies), and "
+        + "Arrangement (which instruments carry it, what the bass and drums do). "
+        + "It must never write lyrics, section tags or quoted words, because "
+        + "those go in the other field.\n\n"
+        + "THE LYRICS are sung out loud, every single line of them. Anything in "
+        + "brackets gets sung too, so a stage direction like a slow piano begins "
+        + "will be sung by a person. Lay it out with a section tag on its own "
+        + "line before each part, from [Intro] [Verse] [Pre-Chorus] [Chorus] "
+        + "[Post-Chorus] [Bridge] [Instrumental] [Solo] [Outro]. A tag can stand "
+        + "alone with nothing under it, which means the band plays and nobody "
+        + "sings, and that still uses up time.\n\n"
+        + "Both instructions should say to write nothing else: no explanation, "
+        + "no markdown, no repeating the idea back.",
+      bullets: [
+        "The node adds your length and shape to the end of the idea before it "
+        + "asks, so your instruction does not need to mention either.",
+        "Change one thing at a time and run the same idea on a couple of seeds. "
+        + "Wording that reads better is not always wording that works better.",
+        "If a result looks wrong, try the temperature before rewriting anything. "
+        + "The shipped caption wording writes cleanly at 0.3 and rambles at 0.7 "
+        + "with not a word changed.",
+        "Do not put examples inside a rule. Naming a few instruments tends to "
+        + "put those exact instruments into every song.",
+        "Say what you DO want rather than what you do not. Telling this model "
+        + "not to leave a section empty was measured making things worse, once "
+        + "producing 26 sung lines for a thirty second song.",
+      ],
+    },
+    {
       heading: "The buttons on the node",
       defs: [
         ["Caption / Lyrics", "Which of the two you are looking at. Both are "
