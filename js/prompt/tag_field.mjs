@@ -64,9 +64,18 @@ export function injectTagCSS() {
        whole block is a JS template literal, so a backtick ends the string and the rest
        of the stylesheet is parsed as JavaScript. node --check does NOT catch it; the
        browser just refuses the module and the node renders as an empty box. */
-    .pix-prm-chip { color:var(--acc); }
-    .pix-prm-chip.s1 { color:color-mix(in srgb, var(--acc) 55%, #ffd27a); }
-    .pix-prm-chip.s2 { color:color-mix(in srgb, var(--acc) 25%, #ffe3a2); }
+    /* TWO variable names on purpose. Prompt Pixaroma sets --acc on its own root;
+       every other node in the pack gets --pix-acc from installNodeAccent. A bare
+       var(--acc) is INVALID where that name is undefined, and an invalid custom
+       property does not fall back to the rule below it - the declaration is dropped
+       and the colour INHERITS from the parent instead. That is silent: the span
+       still carries .pix-prm-chip, so a check that only asserts the CLASS passes
+       while every @tag renders in the backdrop's plain grey. Reported as "didnt pic
+       the color code when used tags", and my own verification had checked the class
+       and not the computed colour. Assert the COLOUR. */
+    .pix-prm-chip { color:var(--acc, var(--pix-acc, #f66744)); }
+    .pix-prm-chip.s1 { color:color-mix(in srgb, var(--acc, var(--pix-acc, #f66744)) 55%, #ffd27a); }
+    .pix-prm-chip.s2 { color:color-mix(in srgb, var(--acc, var(--pix-acc, #f66744)) 25%, #ffe3a2); }
     .pix-prm-wild { color:#4fc98a; }
     .pix-prm-wild.s1 { color:#86d977; }
     .pix-prm-wild.s2 { color:#b6e58d; }
@@ -96,7 +105,7 @@ export function injectTagCSS() {
     .pix-prm-ac-h .cd { width:8px; height:8px; border-radius:50%; }
     .pix-prm-ac-i { padding:6px 11px; cursor:pointer; }
     .pix-prm-ac-i.sel, .pix-prm-ac-i:hover { background:#3a2a24; }
-    .pix-prm-ac-n { font:12px monospace; color:var(--acc, ${BRAND}); }
+    .pix-prm-ac-n { font:12px monospace; color:var(--acc, var(--pix-acc, ${BRAND})); }
     .pix-prm-ac-i.wild .pix-prm-ac-n { color:#b98cff; }
     .pix-prm-ac-i.list .pix-prm-ac-n { color:#b98cff; }
     .pix-prm-ac-d { font-size:10.5px; color:#767676; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:320px; }
