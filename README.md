@@ -375,9 +375,12 @@ Master the Pixaroma suite with our video guides and workflow deep-dives:
 
 ## 🛠 Changelog
 
-### **August 18, 2026 · v1.4.115**
-- **Prompt Pack reads the files Save Text writes.** Both nodes name the same three separators, so paste a saved .txt in, press the matching pill, and run every prompt again.
-- **Comma is gone as a separator.** Prompts are full of commas, so it chopped one prompt into pieces. Workflows set to it move to Blank line.
+### **August 18, 2026 · v1.4.115–v1.4.116**
+- **NEW: your tag library works in AI Prompt too.** `@name`, `*Category` and `#name` from the same library as Prompt Pixaroma, with a Tags button and colours showing which are real.
+- **NEW: a Krea 2 idea preset for Qwen3.5 4B.** Over 36 runs it named the medium every time and never opened with a stray label.
+- **NEW: two MiniMax Music 3 presets**, caption and lyrics. Say how long the song is and the lyrics are written to fit.
+- **Prompt Pack reads what Save Text writes.** The same three separators in both, so a saved .txt runs again.
+- **Comma is gone as a separator.** It chopped prompts into pieces. Workflows set to it move to Blank line.
 - **Quick runs no longer scatter a collection.** Save Text could start a second .txt part way through.
 
 ### **August 17, 2026 · v1.4.111–v1.4.114**
