@@ -90,7 +90,7 @@ def normalise(raw):
     }
 
 
-def _read_checked(path):
+def _read_checked(path, normalise_fn=None):
     """(presets, ok).
 
     ok is False ONLY when the file exists and could not be understood. That
@@ -105,6 +105,12 @@ def _read_checked(path):
     BOM, which plain utf-8 rejects at byte one - this pack has been bitten by
     exactly that before. It reads BOM-less UTF-8 identically.
     """
+    # `normalise_fn` exists ONLY so Music Prompt can share this guard. Its sets
+    # carry `caption` and `lyrics` where a preset carries `formula`, so with this
+    # module's own normalise every entry was dropped and the "not one usable
+    # entry" branch below correctly reported a freshly-written file as
+    # unreadable. Defaulting to normalise keeps every existing call identical.
+    normalise_fn = normalise if normalise_fn is None else normalise_fn
     if not path or not os.path.isfile(path):
         return [], True
     try:
@@ -129,7 +135,7 @@ def _read_checked(path):
         return [], False
     out = []
     for item in items[:MAX_PRESETS]:
-        one = normalise(item)
+        one = normalise_fn(item)
         if one:
             out.append(one)
     if items and not out:

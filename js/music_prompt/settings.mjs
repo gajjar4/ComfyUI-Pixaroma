@@ -12,14 +12,19 @@
 //   - USER_MOVED resets on CLOSE, never on open, or one dragged panel teaches
 //     every later one to sit still where the node is not (house convention #29).
 //
-// The panel carries the model, what to do with it afterwards, the accent, and a
-// collapsed FORMULA SET section.
+// The panel carries the model, what to do with it afterwards, the FORMULA SET,
+// and the accent.
 //
-// That last one exists because a user asked what to do on a different model and
-// the honest answer was NOTHING, which is a dead end rather than a safeguard. A
-// SET is the two instructions plus the sampling that makes them work, under a
-// name saying what it is for - so a second model becomes another entry rather
-// than a rewrite. The measured set still ships and is still the default.
+// The set section exists because a user asked what to do on a different model
+// and the honest answer was NOTHING, which is a dead end rather than a
+// safeguard. A SET is the two instructions plus the sampling that makes them
+// work, under a name saying what it is for - so a second model becomes another
+// entry rather than a rewrite.
+//
+// ⚠️ The PICKER is not folded, and it was at first. That was wrong for a reason
+// worth keeping: the picker is how you go BACK to the wording that ships with
+// the node, so folding it hides the way out of a change. Only the two
+// full-screen editors and the four numbers fold.
 
 import { fetchModels } from "../ai_prompt/api.mjs";
 import { deletePreset, fetchPresets, savePreset } from "./api.mjs";
@@ -47,9 +52,9 @@ let USER_MOVED = false;
 let POP = null;
 let CP_HANDLE = null;
 let MODELS = { ok: false, models: [], error: null };
-// The BUILT-IN wording, fetched once per panel open beside the model list.
-// Empty until it lands; the editor says so rather than offering a blank box
-// as though it were the measured instruction.
+// The formula sets, fetched once per panel open beside the model list. Empty
+// until they land; the panel says so rather than offering a blank editor as
+// though it were the measured instruction.
 let SETS = { ok: false, shipped: [], user: [], userError: false, error: null };
 
 function el(tag, cls, text) {
@@ -110,12 +115,37 @@ function injectCSS() {
       font:11.5px 'Segoe UI', sans-serif; padding:5px 7px; margin-bottom:4px;
       outline:none; }
     .pix-mps-filter:focus { border-color:${ACC}; }
-    .pix-mps-item { padding:5px 8px; border-radius:3px; cursor:pointer;
-      font-size:11.5px; color:#ccc; white-space:nowrap; overflow:hidden;
-      text-overflow:ellipsis; }
+    .pix-mps-item { display:flex; align-items:center; gap:7px;
+      padding:5px 8px; border-radius:3px; cursor:pointer;
+      font-size:11.5px; color:#ccc; }
+    .pix-mps-item .lbl { flex:1 1 auto; min-width:0; overflow:hidden;
+      text-overflow:ellipsis; white-space:nowrap; }
     .pix-mps-item:hover { background:#2a2a2a; color:#fff; }
     .pix-mps-item.on { background:${ACC}; color:#fff; }
     .pix-mps-empty { padding:7px 8px; font-size:11px; color:#7d7a76; }
+
+    /* ORANGE ships with Pixaroma, GREY is yours. Orange is the pack's own
+       accent, so the dot speaks the language the rest of the panel already
+       speaks. Read from IDENTITY against the shipped array, never a name test,
+       so a set of yours that shares a name cannot be mislabelled. */
+    .pix-mps-dot { flex:0 0 auto; width:7px; height:7px; border-radius:50%; }
+    .pix-mps-dot.is-shipped { background:${ACC}; }
+    .pix-mps-dot.is-user { background:#7d7a76; }
+    .pix-mps-item.on .pix-mps-dot.is-user { background:#fff; }
+
+    .pix-mps-chips { display:flex; gap:4px; margin-bottom:4px; }
+    .pix-mps-chip { flex:1 1 0; min-width:0; box-sizing:border-box;
+      background:rgba(255,255,255,.05); border:1px solid rgba(255,255,255,.14);
+      border-radius:3px; color:rgba(255,255,255,.7);
+      font:10.5px 'Segoe UI', sans-serif; padding:3px 4px; cursor:pointer;
+      white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .pix-mps-chip:hover { border-color:${ACC}; color:#ddd; }
+    .pix-mps-chip.on, .pix-mps-chip.on:hover { background:${ACC};
+      border-color:${ACC}; color:#fff; }
+    /* Dimmed AND inert, never hidden - see the note on openPop. */
+    .pix-mps-chip.empty, .pix-mps-chip.empty:hover { opacity:.35;
+      border-color:rgba(255,255,255,.14); color:rgba(255,255,255,.7);
+      background:rgba(255,255,255,.05); cursor:default; }
 
     .pix-mps-row { display:flex; align-items:center; gap:9px; margin-top:9px; }
     .pix-mps-row .t { flex:1 1 auto; min-width:0; font-size:11.5px; color:#ccc; }
@@ -173,6 +203,20 @@ function closePop() {
   POP = null;
 }
 
+/**
+ * The dark dropdown, with an optional KIND filter.
+ *
+ * `values` are `{value, label, title?, kind?}`. When any row carries a `kind`,
+ * the popup grows a dot per row and a row of kind chips with counts.
+ *
+ * ⚠️ The chips ALWAYS show once kinds are in play, even when one of them is
+ * empty. Hiding a kind with nothing in it sounds right and is not: on a fresh
+ * install the user has saved nothing, so the feature would appear completely
+ * absent, and its meaning would then arrive unannounced on the day they saved
+ * their first one. A zero count is DIMMED AND INERT instead - "Mine (0)"
+ * answers "have I saved any yet", where a clickable chip that filters to an
+ * empty list punishes you for using it (ai-prompt.md 19b).
+ */
 function openPop(anchor, values, current, onPick, opts = {}) {
   closePop();
   const pop = el("div", "pix-mps-pop");
@@ -181,30 +225,68 @@ function openPop(anchor, values, current, onPick, opts = {}) {
   pop.style.top = (r.bottom + 3) + "px";
   pop.style.minWidth = r.width + "px";
 
+  const kinds = values.some((v) => v.kind)
+    ? [
+        { key: "all", label: "All" },
+        { key: "shipped", label: "Pixaroma" },
+        { key: "user", label: "Mine" },
+      ]
+    : [];
+  let kindKey = "all";
+
   // A filter for one or two rows is noise; for 36 models it is the point. AI
   // Prompt shipped this gated at 9 and its preset picker was three rows short of
   // ever showing it, so a feature that existed was unreachable (ai-prompt.md 19b).
   const filter = el("input", "pix-mps-filter");
   filter.placeholder = "Type to narrow the list";
+  const chipRow = el("div", "pix-mps-chips");
   const list = el("div");
-  if (values.length >= (opts.filterFrom ?? 9)) pop.append(filter, list);
-  else pop.append(list);
+  if (values.length >= (opts.filterFrom ?? 9)) pop.appendChild(filter);
+  if (kinds.length) pop.appendChild(chipRow);
+  pop.appendChild(list);
+
+  const countOf = (key) =>
+    key === "all" ? values.length : values.filter((v) => v.kind === key).length;
 
   let shown = [];
   const paint = () => {
     const q = filter.value.trim().toLowerCase().split(/\s+/).filter(Boolean);
     shown = values.filter((v) => {
+      if (kindKey !== "all" && v.kind !== kindKey) return false;
       const hay = String(v.label || v.value).toLowerCase();
       return q.every((word) => hay.includes(word));
     });
+
+    chipRow.textContent = "";
+    for (const k of kinds) {
+      const n = countOf(k.key);
+      const chip = el("button", "pix-mps-chip" + (kindKey === k.key ? " on" : "")
+                                + (n === 0 ? " empty" : ""), `${k.label} (${n})`);
+      chip.disabled = n === 0;
+      chip.title = n === 0
+        ? (k.key === "user" ? "You have not saved any of your own yet"
+                            : "Nothing of this kind")
+        : "Show only these";
+      chip.addEventListener("click", (e) => {
+        e.stopPropagation();
+        if (chip.disabled) return;
+        kindKey = k.key;
+        paint();
+      });
+      chipRow.appendChild(chip);
+    }
+
     list.textContent = "";
     if (!shown.length) {
       list.appendChild(el("div", "pix-mps-empty", "Nothing matches"));
       return;
     }
     for (const v of shown) {
-      const it = el("div", "pix-mps-item" + (v.value === current ? " on" : ""),
-                    v.label || v.value);
+      const it = el("div", "pix-mps-item" + (v.value === current ? " on" : ""));
+      if (v.kind) {
+        it.appendChild(el("span", "pix-mps-dot is-" + v.kind));
+      }
+      it.appendChild(el("span", "lbl", v.label || v.value));
       it.title = v.title || v.label || v.value;
       it.addEventListener("click", (e) => { e.stopPropagation(); closePop(); onPick(v.value); });
       list.appendChild(it);
@@ -290,10 +372,16 @@ function effective(node) {
  */
 function loadedSet(node) {
   const now = effective(node);
-  return allSets().find(
+  const hit = (list) => list.find(
     (s) => (s.caption || "").trim() === now.caption.trim()
         && (s.lyrics || "").trim() === now.lyrics.trim(),
-  ) || null;
+  );
+  // THEIRS WINS A TIE. Saving a copy without changing the wording leaves two
+  // sets that are genuinely identical, and searching the shipped list first
+  // made Save as look like it had done nothing - the row still named the
+  // built-in one. If somebody went to the trouble of naming it, that is the
+  // name they mean.
+  return hit(SETS.user || []) || hit(SETS.shipped || []) || null;
 }
 
 /** Copy a set's wording AND its numbers onto the node. */
@@ -343,39 +431,30 @@ function numberField(label, value, onCommit, opts = {}) {
   return wrap;
 }
 
-function buildAdvanced(node, body) {
-  const wrap = el("div", "pix-mps-adv");
+function buildFormulaSet(node, body) {
+  const wrap = el("div");
   const loaded = loadedSet(node);
+  const ship = (SETS.shipped || [])[0];
 
-  const head = el("div", "pix-mps-advhead");
-  head.append(
-    el("span", "caret", ADV_OPEN ? "▼" : "▶"),
-    el("span", null, "Formula set"),
-    el("span", "n", loaded ? loaded.name : "yours"),
-  );
-  head.title = "The two instructions and the sampling that makes them work, "
-    + "under a name saying what they are for.";
-  head.addEventListener("click", (e) => {
-    e.stopPropagation();
-    ADV_OPEN = !ADV_OPEN;
-    renderPanel(node, body);
-  });
-  wrap.appendChild(head);
-  if (!ADV_OPEN) return wrap;
+  wrap.appendChild(el("div", "pix-mps-lbl", "Formula set"));
 
-  const inner = el("div", "pix-mps-advbody");
-  wrap.appendChild(inner);
-
-  // ---- the picker ----------------------------------------------------------
+  // ---- the picker, ALWAYS VISIBLE -----------------------------------------
+  // It was collapsed at first and that was wrong: this is how you go BACK to
+  // the wording that ships with the node, so hiding it hides the way out of a
+  // change. The fine detail below is what folds.
   const pick = el("div", "pix-mps-pick");
+  if (loaded) pick.appendChild(el("span", "pix-mps-dot is-"
+    + (isShipped(loaded) ? "shipped" : "user")));
   const val = el("span", "v", loaded ? loaded.name : "Your own wording");
-  if (loaded) val.title = loaded.note || loaded.name;
+  val.title = loaded ? (loaded.note || loaded.name)
+                     : "Edited, and not saved under a name. Pick a set to go back.";
   pick.append(val, el("span", "c", "▼"));
   pick.addEventListener("click", (e) => {
     e.stopPropagation();
     const values = allSets().map((s) => ({
       value: s.name,
-      label: (isShipped(s) ? "● " : "○ ") + s.name,
+      label: s.name,
+      kind: isShipped(s) ? "shipped" : "user",
       title: [s.note, s.model_hint && "Measured on " + s.model_hint]
         .filter(Boolean).join("\n"),
     }));
@@ -386,93 +465,34 @@ function buildAdvanced(node, body) {
     openPop(pick, values, loaded ? loaded.name : "", (name) => {
       const set = allSets().find((s) => s.name === name);
       if (set) applySet(node, set, body);
-    }, { filterFrom: 3 });
+    }, { filterFrom: 2 });
   });
-  inner.appendChild(pick);
+  wrap.appendChild(pick);
 
   if (SETS.userError) {
     // An unreadable file and an empty library must never look the same: in the
     // first case the user still HAS sets and saving would destroy them.
-    inner.appendChild(el("div", "pix-mps-note is-warn",
+    wrap.appendChild(el("div", "pix-mps-note is-warn",
       "Your saved sets could not be read, so only the built-in one is listed "
       + "and saving is off until that file is fixed. Nothing has been lost."));
   } else if (!SETS.ok) {
-    inner.appendChild(el("div", "pix-mps-note is-warn",
+    wrap.appendChild(el("div", "pix-mps-note is-warn",
       "The formula sets could not be fetched"
       + (SETS.error ? " (" + SETS.error + ")" : "") + "."));
+  } else if (!loaded) {
+    // The one state that needs explaining: they have changed the wording and
+    // not saved it, so no name describes what the node is doing.
+    wrap.appendChild(el("div", "pix-mps-note",
+      "This wording is not one of the saved sets. Save as keeps it under a name "
+      + "of your own, or pick a set above to go back to it."));
   } else {
-    inner.appendChild(el("div", "pix-mps-note",
-      "● ships with the node, ○ is yours. Each set is measured on one language "
-      + "model, so on a different one you may want a set of your own: pick the "
-      + "closest, edit it, then Save as."));
+    wrap.appendChild(el("div", "pix-mps-note",
+      "An orange dot ships with Pixaroma, a grey one is yours. Each set is "
+      + "measured on one language model, so on a different one pick the closest, "
+      + "change it below, then Save as."));
   }
 
-  // ---- the two instructions ------------------------------------------------
-  const ship = (SETS.shipped || [])[0];
-  for (const which of ["caption", "lyrics"]) {
-    const key = which + "_formula";
-    const row = el("div", "pix-mps-frow");
-    row.appendChild(el("span", "t",
-      which === "caption" ? "Caption instruction" : "Lyrics instruction"));
-    const edit = el("button", "pix-mps-mini", "Edit");
-    // Something true has to exist to start from. With no shipped set fetched
-    // AND nothing of their own, the button is inert rather than opening a blank
-    // box that reads as "there is no instruction".
-    const own = readState(node)[key].trim();
-    edit.disabled = !own && !ship;
-    edit.title = edit.disabled
-      ? "The built-in wording could not be read, so there is nothing to edit yet"
-      : "Open it in a full-screen box";
-    edit.addEventListener("click", (e) => {
-      e.stopPropagation();
-      if (edit.disabled) return;      // a disabled control must not fall through
-      const builtin = (ship && ship[which]) || "";
-      openEditor(
-        which === "caption" ? "Caption instruction" : "Lyrics instruction",
-        readState(node)[key] || builtin,
-        (text) => {
-          const next = String(text || "").trim();
-          // Saved back unchanged stores NOTHING, so the node keeps following
-          // the built-in and a future re-measurement still reaches them.
-          writeState(node, { [key]: next === builtin.trim() ? "" : next });
-          ON_CHANGE?.();
-          renderPanel(node, body);
-          return true;
-        },
-        { owner: node, spellcheck: false },
-      );
-    });
-    row.appendChild(edit);
-    inner.appendChild(row);
-  }
-
-  // ---- the numbers ---------------------------------------------------------
-  for (const which of ["caption", "lyrics"]) {
-    const s = readState(node);
-    const fallback = which === "caption" ? [0.3, 500] : [0.8, 900];
-    const nums = el("div", "pix-mps-nums");
-    nums.appendChild(numberField(
-      which + " temp", s[which + "_temperature"],
-      (v) => {
-        writeState(node, { [which + "_temperature"]: v == null ? fallback[0] : v });
-        ON_CHANGE?.();
-        renderPanel(node, body);
-      },
-      { title: "Lower stays factual, higher takes more risks. The built-in set "
-               + "measured " + fallback[0] + "." }));
-    nums.appendChild(numberField(
-      which + " max len", s[which + "_max_length"],
-      (v) => {
-        writeState(node, { [which + "_max_length"]: v == null ? fallback[1] : v });
-        ON_CHANGE?.();
-        renderPanel(node, body);
-      },
-      { title: "How much it may write. A model that reasons before answering "
-               + "needs far more than the words alone." }));
-    inner.appendChild(nums);
-  }
-
-  // ---- save / delete -------------------------------------------------------
+  // ---- save / delete, ALWAYS VISIBLE --------------------------------------
   const acts = el("div", "pix-mps-frow");
   acts.appendChild(el("span", "t", ""));
   const saveAs = el("button", "pix-mps-mini", "Save as");
@@ -519,9 +539,103 @@ function buildAdvanced(node, body) {
     SETS = await fetchPresets();
     renderPanel(node, body);
   });
-
   acts.append(saveAs, del);
-  inner.appendChild(acts);
+  wrap.appendChild(acts);
+
+  // ---- the fine detail, FOLDED -------------------------------------------
+  // Only this part hides: two full-screen editors and four numbers is a lot of
+  // panel for something most people never touch, and none of it is the way back
+  // to the shipped wording.
+  const st0 = readState(node);
+  const drift = [
+    st0.caption_formula.trim() && "caption wording",
+    st0.lyrics_formula.trim() && "lyrics wording",
+    st0.caption_temperature !== 0.3 && "caption temp",
+    st0.caption_max_length !== 500 && "caption length",
+    st0.lyrics_temperature !== 0.8 && "lyrics temp",
+    st0.lyrics_max_length !== 900 && "lyrics length",
+  ].filter(Boolean);
+
+  const head = el("div", "pix-mps-advhead");
+  head.append(
+    el("span", "caret", ADV_OPEN ? "▼" : "▶"),
+    el("span", null, "Instructions and sampling"),
+    el("span", "n", drift.length ? `${drift.length} changed` : ""),
+  );
+  head.title = drift.length ? "Changed: " + drift.join(", ")
+                            : "Everything is at the value the set carries.";
+  head.addEventListener("click", (e) => {
+    e.stopPropagation();
+    ADV_OPEN = !ADV_OPEN;
+    renderPanel(node, body);
+  });
+  wrap.appendChild(head);
+  if (!ADV_OPEN) return wrap;
+
+  const inner = el("div", "pix-mps-advbody");
+  wrap.appendChild(inner);
+
+  for (const which of ["caption", "lyrics"]) {
+    const key = which + "_formula";
+    const row = el("div", "pix-mps-frow");
+    row.appendChild(el("span", "t",
+      which === "caption" ? "Caption instruction" : "Lyrics instruction"));
+    const edit = el("button", "pix-mps-mini", "Edit");
+    // Something true has to exist to start from. With no shipped set fetched
+    // AND nothing of their own, the button is inert rather than opening a blank
+    // box that reads as "there is no instruction".
+    const own = readState(node)[key].trim();
+    edit.disabled = !own && !ship;
+    edit.title = edit.disabled
+      ? "The built-in wording could not be read, so there is nothing to edit yet"
+      : "Open it in a full-screen box";
+    edit.addEventListener("click", (e) => {
+      e.stopPropagation();
+      if (edit.disabled) return;      // a disabled control must not fall through
+      const builtin = (ship && ship[which]) || "";
+      openEditor(
+        which === "caption" ? "Caption instruction" : "Lyrics instruction",
+        readState(node)[key] || builtin,
+        (text) => {
+          const next = String(text || "").trim();
+          // Saved back unchanged stores NOTHING, so the node keeps following the
+          // built-in and a future re-measurement still reaches them.
+          writeState(node, { [key]: next === builtin.trim() ? "" : next });
+          ON_CHANGE?.();
+          renderPanel(node, body);
+          return true;
+        },
+        { owner: node, spellcheck: false },
+      );
+    });
+    row.appendChild(edit);
+    inner.appendChild(row);
+  }
+
+  for (const which of ["caption", "lyrics"]) {
+    const s = readState(node);
+    const fallback = which === "caption" ? [0.3, 500] : [0.8, 900];
+    const nums = el("div", "pix-mps-nums");
+    nums.appendChild(numberField(
+      which + " temp", s[which + "_temperature"],
+      (v) => {
+        writeState(node, { [which + "_temperature"]: v == null ? fallback[0] : v });
+        ON_CHANGE?.();
+        renderPanel(node, body);
+      },
+      { title: "Lower stays factual, higher takes more risks. The built-in set "
+               + "measured " + fallback[0] + "." }));
+    nums.appendChild(numberField(
+      which + " max len", s[which + "_max_length"],
+      (v) => {
+        writeState(node, { [which + "_max_length"]: v == null ? fallback[1] : v });
+        ON_CHANGE?.();
+        renderPanel(node, body);
+      },
+      { title: "How much it may write. A model that reasons before answering "
+               + "needs far more than the words alone." }));
+    inner.appendChild(nums);
+  }
 
   return wrap;
 }
@@ -588,7 +702,7 @@ function renderPanel(node, body) {
   body.appendChild(el("div", "pix-mps-rule"));
 
   // ---- advanced ------------------------------------------------------------
-  body.appendChild(buildAdvanced(node, body));
+  body.appendChild(buildFormulaSet(node, body));
 
   body.appendChild(el("div", "pix-mps-rule"));
 

@@ -24,10 +24,17 @@ path is ever built from user input at all.
 
 import json
 import os
+import threading
 
 # Reused, not re-rolled: the ok flag in `_read_checked` is what stops a corrupt
 # file being read as [] and then overwritten by the next save, which is total
 # silent data loss (reference_lazy_store_write_back_destroys_data).
+#
+# ⚠️ It takes our `normalise` as an argument, and that is not optional. It was
+# NOT generic when first reused: it called AI Prompt's own normalise, which wants
+# a `formula` where a set has `caption` and `lyrics`, so every entry was dropped
+# and the guard reported a file it had just written as unreadable. Verify the
+# CONTRACT of a shared function, not just its name.
 from ._ai_prompt_presets import _read_checked
 from ._music_prompt_formulas import CAPTION_FORMULA, LYRICS_FORMULA
 from ._music_prompt_helpers import CAPTION_SAMPLING, LYRICS_SAMPLING
@@ -121,22 +128,27 @@ def shipped():
 
 
 def load_user():
-    items, _ok = _read_checked(user_store_path())
+    items, _ok = _read_checked(user_store_path(), normalise)
     return [x for x in (normalise(i) for i in items) if x]
 
 
 def user_readable():
     """False ONLY when the file exists and could not be understood."""
-    return _read_checked(user_store_path())[1]
+    return _read_checked(user_store_path(), normalise)[1]
 
 
 def _write_user(items):
     path = user_store_path()
     if not path:
         return False, "ComfyUI did not report a user directory, so there is nowhere to save."
+    # The temp name carries pid AND thread id: a bare ".tmp" is shared by every
+    # writer, so two ComfyUI instances pointed at one user directory can each
+    # truncate the other's half-written file and then both replace, landing
+    # exactly in the corrupt-file case the read guard exists for
+    # (reference_shared_temp_name_needs_thread_id).
+    tmp = "%s.%d.%d.tmp" % (path, os.getpid(), threading.get_ident())
     try:
         os.makedirs(os.path.dirname(path), exist_ok=True)
-        tmp = path + ".tmp"
         with open(tmp, "w", encoding="utf-8", newline="\n") as fh:
             json.dump({"version": 1, "presets": items}, fh, indent=1,
                       ensure_ascii=False)
@@ -159,7 +171,7 @@ def save_user(raw):
     if item["name"] == SHIPPED_NAME:
         return False, ("That name belongs to the set that ships with the node. "
                        "Pick another and both will be listed.")
-    items, readable = _read_checked(user_store_path())
+    items, readable = _read_checked(user_store_path(), normalise)
     if not readable:
         return False, _UNREADABLE % (user_store_path() or "the presets file")
     items = [x for x in (normalise(i) for i in items) if x]
@@ -176,7 +188,7 @@ def delete_user(name):
     name = _clean(name, MAX_NAME).strip()
     if not name:
         return False, "No name given."
-    items, readable = _read_checked(user_store_path())
+    items, readable = _read_checked(user_store_path(), normalise)
     if not readable:
         return False, _UNREADABLE % (user_store_path() or "the presets file")
     items = [x for x in (normalise(i) for i in items) if x]
