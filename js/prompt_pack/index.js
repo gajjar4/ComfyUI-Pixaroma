@@ -34,7 +34,7 @@ const MIN_W = 400;
 const MIN_H = 210;
 // Widget min-height seen by LiteGraph's layout. Body content is now:
 // mode-pill bar (~28) + textarea min (~80) + bottom bar (~30) + root
-// padding (~12) = ~150. Round up. (The Paragraph/Line pills moved from the
+// padding (~12) = ~150. Round up. (The split-mode pills moved from the
 // canvas slot-row into the DOM body for Nodes 2.0 — see render.mjs.)
 const WIDGET_MIN_H = 160;
 

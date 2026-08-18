@@ -3,9 +3,9 @@
 // Hooks up the textarea + the three bottom action buttons (Copy all /
 // Replace / Clear) to state mutations + counter updates. All real state
 // changes go through core.mjs helpers; this module is just glue between
-// DOM events and the state layer. The Paragraph / Line pill toggle lives
-// on the canvas now and is wired in index.js (onDrawForeground +
-// onMouseDown on the nodeType prototype).
+// DOM events and the state layer. The split-mode pills are wired here too,
+// generically from their data-mode (see below) - they are ordinary DOM
+// buttons, not canvas paint, so index.js has no hit-testing to do.
 
 import { app } from "/scripts/app.js";
 import { setText, setMode, readState } from "./core.mjs";

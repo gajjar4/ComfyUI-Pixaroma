@@ -918,7 +918,7 @@ registerNodeHelp(COMFY_CLASS, {
         ["Separator", "A blank line by default. Prompt Pack Pixaroma offers these same three under the same names, so a saved file drops straight into it - just pick the matching one there. Entries are split on whatever you pick, so if your prompts contain blank lines of their own, choose --- line instead or one prompt will be counted as several."],
         ["New entry goes", "At the top puts the newest prompt where you can read it without scrolling."],
         ["Skip repeats", "A second belt. The node already ignores a run where nothing changed, so this is for the case that slips past it: reopening a workflow, where the first run afterwards would otherwise re-add the prompt that is already last. Same as last is the default; Any repeat also catches a prompt you used earlier in the session."],
-        ["Timestamp each entry", "Adds a # comment line above each one. Off keeps the file clean for reuse."],
+        ["Timestamp each entry", "Adds a # comment line above each one. Leave it off if you plan to paste the file back into Prompt Pack: the date is stored inside the entry, so it travels with the prompt, and with the New line separator it counts as a prompt of its own."],
         ["Start a new file after", "Stops one workflow growing an enormous collection inside its own file."],
       ],
     },

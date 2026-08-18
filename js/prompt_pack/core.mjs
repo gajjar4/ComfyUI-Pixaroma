@@ -3,7 +3,7 @@
 // State lives on node.properties.promptPackState.
 // Shape: {
 //   version: 1,
-//   mode: "paragraph" | "line" | "rule" | "comma",
+//   mode: "paragraph" | "line" | "rule",
 //   text: "...",          // raw textarea content
 //   activePrompt: ""      // transient, set per queue iteration
 // }

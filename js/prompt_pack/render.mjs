@@ -42,12 +42,13 @@ export function injectCSS() {
       color: #e0e0e0;
       font: 12px sans-serif;
     }
-    /* Paragraph / Line mode pills — a DOM segmented toggle at the top of
-       the body. (Were canvas-painted on the slot row; moved to DOM so they
-       render in Nodes 2.0. Style matches the .pix-pp-actbtn family.) */
+    /* Split-mode pills — a DOM segmented toggle at the top of the body,
+       one per entry in core.mjs's MODES. (Were canvas-painted on the slot
+       row; moved to DOM so they render in Nodes 2.0. Style matches the
+       .pix-pp-actbtn family.) */
     .pix-pp-modebar {
       display: flex;
-      /* Four pills now. The Nodes 2.0 body is narrower than Classic, so let
+      /* Three pills now. The Nodes 2.0 body is narrower than Classic, so let
          them wrap onto a second line rather than squeezing their labels to
          nothing (node UI convention: action rows wrap, they do not clip). */
       flex-wrap: wrap;
@@ -187,15 +188,14 @@ export function injectCSS() {
   document.head.appendChild(style);
 }
 
-// Build the static DOM tree. Returns the root element. Pills (Paragraph /
-// Line) are NOT in the DOM - they're canvas-painted at the slot-row Y by
-// the onDrawForeground hook in index.js. The DOM widget body now holds
-// just the textarea + a bottom bar with three action buttons + counter.
+// Build the static DOM tree. Returns the root element: the split-mode pill
+// bar, the textarea, and a bottom bar with three action buttons + counter.
+// All of it is DOM - nothing here is canvas-painted (see the module header).
 export function buildRoot() {
   const root = document.createElement("div");
   root.className = "pix-pp-root";
 
-  // Mode pills (Paragraph / Line) — DOM segmented toggle at the top.
+  // Split-mode pills — DOM segmented toggle at the top, one per MODES entry.
   const modebar = document.createElement("div");
   modebar.className = "pix-pp-modebar";
   // Built from core.mjs's MODES so the pills, the labels and the actual
@@ -271,8 +271,7 @@ export function buildRoot() {
 //   - Textarea value matches state.text (only if it differs - avoid stomping the caret)
 //   - Counter updates via updateCounter()
 //   - Clear button enabled state reflects whether there is text to clear
-// (Pill active state is canvas-painted; the node re-paints on every
-// dirty canvas tick.)
+//   - Exactly one pill carries the .active class, matched on data-mode
 export function applyState(root, state, runState) {
   const els = root._pixPp;
   if (!els) return;
@@ -295,7 +294,7 @@ export function applyState(root, state, runState) {
 // doesn't depend on core.mjs at module load time" (there is no cycle: core
 // imports only shared/queue_drivers.mjs, which imports nothing). The copy
 // knew about paragraph and line only, so the moment a third mode was added
-// the pill would have silently counted --- and comma files as one prompt.
+// the pill would have silently counted a --- line file as one prompt.
 export function updateCounter(root, state, runState) {
   const els = root._pixPp;
   if (!els || !els.counter) return;

@@ -672,7 +672,7 @@ const HELP = {
       },
       {
         heading: "Reusing a Save Text collection",
-        body: "Save Text Pixaroma keeps every prompt you tried in a .txt file. Those same three names are its Separator setting, so the two nodes fit together with nothing to convert.\n\nOpen the .txt, copy everything, press `Replace` here, then press the pill with the same name you chose in Save Text. The counter should show the number of prompts you collected. Click Run and it works through all of them.",
+        body: "Save Text Pixaroma keeps every prompt you tried in a .txt file. Those same three names are its Separator setting, so the two nodes fit together with nothing to convert.\n\nOpen the .txt, copy everything, press `Replace` here, then press the pill with the same name you chose in Save Text. The counter should show the number of prompts you collected. Click Run and it works through all of them.\n\nOne thing to watch: if you collected with Save Text's `Timestamp each entry` turned on, the date line is stored inside each entry and comes along with the prompt. On `New line` it even counts as a prompt of its own, doubling the number. Collect with timestamps off if you mean to reuse the file.",
       },
       {
         heading: "How to use",
