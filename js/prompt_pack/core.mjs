@@ -3,7 +3,7 @@
 // State lives on node.properties.promptPackState.
 // Shape: {
 //   version: 1,
-//   mode: "paragraph" | "line",
+//   mode: "paragraph" | "line" | "rule" | "comma",
 //   text: "...",          // raw textarea content
 //   activePrompt: ""      // transient, set per queue iteration
 // }
@@ -23,11 +23,84 @@ import { feedsOnlyInactiveSwitch } from "../shared/queue_drivers.mjs";
 export const STATE_PROP = "promptPackState";
 export const MODE_PARAGRAPH = "paragraph";
 export const MODE_LINE = "line";
+export const MODE_RULE = "rule";
 
-// Paragraph mode: split on one or more blank lines. A "blank line" is any
-// sequence of \n + optional whitespace + \n. This matches the common
-// "long prompt per paragraph" use case.
-const PARA_SPLIT_RE = /\n\s*\n+/;
+// THE THREE SPLIT MODES MIRROR Save Text Pixaroma's three separators, one for
+// one - js/save_text/state.mjs::SEPARATORS + nodes/_save_text_helpers.py.
+// That is the whole point of the pairing: whatever separator you collected
+// with, pick the pill of the same name here and the .txt drops straight in.
+// Our mode id and its separator id differ only for the two that predate the
+// pairing (paragraph = "blank", line = "newline"); renaming those would
+// rewrite every saved workflow, so only the LABELS were brought into line.
+//
+// ADDING A FOURTH: add it to Save Text's SEPARATORS (both sides, JS + Python)
+// and to this table. Nothing else needs to know - the pills, the counter and
+// the queue loop are all driven from here.
+//
+// There is deliberately NO comma option, and Save Text dropped its own on the
+// same day (2026-08-18, one day after it shipped, so nobody could be relying
+// on it). Both nodes exist to carry PROMPTS, and an ordinary prompt is full of
+// commas, so splitting on one shreds a single prompt into fragments: the count
+// lies, the duplicate guard stops matching and the rollover fires early
+// (save-text.md #7). An option that is broken for the node's own subject
+// matter is worse than no option.
+//
+//   mode id      Save Text id   joins entries with
+//   -----------  -------------  ---------------------
+//   paragraph    blank          "\n\n"
+//   line         newline        "\n"
+//   rule         rule           "\n---\n"
+//
+// Each splitter is deliberately more permissive than the exact string Save
+// Text writes, so a file the user has since hand-edited (or opened in
+// Notepad, which rewrites the line endings to \r\n) still parses.
+const SPLITTERS = Object.assign(Object.create(null), {
+  // A "blank line" is any \n + optional whitespace + \n.
+  [MODE_PARAGRAPH]: /\n\s*\n+/,
+  [MODE_LINE]: /\r?\n/,
+  // A line that is ONLY dashes (3 or more), so a prompt that happens to
+  // contain "--- something ---" is left alone. The (?:\r?\n|$) tail also
+  // matches a rule sitting at the very end of the text.
+  [MODE_RULE]: /\r?\n[ \t]*-{3,}[ \t]*(?:\r?\n|$)/,
+});
+
+// Ordered for display. The pills render in this order in both nodes, so the
+// two settings read the same way top to bottom.
+export const MODES = [
+  {
+    id: MODE_PARAGRAPH,
+    label: "Blank line",
+    title: "Blank line: prompts are separated by an empty line. Best for long, multi-line prompts. Matches Save Text's \"Blank line\".",
+  },
+  {
+    id: MODE_LINE,
+    label: "New line",
+    title: "New line: every single line is its own prompt. Best for short one-liners. Matches Save Text's \"New line\".",
+  },
+  {
+    id: MODE_RULE,
+    label: "--- line",
+    title: "--- line: prompts are separated by a line containing only dashes. Use this when your prompts have blank lines inside them. Matches Save Text's \"--- line\".",
+  },
+];
+
+// Is this a mode we know how to split on? Used by readState + setMode so a
+// hand-edited workflow can never leave the node in an unsplittable state.
+export function isMode(mode) {
+  return typeof mode === "string" && SPLITTERS[mode] instanceof RegExp;
+}
+
+// Resolve a mode id to its splitter, falling back to the default.
+//
+// SPLITTERS has a NULL prototype and the result is type-checked, both
+// deliberately: a plain-object lookup walks the prototype chain and every
+// Object.prototype member is truthy, so a mode id of "constructor" or
+// "toString" would hand back a FUNCTION. Save Text hit exactly that and
+// wrote a stringified function into the user's .txt (save-text.md #8).
+function splitterFor(mode) {
+  const s = SPLITTERS[mode];
+  return s instanceof RegExp ? s : SPLITTERS[MODE_PARAGRAPH];
+}
 
 export function defaultState() {
   return {
@@ -41,8 +114,10 @@ export function defaultState() {
 export function readState(node) {
   const s = node.properties?.[STATE_PROP];
   if (!s || typeof s !== "object") return defaultState();
-  // Defensive normalisation against hand-edited workflow JSON.
-  if (s.mode !== MODE_PARAGRAPH && s.mode !== MODE_LINE) s.mode = MODE_PARAGRAPH;
+  // Defensive normalisation against hand-edited workflow JSON. An unknown
+  // mode (including one from a NEWER build that has a fifth separator) falls
+  // back to the default rather than leaving the node unable to split.
+  if (!isMode(s.mode)) s.mode = MODE_PARAGRAPH;
   if (typeof s.text !== "string") s.text = "";
   if (typeof s.activePrompt !== "string") s.activePrompt = "";
   s.version = 1;
@@ -55,7 +130,7 @@ export function writeState(node, state) {
 }
 
 export function setMode(node, mode) {
-  if (mode !== MODE_PARAGRAPH && mode !== MODE_LINE) return;
+  if (!isMode(mode)) return;
   const state = readState(node);
   state.mode = mode;
   writeState(node, state);
@@ -67,17 +142,17 @@ export function setText(node, text) {
   writeState(node, state);
 }
 
-// Parse a text block into individual prompts.
+// Parse a text block into individual prompts. THE one splitter in the node -
+// the pills, the counter pill and the queue loop all come through here, so a
+// new mode cannot be half-supported (the counter used to carry its own
+// private copy of this and would have quietly reported the wrong number).
 //
-// Paragraph mode: split on one or more blank lines.
-// Line mode: split on every newline.
-// Both modes: .trim() each piece and drop empties so the count reflects
-// what will actually queue.
+// Every mode .trim()s each piece and drops empties, so a trailing separator
+// or a stray blank line never inflates the count past what will queue.
 export function parsePrompts(text, mode) {
   if (typeof text !== "string" || !text) return [];
-  const splitter = (mode === MODE_LINE) ? "\n" : PARA_SPLIT_RE;
   return text
-    .split(splitter)
+    .split(splitterFor(mode))
     .map((p) => p.trim())
     .filter((p) => p.length > 0);
 }

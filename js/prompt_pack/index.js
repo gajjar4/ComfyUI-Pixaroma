@@ -6,9 +6,6 @@ import {
   restoreFromProperties,
   parsePrompts,
   findFirstPromptPackNode,
-  setMode,
-  MODE_PARAGRAPH,
-  MODE_LINE,
 } from "./core.mjs";
 import { injectCSS, buildRoot, applyState, updateCounter } from "./render.mjs";
 import { wireEvents, showNoPromptsToast } from "./interaction.mjs";

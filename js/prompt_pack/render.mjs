@@ -9,10 +9,14 @@
 //         .pix-pp-actbtn           (each action button)
 //       .pix-pp-counter            (small pill on the right)
 //
-// Paragraph / Line mode pills are NOT in the DOM - they're canvas-
-// painted at the slot-row Y by the onDrawForeground hook in index.js
-// so the DOM widget body stays compact (mirrors the way Text Pixaroma
-// puts its action buttons up on the slot row).
+// The split-mode pills ARE in the DOM (.pix-pp-modebar at the top). They
+// used to be canvas-painted at the slot-row Y by an onDrawForeground hook,
+// which Nodes 2.0 never calls, so they moved into the widget body.
+//
+// The pills, their labels and the split behaviour ALL come from core.mjs's
+// MODES table - never hard-code a mode here.
+
+import { MODES, parsePrompts } from "./core.mjs";
 
 const BRAND = "#f66744";
 
@@ -43,12 +47,17 @@ export function injectCSS() {
        render in Nodes 2.0. Style matches the .pix-pp-actbtn family.) */
     .pix-pp-modebar {
       display: flex;
+      /* Four pills now. The Nodes 2.0 body is narrower than Classic, so let
+         them wrap onto a second line rather than squeezing their labels to
+         nothing (node UI convention: action rows wrap, they do not clip). */
+      flex-wrap: wrap;
       gap: 4px;
       flex: 0 0 auto;
       user-select: none;
     }
     .pix-pp-modepill {
-      flex: 1;
+      flex: 1 1 auto;
+      min-width: 64px;
       box-sizing: border-box;
       background: rgba(255, 255, 255, 0.05);
       border: 1px solid rgba(255, 255, 255, 0.15);
@@ -189,26 +198,25 @@ export function buildRoot() {
   // Mode pills (Paragraph / Line) — DOM segmented toggle at the top.
   const modebar = document.createElement("div");
   modebar.className = "pix-pp-modebar";
-  const paraPill = document.createElement("button");
-  paraPill.type = "button";
-  paraPill.className = "pix-pp-modepill";
-  paraPill.textContent = "Paragraph";
-  paraPill.dataset.mode = "paragraph";
-  paraPill.title = "Paragraph mode: each prompt is separated by a blank line. Best for long, multi-line prompts.";
-  const linePill = document.createElement("button");
-  linePill.type = "button";
-  linePill.className = "pix-pp-modepill";
-  linePill.textContent = "Line";
-  linePill.dataset.mode = "line";
-  linePill.title = "Line mode: one prompt per line. Best for short prompts or quick lists.";
-  modebar.append(paraPill, linePill);
+  // Built from core.mjs's MODES so the pills, the labels and the actual
+  // splitting can never disagree, and so a fifth separator is one table entry.
+  const pills = MODES.map((m) => {
+    const pill = document.createElement("button");
+    pill.type = "button";
+    pill.className = "pix-pp-modepill";
+    pill.textContent = m.label;
+    pill.dataset.mode = m.id;
+    pill.title = m.title;
+    modebar.appendChild(pill);
+    return pill;
+  });
 
   const tawrap = document.createElement("div");
   tawrap.className = "pix-pp-tawrap";
 
   const ta = document.createElement("textarea");
   ta.className = "pix-pp-ta";
-  ta.placeholder = "Paste your prompts here...\n\nParagraph mode: separate with a blank line.\nLine mode: one prompt per line.";
+  ta.placeholder = "Paste your prompts here...\n\nPick the pill that matches how they are separated.\nA file from Save Text Pixaroma? Pick the same one you chose there.";
   ta.spellcheck = false;
 
   tawrap.appendChild(ta);
@@ -254,7 +262,7 @@ export function buildRoot() {
   root.appendChild(tawrap);
   root.appendChild(bottombar);
 
-  root._pixPp = { ta, counter, copyBtn, replaceBtn, clearBtn, paraPill, linePill };
+  root._pixPp = { ta, counter, copyBtn, replaceBtn, clearBtn, pills };
 
   return root;
 }
@@ -269,10 +277,8 @@ export function applyState(root, state, runState) {
   const els = root._pixPp;
   if (!els) return;
   if (els.ta.value !== state.text) els.ta.value = state.text;
-  if (els.paraPill && els.linePill) {
-    const isLine = state.mode === "line";
-    els.paraPill.classList.toggle("active", !isLine);
-    els.linePill.classList.toggle("active", isLine);
+  for (const pill of els.pills || []) {
+    pill.classList.toggle("active", pill.dataset.mode === state.mode);
   }
   updateCounter(root, state, runState);
   updateClearButton(root, state);
@@ -283,15 +289,17 @@ export function applyState(root, state, runState) {
 //                                         as workflows finish executing)
 //   undefined / null / running:false   -> "N prompts" or "0 prompts"
 //
-// We use a small inline parse (mirrors core.mjs parsePrompts) so render.mjs
-// doesn't depend on core.mjs at module load time.
+// The count comes from core.mjs's parsePrompts - the SAME function the queue
+// loop uses, so the number on the pill is by construction the number of runs
+// you will get. This used to be an inline copy of the split "so render.mjs
+// doesn't depend on core.mjs at module load time" (there is no cycle: core
+// imports only shared/queue_drivers.mjs, which imports nothing). The copy
+// knew about paragraph and line only, so the moment a third mode was added
+// the pill would have silently counted --- and comma files as one prompt.
 export function updateCounter(root, state, runState) {
   const els = root._pixPp;
   if (!els || !els.counter) return;
-  const text = state?.text || "";
-  const mode = state?.mode || "paragraph";
-  const splitter = (mode === "line") ? "\n" : /\n\s*\n+/;
-  const total = text.split(splitter).map((p) => p.trim()).filter((p) => p.length > 0).length;
+  const total = parsePrompts(state?.text || "", state?.mode).length;
 
   els.counter.classList.remove("active", "empty");
   if (runState && runState.running) {

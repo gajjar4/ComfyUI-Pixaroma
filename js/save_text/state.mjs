@@ -44,17 +44,26 @@ export const DEFAULT_STATE = {
 // Separator ids MUST match nodes/_save_text_helpers.py::SEPARATORS. A blank line
 // is the default because it is EXACTLY Prompt Pack Pixaroma's paragraph format,
 // so a saved .txt drops straight back into the pack.
+// Prompt Pack Pixaroma reads ALL THREE - js/prompt_pack/core.mjs::MODES has one
+// pill per id here, with the same label - so whichever you pick, the saved .txt
+// drops straight into it.
+//
+// A "Comma" separator was offered on the day this node shipped and REMOVED the
+// next (2026-08-18), before anyone could be relying on it. This node exists to
+// carry PROMPTS and an ordinary prompt is full of commas, so splitting on one
+// shreds a single prompt into fragments: countEntries lies, the duplicate guard
+// stops matching and the rollover fires early (#7 below). It was broken for the
+// node's own subject matter, which is worse than not offering it. A workflow
+// still holding "comma" is healed by readState.
 export const SEPARATORS = {
   blank: "\n\n",
   newline: "\n",
   rule: "\n---\n",
-  comma: ", ",
 };
 export const SEPARATOR_LABELS = [
   ["blank", "Blank line"],
   ["newline", "New line"],
   ["rule", "--- line"],
-  ["comma", "Comma"],
 ];
 
 export function separatorStr(id) {
@@ -92,12 +101,27 @@ export function readState(node) {
   const v = node.properties?.[STATE_PROP];
   if (typeof v === "string" && v) {
     try {
-      return { ...DEFAULT_STATE, ...JSON.parse(v) };
+      return healState({ ...DEFAULT_STATE, ...JSON.parse(v) });
     } catch {
       /* fall through to defaults */
     }
   }
   return { ...DEFAULT_STATE };
+}
+
+// Normalise a separator this build no longer has back to the default, so a
+// workflow saved with the removed "comma" (or a hand-edited id) shows a chip
+// as selected instead of none, and the settings panel agrees with what the
+// node will actually do. separatorStr already falls back on its own, so this
+// is about the UI telling the truth, not about safety.
+//
+// READ-ONLY on purpose: it returns a corrected COPY and never writes
+// node.properties, so merely opening an old workflow cannot flag it modified
+// (Vue Compat #18). The corrected value persists the next time the user
+// changes something, which is the right moment for it.
+function healState(st) {
+  if (typeof SEPARATORS[st.separator] !== "string") st.separator = DEFAULT_STATE.separator;
+  return st;
 }
 
 export function writeState(node, state) {

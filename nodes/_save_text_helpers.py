@@ -16,11 +16,16 @@ import re
 # is stored in state; the string is what actually joins two entries. A blank
 # line is the default because it is EXACTLY Prompt Pack Pixaroma's paragraph
 # format, so a saved .txt drops straight back into the pack.
+#
+# Prompt Pack reads all three (js/prompt_pack/core.mjs::MODES has one pill per
+# id here, same label). A "comma" id was offered on the day this node shipped
+# and removed the next: a prompt is full of commas, so splitting on one shreds
+# a single prompt into fragments. An id this dict no longer has falls back to
+# the default in separator_str below, so an old state blob still saves fine.
 SEPARATORS = {
     "blank": "\n\n",
     "newline": "\n",
     "rule": "\n---\n",
-    "comma": ", ",
 }
 DEFAULT_SEPARATOR = "blank"
 
