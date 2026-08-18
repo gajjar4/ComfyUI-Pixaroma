@@ -97,7 +97,15 @@ def _available():
         return []
 
 
-def _load_clip(name, clip_type):
+def _load_clip(name, clip_type, label="AI Prompt", needed=None):
+    """Load (or reuse) a text encoder.
+
+    `label` and `needed` exist only so Music Prompt Pixaroma can share this
+    function - and with it the module-level cache, so a Music Prompt and an
+    AI Prompt naming the same file load it ONCE between them. Defaults keep
+    every existing call identical.
+    """
+    needed = _NEEDED if needed is None else needed
     key = (name, clip_type)
     cached = _CLIP_CACHE.get(key)
     if cached is not None:
@@ -110,14 +118,15 @@ def _load_clip(name, clip_type):
     if name not in _available():
         have = _available()
         raise RuntimeError(
-            "[Pixaroma] AI Prompt: the model \"%s\" is not in your "
+            "[Pixaroma] %s: the model \"%s\" is not in your "
             "text_encoders folder.\n%s\n%s"
             % (
+                label,
                 name,
                 ("  Files you do have: " + ", ".join(have[:8]) +
                  ("..." if len(have) > 8 else "")) if have
                 else "  That folder is empty.",
-                _NEEDED,
+                needed,
             )
         )
 
@@ -129,9 +138,9 @@ def _load_clip(name, clip_type):
         path = folder_paths.get_full_path_or_raise("text_encoders", name)
     except Exception as e:
         raise RuntimeError(
-            "[Pixaroma] AI Prompt: the model \"%s\" could not be found on disk, "
+            "[Pixaroma] %s: the model \"%s\" could not be found on disk, "
             "even though it is listed in your text_encoders folder.\n%s"
-            % (name, _NEEDED)
+            % (label, name, needed)
         ) from e
     clip_type_enum = getattr(
         comfy.sd.CLIPType, str(clip_type).upper(), comfy.sd.CLIPType.STABLE_DIFFUSION
@@ -146,8 +155,8 @@ def _load_clip(name, clip_type):
         )
     except Exception as e:
         raise RuntimeError(
-            "[Pixaroma] AI Prompt: \"%s\" could not be loaded as a language "
-            "model.\n%s" % (name, _NEEDED)
+            "[Pixaroma] %s: \"%s\" could not be loaded as a language "
+            "model.\n%s" % (label, name, needed)
         ) from e
     # NOTE: do NOT test hasattr(clip, "generate") here. ComfyUI's CLIP wrapper
     # ALWAYS has it - it delegates inward - so the check passes for a T5 and
