@@ -375,6 +375,11 @@ Master the Pixaroma suite with our video guides and workflow deep-dives:
 
 ## 🛠 Changelog
 
+### **August 18, 2026 · v1.4.115**
+- **Prompt Pack reads the files Save Text writes.** Both nodes name the same three separators, so paste a saved .txt in, press the matching pill, and run every prompt again.
+- **Comma is gone as a separator.** Prompts are full of commas, so it chopped one prompt into pieces. Workflows set to it move to Blank line.
+- **Quick runs no longer scatter a collection.** Save Text could start a second .txt part way through.
+
 ### **August 17, 2026 · v1.4.111–v1.4.114**
 - **NEW: Save Text Pixaroma.** Keeps every run's text in one list on the node and in a .txt file, so tried prompts are not lost. Clear starts a new file instead of deleting the old one.
 - **Copy and Paste (Clipspace) work again** on Load Image, Load Image Mini and Preview Image.
