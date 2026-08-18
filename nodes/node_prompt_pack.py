@@ -1,7 +1,10 @@
 """Prompt Pack Pixaroma - paste-a-block-of-prompts node.
 
 User pastes a block of prompts in the textarea, picks how to split them
-(blank line or single newline) via the pill toggle, and clicks Run. The
+via the pill toggle, and clicks Run. The three split modes mirror Save
+Text Pixaroma's three separators one for one (see MODES in
+js/prompt_pack/core.mjs), so a .txt collected by that node pastes
+straight in. The
 JS app.queuePrompt patch in js/prompt_pack/index.js loops the queue, one
 workflow per non-empty parsed prompt, setting state.activePrompt before
 each call. The graphToPrompt hook bakes activePrompt into the hidden
@@ -19,9 +22,15 @@ class PixaromaPromptPack:
     DESCRIPTION = (
         "Prompt Pack Pixaroma - paste a block of prompts and queue one "
         "workflow run per prompt.\n\n"
-        "Pick how to split them with the pill at the top: Paragraph "
-        "(default, splits on blank lines, good for long prompts) or Line "
-        "(splits on every newline, good for short prompt lists).\n\n"
+        "Pick how your prompts are separated with the pills at the top: "
+        "Blank line (default, good for long prompts), New line (one prompt "
+        "per line, good for short lists), or --- line (a line of dashes "
+        "between prompts, for when your prompts contain blank lines of "
+        "their own).\n\n"
+        "These are the same three choices, with the same names, as the "
+        "Separator setting on Save Text Pixaroma. Collect prompts there, "
+        "paste the file here, pick the matching pill, and you can run them "
+        "all again.\n\n"
         "The counter in the bottom-right corner of the textarea shows the "
         "total number of prompts. During a run it switches to current / "
         "total so you can see progress.\n\n"

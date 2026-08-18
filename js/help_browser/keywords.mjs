@@ -50,7 +50,7 @@ export const KEYWORDS = {
   // ── Prompt and text ──
   PixaromaPrompt: "tag library wildcard random autocomplete snippet phrase reorder order sort rearrange move category colour color highlight underline resize sidebar rename",
   PixaromaPromptMulti: "batch queue many list prompts",
-  PixaromaPromptPack: "batch paste queue block many prompts",
+  PixaromaPromptPack: "batch paste queue block many prompts separator split blank line new line dashes --- paragraph reuse rerun run again txt file import load collected save text",
   PixaromaPromptStack: "assemble parts toggle build pieces chunks",
   PixaromaPromptFromList: "index pick number choose",
   PixaromaFindReplace: "replace swap substitute rules change words",

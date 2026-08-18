@@ -668,13 +668,18 @@ const HELP = {
     sections: [
       {
         heading: "What it does",
-        body: "You paste multiple prompts into one big textarea. When you click Run the node queues the workflow once per non-empty prompt, looping automatically. The counter pill in the textarea's corner shows the total count at idle, then `current / total` during a run.\n\nA split-mode pill at the top controls how prompts are separated: `Paragraph` splits on blank lines (good for long, multi-sentence prompts) and `Line` splits on every newline (good for short one-liners).",
+        body: "You paste multiple prompts into one big textarea. When you click Run the node queues the workflow once per non-empty prompt, looping automatically. The counter pill in the textarea's corner shows the total count at idle, then counts down during a run.\n\nThe pills at the top say how your prompts are separated: `Blank line`, `New line`, or `--- line`. Pick the wrong one and the counter tells you straight away, because it will read 1 prompt instead of the number you expect.",
+      },
+      {
+        heading: "Reusing a Save Text collection",
+        body: "Save Text Pixaroma keeps every prompt you tried in a .txt file. Those same three names are its Separator setting, so the two nodes fit together with nothing to convert.\n\nOpen the .txt, copy everything, press `Replace` here, then press the pill with the same name you chose in Save Text. The counter should show the number of prompts you collected. Click Run and it works through all of them.",
       },
       {
         heading: "How to use",
         bullets: [
           "Paste or type your prompts into the textarea.",
-          "Choose `Paragraph` or `Line` split mode using the pill at the top.",
+          "Press the pill that matches how they are separated.",
+          "Check the counter reads the number of prompts you expect.",
           "Wire the `text` output to CLIP Text Encode.",
           "Click Run - the node queues one workflow per prompt automatically.",
           "Empty or whitespace-only entries are silently skipped.",
@@ -689,12 +694,13 @@ const HELP = {
       {
         heading: "The buttons on the node",
         defs: [
-          ["Paragraph", "Treats a block of text separated by a blank line as one prompt."],
-          ["Line", "Treats every single line as its own prompt. Use this for a long list of short prompts."],
+          ["Blank line", "Prompts are separated by an empty line. Best for long prompts that run over several lines."],
+          ["New line", "Every single line is its own prompt. Best for a long list of short ones."],
+          ["--- line", "Prompts are separated by a line of dashes. Use this when the prompts themselves contain blank lines, which would otherwise split one prompt into several."],
           ["Copy all", "Copies everything in the box to your clipboard."],
           ["Replace", "Overwrites the box with whatever text is on your clipboard."],
           ["Clear", "Empties the box straight away, with no confirmation."],
-          ["The counter", "Shows how many prompts are in the box, and counts down while a run works through them."],
+          ["The counter", "Shows how many prompts are in the box, and counts down while a run works through them. It is also how you check you picked the right pill."],
         ],
       },
     ],

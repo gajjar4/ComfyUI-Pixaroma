@@ -246,10 +246,11 @@ export function openSettingsPanel(node, onChange) {
 
   // ── how entries are added ──
   const sepWrap = section(body, "Separator",
-    "What goes between two entries. A blank line is Prompt Pack's format, so a " +
-    "saved file drops straight back into it. If your prompts themselves contain " +
-    "blank lines, pick --- line instead: entries are split on whatever you " +
-    "choose here, so a separator that appears inside a prompt splits it in two.");
+    "What goes between two entries. Prompt Pack Pixaroma has these same three " +
+    "by the same name, so a saved file drops straight into it: pick the one " +
+    "there that you picked here. If your prompts themselves contain blank " +
+    "lines, choose --- line: entries are split on whatever you choose here, so " +
+    "a separator that appears inside a prompt splits it in two.");
   sepWrap.appendChild(chipRow(node, "separator", SEPARATOR_LABELS));
 
   const newWrap = section(body, "New entry goes",
