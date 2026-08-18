@@ -668,7 +668,7 @@ const HELP = {
     sections: [
       {
         heading: "What it does",
-        body: "You paste multiple prompts into one big textarea. When you click Run the node queues the workflow once per non-empty prompt, looping automatically. The counter pill in the textarea's corner shows the total count at idle, then counts down during a run.\n\nThe pills at the top say how your prompts are separated: `Blank line`, `New line`, or `--- line`. Pick the wrong one and the counter tells you straight away, because it will read 1 prompt instead of the number you expect.",
+        body: "You paste multiple prompts into one big textarea. When you click Run the node queues the workflow once per non-empty prompt, looping automatically. The counter pill in the textarea's corner shows the total count at idle, then counts down during a run.\n\nThe pills at the top say how your prompts are separated: `Blank line`, `New line`, or `--- line`. If the counter is not the number of prompts you expect, you have picked the wrong pill. The reverse is not a guarantee: now and then a wrong pill lands on the right number by chance, so if a run comes out strange, look at the first prompt as well as the count.",
       },
       {
         heading: "Reusing a Save Text collection",
@@ -700,7 +700,7 @@ const HELP = {
           ["Copy all", "Copies everything in the box to your clipboard."],
           ["Replace", "Overwrites the box with whatever text is on your clipboard."],
           ["Clear", "Empties the box straight away, with no confirmation."],
-          ["The counter", "Shows how many prompts are in the box, and counts down while a run works through them. It is also how you check you picked the right pill."],
+          ["The counter", "Shows how many prompts are in the box, and counts down while a run works through them. A number you did not expect means the wrong pill is selected."],
         ],
       },
     ],
