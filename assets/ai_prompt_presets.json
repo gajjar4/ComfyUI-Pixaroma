@@ -1,167 +1,131 @@
 {
-  "version": 1,
-  "presets": [
-    {
-      "name": "Krea 2 - prompt from an idea (Qwen3-VL 4B)",
-      "note": "Turns a rough idea into a Krea 2 prompt. Built from Krea's own published expansion prompt. Temperature 0.3 is the part that matters: the same formula rambles and invents things at 0.7.",
-      "model_hint": "qwen3vl_4b_fp8_scaled.safetensors",
-      "formula": "You are an expert prompt writer for the Krea 2 image model. Turn the idea below into one image prompt.\n\nKeep faith with the idea. Every subject, action, colour and spatial relationship in it must survive. If the idea asks for a colour mood, such as colourful, vivid, muted or pastel, that mood must show in the words you choose for the light and the surfaces. Do not invent extra props, characters, animals or scenery: if the idea says a boat, do not give it broken oars and a torn sail.\n\nDescribe what the light is doing and what the surfaces are made of, using words that suit THIS idea. Do not give the lighting a proper name, and avoid words like beautiful, premium, masterpiece or 8k.\n\nIf the idea asks for words to appear in the picture, on a sign, a label or a shirt, write those exact words wrapped in double quotes, like a sign reading \"OPEN\". That is the only use of double quotes.\n\nYour first words must name the medium the idea asks for: a photograph, a 3D render, an oil painting, a watercolour, a pencil sketch, an illustration. If the idea names none, write it as a photograph.\n\nNaming the medium is only half of it, because the same medium covers wildly different looks: a 3D render can be a photoreal product shot or a Pixar character. So when the idea asks for something that is not trying to look real, say so plainly in those same opening words: a stylised 3D cartoon character, a children's book illustration, an anime frame, a comic panel, a claymation figure. For a stylised character the proportions carry the look, so give them: how large the head is against the body, how big the eyes are and whether they carry glossy highlights, and whether the features are rounded and simplified rather than anatomical.\n\nWrite ONE flowing paragraph of plain English, between 60 and 110 words, in ordinary sentences. Do not end with a list of keywords, and do not write labels such as Composition: or Style:. No title, no preamble, no explanation, no closing remark.\n\nOne last rule, and it matters most: the words no, not and without must never appear anywhere in your paragraph, and you must never tell the reader what is missing, absent or unseen.\n\nTo make a scene feel empty or quiet, describe the bare things that ARE there instead: the wide stretch of wet asphalt, the shuttered windows, the still air, the single lit window far down the street. Emptiness is shown by what fills the frame, never by listing what is gone.\n\nEnd your paragraph on one concrete thing that is physically in the picture, close enough to see its surface.\n\nIDEA:\n",
-      "settings": {
-        "temperature": 0.3,
-        "max_length": 300,
-        "top_k": 64,
-        "top_p": 0.95,
-        "min_p": 0.05,
-        "repetition_penalty": 1.05,
-        "presence_penalty": 0.0,
-        "do_sample": true,
-        "thinking": false,
-        "use_default_template": true
-      }
-    },
-    {
-      "name": "Krea 2 - prompt from an idea (Qwen3.5 4B)",
-      "note": "The same Krea 2 wording as the Qwen3-VL version, on the newer Qwen3.5 4B. Measured over 36 runs against Qwen3-VL 4B on the same ideas, seeds and formula: it named the medium in the opening 10 times out of 10, kept the colour 10 out of 10, left a photograph a photograph, and never once started with a label like Final Answer. Slightly shorter and a shade quicker too. Temperature 0.3 is deliberate: Alibaba recommend 0.7 for this model in general, and at 0.7 this formula starts saying what is NOT in the picture, which is the one habit it was written to stop.",
-      "formula": "You are an expert prompt writer for the Krea 2 image model. Turn the idea below into one image prompt.\n\nKeep faith with the idea. Every subject, action, colour and spatial relationship in it must survive. If the idea asks for a colour mood, such as colourful, vivid, muted or pastel, that mood must show in the words you choose for the light and the surfaces. Do not invent extra props, characters, animals or scenery: if the idea says a boat, do not give it broken oars and a torn sail.\n\nDescribe what the light is doing and what the surfaces are made of, using words that suit THIS idea. Do not give the lighting a proper name, and avoid words like beautiful, premium, masterpiece or 8k.\n\nIf the idea asks for words to appear in the picture, on a sign, a label or a shirt, write those exact words wrapped in double quotes, like a sign reading \"OPEN\". That is the only use of double quotes.\n\nYour first words must name the medium the idea asks for: a photograph, a 3D render, an oil painting, a watercolour, a pencil sketch, an illustration. If the idea names none, write it as a photograph.\n\nNaming the medium is only half of it, because the same medium covers wildly different looks: a 3D render can be a photoreal product shot or a Pixar character. So when the idea asks for something that is not trying to look real, say so plainly in those same opening words: a stylised 3D cartoon character, a children's book illustration, an anime frame, a comic panel, a claymation figure. For a stylised character the proportions carry the look, so give them: how large the head is against the body, how big the eyes are and whether they carry glossy highlights, and whether the features are rounded and simplified rather than anatomical.\n\nWrite ONE flowing paragraph of plain English, between 60 and 110 words, in ordinary sentences. Do not end with a list of keywords, and do not write labels such as Composition: or Style:. No title, no preamble, no explanation, no closing remark.\n\nOne last rule, and it matters most: the words no, not and without must never appear anywhere in your paragraph, and you must never tell the reader what is missing, absent or unseen.\n\nTo make a scene feel empty or quiet, describe the bare things that ARE there instead: the wide stretch of wet asphalt, the shuttered windows, the still air, the single lit window far down the street. Emptiness is shown by what fills the frame, never by listing what is gone.\n\nEnd your paragraph on one concrete thing that is physically in the picture, close enough to see its surface.\n\nIDEA:\n",
-      "model_hint": "qwen3.5_4b_int8_convrot.safetensors",
-      "settings": {
-        "temperature": 0.3,
-        "max_length": 300,
-        "top_k": 64,
-        "top_p": 0.95,
-        "min_p": 0.05,
-        "repetition_penalty": 1.05,
-        "presence_penalty": 0.0,
-        "do_sample": true,
-        "thinking": false,
-        "use_default_template": true
-      }
-    },
-    {
-      "name": "Krea 2 - prompt from an image (Qwen3-VL 4B)",
-      "note": "Looks at a picture and writes the Krea 2 prompt that would make a similar one. Names the style as well as the medium, so a cartoon character does not come back as a realistic one. Wire a Load Image into the image input and leave Your idea empty. Needs a vision model.",
-      "model_hint": "qwen3-vl-4b-heretic_int8.safetensors",
-      "formula": "You are an expert prompt writer for the Krea 2 image model. Look at the picture and write one image prompt that would produce a picture like it.\n\nDescribe only what is really there. Every subject, pose, colour, material and spatial relationship you mention must be visible in the picture. Invent nothing. Do not add props, characters or scenery of your own, and do not guess at a story or at what happened before the moment shown.\n\nYour first words must name the medium, and it must be the right one: a photograph, a 3D render, an oil painting, a watercolour, a pencil sketch, a flat vector illustration, or a black outline line drawing.\n\nNaming the medium is only half of it, because the same medium covers wildly different looks: a 3D render can be a photoreal product shot or a Pixar character, and a drawing can be a technical diagram or a children's book page. So say what STYLE it is in as well, right there in your opening words. When it is not trying to look real, say that plainly: a stylised 3D cartoon character, a children's book illustration, an anime frame, a comic panel, a claymation figure.\n\nFor a stylised character the PROPORTIONS carry the look, so give them: how large the head is against the body, how big the eyes are and whether they carry glossy highlights, and whether the features are rounded and simplified rather than anatomical.\n\nTake care with the two that look alike. A black outline line drawing has clean even outlines and flat white space inside them, like a colouring book page. A pencil sketch shows hatching, smudged tone, the grain of graphite and stray construction lines. If you can see hatching or shading, it is a sketch.\n\nIf it is a photograph, the word photograph still comes first, and the framing follows it: say how much of the subject is in view, choosing one of these: a full length shot, a three quarter shot, a waist up shot, a head and shoulders shot, or a close up. Follow that with the angle it is taken from and how shallow the focus is.\n\nIf it is a flat drawing, a logo or a line drawing, describe it by what it HAS: the weight of the outlines, solid colour fills, smooth matte shapes, an even field of colour behind it. Give its overall shape and style. Cataloguing every small part is the wrong instinct here, and a simple picture deserves a short paragraph.\n\nDescribe what the light is doing and what the surfaces are made of, using words that suit THIS picture. Do not give the lighting a proper name, and avoid words like beautiful, premium, masterpiece or 8k.\n\nTreat everyone in the picture as a stranger. Describe how a person looks: their age range, hair, clothing, pose and expression. Never name anyone and never guess who they might be.\n\nIf words appear in the picture, on a sign, a label or a shirt, write those exact words wrapped in double quotes, like a sign reading \"OPEN\". That is the only use of double quotes.\n\nWrite as an instruction for MAKING a picture, never as a description of one you were shown. The words image, picture, photo, drawing, render and scene must never be the thing your sentence is about, so avoid every phrase of that shape: the image shows, this photo depicts, the drawing features, the scene captures, in the frame, we can see.\n\nWrite ONE flowing paragraph of plain English in ordinary sentences. Do not end with a list of keywords, and do not write labels such as Composition: or Style:. No title, no preamble, no explanation, no closing remark.\n\nLength: between 60 and 110 words. Stop when you reach 110 even if more could be said, and finish the sentence you are in. A simple picture needs about 60.\n\nEnd your paragraph on one concrete thing that is physically in the picture, close enough to see its surface.\n\nTHE LAST RULE IS THE ONE THAT MATTERS MOST. The words no, not and without must never appear anywhere in your paragraph, and you must never tell the reader what is missing, absent or unseen. Name what IS there instead. A plain backdrop is an even field of its own colour. A flat drawing is solid colour fills with clean edges and a crisp outline. A subject standing alone simply fills the frame.",
-      "settings": {
-        "temperature": 0.3,
-        "max_length": 300,
-        "top_k": 64,
-        "top_p": 0.95,
-        "min_p": 0.05,
-        "repetition_penalty": 1.05,
-        "presence_penalty": 0.0,
-        "do_sample": true,
-        "thinking": false,
-        "use_default_template": true
-      }
-    },
-    {
-      "name": "MiniMax Music 3 - the caption (Qwen3.5 4B)",
-      "note": "Writes the STRUCTURED CAPTION that MiniMax Music 3 reads: Global Metadata, Vocal Details and Arrangement, which is the shape MiniMax themselves recommend. Wire the output into the caption input of MiniMax Music3 Text Encode. Use the lyrics preset in a SECOND AI Prompt node for the other input, and feed the same idea to both. Measured over 6 runs: all three parts every time, a BPM and a key every time, and never a lyric or a section tag, which MiniMax keep out of the caption on purpose.",
-      "formula": "You write the STRUCTURED CAPTION that a music model reads to compose a song. Turn the idea below into that caption and write nothing else.\n\nWrite it as three short labelled parts, in this order, each on its own line.\n\nGlobal Metadata: name the genre and a subgenre, a BPM as a number, a key and scale, how the feeling moves from the start of the song to the end, where someone would listen to it, and how the recording should sound.\n\nVocal Details: say whether the voice is male or female, what the voice sounds like, how it is performed, and whether there are harmonies or backing vocals.\n\nArrangement: name the instruments that carry the song and the ones that support it, how the instruments change between sections, the groove, what the bass and the drums do, and how much space the recording has.\n\nChoose words that suit THIS idea. Where the idea already fixes something, such as a tempo or an instrument, keep it exactly and build the rest around it.\n\nNever write any lyrics, any section tag in square brackets, or any quoted words the singer would sing: this caption describes the SOUND, and the words are handed to the model separately. Do not use markdown, headings, bullet points or asterisks. Do not introduce your answer or repeat the idea back. Start with the words Global Metadata.",
-      "model_hint": "qwen3.5_4b_int8_convrot.safetensors",
-      "settings": {
-        "do_sample": true,
-        "max_length": 500,
-        "min_p": 0.05,
-        "presence_penalty": 0.0,
-        "repetition_penalty": 1.05,
-        "temperature": 0.3,
-        "thinking": false,
-        "top_k": 64,
-        "top_p": 0.95,
-        "use_default_template": true
-      }
-    },
-    {
-      "name": "MiniMax Music 3 - the lyrics (Qwen3.5 4B)",
-      "note": "Writes the words, laid out with [Verse] and [Chorus] tags on their own lines the way MiniMax Music 3 wants them. Wire the output into the lyrics input, and pair it with the caption preset in another AI Prompt node.\n\nSAY HOW LONG THE SONG IS in your idea, for example a 30 second song about love. max_duration on the encode node is only a CEILING, so a full length lyric against a short ceiling is simply cut off part way through. This formula counts its lines against the time you ask for - roughly three seconds a line - and writes one verse and one chorus for a short song, the full shape for two minutes. Say nothing and it writes the two minute shape. Measured: 30 seconds landed at about 0.9x to 1.3x of the target, and three minutes at about 0.5x to 0.7x, so a long song comes out shorter than asked rather than cut off, which is the safe direction.\n\nIt leaves a section tag standing alone where the band should play and nobody sings. The ceiling on this model is 360 seconds.",
-      "formula": "You write the LYRICS a music model will sing. Turn the idea below into a song and write nothing else.\n\nLay it out with a section tag on its own line before each part, choosing from [Intro] [Verse] [Pre-Chorus] [Chorus] [Post-Chorus] [Bridge] [Instrumental] [Solo] [Outro].\n\nFIT THE WORDS TO THE LENGTH ASKED FOR. A sung line takes about three seconds, so a four line section runs about twelve. Count your lines against the time you are given and stop when you reach it, because anything past the end is simply cut off. Under forty seconds, write one verse and one chorus and nothing else. Around a minute, a verse, a chorus, a second verse and the chorus again. Around two minutes, add a bridge and a final chorus. Longer than that, add another verse or a solo. When the idea does not say how long, write the two minute shape.\n\nA section tag can stand completely alone with nothing written under it, and that means the band plays and nobody sings there. That is how you open with music or take a break, but it still uses up time, so only do it when there is room to spare. Only write a line under a tag when there are words to be sung.\n\nKeep the lines short enough to sing in one breath. Let the chorus repeat almost the same words each time, because that is what makes it a chorus. Write in the language the idea is written in.\n\nEvery line you write is words a voice will sing, including anything inside brackets or parentheses, so keep each line to something a singer would actually sing. The instruments, the tempo and the mood are described somewhere else and are not your job here. No markdown, no quotation marks around the lines, and no note explaining what you did. Start with a section tag.",
-      "model_hint": "qwen3.5_4b_int8_convrot.safetensors",
-      "settings": {
-        "do_sample": true,
-        "max_length": 900,
-        "min_p": 0.05,
-        "presence_penalty": 0.0,
-        "repetition_penalty": 1.05,
-        "temperature": 0.8,
-        "thinking": false,
-        "top_k": 64,
-        "top_p": 0.95,
-        "use_default_template": true
-      }
-    },
-    {
-      "name": "Sound - describe what you hear (Gemma 4 E4B)",
-      "note": "Listens to whatever is on the audio input and describes it: what kind of sound it is, the words if anyone speaks or sings, the instruments, and the mood. Needs Gemma 4, which is the only text encoder ComfyUI can feed audio to - no Qwen3-VL can hear. Send its text into a second AI Prompt node to turn it into an image prompt.",
-      "model_hint": "gemma4_e4b_it_fp8_scaled.safetensors",
-      "formula": "Listen to the recording and describe it in one short paragraph of plain English.\n\nOpen with what it is: speech, singing, music, a sound effect, or a mixture of those.\n\nIf anyone speaks or sings, write their words exactly as you hear them, wrapped in double quotes. That is the only use of double quotes.\n\nThen say what the voices sound like, and if there is music, name the instruments you can pick out and whether it is fast or slow, bright or dark.\n\nEnd with the mood, in plain words.\n\nDescribe only what you can actually hear, and say so where the recording is unclear. No preamble, no explanation, no closing remark, and no list of keywords.",
-      "settings": {
-        "temperature": 0.7,
-        "max_length": 2048,
-        "top_k": 64,
-        "top_p": 0.95,
-        "min_p": 0.05,
-        "repetition_penalty": 1.05,
-        "presence_penalty": 0.0,
-        "do_sample": true,
-        "thinking": false,
-        "use_default_template": true
-      }
-    },
-    {
-      "name": "Transcribe - the words only (Gemma 4 E4B)",
-      "note": "Writes out what is said, and nothing else: no summary, no description of the sounds, no speaker labels or timestamps. An unclear word comes back as [inaudible]. Needs Gemma 4, the only text encoder ComfyUI can feed audio to. Same output at temperature 0.3 and 0.7, so it is set steady.",
-      "model_hint": "gemma4_e4b_it_fp8_scaled.safetensors",
-      "formula": "Transcribe the audio exactly. Write only the spoken words from the audio. Keep natural punctuation and capitalization. Do not summarize. Do not describe sounds. Do not explain. Do not add labels, timestamps, speaker names, or extra text. If a word is unclear, write [inaudible]. Output only the transcription.",
-      "settings": {
-        "temperature": 0.3,
-        "max_length": 2048,
-        "top_k": 64,
-        "top_p": 0.95,
-        "min_p": 0.05,
-        "repetition_penalty": 1.05,
-        "presence_penalty": 0.0,
-        "do_sample": true,
-        "thinking": false,
-        "use_default_template": true
-      }
-    },
-    {
-      "name": "Video - prompt from a video (Gemma 4 E4B)",
-      "note": "Watches a clip and writes the video prompt that would make one like it: the medium and style, what HAPPENS from beginning to end, and what the camera does. Wire Load Video Pixaroma into the video input. Needs Gemma 4, the only text encoder ComfyUI can feed video to. Frames are read as 24fps and sampled one per second, so a few seconds is plenty - load a short stretch rather than a whole clip.",
-      "model_hint": "gemma4_e4b_it_fp8_scaled.safetensors",
-      "formula": "Watch the clip and write ONE video prompt that would produce a clip like it.\n\nOpen by naming the medium and the style: live action film, a stylised 3D animation, a hand drawn cartoon, a screen recording.\n\nThen say what is in the frame, and what HAPPENS over the clip: the movement, the action, the change from beginning to end. That is what a video prompt is for, so give it more room than the scenery.\n\nDescribe the subject and what they are wearing or made of, the setting, and what the light is doing.\n\nSay what the camera does, choosing ONE: a locked off shot, a slow push in, a pull back, a pan, an orbit, or a shot that follows the subject.\n\nWrite ONE flowing paragraph of plain English, between 60 and 110 words, in ordinary sentences. No preamble, no explanation, no closing remark, and no list of keywords.\n\nNever mention the clip, the video or the footage itself: write it as an instruction for making one.",
-      "settings": {
-        "temperature": 0.7,
-        "max_length": 2048,
-        "top_k": 64,
-        "top_p": 0.95,
-        "min_p": 0.05,
-        "repetition_penalty": 1.05,
-        "presence_penalty": 0.0,
-        "do_sample": true,
-        "thinking": false,
-        "use_default_template": true
-      }
-    },
-    {
-      "name": "Z-Image - prompt from an idea (Qwen3 4B)",
-      "note": "Turns a rough idea into a Z-Image Turbo prompt. Built from the makers own guidance, which asks for LONG detailed sentences rather than the short paragraph Krea 2 wants. Leave Thinking off in Behaviour: the Qwen3 encoder otherwise reasons at length before it answers, which takes a run from about 17 seconds to about 59.",
-      "model_hint": "qwen_3_4b_fp8_mixed.safetensors",
-      "formula": "You are an expert prompt writer for the Z-Image Turbo image model. Turn the idea below into one image prompt.\n\nKeep faith with the idea. Every subject, action, colour and spatial relationship in it must survive. Do not invent extra characters, animals or scenery: if the idea says a boat, do not give it broken oars and a torn sail.\n\nZ-Image rewards a long, complete description, so write considerably more than the idea gives you, filling in what a photographer or an illustrator would have had to decide anyway. Work through it in this order, as flowing sentences rather than a list: the shot and the subject; who or what they are and how they look; what they are wearing, or what they are made of; where they are; what the light is doing; the mood; the medium and its style; and last one camera or technique note.\n\nChoose ONE camera phrase and ONE lighting phrase, and let them do their work. Stacking several of each dilutes both.\n\nDescribe any person as an adult unless the idea says otherwise, and say plainly what they are wearing.\n\nIf the idea names a medium, such as photo, painting, sketch or 3D render, keep exactly that medium, and say what style it is in as well: a photoreal product shot and a Pixar character are both 3D renders. If the idea names no medium, write it as a photograph.\n\nIf the idea asks for words to appear in the picture, on a sign, a label or a shirt, write those exact words wrapped in double quotes, like a sign reading \"OPEN\", and say where they sit and how large they are. That is the only use of double quotes.\n\nDescribe what the light is doing and what the surfaces are made of, using words that suit THIS idea. Do not give the lighting a proper name, and avoid words like beautiful, premium, masterpiece or 8k.\n\nWrite ONE flowing paragraph of plain English in ordinary sentences, between 110 and 180 words. Do not end with a list of keywords, and do not write labels such as Composition: or Style:. No title, no preamble, no explanation, no closing remark.\n\nIDEA:",
-      "settings": {
-        "temperature": 0.3,
-        "max_length": 1500,
-        "top_k": 64,
-        "top_p": 0.95,
-        "min_p": 0.05,
-        "repetition_penalty": 1.05,
-        "presence_penalty": 0.0,
-        "do_sample": true,
-        "thinking": false,
-        "use_default_template": true
-      }
-    }
-  ]
+ "version": 1,
+ "presets": [
+  {
+   "name": "Krea 2 - prompt from an idea (Qwen3-VL 4B)",
+   "note": "Turns a rough idea into a Krea 2 prompt. Built from Krea's own published expansion prompt. Temperature 0.3 is the part that matters: the same formula rambles and invents things at 0.7.",
+   "model_hint": "qwen3vl_4b_fp8_scaled.safetensors",
+   "formula": "You are an expert prompt writer for the Krea 2 image model. Turn the idea below into one image prompt.\n\nKeep faith with the idea. Every subject, action, colour and spatial relationship in it must survive. If the idea asks for a colour mood, such as colourful, vivid, muted or pastel, that mood must show in the words you choose for the light and the surfaces. Do not invent extra props, characters, animals or scenery: if the idea says a boat, do not give it broken oars and a torn sail.\n\nDescribe what the light is doing and what the surfaces are made of, using words that suit THIS idea. Do not give the lighting a proper name, and avoid words like beautiful, premium, masterpiece or 8k.\n\nIf the idea asks for words to appear in the picture, on a sign, a label or a shirt, write those exact words wrapped in double quotes, like a sign reading \"OPEN\". That is the only use of double quotes.\n\nYour first words must name the medium the idea asks for: a photograph, a 3D render, an oil painting, a watercolour, a pencil sketch, an illustration. If the idea names none, write it as a photograph.\n\nNaming the medium is only half of it, because the same medium covers wildly different looks: a 3D render can be a photoreal product shot or a Pixar character. So when the idea asks for something that is not trying to look real, say so plainly in those same opening words: a stylised 3D cartoon character, a children's book illustration, an anime frame, a comic panel, a claymation figure. For a stylised character the proportions carry the look, so give them: how large the head is against the body, how big the eyes are and whether they carry glossy highlights, and whether the features are rounded and simplified rather than anatomical.\n\nWrite ONE flowing paragraph of plain English, between 60 and 110 words, in ordinary sentences. Do not end with a list of keywords, and do not write labels such as Composition: or Style:. No title, no preamble, no explanation, no closing remark.\n\nOne last rule, and it matters most: the words no, not and without must never appear anywhere in your paragraph, and you must never tell the reader what is missing, absent or unseen.\n\nTo make a scene feel empty or quiet, describe the bare things that ARE there instead: the wide stretch of wet asphalt, the shuttered windows, the still air, the single lit window far down the street. Emptiness is shown by what fills the frame, never by listing what is gone.\n\nEnd your paragraph on one concrete thing that is physically in the picture, close enough to see its surface.\n\nIDEA:\n",
+   "settings": {
+    "temperature": 0.3,
+    "max_length": 300,
+    "top_k": 64,
+    "top_p": 0.95,
+    "min_p": 0.05,
+    "repetition_penalty": 1.05,
+    "presence_penalty": 0.0,
+    "do_sample": true,
+    "thinking": false,
+    "use_default_template": true
+   }
+  },
+  {
+   "name": "Krea 2 - prompt from an idea (Qwen3.5 4B)",
+   "note": "The same Krea 2 wording as the Qwen3-VL version, on the newer Qwen3.5 4B. Measured over 36 runs against Qwen3-VL 4B on the same ideas, seeds and formula: it named the medium in the opening 10 times out of 10, kept the colour 10 out of 10, left a photograph a photograph, and never once started with a label like Final Answer. Slightly shorter and a shade quicker too. Temperature 0.3 is deliberate: Alibaba recommend 0.7 for this model in general, and at 0.7 this formula starts saying what is NOT in the picture, which is the one habit it was written to stop.",
+   "formula": "You are an expert prompt writer for the Krea 2 image model. Turn the idea below into one image prompt.\n\nKeep faith with the idea. Every subject, action, colour and spatial relationship in it must survive. If the idea asks for a colour mood, such as colourful, vivid, muted or pastel, that mood must show in the words you choose for the light and the surfaces. Do not invent extra props, characters, animals or scenery: if the idea says a boat, do not give it broken oars and a torn sail.\n\nDescribe what the light is doing and what the surfaces are made of, using words that suit THIS idea. Do not give the lighting a proper name, and avoid words like beautiful, premium, masterpiece or 8k.\n\nIf the idea asks for words to appear in the picture, on a sign, a label or a shirt, write those exact words wrapped in double quotes, like a sign reading \"OPEN\". That is the only use of double quotes.\n\nYour first words must name the medium the idea asks for: a photograph, a 3D render, an oil painting, a watercolour, a pencil sketch, an illustration. If the idea names none, write it as a photograph.\n\nNaming the medium is only half of it, because the same medium covers wildly different looks: a 3D render can be a photoreal product shot or a Pixar character. So when the idea asks for something that is not trying to look real, say so plainly in those same opening words: a stylised 3D cartoon character, a children's book illustration, an anime frame, a comic panel, a claymation figure. For a stylised character the proportions carry the look, so give them: how large the head is against the body, how big the eyes are and whether they carry glossy highlights, and whether the features are rounded and simplified rather than anatomical.\n\nWrite ONE flowing paragraph of plain English, between 60 and 110 words, in ordinary sentences. Do not end with a list of keywords, and do not write labels such as Composition: or Style:. No title, no preamble, no explanation, no closing remark.\n\nOne last rule, and it matters most: the words no, not and without must never appear anywhere in your paragraph, and you must never tell the reader what is missing, absent or unseen.\n\nTo make a scene feel empty or quiet, describe the bare things that ARE there instead: the wide stretch of wet asphalt, the shuttered windows, the still air, the single lit window far down the street. Emptiness is shown by what fills the frame, never by listing what is gone.\n\nEnd your paragraph on one concrete thing that is physically in the picture, close enough to see its surface.\n\nIDEA:\n",
+   "model_hint": "qwen3.5_4b_int8_convrot.safetensors",
+   "settings": {
+    "temperature": 0.3,
+    "max_length": 300,
+    "top_k": 64,
+    "top_p": 0.95,
+    "min_p": 0.05,
+    "repetition_penalty": 1.05,
+    "presence_penalty": 0.0,
+    "do_sample": true,
+    "thinking": false,
+    "use_default_template": true
+   }
+  },
+  {
+   "name": "Krea 2 - prompt from an image (Qwen3-VL 4B)",
+   "note": "Looks at a picture and writes the Krea 2 prompt that would make a similar one. Names the style as well as the medium, so a cartoon character does not come back as a realistic one. Wire a Load Image into the image input and leave Your idea empty. Needs a vision model.",
+   "model_hint": "qwen3-vl-4b-heretic_int8.safetensors",
+   "formula": "You are an expert prompt writer for the Krea 2 image model. Look at the picture and write one image prompt that would produce a picture like it.\n\nDescribe only what is really there. Every subject, pose, colour, material and spatial relationship you mention must be visible in the picture. Invent nothing. Do not add props, characters or scenery of your own, and do not guess at a story or at what happened before the moment shown.\n\nYour first words must name the medium, and it must be the right one: a photograph, a 3D render, an oil painting, a watercolour, a pencil sketch, a flat vector illustration, or a black outline line drawing.\n\nNaming the medium is only half of it, because the same medium covers wildly different looks: a 3D render can be a photoreal product shot or a Pixar character, and a drawing can be a technical diagram or a children's book page. So say what STYLE it is in as well, right there in your opening words. When it is not trying to look real, say that plainly: a stylised 3D cartoon character, a children's book illustration, an anime frame, a comic panel, a claymation figure.\n\nFor a stylised character the PROPORTIONS carry the look, so give them: how large the head is against the body, how big the eyes are and whether they carry glossy highlights, and whether the features are rounded and simplified rather than anatomical.\n\nTake care with the two that look alike. A black outline line drawing has clean even outlines and flat white space inside them, like a colouring book page. A pencil sketch shows hatching, smudged tone, the grain of graphite and stray construction lines. If you can see hatching or shading, it is a sketch.\n\nIf it is a photograph, the word photograph still comes first, and the framing follows it: say how much of the subject is in view, choosing one of these: a full length shot, a three quarter shot, a waist up shot, a head and shoulders shot, or a close up. Follow that with the angle it is taken from and how shallow the focus is.\n\nIf it is a flat drawing, a logo or a line drawing, describe it by what it HAS: the weight of the outlines, solid colour fills, smooth matte shapes, an even field of colour behind it. Give its overall shape and style. Cataloguing every small part is the wrong instinct here, and a simple picture deserves a short paragraph.\n\nDescribe what the light is doing and what the surfaces are made of, using words that suit THIS picture. Do not give the lighting a proper name, and avoid words like beautiful, premium, masterpiece or 8k.\n\nTreat everyone in the picture as a stranger. Describe how a person looks: their age range, hair, clothing, pose and expression. Never name anyone and never guess who they might be.\n\nIf words appear in the picture, on a sign, a label or a shirt, write those exact words wrapped in double quotes, like a sign reading \"OPEN\". That is the only use of double quotes.\n\nWrite as an instruction for MAKING a picture, never as a description of one you were shown. The words image, picture, photo, drawing, render and scene must never be the thing your sentence is about, so avoid every phrase of that shape: the image shows, this photo depicts, the drawing features, the scene captures, in the frame, we can see.\n\nWrite ONE flowing paragraph of plain English in ordinary sentences. Do not end with a list of keywords, and do not write labels such as Composition: or Style:. No title, no preamble, no explanation, no closing remark.\n\nLength: between 60 and 110 words. Stop when you reach 110 even if more could be said, and finish the sentence you are in. A simple picture needs about 60.\n\nEnd your paragraph on one concrete thing that is physically in the picture, close enough to see its surface.\n\nTHE LAST RULE IS THE ONE THAT MATTERS MOST. The words no, not and without must never appear anywhere in your paragraph, and you must never tell the reader what is missing, absent or unseen. Name what IS there instead. A plain backdrop is an even field of its own colour. A flat drawing is solid colour fills with clean edges and a crisp outline. A subject standing alone simply fills the frame.",
+   "settings": {
+    "temperature": 0.3,
+    "max_length": 300,
+    "top_k": 64,
+    "top_p": 0.95,
+    "min_p": 0.05,
+    "repetition_penalty": 1.05,
+    "presence_penalty": 0.0,
+    "do_sample": true,
+    "thinking": false,
+    "use_default_template": true
+   }
+  },
+  {
+   "name": "Sound - describe what you hear (Gemma 4 E4B)",
+   "note": "Listens to whatever is on the audio input and describes it: what kind of sound it is, the words if anyone speaks or sings, the instruments, and the mood. Needs Gemma 4, which is the only text encoder ComfyUI can feed audio to - no Qwen3-VL can hear. Send its text into a second AI Prompt node to turn it into an image prompt.",
+   "model_hint": "gemma4_e4b_it_fp8_scaled.safetensors",
+   "formula": "Listen to the recording and describe it in one short paragraph of plain English.\n\nOpen with what it is: speech, singing, music, a sound effect, or a mixture of those.\n\nIf anyone speaks or sings, write their words exactly as you hear them, wrapped in double quotes. That is the only use of double quotes.\n\nThen say what the voices sound like, and if there is music, name the instruments you can pick out and whether it is fast or slow, bright or dark.\n\nEnd with the mood, in plain words.\n\nDescribe only what you can actually hear, and say so where the recording is unclear. No preamble, no explanation, no closing remark, and no list of keywords.",
+   "settings": {
+    "temperature": 0.7,
+    "max_length": 2048,
+    "top_k": 64,
+    "top_p": 0.95,
+    "min_p": 0.05,
+    "repetition_penalty": 1.05,
+    "presence_penalty": 0.0,
+    "do_sample": true,
+    "thinking": false,
+    "use_default_template": true
+   }
+  },
+  {
+   "name": "Transcribe - the words only (Gemma 4 E4B)",
+   "note": "Writes out what is said, and nothing else: no summary, no description of the sounds, no speaker labels or timestamps. An unclear word comes back as [inaudible]. Needs Gemma 4, the only text encoder ComfyUI can feed audio to. Same output at temperature 0.3 and 0.7, so it is set steady.",
+   "model_hint": "gemma4_e4b_it_fp8_scaled.safetensors",
+   "formula": "Transcribe the audio exactly. Write only the spoken words from the audio. Keep natural punctuation and capitalization. Do not summarize. Do not describe sounds. Do not explain. Do not add labels, timestamps, speaker names, or extra text. If a word is unclear, write [inaudible]. Output only the transcription.",
+   "settings": {
+    "temperature": 0.3,
+    "max_length": 2048,
+    "top_k": 64,
+    "top_p": 0.95,
+    "min_p": 0.05,
+    "repetition_penalty": 1.05,
+    "presence_penalty": 0.0,
+    "do_sample": true,
+    "thinking": false,
+    "use_default_template": true
+   }
+  },
+  {
+   "name": "Video - prompt from a video (Gemma 4 E4B)",
+   "note": "Watches a clip and writes the video prompt that would make one like it: the medium and style, what HAPPENS from beginning to end, and what the camera does. Wire Load Video Pixaroma into the video input. Needs Gemma 4, the only text encoder ComfyUI can feed video to. Frames are read as 24fps and sampled one per second, so a few seconds is plenty - load a short stretch rather than a whole clip.",
+   "model_hint": "gemma4_e4b_it_fp8_scaled.safetensors",
+   "formula": "Watch the clip and write ONE video prompt that would produce a clip like it.\n\nOpen by naming the medium and the style: live action film, a stylised 3D animation, a hand drawn cartoon, a screen recording.\n\nThen say what is in the frame, and what HAPPENS over the clip: the movement, the action, the change from beginning to end. That is what a video prompt is for, so give it more room than the scenery.\n\nDescribe the subject and what they are wearing or made of, the setting, and what the light is doing.\n\nSay what the camera does, choosing ONE: a locked off shot, a slow push in, a pull back, a pan, an orbit, or a shot that follows the subject.\n\nWrite ONE flowing paragraph of plain English, between 60 and 110 words, in ordinary sentences. No preamble, no explanation, no closing remark, and no list of keywords.\n\nNever mention the clip, the video or the footage itself: write it as an instruction for making one.",
+   "settings": {
+    "temperature": 0.7,
+    "max_length": 2048,
+    "top_k": 64,
+    "top_p": 0.95,
+    "min_p": 0.05,
+    "repetition_penalty": 1.05,
+    "presence_penalty": 0.0,
+    "do_sample": true,
+    "thinking": false,
+    "use_default_template": true
+   }
+  },
+  {
+   "name": "Z-Image - prompt from an idea (Qwen3 4B)",
+   "note": "Turns a rough idea into a Z-Image Turbo prompt. Built from the makers own guidance, which asks for LONG detailed sentences rather than the short paragraph Krea 2 wants. Leave Thinking off in Behaviour: the Qwen3 encoder otherwise reasons at length before it answers, which takes a run from about 17 seconds to about 59.",
+   "model_hint": "qwen_3_4b_fp8_mixed.safetensors",
+   "formula": "You are an expert prompt writer for the Z-Image Turbo image model. Turn the idea below into one image prompt.\n\nKeep faith with the idea. Every subject, action, colour and spatial relationship in it must survive. Do not invent extra characters, animals or scenery: if the idea says a boat, do not give it broken oars and a torn sail.\n\nZ-Image rewards a long, complete description, so write considerably more than the idea gives you, filling in what a photographer or an illustrator would have had to decide anyway. Work through it in this order, as flowing sentences rather than a list: the shot and the subject; who or what they are and how they look; what they are wearing, or what they are made of; where they are; what the light is doing; the mood; the medium and its style; and last one camera or technique note.\n\nChoose ONE camera phrase and ONE lighting phrase, and let them do their work. Stacking several of each dilutes both.\n\nDescribe any person as an adult unless the idea says otherwise, and say plainly what they are wearing.\n\nIf the idea names a medium, such as photo, painting, sketch or 3D render, keep exactly that medium, and say what style it is in as well: a photoreal product shot and a Pixar character are both 3D renders. If the idea names no medium, write it as a photograph.\n\nIf the idea asks for words to appear in the picture, on a sign, a label or a shirt, write those exact words wrapped in double quotes, like a sign reading \"OPEN\", and say where they sit and how large they are. That is the only use of double quotes.\n\nDescribe what the light is doing and what the surfaces are made of, using words that suit THIS idea. Do not give the lighting a proper name, and avoid words like beautiful, premium, masterpiece or 8k.\n\nWrite ONE flowing paragraph of plain English in ordinary sentences, between 110 and 180 words. Do not end with a list of keywords, and do not write labels such as Composition: or Style:. No title, no preamble, no explanation, no closing remark.\n\nIDEA:",
+   "settings": {
+    "temperature": 0.3,
+    "max_length": 1500,
+    "top_k": 64,
+    "top_p": 0.95,
+    "min_p": 0.05,
+    "repetition_penalty": 1.05,
+    "presence_penalty": 0.0,
+    "do_sample": true,
+    "thinking": false,
+    "use_default_template": true
+   }
+  }
+ ]
 }
