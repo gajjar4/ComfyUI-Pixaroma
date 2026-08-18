@@ -53,6 +53,7 @@ export const AI_PROMPT_HELP = {
       defs: [
         ["The gear", "Opens the settings: the model, the formula, and how wired text is joined. It sits in the empty space beside the input dots so it costs the node no height."],
         ["The seed, and F or R", "F is Fixed: the same seed every Run, so an unchanged node is cached and Run is instant. R is Random: a new seed each Run, so it writes something different every time. Click the number to type one."],
+        ["Tags", "Opens your tag library, the same one Prompt Pixaroma uses. Anything you save there can be used in either node."],
         ["Idea first, Wired first", "Only appears when something is wired into the text input. It decides which of the two comes first. The starting choice is in the settings."],
         ["Expand", "Opens your idea in a full-screen box, for when it is long."],
         ["The bar between the two boxes", "Drag it to give more room to whichever box you are using. Double-click resets it."],
@@ -61,6 +62,43 @@ export const AI_PROMPT_HELP = {
         ["Free VRAM", "Unloads the model as soon as the text is written, so a video model later in the workflow gets the memory back. Read the memory section below before turning it on in a chain."],
         ["Generate", "Runs the workflow."],
       ],
+    },
+    {
+      heading: "Tags in your idea",
+      body:
+        "Your idea box understands the same @tags as Prompt Pixaroma, out of the "
+        + "same library, so a phrase you saved once can be used in both nodes. Press "
+        + "Tags to open it.\n\n"
+        + "They are swapped for their real words before the model is asked anything, "
+        + "so the model reads finished English and never sees an @ sign.",
+      defs: [
+        ["@name", "Your saved snippet, exactly as you wrote it."],
+        ["*Category", "One random tag out of that category, rolled fresh on every Run."],
+        ["#name", "One random line out of that tag, rolled fresh on every Run."],
+      ],
+    },
+    {
+      heading: "Reading the colours as you type",
+      body:
+        "The colour tells you what a word will become, so you can see at a glance "
+        + "whether a tag is real before you Run anything.",
+      defs: [
+        ["Orange", "An @tag that exists."],
+        ["Green", "A *category that exists and has something in it."],
+        ["Violet", "A #list that exists and has lines in it."],
+        ["A red wavy underline", "That name is not in your library, so it will be sent to the model as the literal text you typed. Every name looks like this while you are still typing it, and it takes its real colour the moment it matches."],
+      ],
+    },
+    {
+      heading: "Seeing what the tags turned into",
+      body:
+        "Turn on \"Show what the tags expand to\" in the settings and a box appears "
+        + "under your idea with the real words. Before a Run it names what each slot "
+        + "will do, such as [shuffled: Styles], because showing a live random would "
+        + "change on every keystroke. After a Run it shows what was actually sent, in "
+        + "the same colours, so you can tell which option came up.\n\n"
+        + "It is off to begin with, and it takes its height from the idea box, so "
+        + "turning it on never makes the node bigger.",
     },
     {
       heading: "Chaining several of them",
