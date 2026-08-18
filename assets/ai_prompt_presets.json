@@ -56,6 +56,42 @@
       }
     },
     {
+      "name": "MiniMax Music 3 - the caption (Qwen3.5 4B)",
+      "note": "Writes the STRUCTURED CAPTION that MiniMax Music 3 reads: Global Metadata, Vocal Details and Arrangement, which is the shape MiniMax themselves recommend. Wire the output into the caption input of MiniMax Music3 Text Encode. Use the lyrics preset in a SECOND AI Prompt node for the other input, and feed the same idea to both. Measured over 6 runs: all three parts every time, a BPM and a key every time, and never a lyric or a section tag, which MiniMax keep out of the caption on purpose.",
+      "formula": "You write the STRUCTURED CAPTION that a music model reads to compose a song. Turn the idea below into that caption and write nothing else.\n\nWrite it as three short labelled parts, in this order, each on its own line.\n\nGlobal Metadata: name the genre and a subgenre, a BPM as a number, a key and scale, how the feeling moves from the start of the song to the end, where someone would listen to it, and how the recording should sound.\n\nVocal Details: say whether the voice is male or female, what the voice sounds like, how it is performed, and whether there are harmonies or backing vocals.\n\nArrangement: name the instruments that carry the song and the ones that support it, how the instruments change between sections, the groove, what the bass and the drums do, and how much space the recording has.\n\nChoose words that suit THIS idea. Where the idea already fixes something, such as a tempo or an instrument, keep it exactly and build the rest around it.\n\nNever write any lyrics, any section tag in square brackets, or any quoted words the singer would sing: this caption describes the SOUND, and the words are handed to the model separately. Do not use markdown, headings, bullet points or asterisks. Do not introduce your answer or repeat the idea back. Start with the words Global Metadata.",
+      "model_hint": "qwen3.5_4b_int8_convrot.safetensors",
+      "settings": {
+        "do_sample": true,
+        "max_length": 500,
+        "min_p": 0.05,
+        "presence_penalty": 0.0,
+        "repetition_penalty": 1.05,
+        "temperature": 0.3,
+        "thinking": false,
+        "top_k": 64,
+        "top_p": 0.95,
+        "use_default_template": true
+      }
+    },
+    {
+      "name": "MiniMax Music 3 - the lyrics (Qwen3.5 4B)",
+      "note": "Writes the words, laid out with [Verse] and [Chorus] tags on their own lines the way MiniMax Music 3 wants them. Wire the output into the lyrics input. Pair it with the caption preset in another AI Prompt node. It leaves a section tag standing alone where the band should play and nobody sings, which is how you ask for an instrumental opening or a solo. Measured over 6 runs on ideas that all named an instrument: a proper structure with a repeating chorus every time, and one run in six still slipped a stage direction in.",
+      "formula": "You write the LYRICS a music model will sing. Turn the idea below into a short song and write nothing else.\n\nLay it out with a section tag on its own line before each part, choosing from [Intro] [Verse] [Pre-Chorus] [Chorus] [Post-Chorus] [Bridge] [Instrumental] [Solo] [Outro]. A normal song is a verse, a chorus, a second verse, the chorus again, a bridge and a last chorus.\n\nA section tag can stand completely alone with nothing written under it, and that means the band plays and nobody sings there. That is the right way to open with music, to take a break in the middle, or to fade out at the end. Only write a line under a tag when there are words to be sung.\n\nKeep the lines short enough to sing in one breath. Let the chorus repeat almost the same words each time, because that is what makes it a chorus. Write in the language the idea is written in.\n\nEvery other line you write is words a voice will sing, including anything inside brackets or parentheses, so keep each line to something a singer would actually sing. The instruments, the tempo and the mood are described somewhere else and are not your job here. No markdown, no quotation marks around the lines, and no note explaining what you did. Start with a section tag.",
+      "model_hint": "qwen3.5_4b_int8_convrot.safetensors",
+      "settings": {
+        "do_sample": true,
+        "max_length": 700,
+        "min_p": 0.05,
+        "presence_penalty": 0.0,
+        "repetition_penalty": 1.05,
+        "temperature": 0.8,
+        "thinking": false,
+        "top_k": 64,
+        "top_p": 0.95,
+        "use_default_template": true
+      }
+    },
+    {
       "name": "Sound - describe what you hear (Gemma 4 E4B)",
       "note": "Listens to whatever is on the audio input and describes it: what kind of sound it is, the words if anyone speaks or sings, the instruments, and the mood. Needs Gemma 4, which is the only text encoder ComfyUI can feed audio to - no Qwen3-VL can hear. Send its text into a second AI Prompt node to turn it into an image prompt.",
       "model_hint": "gemma4_e4b_it_fp8_scaled.safetensors",
