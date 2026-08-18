@@ -673,11 +673,13 @@ function renderPanel(node, body) {
     e.stopPropagation();
     const values = [{ value: "", label: "None - pass the text through" }];
     for (const m of MODELS.models) values.push({ value: m, label: m });
+    // filterFrom 2, like the sets picker: the user asked for the model list
+    // to be filterable too, and two names are already worth narrowing.
     openPop(pick, values, st.model, (v) => {
       writeState(node, { model: v });
       ON_CHANGE?.();
       renderPanel(node, body);
-    });
+    }, { filterFrom: 2 });
   });
   body.appendChild(pick);
 

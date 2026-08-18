@@ -1178,7 +1178,9 @@ function renderPanel(node, body) {
   const modelRow = pickRow(modelLabel, (anchor) => {
     const values = [["", "None — pass text through"]]
       .concat(MODELS.models.map((m) => [m, m]));
-    openPop(anchor, values, st.model, (v) => set({ model: v }));
+    // filterFrom 2, like the preset picker (19b): the user asked for the same
+    // filter here, and two model names are already worth narrowing.
+    openPop(anchor, values, st.model, (v) => set({ model: v }), { filterFrom: 2 });
   }, {
     locked: clipWired,
     none: !clipWired && !st.model,

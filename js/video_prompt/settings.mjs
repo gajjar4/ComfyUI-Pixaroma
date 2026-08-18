@@ -211,12 +211,14 @@ function closePop() {
   POP?.remove();
   POP = null;
 }
-function openPop(anchor, values, current, onPick) {
+function openPop(anchor, values, current, onPick, opts) {
   closePop();
   const pop = el("div", "pix-vpp-pop");
 
   // A text_encoders folder is a junk drawer - this box has 30-odd files in it -
-  // so scrolling to find one is miserable. Filter above about a screenful.
+  // so scrolling to find one is miserable. Filter above about a screenful by
+  // default; a caller can lower the bar with opts.filterFrom (the model picker
+  // passes 2, because the user asked for the same filter presets have).
   let filter = null;
   const list = el("div", "pix-vpp-poplist");
   const paint = (q) => {
@@ -255,7 +257,7 @@ function openPop(anchor, values, current, onPick) {
     }
   };
 
-  if (values.length > 8) {
+  if (values.length >= (opts?.filterFrom ?? 9)) {
     filter = document.createElement("input");
     filter.type = "text";
     filter.className = "pix-vpp-popfilter";
@@ -591,7 +593,7 @@ function renderPanel(node, body) {
   if (!clipWired) {
     pick.addEventListener("click", (e) => {
       e.stopPropagation();
-      openPop(pick, models, st.model, (v) => set({ model: v }));
+      openPop(pick, models, st.model, (v) => set({ model: v }), { filterFrom: 2 });
     });
   }
   body.appendChild(pick);
