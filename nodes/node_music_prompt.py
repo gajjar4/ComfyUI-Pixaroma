@@ -54,14 +54,18 @@ class PixaromaMusicPrompt:
     DESCRIPTION = (
         "Turns one idea into the two pieces of writing a music model needs: a caption "
         "describing how the song should SOUND, and the lyrics that get sung. Wire both "
-        "straight into MiniMax Music 3.\n\n"
+        "straight into MiniMax Music 3, and the duration output into its max_duration, "
+        "so the song is given exactly the time the words were written for.\n\n"
         "It runs a language model you already have, on your own machine, twice on one "
         "load. The wording of both instructions is built in and was measured rather "
         "than guessed, so there is no formula to write: you type the idea and set the "
         "length, and the controls do the rest.\n\n"
         "Length is the important one. The music model treats it as a ceiling, so a "
         "lyric written for three minutes against a thirty second setting is simply cut "
-        "off part way through. Set the same number here and on the music node.\n\n"
+        "off part way through. Wiring the duration output means you only set it here.\n\n"
+        "A song can still come out shorter than you asked, because the music model stops "
+        "when the words run out. If that happens, press Re-roll: how many lines get "
+        "written varies from one seed to the next.\n\n"
         "Verses are a request, not a promise. One and two come back exactly as asked; "
         "three sometimes drifts. Left on Auto the length alone decides the shape, "
         "which is the most reliable way to run it.\n\n"
@@ -99,14 +103,23 @@ class PixaromaMusicPrompt:
             "hidden": {"MusicPromptState": ("STRING", {"default": "{}"})},
         }
 
-    RETURN_TYPES = ("STRING", "STRING")
-    RETURN_NAMES = ("caption", "lyrics")
+    # duration is a FLOAT because that is what MiniMaxMusic3TextEncode's
+    # max_duration is (0.04 to 360, step 0.04). Wiring it means the length is set
+    # ONCE, here, where the lyric is written for it - rather than typed into two
+    # nodes that can silently disagree. That encode node then passes its own
+    # `seconds` output on to EmptyMiniMaxMusic3LatentAudio, so one wire from here
+    # sets the whole chain.
+    RETURN_TYPES = ("STRING", "STRING", "FLOAT")
+    RETURN_NAMES = ("caption", "lyrics", "duration")
     OUTPUT_TOOLTIPS = (
         "How the song should sound: genre, BPM, key, the voice and the instruments, in "
         "the three labelled parts MiniMax Music 3 expects. Wire it to that node's "
         "caption input.",
         "The words that get sung, laid out with section tags like [Verse] and "
         "[Chorus]. Wire it to that node's lyrics input.",
+        "The length you set on this node, in seconds. Wire it to the music node's "
+        "max_duration so the song is given exactly the time the words were written "
+        "for, instead of you typing the same number in two places.",
     )
     FUNCTION = "run"
     # Load-bearing. Without it a node whose outputs are not yet wired into
@@ -186,7 +199,7 @@ class PixaromaMusicPrompt:
                         "seed": st["seed"],
                     }]
                 },
-                "result": (out, out),
+                "result": (out, out, float(st["seconds"])),
             }
 
         # ---- the generating path -------------------------------------------
@@ -251,7 +264,7 @@ class PixaromaMusicPrompt:
                     "seed": st["seed"],
                 }]
             },
-            "result": (caption, lyrics),
+            "result": (caption, lyrics, float(st["seconds"])),
         }
 
 

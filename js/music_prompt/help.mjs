@@ -21,7 +21,9 @@ registerNodeHelp(CLASS, {
         + "This node writes both from one idea. It runs a language model you "
         + "already have, on your own machine, twice on a single load: once for "
         + "the caption and once for the lyrics. Nothing is sent anywhere.\n\n"
-        + "Wire `caption` and `lyrics` straight into MiniMax Music 3 Text Encode.",
+        + "Wire `caption` and `lyrics` straight into MiniMax Music 3 Text Encode, and "
+        + "`duration` into its `max_duration`. That last wire means you set the length "
+        + "ONCE, here, where the words are written for it.",
     },
     {
       heading: "Getting started",
@@ -36,17 +38,20 @@ registerNodeHelp(CLASS, {
       ],
     },
     {
-      heading: "Length is the important one",
+      heading: "Length, and the duration wire",
       body:
         "The music model treats length as a CEILING. It can end a song early, "
         + "but anything past the limit is simply cut off part way through. So a "
         + "lyric written for three minutes against a thirty second setting gets "
         + "chopped.\n\n"
-        + "Set the same number here and on the music node and the two agree. The "
-        + "highest MiniMax Music 3 accepts is 360 seconds.\n\n"
-        + "The words tend to come out a little SHORT of the number rather than "
-        + "long, and that is on purpose: a short lyric just ends the song early, "
-        + "which is much better than one that stops mid sentence.",
+        + "Wire the `duration` output into the music node's `max_duration` and the two "
+        + "can never disagree. The highest it accepts is 360 seconds.\n\n"
+        + "A song can still come out shorter than you asked. That is the music model "
+        + "stopping when the words run out, not a fault: it only sings what it was "
+        + "given. Measured over ten songs, nine used the whole length and one stopped "
+        + "at three quarters, because that seed happened to write half as many lines.\n\n"
+        + "If a song comes out short, press Re-roll. How many lines get written varies "
+        + "from one seed to the next, and a fresh seed usually fills the time.",
     },
     {
       heading: "Verses are a request, not a promise",
