@@ -85,7 +85,14 @@ DEFAULT_STATE = {
 def _clamp(value, fallback, lo, hi):
     try:
         out = float(value)
-    except (TypeError, ValueError):
+    # OverflowError is NOT a subclass of either of the others, and it is the one
+    # a huge value actually raises: json.loads turns a 310-digit literal into an
+    # arbitrary-precision int, and float() on that raises rather than returning
+    # inf. (A huge STRING or "1e400" does return inf, which the check below
+    # already catches - so only the bare-int path was exposed.) /prompt is
+    # unauthenticated, so this reached both nodes' parse_state as a raw
+    # traceback instead of clamping like every other out-of-range value.
+    except (TypeError, ValueError, OverflowError):
         return fallback
     if out != out or out in (float("inf"), float("-inf")):
         return fallback

@@ -65,7 +65,9 @@ export const DEFAULT_STATE = {
   // Empty on purpose: the node passes its text through with no model, so there
   // is nothing to guess and nothing to go wrong on somebody else's machine.
   model: "",
-  clip_type: "krea2",
+  // MUST match AI Prompt, or the shared model cache never hits - see the
+  // note on DEFAULT_STATE in nodes/_music_prompt_helpers.py.
+  clip_type: "minimax",
   seed: 0,
   seconds: DEFAULT_SECONDS,
   verses: VERSES_AUTO,
@@ -121,7 +123,7 @@ export function readState(node) {
   const st = { ...DEFAULT_STATE, ...(raw && typeof raw === "object" ? raw : {}) };
   st.idea = str(st.idea, "");
   st.model = str(st.model, "").trim();
-  st.clip_type = str(st.clip_type, "").trim() || "krea2";
+  st.clip_type = str(st.clip_type, "").trim() || "minimax";
   st.seed = Math.trunc(num(st.seed, 0, 0, Number.MAX_SAFE_INTEGER));
   st.seed_mode = st.seed_mode === SEED_RANDOM ? SEED_RANDOM : SEED_FIXED;
   st.seconds = Math.trunc(num(st.seconds, DEFAULT_SECONDS, MIN_SECONDS, MAX_SECONDS));

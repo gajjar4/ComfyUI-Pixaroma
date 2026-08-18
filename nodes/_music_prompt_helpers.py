@@ -105,6 +105,7 @@ MAX_VERSES = 3
 # ⚠️ TWO OTHER APPROACHES FAILED - see music-prompt.md #6, do not retry them:
 # telling the writer a SHORTER target changed nothing (8 lines either way), and
 # telling it not to leave a section empty produced 26 sung lines on one seed.
+#
 # ⚠️ THE THIRD FIELD IS LINES PER SECTION, and it exists because naming the
 # SHAPE was not enough on its own at the short end.
 #
@@ -169,9 +170,17 @@ COMMON_SAMPLING = {
 DEFAULT_STATE = {
     "idea": "",
     "model": "",
-    # Inert - ComfyUI detects the encoder from the file's contents - but it is
-    # what the probes passed, so it is what this passes.
-    "clip_type": "krea2",
+    # ⚠️ MUST match AI Prompt's default. The shared loader keys its cache on
+    # (name, clip_type), so the SAME file under two different strings is two
+    # entries - and since the cache holds ONE, alternating between an AI
+    # Prompt and a Music Prompt evicted and reloaded a multi-GB encoder every
+    # single time, silently defeating this node's headline promise.
+    #
+    # It is inert for the model both nodes recommend: comfy/sd.py selects the
+    # tokenizer purely on te_model for the QWEN35_* family and never reads
+    # clip_type there, so this changes nothing about how the file loads. The
+    # probes passed "krea2" for the same reason - it made no difference.
+    "clip_type": "minimax",
     "seed": 0,
     "seconds": DEFAULT_SECONDS,
     "verses": VERSES_AUTO,
@@ -220,7 +229,7 @@ def parse_state(raw):
 
     st["idea"] = as_text(st["idea"])
     st["model"] = as_text(st["model"]).strip()
-    st["clip_type"] = as_text(st["clip_type"]).strip() or "krea2"
+    st["clip_type"] = as_text(st["clip_type"]).strip() or "minimax"
 
     st["seed"] = int(_clamp(st["seed"], 0, 0, 0xFFFFFFFFFFFFFFFF))
     st["seconds"] = int(

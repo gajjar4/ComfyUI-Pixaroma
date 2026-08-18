@@ -431,6 +431,14 @@ function numberField(label, value, onCommit, opts = {}) {
   inp.addEventListener("change", commit);
   inp.addEventListener("blur", commit);
   inp.addEventListener("pointerdown", (e) => e.stopPropagation());
+  // ⚠️ The close path calls this DIRECTLY rather than relying on blur. Chrome
+  // fires neither change nor blur when a focused element is removed from the
+  // document, and the sibling's fix - blur the active element first - cannot be
+  // verified in the in-app browser pane at all, because that pane never takes
+  // system focus so NO blur or focusout event is ever dispatched
+  // (reference_inapp_browser_no_blur_events). Calling the commit outright
+  // depends on no event, so it works in both.
+  inp._pixCommit = commit;
   wrap.appendChild(inp);
   return wrap;
 }
@@ -523,7 +531,12 @@ function buildFormulaSet(node, body) {
       settings: Object.fromEntries(SETTING_KEYS.map((k) => [k, s[k]])),
     });
     if (!res.ok) { await sayIt("Could not save", res.message); return; }
-    SETS = await fetchPresets();
+    // Keep the LAST GOOD list if the refresh hiccups. Wiping it would report
+    // "no sets could be read" straight after a SUCCESSFUL save, and blind the
+    // name-collision guard with it - the same guard openMusicPromptPanel
+    // already applies one function away.
+    const fresh = await fetchPresets();
+    if (fresh.ok || !SETS.ok) SETS = fresh;
     renderPanel(node, body);
   });
 
@@ -540,7 +553,12 @@ function buildFormulaSet(node, body) {
     if (!(await askConfirm("Delete this set?", loaded.name))) return;
     const res = await deletePreset(loaded.name);
     if (!res.ok) { await sayIt("Could not delete", res.message); return; }
-    SETS = await fetchPresets();
+    // Keep the LAST GOOD list if the refresh hiccups. Wiping it would report
+    // "no sets could be read" straight after a SUCCESSFUL save, and blind the
+    // name-collision guard with it - the same guard openMusicPromptPanel
+    // already applies one function away.
+    const fresh = await fetchPresets();
+    if (fresh.ok || !SETS.ok) SETS = fresh;
     renderPanel(node, body);
   });
   acts.append(saveAs, del);
@@ -744,9 +762,13 @@ function escClose(e) {
 }
 
 function wheelClose(e) {
-  if (!PANEL) return;
-  if (PANEL.contains(e.target) || POP?.contains(e.target)) return;
-  closeMusicPromptPanelFor(null);
+  // ⚠️ Closes the POPUP only, never the panel. Scrolling the wheel over the
+  // canvas is how you zoom, and it is the commonest thing anyone does while a
+  // settings panel is open - closing the panel on it made the panel vanish for
+  // no reason the user could see. The panel does not need closing on a zoom
+  // anyway: followNode keeps it beside its node through any transform.
+  if (!POP || POP.contains(e.target)) return;
+  closePop();
 }
 
 export function closeMusicPromptPanelFor(node) {
@@ -755,6 +777,23 @@ export function closeMusicPromptPanelFor(node) {
   try { CP_HANDLE?.close?.(); } catch (_) { /* already gone */ }
   CP_HANDLE = null;
   try { PANEL?._pixCleanup?.(); } catch (_) { /* already gone */ }
+  // COMMIT a half-typed number before the panel goes. The numeric fields commit
+  // on change/blur, and Chrome fires NEITHER when a focused element is removed
+  // from the document - and outsideClose runs on capture-phase pointerdown,
+  // before the browser moves focus. So typing into "lyrics max len" and then
+  // clicking the canvas silently threw the value away.
+  try {
+    const active = document.activeElement;
+    if (active && PANEL && PANEL.contains(active)) {
+      // Commit OUTRIGHT, not via blur. Chrome fires neither change nor blur
+      // when a focused element is removed from the document, and blur cannot be
+      // relied on here anyway - the in-app browser pane never takes system
+      // focus, so it dispatches no blur or focusout at all. The direct call
+      // needs no event; the blur after it is belt and braces for a real browser.
+      if (typeof active._pixCommit === "function") active._pixCommit();
+      if (typeof active.blur === "function") active.blur();
+    }
+  } catch (_) { /* not fatal */ }
   PANEL?.remove();
   PANEL = null;
   PANEL_NODE = null;

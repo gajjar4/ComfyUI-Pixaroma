@@ -458,8 +458,17 @@ export function buildFace(node, openPanel, openIdeaEditor) {
   reroll.title = "Roll a new seed and run again, for a different song";
   reroll.addEventListener("click", (e) => {
     e.stopPropagation();
-    writeState(node, { seed: rollSeed() });
-    renderFace(node);
+    // In FIXED mode a re-roll HAS to change the seed, or nothing differs and
+    // ComfyUI serves the cached song - the button would look broken. That is a
+    // deliberate user action, so dirtying the workflow is correct.
+    //
+    // In RANDOM mode it must NOT: seedForRun already rolls a fresh seed for
+    // every run and ignores the stored one, so writing here would change
+    // nothing about the result while still marking a clean workflow modified.
+    if (readState(node).seed_mode !== SEED_RANDOM) {
+      writeState(node, { seed: rollSeed() });
+      renderFace(node);
+    }
     app.queuePrompt?.(0, 1);
   });
   const copy = el("button", "pix-mp-btn", "Copy");
