@@ -375,8 +375,9 @@ Master the Pixaroma suite with our video guides and workflow deep-dives:
 
 ## 🛠 Changelog
 
-### **August 18, 2026 · v1.4.115–v1.4.116**
+### **August 18, 2026 · v1.4.115–v1.4.117**
 - **NEW: Music Prompt Pixaroma.** One idea in, a caption and lyrics out for MiniMax Music 3. Set the length and the words are written to fit. Replaces the two music presets.
+- **Find a model by typing.** The model lists in AI Prompt, Video Prompt and Music Prompt settings now filter as you type, like presets do.
 - **NEW: your tag library works in AI Prompt too.** `@name`, `*Category` and `#name` from the same library as Prompt Pixaroma, coloured so you can see which are real.
 - **NEW: a Krea 2 idea preset for Qwen3.5 4B.** Over 36 runs it named the medium every time and never opened with a stray label.
 - **Prompt Pack reads what Save Text writes.** The same three separators in both, so a saved .txt runs again.
