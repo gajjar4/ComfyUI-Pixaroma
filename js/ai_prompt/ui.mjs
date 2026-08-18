@@ -63,12 +63,19 @@ const WIDGET_MIN_H = 250;
 // between them so the seed and the join segment never read as one block.
 const CLASSIC_BAND_TOP = -92;
 const CLASSIC_RSV_L = 78;      // clear the clip / image / video / audio labels
-// A band row is 19px tall and the slot rows are 20px apart, so a 1px gap puts each
-// row on the NEXT slot row. It used to be 21 (skipping a row) to keep the gear+seed
-// cluster visually apart from the join segment; the Tags button now occupies that
-// gap row, which does the separating and costs nothing. Rows land on slots 2, 3, 4 -
-// MEASURED, and re-measure again if the node's slots ever change (pattern #4).
-const CLASSIC_ROW_GAP = 1;
+// The band spreads over the FOUR free slot rows rather than bunching at the top:
+// gear + seed beside slot 2, Tags halfway down, and the join segment beside the
+// TEXT input it belongs to (slot 5), which is what it actually controls.
+//
+// Solved, not eyeballed. Rows 1 and 3 are 19px, the Tags row is TAGS_H, and the
+// centres must be 60px apart (slot 2 at 34 to slot 5 at 94), so
+//   (row3 centre - row1 centre) = 19 + 2*gap + TAGS_H = 60
+// which fixes the gap once TAGS_H is chosen. With TAGS_H 23 that is a 9px gap, and
+// it puts the Tags centre at 63.5 - midway between slots 3 and 4, i.e. exactly
+// between the seed and the join. Change one and re-solve the other; do not nudge
+// them by eye (pattern #4).
+const TAGS_H = 23;
+const CLASSIC_ROW_GAP = 9;
 const VUE_ROW_GAP = 5;
 // The widget root stops at node width - 10, while LiteGraph draws the output
 // dot centred at width - 9 with radius 4, so its right edge is 5px further
@@ -211,11 +218,12 @@ export function injectCSS() {
        the idea box already say whether a tag is real, which is the part that
        matters; what a slot ROLLED shows up in the generated prompt below. */
 
-    /* Tags: opens the shared library. Same 19px height as the gear and the seed chip
-       so the band rows line up on the slot rows. */
-    .pix-ap-tags { height:19px; flex:0 0 auto; border-radius:4px; padding:0 8px;
+    /* Tags: opens the shared library. Deliberately a touch LARGER than the gear and
+       the seed chip - it is the one control on this band a person reaches for while
+       writing, and its height feeds the row arithmetic above (TAGS_H). */
+    .pix-ap-tags { height:${TAGS_H}px; flex:0 0 auto; border-radius:4px; padding:0 13px;
       background:rgba(255,255,255,.05); border:1px solid rgba(255,255,255,.14);
-      color:#c9c6c2; font:10.5px 'Segoe UI', sans-serif; cursor:pointer;
+      color:#c9c6c2; font:11.5px 'Segoe UI', sans-serif; cursor:pointer;
       display:flex; align-items:center; gap:5px; }
     .pix-ap-tags:hover { background:${ACC}; border-color:${ACC}; color:#fff; }
     /* The PROMPT readout is a preview, not an input, so it wears Prompt
