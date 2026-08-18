@@ -1687,14 +1687,8 @@ function renderPanel(node, body) {
     (v) => set({ thinking: v }),
     "Some models reason first and answer second. Slower, and not every model "
     + "supports it."));
-  // Off for a new node. The highlight in the idea box already tells you whether a
-  // tag is real; this box is for seeing WHICH option a *category or #list rolled,
-  // which not everybody needs, and it takes its room from the idea box either way.
-  body.appendChild(toggleRow("Show what the tags expand to", st.show_expanded,
-    (v) => set({ show_expanded: v }),
-    "Adds a box under your idea showing the words your @tags, *categories and "
-    + "#lists turn into, and after a run the ones that were actually sent. It "
-    + "shares the idea box's height, so the node never grows."));
+  // No "show what the tags expand to" row: the box it switched on did not fit this
+  // face and was removed (ai-prompt.md #21).
 
   // ---- accent --------------------------------------------------------------
   body.appendChild(createAccentSection(node, {

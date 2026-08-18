@@ -90,15 +90,15 @@ export const AI_PROMPT_HELP = {
       ],
     },
     {
-      heading: "Seeing what the tags turned into",
+      heading: "Seeing what a slot actually picked",
       body:
-        "Turn on \"Show what the tags expand to\" in the settings and a box appears "
-        + "under your idea with the real words. Before a Run it names what each slot "
-        + "will do, such as [shuffled: Styles], because showing a live random would "
-        + "change on every keystroke. After a Run it shows what was actually sent, in "
-        + "the same colours, so you can tell which option came up.\n\n"
-        + "It is off to begin with, and it takes its height from the idea box, so "
-        + "turning it on never makes the node bigger.",
+        "There is no preview box on this node, on purpose: the face is already two "
+        + "text boxes deep and a third one left nothing readable.\n\n"
+        + "You rarely need one. The colours above tell you a tag is real before you "
+        + "Run, and the prompt the model writes is right there underneath, built "
+        + "from whatever the slot picked. If you want to see the swapped words "
+        + "themselves, put a Prompt Pixaroma node in front of this one: it has the "
+        + "expanded view, and its output wires straight into the text input here.",
     },
     {
       heading: "Chaining several of them",

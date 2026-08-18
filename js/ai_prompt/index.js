@@ -296,12 +296,6 @@ app.graphToPrompt = async function (...args) {
           // you what they did.
           const res = expandAll(st.idea, makeRunResolvers());
           st.idea = res.out;
-          // Remember what this build produced so the expanded box can show the REAL
-          // words instead of the [shuffled line: x] placeholder. RUNTIME ONLY: this
-          // is derived from the idea and regenerates itself, so unlike the ANSWER
-          // (which is serialized, #18) it costs nothing to lose on a tab switch.
-          node._pixApLastExpand = { src: readState(node).idea, out: res.out, spans: res.spans };
-          queueMicrotask(() => { try { renderFace(node); } catch { /* node may be gone */ } });
           entry.inputs = entry.inputs || {};
           entry.inputs[HIDDEN_INPUT] = JSON.stringify(st);
         } catch (nodeErr) {

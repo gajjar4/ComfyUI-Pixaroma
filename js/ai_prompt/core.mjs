@@ -56,6 +56,15 @@ export const IDEA_SHARE_DEFAULT = 0.36;
 export const IDEA_SHARE_MIN = 0.12;
 export const IDEA_SHARE_MAX = 0.8;
 
+// There is NO expanded-preview state here, and that is deliberate. One was built
+// and taken out the same day: the face already carries a banner, two caption rows,
+// two text boxes, a grip and a button row, so on a 320x368 node the idea box is
+// already under its own 44px minimum. A third box collapsed to an 11px sliver, and
+// the only ways out were forcing the node taller than the user had made it or
+// letting the buttons spill past the frame. The tag COLOURS in the idea box already
+// answer "is this tag real", which is the part that earns its space; what a slot
+// rolled shows up in the generated prompt underneath. See ai-prompt.md #21.
+
 export const DEFAULT_STATE = {
   // --- what Python reads --------------------------------------------------
   idea: "",
@@ -88,12 +97,6 @@ export const DEFAULT_STATE = {
   // --- face only, never sent (see PROMPT_KEYS) ----------------------------
   seed_mode: SEED_FIXED,
   idea_share: IDEA_SHARE_DEFAULT,
-  // Show a third box under the idea with what the @tags / *categories / #lists
-  // expand to. OFF for a new node, unlike Prompt Pixaroma where it defaults on: there
-  // the expanded text IS what leaves the node, so you have to see it, while here it
-  // is only the model's INPUT and the thing you judge - the generated prompt - is
-  // already on screen. A node that uses no tags should never pay a box for it.
-  show_expanded: false,
 };
 
 // Exactly the keys Python reads. Anything outside this list is presentation,
@@ -150,7 +153,6 @@ export function readState(node) {
   st.use_default_template = st.use_default_template !== false;
   st.release_model = st.release_model === true;
   st.idea_share = num(st.idea_share, IDEA_SHARE_DEFAULT, IDEA_SHARE_MIN, IDEA_SHARE_MAX);
-  st.show_expanded = st.show_expanded === true;
   return st;
 }
 

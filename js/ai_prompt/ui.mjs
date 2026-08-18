@@ -30,9 +30,8 @@ import { askName } from "./settings.mjs";
 // listOf must stay the single source of "is this live").
 import {
   acKeydown, backdropHTML, closeAC, injectTagCSS, insertTagAt,
-  maybeAC, paintExpanded, PREVIEW_RESOLVERS, syncColumns,
+  maybeAC, syncColumns,
 } from "../prompt/tag_field.mjs";
-import { expandAll, hasLists, hasTags, hasWilds } from "../prompt/expand.mjs";
 import { openLibraryEditor, closeLibraryEditorFor } from "../prompt/library_editor.mjs";
 import {
   IDEA_SHARE_DEFAULT,
@@ -203,17 +202,14 @@ export function injectCSS() {
       border-radius:4px; padding:6px 8px; font:11.5px/1.45 monospace; resize:none;
       outline:none; scrollbar-gutter:stable; }
 
-    /* What the tags expand to. Off for a new node (see show_expanded in core.mjs);
-       when on it takes its height from the IDEA's share of the node, so the grip
-       still means "idea area against prompt area" and turning it on never grows the
-       node. Lighter panel than the sunken input above it, so it reads as read-only
-       (the same pair Prompt Pixaroma uses). */
-    .pix-ap-exp { display:none; flex:var(--pix-ap-exp-grow,0) 1 0; min-height:0;
-      background:#2d2d2d; border:1px solid #3a3a3a; border-radius:4px; padding:5px 8px;
-      font:11px/1.45 monospace; white-space:pre-wrap; word-wrap:break-word;
-      overflow-y:auto; color:#d8d8d8; box-sizing:border-box; cursor:text; }
-    .pix-ap-exp.on { display:block; }
-    .pix-ap-exp .note { color:#8a8a8a; font-style:italic; }
+    /* NO expanded-preview box here, deliberately - see ai-prompt.md #21. One was
+       built and removed the same day: this face already carries a banner, two
+       caption rows, two text boxes, a grip and a button row, so on a 320x368 node
+       the idea box is ALREADY under its own 44px minimum. A third box collapsed to
+       an 11px sliver, and the only ways out were forcing the node taller than the
+       user had made it or letting the buttons spill past the frame. The colours in
+       the idea box already say whether a tag is real, which is the part that
+       matters; what a slot ROLLED shows up in the generated prompt below. */
 
     /* Tags: opens the shared library. Same 19px height as the gear and the seed chip
        so the band rows line up on the slot rows. */
@@ -315,15 +311,8 @@ export function applyShare(node) {
   const st = readState(node);
   const share = st.idea_share;
   const ideaTotal = Math.round(share * 1000);
-  // The expanded box takes its room from the IDEA's share, never from the node. So
-  // the grip keeps meaning "idea area against prompt area", turning the box on can
-  // never grow the node (which would dirty a workflow on load, Vue Compat #18), and
-  // the readout below is not squeezed by a preview the user may not be using.
-  const expOn = st.show_expanded;
-  els.inner.style.setProperty("--pix-ap-idea-grow", String(expOn ? Math.round(ideaTotal * 0.55) : ideaTotal));
-  els.inner.style.setProperty("--pix-ap-exp-grow", String(expOn ? Math.round(ideaTotal * 0.45) : 0));
+  els.inner.style.setProperty("--pix-ap-idea-grow", String(ideaTotal));
   els.inner.style.setProperty("--pix-ap-out-grow", String(Math.round((1 - share) * 1000)));
-  els.exp?.classList.toggle("on", expOn);
 }
 
 /**
@@ -347,33 +336,15 @@ export function openTagLibrary(node, ideaEl, ctx) {
 }
 
 /**
- * Paint the highlight backdrop and, when it is switched on, the expanded preview.
- * DOM only - safe to call from the load path.
+ * Paint the highlight backdrop under the idea textarea.
+ *
+ * DOM only, so it is safe from the load path. There is no expanded-preview box to
+ * fill - see the CSS note above for why one was built and taken out again.
  */
 function renderIdeaTags(node) {
   const els = node?._pixApEls;
   if (!els?.ideabd) return;
-  const text = els.idea.value;
-  els.ideabd.innerHTML = backdropHTML(text);
-
-  const st = readState(node);
-  if (!st.show_expanded) return;
-  if (!hasTags(text) && !hasWilds(text) && !hasLists(text)) {
-    els.exp.innerHTML = text.trim()
-      ? `<span class="note">No tags in the idea. Type @ for a snippet, * for a random one from a category, # for a random line.</span>`
-      : `<span class="note">What your tags expand to will show here.</span>`;
-    return;
-  }
-  // After a build, show the words that were REALLY sent instead of the
-  // [shuffled line: x] placeholder - otherwise there is no way to tell what a run
-  // picked. Gated on the text being unchanged since, so an edit returns to the
-  // placeholder by itself and a stale result is impossible. The placeholder is still
-  // what you see while typing, which is prompt.md #24's "never a live random, or the
-  // preview flickers on every keystroke".
-  const ran = node._pixApLastExpand;
-  const useRan = ran && ran.src === text;
-  const res = useRan ? null : expandAll(text, PREVIEW_RESOLVERS);
-  els.exp.innerHTML = paintExpanded(useRan ? ran.out : res.out, useRan ? ran.spans : res.spans);
+  els.ideabd.innerHTML = backdropHTML(els.idea.value);
 }
 
 function installGrip(node, grip, idea, out) {
@@ -508,8 +479,7 @@ export function buildFace(node, openPanel, openIdeaEditor) {
   idea.placeholder = "what you want, in plain words";
   idea.spellcheck = true;
   ideawrap.append(ideabd, idea);
-  const exp = el("div", "pix-ap-exp");
-  inner.append(cap1, ideawrap, exp);
+  inner.append(cap1, ideawrap);
 
   const grip = el("div", "pix-ap-grip");
   grip.title = "Drag to change how the height is shared. Double-click to reset.";
@@ -649,7 +619,7 @@ export function buildFace(node, openPanel, openIdeaEditor) {
   node._pixApEls = {
     root, inner, band, banner, bLabel, bHint, idea, out, meta,
     seed, seedmode, seedwrap, seg, segIdea, segWired, copy, vram, gear,
-    reroll, row1, row2, rowTags, tagsBtn, ideawrap, ideabd, exp,
+    reroll, row1, row2, rowTags, tagsBtn, ideawrap, ideabd,
   };
 
   const widget = node.addDOMWidget(WIDGET_TYPE, WIDGET_TYPE, root, {
