@@ -35,14 +35,23 @@ import threading
 # a `formula` where a set has `caption` and `lyrics`, so every entry was dropped
 # and the guard reported a file it had just written as unreadable. Verify the
 # CONTRACT of a shared function, not just its name.
-from ._ai_prompt_presets import _read_checked
+from ._ai_prompt_presets import MAX_PRESETS, _read_checked
 from ._music_prompt_formulas import CAPTION_FORMULA, LYRICS_FORMULA
 from ._music_prompt_helpers import CAPTION_SAMPLING, LYRICS_SAMPLING
 
 MAX_NAME = 120
 MAX_FORMULA = 20000
 MAX_NOTE = 600
-MAX_SETS = 200
+
+# ⚠️ DERIVED, never its own number. `_read_checked` truncates the raw list at
+# ITS module's MAX_PRESETS - a function's globals resolve in the module it was
+# defined in, not the one calling it - so a separate write-side cap here could
+# silently drift above the read-side one. If it ever did, a library that grew
+# past the read cap would be read back truncated, and the next save would
+# os.replace that shortened list over the real file: everything past the cap
+# gone, with ok=True and no error anywhere. Inert while both were 200, which is
+# exactly the kind of latent data loss that survives a review.
+MAX_SETS = MAX_PRESETS
 
 # What a set carries besides its two formulas. Must match SETTING_KEYS in
 # js/music_prompt/core.mjs.
@@ -160,7 +169,14 @@ def _write_user(items):
                 os.remove(tmp)
         except Exception:
             pass
-        return False, str(e)
+        # The real error goes to the CONSOLE, not to the browser. `str(e)` on an
+        # OSError embeds the full temp path, which carries the OS username and
+        # the install layout, and these routes are unauthenticated. The sibling
+        # module made the same call deliberately - its callers say only "Could
+        # not write the presets file." - and a maintainer looking at a "cannot
+        # save" report reads the ComfyUI log anyway.
+        print("[Pixaroma] Music Prompt: could not write %s: %s" % (path, e))
+        return False, "Could not write the formula sets file. The ComfyUI console has the reason."
 
 
 def save_user(raw):

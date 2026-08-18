@@ -6,6 +6,8 @@
 
 import { app } from "/scripts/app.js";
 import { api } from "/scripts/api.js";
+import { isGraphLoading } from "../shared/graph_loading.mjs";
+import { isVueNodes } from "../shared/nodes2.mjs";
 
 import {
   CLASS,
@@ -39,6 +41,10 @@ app.registerExtension({
 
   beforeRegisterNodeDef(nodeType, nodeData) {
     if (nodeData?.name !== CLASS) return;
+    // A re-registration would wrap every hook a second time and build the face
+    // twice. Only reachable on a dev hot-reload, but the guard is free.
+    if (nodeType.prototype._pixMpPatched) return;
+    nodeType.prototype._pixMpPatched = true;
 
     const origCreated = nodeType.prototype.onNodeCreated;
     nodeType.prototype.onNodeCreated = function () {
@@ -57,6 +63,11 @@ app.registerExtension({
       // So the settings panel can repaint the face after a change without
       // importing ui.mjs (which imports settings.mjs for nothing else).
       this._pixMpRender = () => renderFace(this);
+      // Vue Compat #8: nodeCreated fires BEFORE configure, so the paint inside
+      // buildFace above reads the DEFAULTS. Without this the face shows an empty
+      // idea and "No model" for a moment before flipping to the saved content.
+      // Style and DOM only, so it cannot dirty a workflow.
+      queueMicrotask(() => renderFace(this));
       return r;
     };
 
@@ -69,6 +80,8 @@ app.registerExtension({
       const r = origConfigure?.apply(this, arguments);
       applyShare(this);
       renderFace(this);
+      // Backup for the Nodes 2.0 case, where the restore settles a tick later.
+      queueMicrotask(() => renderFace(this));
       return r;
     };
 
@@ -91,16 +104,36 @@ app.registerExtension({
       return r;
     };
 
-    // Legacy only. In Nodes 2.0 the rendered size lives in the Vue layout store,
-    // not in node.size, so clamping here would desync the two and the node would
-    // JUMP to the clamped size on the next workflow switch (Nodes 2.0 recipe #1).
+    // Legacy only. In Nodes 2.0 the rendered size lives in the Vue layout
+    // store, not in node.size, so clamping here would desync the two and the
+    // node would JUMP to the clamped size on the next workflow switch.
+    //
+    // ⚠️ AND the load gate is not optional. onResize is NOT only a user drag -
+    // it is called from setSize, which the frontend also invokes on workflow
+    // restore. Without the gate: save a node below the minimum in Nodes 2.0
+    // (which has no live width clamp, so it genuinely can be), reopen it in
+    // Classic, and the clamp rewrites node.size on load - so an untouched
+    // workflow opens flagged "modified" and offers to save itself.
     const origResize = nodeType.prototype.onResize;
     nodeType.prototype.onResize = function (size) {
-      if (!window.LiteGraph?.vueNodesMode) {
+      if (!isVueNodes() && !isGraphLoading()) {
         if (size[0] < MIN_W) size[0] = MIN_W;
         if (size[1] < MIN_H) size[1] = MIN_H;
       }
       return origResize?.apply(this, arguments);
+    };
+
+    // Belt and braces: onResize does not fire for every resize path. Same gate,
+    // and here it matters even more - a draw hook runs on the FIRST frame of a
+    // load, earlier than any other clamp, so an ungated write is the one place
+    // that can rewrite a saved node.size on a clean open.
+    const origDraw = nodeType.prototype.onDrawForeground;
+    nodeType.prototype.onDrawForeground = function () {
+      if (!isVueNodes() && !isGraphLoading()) {
+        if (this.size[0] < MIN_W) this.size[0] = MIN_W;
+        if (this.size[1] < MIN_H) this.size[1] = MIN_H;
+      }
+      return origDraw?.apply(this, arguments);
     };
   },
 });
