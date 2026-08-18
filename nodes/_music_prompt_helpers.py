@@ -65,10 +65,33 @@ MAX_SECONDS = 360
 MIN_SECONDS = 5
 DEFAULT_SECONDS = 120
 
-# 0 means "let the length decide", which is the formula's own shape rule and
-# the path every reliability measurement was taken on.
+# 0 means "let the length decide", which is the formula's own shape rule.
 VERSES_AUTO = 0
 MAX_VERSES = 3
+
+# ⚠️ AROUND A MINUTE, AUTO HAS TO SAY THE NUMBER OUT LOUD.
+#
+# The formula's own rule already prescribes "a verse, a chorus, a second verse
+# and the chorus again" for about a minute. The model does not reliably follow
+# it THERE, and only there. Measured at 60 seconds, one idea, five seeds:
+#
+#     Auto, saying nothing         3/5 filled the minute (three wrote 1v/1c)
+#     "2 verses and 2 choruses"    5/5 filled the minute
+#
+# A user reported exactly the failing shape: 8 sung lines in one verse and one
+# chorus for a 60 second song, which ran 21 seconds. Eight lines in two sections
+# is the UNDER-FORTY shape, so the length rule had simply been ignored.
+#
+# 30s, 120s and 180s on Auto all measured 1.00x and are LEFT ALONE. Do not fix
+# what measures fine - especially at 180s, where an explicit 3 drifts back to 2.
+#
+# This is not Auto quietly becoming something else: Auto means the length decides
+# the shape, and this is the length deciding it rather than hoping the model
+# does. The clause produced is byte-identical to choosing 2 verses by hand, which
+# is why that 5/5 measurement transfers with no new run needed.
+AUTO_HELP_FROM = 40
+AUTO_HELP_TO = 90
+AUTO_HELP_VERSES = 2
 
 # MEASURED WITH THE WORDING, so they travel with it. The caption wants a low
 # temperature to stay factual; the lyrics want a high one or every song rhymes
@@ -170,13 +193,16 @@ def structure_clause(seconds, verses=VERSES_AUTO, bridge=False, instrumental=Fal
 
     Length is always stated, because the node has a control for it and relying
     on the user to type "a 30 second song" is exactly the friction this node
-    exists to remove. Structure is only stated when asked for: left on auto the
-    formula's own shape rule runs, which is the path every reliability run was
-    measured on (20 of 20 gave 8 sung lines in 2 sections for thirty seconds).
+    exists to remove. Structure is otherwise only stated when asked for, so the
+    formula's own shape rule runs - except around a minute, where it measured
+    unreliable and Auto says the number itself (see AUTO_HELP_FROM).
     """
     bits = []
     if seconds:
         bits.append("%d seconds long" % int(seconds))
+
+    if not verses and seconds and AUTO_HELP_FROM <= int(seconds) < AUTO_HELP_TO:
+        verses = AUTO_HELP_VERSES
 
     wanted = []
     if verses and verses >= 1:
