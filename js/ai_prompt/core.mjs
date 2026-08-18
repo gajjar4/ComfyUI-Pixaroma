@@ -88,6 +88,12 @@ export const DEFAULT_STATE = {
   // --- face only, never sent (see PROMPT_KEYS) ----------------------------
   seed_mode: SEED_FIXED,
   idea_share: IDEA_SHARE_DEFAULT,
+  // Show a third box under the idea with what the @tags / *categories / #lists
+  // expand to. OFF for a new node, unlike Prompt Pixaroma where it defaults on: there
+  // the expanded text IS what leaves the node, so you have to see it, while here it
+  // is only the model's INPUT and the thing you judge - the generated prompt - is
+  // already on screen. A node that uses no tags should never pay a box for it.
+  show_expanded: false,
 };
 
 // Exactly the keys Python reads. Anything outside this list is presentation,
@@ -144,6 +150,7 @@ export function readState(node) {
   st.use_default_template = st.use_default_template !== false;
   st.release_model = st.release_model === true;
   st.idea_share = num(st.idea_share, IDEA_SHARE_DEFAULT, IDEA_SHARE_MIN, IDEA_SHARE_MAX);
+  st.show_expanded = st.show_expanded === true;
   return st;
 }
 
