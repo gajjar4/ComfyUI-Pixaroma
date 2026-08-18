@@ -46,7 +46,9 @@ __all__ = [
     "LYRICS_SAMPLING",
     "DEFAULT_STATE",
     "MAX_SECONDS",
+    "AUTO_SHAPE",
     "MAX_VERSES",
+    "auto_verses",
     "VERSES_AUTO",
     "build_caption_prompt",
     "build_lyrics_prompt",
@@ -69,29 +71,51 @@ DEFAULT_SECONDS = 120
 VERSES_AUTO = 0
 MAX_VERSES = 3
 
-# ⚠️ AROUND A MINUTE, AUTO HAS TO SAY THE NUMBER OUT LOUD.
+# ⚠️ AUTO NAMES THE SHAPE. It does not leave the model to infer it from prose.
 #
-# The formula's own rule already prescribes "a verse, a chorus, a second verse
-# and the chorus again" for about a minute. The model does not reliably follow
-# it THERE, and only there. Measured at 60 seconds, one idea, five seeds:
+# The formula ALREADY prescribes a shape per length in its own words. The model
+# reads it unreliably, and both failures a user hit came from that:
 #
-#     Auto, saying nothing         3/5 filled the minute (three wrote 1v/1c)
-#     "2 verses and 2 choruses"    5/5 filled the minute
+#   - a 60 second song came back with one verse and one chorus - the UNDER-FORTY
+#     shape - and ran 21 seconds;
+#   - a 30 second song came back with an empty [Intro] on top of a full verse and
+#     chorus, and the chorus was chopped off the end.
 #
-# A user reported exactly the failing shape: 8 sung lines in one verse and one
-# chorus for a 60 second song, which ran 21 seconds. Eight lines in two sections
-# is the UNDER-FORTY shape, so the length rule had simply been ignored.
+# Naming the shape outright fixes both, measured on one idea with four or five
+# seeds an arm, nothing else moving:
 #
-# 30s, 120s and 180s on Auto all measured 1.00x and are LEFT ALONE. Do not fix
-# what measures fine - especially at 180s, where an explicit 3 drifts back to 2.
+#     60s  say nothing              3/5 filled the minute
+#     60s  "2 verses and 2 choruses" 5/5 filled the minute
 #
-# This is not Auto quietly becoming something else: Auto means the length decides
-# the shape, and this is the length deciding it rather than hoping the model
-# does. The clause produced is byte-identical to choosing 2 verses by hand, which
-# is why that 5/5 measurement transfers with no new run needed.
-AUTO_HELP_FROM = 40
-AUTO_HELP_TO = 90
-AUTO_HELP_VERSES = 2
+#     30s  say nothing              1/4 free of an empty section
+#     30s  "1 verse and 1 chorus"   4/4 free of an empty section
+#
+# The thresholds ARE the formula's own table, so this states what it already
+# says rather than inventing a policy. 90 seconds and up is deliberately absent:
+# 120s and 180s both measured 1.00x on Auto, and an explicit 3 verses drifts back
+# to 2 at 180s, so naming it there would make things worse. Do not fix what
+# measures fine.
+#
+# This is not Auto quietly becoming something else. Auto means the length decides
+# the shape; this is the length deciding it. The clause produced is BYTE-IDENTICAL
+# to choosing that verse count by hand, which is why the measurements above
+# transfer with no new run.
+#
+# ⚠️ TWO OTHER APPROACHES FAILED - see music-prompt.md #6, do not retry them:
+# telling the writer a SHORTER target changed nothing (8 lines either way), and
+# telling it not to leave a section empty produced 26 sung lines on one seed.
+AUTO_SHAPE = (
+    (40, 1),    # under 40 seconds: one verse and one chorus
+    (90, 2),    # 40 up to 90: two verses and two choruses
+)               # 90 and over: say nothing
+
+
+def auto_verses(seconds):
+    """The verse count Auto asks for at this length, or 0 to say nothing."""
+    for limit, verses in AUTO_SHAPE:
+        if int(seconds) < limit:
+            return verses
+    return VERSES_AUTO
 
 # MEASURED WITH THE WORDING, so they travel with it. The caption wants a low
 # temperature to stay factual; the lyrics want a high one or every song rhymes
@@ -194,15 +218,15 @@ def structure_clause(seconds, verses=VERSES_AUTO, bridge=False, instrumental=Fal
     Length is always stated, because the node has a control for it and relying
     on the user to type "a 30 second song" is exactly the friction this node
     exists to remove. Structure is otherwise only stated when asked for, so the
-    formula's own shape rule runs - except around a minute, where it measured
-    unreliable and Auto says the number itself (see AUTO_HELP_FROM).
+    formula's own shape rule runs - except that Auto NAMES that shape rather
+    than leaving it to be inferred from prose (see AUTO_SHAPE).
     """
     bits = []
     if seconds:
         bits.append("%d seconds long" % int(seconds))
 
-    if not verses and seconds and AUTO_HELP_FROM <= int(seconds) < AUTO_HELP_TO:
-        verses = AUTO_HELP_VERSES
+    if not verses and seconds:
+        verses = auto_verses(seconds)
 
     wanted = []
     if verses and verses >= 1:
