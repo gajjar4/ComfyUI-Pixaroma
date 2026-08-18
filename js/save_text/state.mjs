@@ -208,6 +208,50 @@ export function shouldCollect(buffer, entry, st) {
   return stored(entries[st.newest === "top" ? 0 : entries.length - 1]) !== target;
 }
 
+// Run `fn` only once every earlier call for this node has settled, so two of
+// them can never be in flight at the same time. The chain lives on the node
+// under `key` (a runtime field, never serialized).
+//
+// WHY THIS EXISTS - two races, both measured, both from `saveToFile` reading
+// state before its `await` (the #4 trap in the pattern file, for the fourth
+// time in that one function):
+//
+//  1. DOUBLE CLAIM. The request carries `claim: !st.currentFile`, decided
+//     BEFORE the fetch. Two saves starting within one round-trip both still
+//     see currentFile === "" and both claim a fresh name, so one collection
+//     lands in several files. MEASURED: 4 runs back to back produced
+//     racebefore_001.txt (3 entries) AND racebefore_002.txt (4 entries).
+//  2. OUT-OF-ORDER WRITES. Even once a name exists, two overlapping saves can
+//     land in either order, leaving the FILE holding an older buffer than the
+//     node shows. That one breaks the node's headline promise - what you see
+//     on the node IS what is in the file - so it matters more than the litter.
+//
+// Serialising fixes both at once, and is the smallest thing that does: a lock
+// on the claim alone would leave (2) untouched.
+//
+// It deliberately does NOT coalesce queued calls. Every save writes the WHOLE
+// buffer, so a redundant one is harmless, whereas dropping one would have to
+// decide what its caller's boolean result means - and the rollover DEPENDS on
+// that result to know whether it may wipe the collection.
+//
+// Errors are contained TWICE, and either half alone would do it: the two-arm
+// `then` runs fn even when the previous call rejected, and the stored chain
+// always resolves so the next call never sees a rejection at all. Keeping both
+// is deliberate belt-and-braces in a function whose whole job is not to lose
+// the user's text. (Consequence for mutation testing: removing ONE of them is
+// an equivalent mutant and survives - the script mutates them together.)
+// The caller still sees its own rejection either way.
+const NOOP = () => {};
+
+export function queueOnNode(node, key, fn) {
+  const prev = node[key] || Promise.resolve();
+  // Both arms call fn with NO arguments - `prev.then(fn, fn)` would hand it the
+  // previous call's value or error, which is not this call's business.
+  const mine = prev.then(() => fn(), () => fn());
+  node[key] = mine.then(NOOP, NOOP);
+  return mine;
+}
+
 export {
   resolveDateTokens,
   expandNativeTokens,

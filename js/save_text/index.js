@@ -35,6 +35,7 @@ import {
   appendEntry,
   shouldCollect,
   separatorStr,
+  queueOnNode,
   SEPARATOR_LABELS,
   resolveDateTokens,
   expandNativeTokens,
@@ -329,7 +330,28 @@ function updatePreview(node) {
 // ALWAYS the whole buffer, never an append, so a run and a manual Save take the
 // identical path. `claim` is what decides between continuing the current file
 // and starting a new one, and it is simply "do we already have a file name".
-async function saveToFile(node, { quiet } = {}) {
+//
+// ONE SAVE PER NODE AT A TIME. Every caller goes through this wrapper, so a
+// second save waits for the first to have written its filename back. Two
+// measured races made that necessary, both from `claim` and `currentFile`
+// being read BEFORE the await (pattern #4, for the fourth time in this one
+// function):
+//
+//   * 4 runs back to back claimed TWO files - racebefore_001.txt with three
+//     entries and racebefore_002.txt with four - because the early saves all
+//     still saw currentFile === "". One collection, several files.
+//   * two overlapping writes to the SAME name can land in either order, which
+//     would leave the file holding an older buffer than the node shows. That
+//     one breaks the node's headline promise, so it mattered more than litter.
+//
+// Reproduce either by firing `app.queuePrompt(0,1)` several times without
+// awaiting a gap; a normal image workflow is far too slow to hit it, which is
+// why four review rounds did not.
+function saveToFile(node, opts = {}) {
+  return queueOnNode(node, "_pixStxSaveChain", () => saveToFileNow(node, opts));
+}
+
+async function saveToFileNow(node, { quiet } = {}) {
   const ui = uiOf(node);
   if (!ui) return false;
   const st = readState(node);
