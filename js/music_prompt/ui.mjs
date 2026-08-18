@@ -111,6 +111,9 @@ export function injectCSS() {
 
     /* ---- captions -------------------------------------------------------- */
     .pix-mp-caprow { display:flex; align-items:baseline; gap:10px; flex:0 0 auto; }
+    /* The row carrying the seed chip centres instead, or a 21px control hangs
+       off a text baseline. */
+    .pix-mp-caprow.has-seed { align-items:center; gap:7px; }
     .pix-mp-cap { font-size:10px; letter-spacing:.09em; text-transform:uppercase;
       color:${ACC}; flex:0 0 auto; }
     .pix-mp-expand { margin-left:auto; background:none; border:none; color:#6f6c67;
@@ -204,10 +207,16 @@ export function injectCSS() {
       border-left-color:rgba(0,0,0,.3); }
 
     /* ---- tip ------------------------------------------------------------- */
+    /* ⚠️ text-overflow on a FLEX CONTAINER does nothing for its children: they
+       lay out at natural width and overflow:hidden then CLIPS whatever is on
+       the end. That is how turning Bridge and Instr. on pushed the seed chip
+       off the right of the node and out of sight (user-reported). The
+       truncation has to live on the TEXT ITSELF, which is .pix-mp-tipv. */
     .pix-mp-tip { flex:0 0 auto; display:flex; align-items:center; gap:5px;
-      color:#777; font-size:10px; line-height:1.3; overflow:hidden;
-      text-overflow:ellipsis; white-space:nowrap; }
+      color:#777; font-size:10px; line-height:1.3; min-width:0; }
     .pix-mp-tip b { color:${ACC}; font-weight:400; flex:0 0 auto; }
+    .pix-mp-tipv { flex:0 1 auto; min-width:0; overflow:hidden;
+      text-overflow:ellipsis; white-space:nowrap; }
 
     /* ---- the caption/lyrics segment -------------------------------------- */
     .pix-mp-seg { display:flex; height:20px; flex:0 0 auto; border-radius:4px;
@@ -416,7 +425,7 @@ export function buildFace(node, openPanel, openIdeaEditor) {
   // ---- tip -----------------------------------------------------------------
   const tip = el("div", "pix-mp-tip");
   const tipK = el("b", null, "Song");
-  const tipV = el("span", null, "");
+  const tipV = el("span", "pix-mp-tipv", "");
   tip.append(tipK, tipV);
   inner.appendChild(tip);
 
@@ -505,10 +514,21 @@ export function buildFace(node, openPanel, openIdeaEditor) {
     renderFace(node);
   });
   seedwrap.append(seed, seedmode);
-  // It belongs beside the tip, which is the quiet line: the seed is something
-  // you check rather than something you reach for while writing.
-  tip.appendChild(el("span", "pix-mp-spacer"));
-  tip.appendChild(seedwrap);
+  // ON THE TAB ROW, between the Caption/Lyrics segment and the meta readout.
+  //
+  // It sat on the TIP line first, and the user reported the consequence:
+  // turning Bridge and Instr. on made that line longer and pushed the seed off
+  // the right of the node, out of sight. The CSS fix above stops the clipping,
+  // but a line that GROWS with the settings was never the right home for a
+  // control.
+  //
+  // The BUTTON row was the next try and measured worse: the row wrapped to two
+  // lines (27px to 59px at the default width), and that height comes straight
+  // out of the readout. This row holds two short buttons and a meta label that
+  // already ellipsises, so it has the room, and the seed sits beside the answer
+  // it produced.
+  cap2.classList.add("has-seed");
+  cap2.insertBefore(seedwrap, meta);
 
   // ---- mount ---------------------------------------------------------------
   const widget = node.addDOMWidget(WIDGET_TYPE, WIDGET_TYPE, root, {
