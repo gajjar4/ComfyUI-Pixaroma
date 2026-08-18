@@ -124,13 +124,32 @@ MAX_VERSES = 3
 # seconds at that pace, which fits with room to spare - and a short lyric costs
 # nothing, because MiniMax plays out the rest of the ceiling anyway.
 #
-# ⚠️ None above 40 seconds ON PURPOSE. No truncation has been reported there and
-# there is only ONE pace measurement in existence (the user's ear on one song),
-# so a line budget at 60s would be changing something nobody has shown to be
-# broken, on one data point. Get a report first.
+# ⚠️ 40 TO 90 GOT ITS OWN LINE COUNT 2026-08-18, on the report the previous
+# version of this note was explicitly waiting for. Two renders at 60 seconds,
+# BY EAR, on the same 16 line lyric:
+#
+#     intro  9s -> 51s of singing -> cut inside line 10   (5.2s a line)
+#     intro 18s -> 41s of singing -> stopped after line 9 (4.6s a line)
+#
+# So about NINE lines fit a sixty second song, and the band was asking for
+# sixteen. Two verses and two choruses at two lines each is eight, which fits
+# both cases and leaves the four section shape intact.
+#
+# The INTRO is the variable nobody can plan around: it DOUBLED between two runs
+# of the same lyric, spending a third of the ceiling before a word is sung.
+# That is why the budget aims short rather than at the measured maximum.
+#
+# ⚠️ The 5/5 "filled the minute" result that ADDED this band was read off the
+# encode node's `seconds` output, which is only the CEILING the acoustic model
+# produced. It never showed whether the singing fit, and it did not. The same
+# output is why two earlier truncations got through. A rendered song is the
+# acceptance test; `seconds` is a pre-filter and nothing more.
+#
+# A shorter lyric costs nothing here either: run two still came back 59 seconds
+# with nine lines sung, so the music simply plays the rest.
 AUTO_SHAPE = (
     (40, 1, 2),      # under 40s: one verse and one chorus, two lines each
-    (90, 2, None),   # 40 up to 90: two verses and two choruses, no line count
+    (90, 2, 2),      # 40 up to 90: two verses and two choruses, two lines each
 )                    # 90 and over: say nothing
 
 
