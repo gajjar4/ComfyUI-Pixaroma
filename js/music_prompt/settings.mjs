@@ -12,17 +12,23 @@
 //   - USER_MOVED resets on CLOSE, never on open, or one dragged panel teaches
 //     every later one to sit still where the node is not (house convention #29).
 //
-// This panel is deliberately small. There is no formula to edit and no presets
-// to manage - both wordings are baked in and measured - so all it carries is
-// the model, what to do with it afterwards, and the accent.
+// The panel carries the model, what to do with it afterwards, the accent, and a
+// collapsed FORMULA SET section.
+//
+// That last one exists because a user asked what to do on a different model and
+// the honest answer was NOTHING, which is a dead end rather than a safeguard. A
+// SET is the two instructions plus the sampling that makes them work, under a
+// name saying what it is for - so a second model becomes another entry rather
+// than a rewrite. The measured set still ships and is still the default.
 
 import { fetchModels } from "../ai_prompt/api.mjs";
+import { deletePreset, fetchPresets, savePreset } from "./api.mjs";
 // Reused, not re-rolled. `openEditor` already carries installGraphUndoGuard,
 // and it was the ONLY fullscreen editor in the pack without it until that was
 // found and fixed (ai-prompt.md 19d) - a fresh copy would very likely repeat
 // exactly that hole. There is no cycle: ai_prompt never imports music_prompt.
 // If a third consumer turns up, that is when it moves to js/shared.
-import { openEditor } from "../ai_prompt/settings.mjs";
+import { askConfirm, askName, openEditor, sayIt } from "../ai_prompt/settings.mjs";
 import { followNode, getNodeScreenRect, makeDraggable, placeBeside } from "../shared/node_panel.mjs";
 import {
   ACC,
@@ -41,6 +47,10 @@ let USER_MOVED = false;
 let POP = null;
 let CP_HANDLE = null;
 let MODELS = { ok: false, models: [], error: null };
+// The BUILT-IN wording, fetched once per panel open beside the model list.
+// Empty until it lands; the editor says so rather than offering a blank box
+// as though it were the measured instruction.
+let SETS = { ok: false, shipped: [], user: [], userError: false, error: null };
 
 function el(tag, cls, text) {
   const node = document.createElement(tag);
@@ -116,6 +126,41 @@ function injectCSS() {
       height:14px; border-radius:50%; background:#999; transition:left .12s; }
     .pix-mps-tog.on { background:${ACC}; }
     .pix-mps-tog.on .knob { left:18px; background:#fff; }
+
+    /* ---- the advanced section ------------------------------------------- */
+    .pix-mps-adv { margin-top:2px; }
+    .pix-mps-advhead { display:flex; align-items:center; gap:6px; cursor:pointer;
+      user-select:none; font-size:11.5px; color:#bbb; padding:3px 0; }
+    .pix-mps-advhead:hover { color:${ACC}; }
+    .pix-mps-advhead .caret { color:${ACC}; font-size:9px; width:9px; }
+    .pix-mps-advhead .n { margin-left:auto; font:10.5px monospace; color:#7d7a76; }
+    .pix-mps-advbody { padding-top:7px; }
+
+    .pix-mps-frow { display:flex; align-items:center; gap:7px; margin-top:7px; }
+    .pix-mps-frow .t { flex:1 1 auto; min-width:0; font-size:11.5px; color:#ccc;
+      overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .pix-mps-mini { flex:0 0 auto; background:rgba(255,255,255,.05);
+      border:1px solid rgba(255,255,255,.14); border-radius:4px;
+      color:rgba(255,255,255,.72); font:11px 'Segoe UI', sans-serif;
+      padding:3px 9px; cursor:pointer; }
+    .pix-mps-mini:hover { background:${ACC}; border-color:${ACC}; color:#fff; }
+    .pix-mps-mini:disabled, .pix-mps-mini:disabled:hover { opacity:.35;
+      background:rgba(255,255,255,.05); border-color:rgba(255,255,255,.14);
+      color:rgba(255,255,255,.72); cursor:default; }
+    .pix-mps-mine { flex:0 0 auto; font:10px monospace; color:${ACC}; }
+
+    .pix-mps-nums { display:flex; gap:7px; margin-top:9px; }
+    /* flex items default to min-width:auto, so without this the two boxes
+       refuse to shrink and overflow the panel (ai-prompt.md #10). */
+    .pix-mps-num { flex:1 1 0; min-width:0; box-sizing:border-box;
+      display:flex; align-items:center; gap:5px; background:#1d1d1d;
+      border:1px solid #444; border-radius:4px; padding:4px 7px; }
+    .pix-mps-num:focus-within { border-color:${ACC}; }
+    .pix-mps-num em { flex:0 0 auto; font-style:normal; font-size:9.5px;
+      letter-spacing:.06em; text-transform:uppercase; color:${ACC}; }
+    .pix-mps-num input { flex:1 1 0; min-width:0; background:transparent;
+      border:none; outline:none; color:#ddd; font:11px monospace;
+      text-align:right; }
   `;
   document.head.appendChild(style);
 }
@@ -128,7 +173,7 @@ function closePop() {
   POP = null;
 }
 
-function openPop(anchor, values, current, onPick) {
+function openPop(anchor, values, current, onPick, opts = {}) {
   closePop();
   const pop = el("div", "pix-mps-pop");
   const r = anchor.getBoundingClientRect();
@@ -136,10 +181,14 @@ function openPop(anchor, values, current, onPick) {
   pop.style.top = (r.bottom + 3) + "px";
   pop.style.minWidth = r.width + "px";
 
+  // A filter for one or two rows is noise; for 36 models it is the point. AI
+  // Prompt shipped this gated at 9 and its preset picker was three rows short of
+  // ever showing it, so a feature that existed was unreachable (ai-prompt.md 19b).
   const filter = el("input", "pix-mps-filter");
   filter.placeholder = "Type to narrow the list";
   const list = el("div");
-  pop.append(filter, list);
+  if (values.length >= (opts.filterFrom ?? 9)) pop.append(filter, list);
+  else pop.append(list);
 
   let shown = [];
   const paint = () => {
@@ -187,7 +236,294 @@ function openPop(anchor, values, current, onPick) {
     pop.style.left = Math.max(8, window.innerWidth - pr.width - 8) + "px";
   }
   POP = pop;
-  setTimeout(() => filter.focus(), 0);
+  if (filter.isConnected) setTimeout(() => filter.focus(), 0);
+}
+
+// ---------------------------------------------------------------------------
+// Advanced: the escape hatch for a different model
+// ---------------------------------------------------------------------------
+// The formulas are baked in on purpose (music-prompt.md #3): both were measured,
+// the lyrics one took three rounds, and each is tuned to its own temperature. But
+// somebody on a different model had NO recourse at all, which is a dead end
+// rather than a safeguard - so this section exists and is collapsed by default.
+//
+// EMPTY MEANS THE MEASURED ONE. A blank box cannot be mistaken for a formula,
+// Reset is just clearing it, and nothing has to store a copy of the built-in
+// text to compare against.
+let ADV_OPEN = false;
+
+// MUST match SETTING_KEYS in nodes/_music_prompt_presets.py, or a set saves
+// numbers the server drops and loads numbers the panel ignores.
+const SETTING_KEYS = [
+  "caption_temperature", "caption_max_length",
+  "lyrics_temperature", "lyrics_max_length",
+];
+
+function allSets() {
+  return [...(SETS.shipped || []), ...(SETS.user || [])];
+}
+
+/** True when this set is one that ships with the node. */
+function isShipped(set) {
+  // IDENTITY against the shipped array, never a name test: the objects in
+  // allSets() ARE those objects, so a user set that somehow shares a name
+  // cannot be mislabelled (ai-prompt.md 19b).
+  return (SETS.shipped || []).includes(set);
+}
+
+/** The two instructions the node is ACTUALLY using right now. */
+function effective(node) {
+  const st = readState(node);
+  const ship = (SETS.shipped || [])[0] || { caption: "", lyrics: "" };
+  return {
+    caption: st.caption_formula.trim() || ship.caption,
+    lyrics: st.lyrics_formula.trim() || ship.lyrics,
+  };
+}
+
+/**
+ * Which named set the node is on, or null when its wording matches none.
+ *
+ * Found by MATCHING rather than stored, exactly as AI Prompt does: a stored
+ * name would go stale the moment somebody edited the wording, and this survives
+ * a reload and a duplicate with nothing extra kept on the node.
+ */
+function loadedSet(node) {
+  const now = effective(node);
+  return allSets().find(
+    (s) => (s.caption || "").trim() === now.caption.trim()
+        && (s.lyrics || "").trim() === now.lyrics.trim(),
+  ) || null;
+}
+
+/** Copy a set's wording AND its numbers onto the node. */
+function applySet(node, set, body) {
+  const ship = (SETS.shipped || [])[0];
+  const patch = {
+    // The shipped set is stored as EMPTY, so the node keeps following the
+    // built-in wording if that is ever re-measured.
+    caption_formula: set === ship ? "" : (set.caption || ""),
+    lyrics_formula: set === ship ? "" : (set.lyrics || ""),
+  };
+  for (const k of SETTING_KEYS) {
+    if (set.settings && set.settings[k] != null) patch[k] = set.settings[k];
+  }
+  writeState(node, patch);
+  ON_CHANGE?.();
+  renderPanel(node, body);
+}
+
+function numberField(label, value, onCommit, opts = {}) {
+  const wrap = el("div", "pix-mps-num");
+  wrap.appendChild(el("em", null, label));
+  const inp = el("input");
+  inp.type = "text";
+  inp.value = String(value);
+  // Kill the <input>'s intrinsic ~20-character width, or two of these overflow
+  // the panel however hard they are told to shrink (ai-prompt.md #10).
+  inp.size = 1;
+  inp.title = opts.title || "";
+  const commit = () => {
+    const raw = String(inp.value).replace(/[^0-9.]/g, "");
+    const n = parseFloat(raw);
+    onCommit(Number.isFinite(n) ? n : null);
+  };
+  inp.addEventListener("keydown", (e) => {
+    // ComfyUI binds keys on the document, Ctrl+V to paste NODES included.
+    e.stopPropagation();
+    if (e.key === "Enter") { e.preventDefault(); inp.blur(); }
+  });
+  // change AND blur: Chrome fires NEITHER when a focused element is removed
+  // from the document, and the panel's outside-close runs on capture-phase
+  // pointerdown - so a half-typed number was thrown away.
+  inp.addEventListener("change", commit);
+  inp.addEventListener("blur", commit);
+  inp.addEventListener("pointerdown", (e) => e.stopPropagation());
+  wrap.appendChild(inp);
+  return wrap;
+}
+
+function buildAdvanced(node, body) {
+  const wrap = el("div", "pix-mps-adv");
+  const loaded = loadedSet(node);
+
+  const head = el("div", "pix-mps-advhead");
+  head.append(
+    el("span", "caret", ADV_OPEN ? "▼" : "▶"),
+    el("span", null, "Formula set"),
+    el("span", "n", loaded ? loaded.name : "yours"),
+  );
+  head.title = "The two instructions and the sampling that makes them work, "
+    + "under a name saying what they are for.";
+  head.addEventListener("click", (e) => {
+    e.stopPropagation();
+    ADV_OPEN = !ADV_OPEN;
+    renderPanel(node, body);
+  });
+  wrap.appendChild(head);
+  if (!ADV_OPEN) return wrap;
+
+  const inner = el("div", "pix-mps-advbody");
+  wrap.appendChild(inner);
+
+  // ---- the picker ----------------------------------------------------------
+  const pick = el("div", "pix-mps-pick");
+  const val = el("span", "v", loaded ? loaded.name : "Your own wording");
+  if (loaded) val.title = loaded.note || loaded.name;
+  pick.append(val, el("span", "c", "▼"));
+  pick.addEventListener("click", (e) => {
+    e.stopPropagation();
+    const values = allSets().map((s) => ({
+      value: s.name,
+      label: (isShipped(s) ? "● " : "○ ") + s.name,
+      title: [s.note, s.model_hint && "Measured on " + s.model_hint]
+        .filter(Boolean).join("\n"),
+    }));
+    if (!values.length) {
+      openPop(pick, [{ value: "", label: "No sets could be read" }], "", () => {});
+      return;
+    }
+    openPop(pick, values, loaded ? loaded.name : "", (name) => {
+      const set = allSets().find((s) => s.name === name);
+      if (set) applySet(node, set, body);
+    }, { filterFrom: 3 });
+  });
+  inner.appendChild(pick);
+
+  if (SETS.userError) {
+    // An unreadable file and an empty library must never look the same: in the
+    // first case the user still HAS sets and saving would destroy them.
+    inner.appendChild(el("div", "pix-mps-note is-warn",
+      "Your saved sets could not be read, so only the built-in one is listed "
+      + "and saving is off until that file is fixed. Nothing has been lost."));
+  } else if (!SETS.ok) {
+    inner.appendChild(el("div", "pix-mps-note is-warn",
+      "The formula sets could not be fetched"
+      + (SETS.error ? " (" + SETS.error + ")" : "") + "."));
+  } else {
+    inner.appendChild(el("div", "pix-mps-note",
+      "● ships with the node, ○ is yours. Each set is measured on one language "
+      + "model, so on a different one you may want a set of your own: pick the "
+      + "closest, edit it, then Save as."));
+  }
+
+  // ---- the two instructions ------------------------------------------------
+  const ship = (SETS.shipped || [])[0];
+  for (const which of ["caption", "lyrics"]) {
+    const key = which + "_formula";
+    const row = el("div", "pix-mps-frow");
+    row.appendChild(el("span", "t",
+      which === "caption" ? "Caption instruction" : "Lyrics instruction"));
+    const edit = el("button", "pix-mps-mini", "Edit");
+    // Something true has to exist to start from. With no shipped set fetched
+    // AND nothing of their own, the button is inert rather than opening a blank
+    // box that reads as "there is no instruction".
+    const own = readState(node)[key].trim();
+    edit.disabled = !own && !ship;
+    edit.title = edit.disabled
+      ? "The built-in wording could not be read, so there is nothing to edit yet"
+      : "Open it in a full-screen box";
+    edit.addEventListener("click", (e) => {
+      e.stopPropagation();
+      if (edit.disabled) return;      // a disabled control must not fall through
+      const builtin = (ship && ship[which]) || "";
+      openEditor(
+        which === "caption" ? "Caption instruction" : "Lyrics instruction",
+        readState(node)[key] || builtin,
+        (text) => {
+          const next = String(text || "").trim();
+          // Saved back unchanged stores NOTHING, so the node keeps following
+          // the built-in and a future re-measurement still reaches them.
+          writeState(node, { [key]: next === builtin.trim() ? "" : next });
+          ON_CHANGE?.();
+          renderPanel(node, body);
+          return true;
+        },
+        { owner: node, spellcheck: false },
+      );
+    });
+    row.appendChild(edit);
+    inner.appendChild(row);
+  }
+
+  // ---- the numbers ---------------------------------------------------------
+  for (const which of ["caption", "lyrics"]) {
+    const s = readState(node);
+    const fallback = which === "caption" ? [0.3, 500] : [0.8, 900];
+    const nums = el("div", "pix-mps-nums");
+    nums.appendChild(numberField(
+      which + " temp", s[which + "_temperature"],
+      (v) => {
+        writeState(node, { [which + "_temperature"]: v == null ? fallback[0] : v });
+        ON_CHANGE?.();
+        renderPanel(node, body);
+      },
+      { title: "Lower stays factual, higher takes more risks. The built-in set "
+               + "measured " + fallback[0] + "." }));
+    nums.appendChild(numberField(
+      which + " max len", s[which + "_max_length"],
+      (v) => {
+        writeState(node, { [which + "_max_length"]: v == null ? fallback[1] : v });
+        ON_CHANGE?.();
+        renderPanel(node, body);
+      },
+      { title: "How much it may write. A model that reasons before answering "
+               + "needs far more than the words alone." }));
+    inner.appendChild(nums);
+  }
+
+  // ---- save / delete -------------------------------------------------------
+  const acts = el("div", "pix-mps-frow");
+  acts.appendChild(el("span", "t", ""));
+  const saveAs = el("button", "pix-mps-mini", "Save as");
+  saveAs.title = "Keep this wording and these numbers under a name of your own";
+  saveAs.disabled = SETS.userError;
+  saveAs.addEventListener("click", async (e) => {
+    e.stopPropagation();
+    if (saveAs.disabled) return;
+    // NEVER window.prompt: Electron does not implement it and refuses SILENTLY,
+    // which has produced three false "the button does nothing" reports in this
+    // pack (ai-prompt.md #19 / #19c).
+    const suggested = loaded && isShipped(loaded) ? loaded.name + " (mine)"
+                                                  : (loaded ? loaded.name : "My set");
+    const name = await askName("Save formula set", "A name saying what it is for",
+                               suggested);
+    if (!name) return;
+    const now = effective(node);
+    const s = readState(node);
+    const res = await savePreset({
+      name,
+      caption: now.caption,
+      lyrics: now.lyrics,
+      model_hint: s.model,
+      settings: Object.fromEntries(SETTING_KEYS.map((k) => [k, s[k]])),
+    });
+    if (!res.ok) { await sayIt("Could not save", res.message); return; }
+    SETS = await fetchPresets();
+    renderPanel(node, body);
+  });
+
+  const del = el("button", "pix-mps-mini", "Delete");
+  const canDelete = !!loaded && !isShipped(loaded);
+  del.disabled = !canDelete;
+  del.title = canDelete
+    ? "Remove this saved set"
+    : (loaded ? "This one ships with the node and cannot be removed"
+              : "Nothing to remove: this wording is not a saved set");
+  del.addEventListener("click", async (e) => {
+    e.stopPropagation();
+    if (del.disabled) return;
+    if (!(await askConfirm("Delete this set?", loaded.name))) return;
+    const res = await deletePreset(loaded.name);
+    if (!res.ok) { await sayIt("Could not delete", res.message); return; }
+    SETS = await fetchPresets();
+    renderPanel(node, body);
+  });
+
+  acts.append(saveAs, del);
+  inner.appendChild(acts);
+
+  return wrap;
 }
 
 // ---------------------------------------------------------------------------
@@ -248,6 +584,11 @@ function renderPanel(node, body) {
     "The same switch as Free VRAM on the node. In a chain it belongs only on "
     + "the last node using that model, and it is skipped entirely when the "
     + "model arrived on the clip wire - that one is not this node's to unload."));
+
+  body.appendChild(el("div", "pix-mps-rule"));
+
+  // ---- advanced ------------------------------------------------------------
+  body.appendChild(buildAdvanced(node, body));
 
   body.appendChild(el("div", "pix-mps-rule"));
 
@@ -362,9 +703,13 @@ export async function openMusicPromptPanel(node, onChange) {
   // Land it in a LOCAL and publish only after the staleness guard: writing the
   // module singleton first let a slow request for a CLOSED panel clobber the
   // list a newer panel had already rendered from.
-  const fetched = await fetchModels();
+  const [fetched, sets] = await Promise.all([fetchModels(), fetchPresets()]);
   if (PANEL !== panel) return;
   MODELS = fetched;
+  // Keep the LAST GOOD list on a failed read. A failure that wiped it would
+  // leave the picker saying "nothing saved" AND blind the name-collision guard,
+  // which is the shape that destroys somebody's library (ai-prompt.md #13).
+  if (sets.ok || !SETS.ok) SETS = sets;
   renderPanel(node, body);
   // Place it AGAIN now the content is in: the placement above ran while the
   // body still said "Loading..." and the panel was ~80px tall, so it was

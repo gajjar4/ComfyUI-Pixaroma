@@ -4225,3 +4225,59 @@ async def api_save_text_write(request):
         return web.json_response(out)
     except Exception as e:
         return web.json_response({"ok": False, "message": str(e)})
+
+
+# ---------------------------------------------------------------------------
+# Music Prompt Pixaroma - named formula sets
+# ---------------------------------------------------------------------------
+# A SET is the two instructions plus the sampling that makes them work, under a
+# name saying what it is for. The node ships one measured set and a second model
+# becomes another entry rather than a rewrite.
+#
+# The shipped set is GENERATED from the formulas module at request time, so
+# there is no second copy of the wording anywhere to drift.
+@PromptServer.instance.routes.get("/pixaroma/api/music_prompt/presets")
+async def api_music_prompt_presets(request):
+    try:
+        from .nodes import _music_prompt_presets as mps
+        return web.json_response(
+            {
+                "shipped": mps.shipped(),
+                "user": mps.load_user(),
+                # The file exists and could not be understood. An empty library
+                # and an unreadable one must NEVER look the same: in the second
+                # case the user still HAS sets, and saving would destroy them.
+                "userError": not mps.user_readable(),
+            },
+            headers=_vp_no_store(),
+        )
+    except Exception as e:
+        return web.json_response(
+            {"shipped": [], "user": [], "userError": False, "error": str(e)},
+            headers=_vp_no_store(),
+        )
+
+
+@PromptServer.instance.routes.post("/pixaroma/api/music_prompt/presets/save")
+async def api_music_prompt_presets_save(request):
+    try:
+        data = await request.json()
+        if not isinstance(data, dict):
+            return web.json_response({"ok": False, "message": "Expected an object."})
+        from .nodes import _music_prompt_presets as mps
+        ok, message = mps.save_user(data)
+        return web.json_response({"ok": bool(ok), "message": message})
+    except Exception as e:
+        return web.json_response({"ok": False, "message": str(e)})
+
+
+@PromptServer.instance.routes.post("/pixaroma/api/music_prompt/presets/delete")
+async def api_music_prompt_presets_delete(request):
+    try:
+        data = await request.json()
+        name = data.get("name") if isinstance(data, dict) else None
+        from .nodes import _music_prompt_presets as mps
+        ok, message = mps.delete_user(name)
+        return web.json_response({"ok": bool(ok), "message": message})
+    except Exception as e:
+        return web.json_response({"ok": False, "message": str(e)})

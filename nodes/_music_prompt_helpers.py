@@ -55,6 +55,7 @@ __all__ = [
     "idea_text",
     "parse_state",
     "status_line",
+    "sampling_for",
     "structure_clause",
     "will_generate",
 ]
@@ -104,18 +105,48 @@ MAX_VERSES = 3
 # ⚠️ TWO OTHER APPROACHES FAILED - see music-prompt.md #6, do not retry them:
 # telling the writer a SHORTER target changed nothing (8 lines either way), and
 # telling it not to leave a section empty produced 26 sung lines on one seed.
+# ⚠️ THE THIRD FIELD IS LINES PER SECTION, and it exists because naming the
+# SHAPE was not enough on its own at the short end.
+#
+# The user's 30 second song came back as a full verse and chorus and still got
+# chopped mid-chorus - their audio had roughly five sung lines in 29 seconds, so
+# the real pace is nearer SIX seconds a line than the three the formula states.
+# Eight lines cannot fit thirty seconds at that pace, however tidy the shape is.
+#
+# Measured at 30s over three seeds, with the shape clause already in place:
+#
+#     nothing added                     8, 8, 8 sung lines
+#     "about six lines in total"        8, 8, 8   <- a BUDGET is ignored
+#     "with two lines in each section"  4, 4, 4   <- a COUNT is obeyed
+#
+# A per-section COUNT works where a total does not. Four lines is about 23
+# seconds at that pace, which fits with room to spare - and a short lyric costs
+# nothing, because MiniMax plays out the rest of the ceiling anyway.
+#
+# ⚠️ None above 40 seconds ON PURPOSE. No truncation has been reported there and
+# there is only ONE pace measurement in existence (the user's ear on one song),
+# so a line budget at 60s would be changing something nobody has shown to be
+# broken, on one data point. Get a report first.
 AUTO_SHAPE = (
-    (40, 1),    # under 40 seconds: one verse and one chorus
-    (90, 2),    # 40 up to 90: two verses and two choruses
-)               # 90 and over: say nothing
+    (40, 1, 2),      # under 40s: one verse and one chorus, two lines each
+    (90, 2, None),   # 40 up to 90: two verses and two choruses, no line count
+)                    # 90 and over: say nothing
 
 
 def auto_verses(seconds):
     """The verse count Auto asks for at this length, or 0 to say nothing."""
-    for limit, verses in AUTO_SHAPE:
+    for limit, verses, _lines in AUTO_SHAPE:
         if int(seconds) < limit:
             return verses
     return VERSES_AUTO
+
+
+def auto_lines(seconds):
+    """Lines per section Auto asks for at this length, or None to say nothing."""
+    for limit, _verses, lines in AUTO_SHAPE:
+        if int(seconds) < limit:
+            return lines
+    return None
 
 # MEASURED WITH THE WORDING, so they travel with it. The caption wants a low
 # temperature to stay factual; the lyrics want a high one or every song rhymes
@@ -147,6 +178,21 @@ DEFAULT_STATE = {
     "bridge": False,
     "instrumental": False,
     "release_model": False,
+    # ---- the escape hatch, added 2026-08-18 --------------------------------
+    # #3 says the formulas are baked in, and that stands as the DEFAULT: both
+    # were measured, the lyrics one took three rounds, and each is tuned to its
+    # temperature. But a user on a different model had no recourse at all, which
+    # is a dead end rather than a safeguard. So they are overridable and EMPTY
+    # MEANS THE MEASURED ONE - a blank box cannot be mistaken for a formula, and
+    # Reset is just clearing it. The sampling is overridable for the same
+    # reason: a reasoning model needs a far bigger max_length (ai-prompt.md
+    # #14c), and no wording change can substitute for that.
+    "caption_formula": "",
+    "lyrics_formula": "",
+    "caption_temperature": CAPTION_SAMPLING["temperature"],
+    "caption_max_length": CAPTION_SAMPLING["max_length"],
+    "lyrics_temperature": LYRICS_SAMPLING["temperature"],
+    "lyrics_max_length": LYRICS_SAMPLING["max_length"],
 }
 
 
@@ -182,6 +228,19 @@ def parse_state(raw):
     )
     st["verses"] = int(_clamp(st["verses"], VERSES_AUTO, VERSES_AUTO, MAX_VERSES))
 
+    st["caption_formula"] = as_text(st["caption_formula"])
+    st["lyrics_formula"] = as_text(st["lyrics_formula"])
+    # The same ranges core's own text node uses, so a value that reaches the
+    # model is one the model will accept.
+    st["caption_temperature"] = _clamp(
+        st["caption_temperature"], CAPTION_SAMPLING["temperature"], 0.01, 2.0)
+    st["lyrics_temperature"] = _clamp(
+        st["lyrics_temperature"], LYRICS_SAMPLING["temperature"], 0.01, 2.0)
+    st["caption_max_length"] = int(_clamp(
+        st["caption_max_length"], CAPTION_SAMPLING["max_length"], 1, 32768))
+    st["lyrics_max_length"] = int(_clamp(
+        st["lyrics_max_length"], LYRICS_SAMPLING["max_length"], 1, 32768))
+
     st["bridge"] = st["bridge"] is True
     st["instrumental"] = st["instrumental"] is True
     st["release_model"] = st["release_model"] is True
@@ -191,6 +250,11 @@ def parse_state(raw):
 def _join(parts, sep):
     """Join, dropping blank pieces so a missing one takes its separator too."""
     return sep.join(p for p in parts if isinstance(p, str) and p.strip())
+
+
+# The measured clause spelled the number as a WORD, and the whole point of
+# reproducing measured wording is not paraphrasing it (ai-prompt.md #14b).
+_NUMBER_WORDS = {1: "one", 2: "two", 3: "three", 4: "four", 5: "five", 6: "six"}
 
 
 def _listy(items):
@@ -225,8 +289,13 @@ def structure_clause(seconds, verses=VERSES_AUTO, bridge=False, instrumental=Fal
     if seconds:
         bits.append("%d seconds long" % int(seconds))
 
+    # The line count rides with the AUTO shape only. Someone who names a verse
+    # count has taken the shape into their own hands, and silently adding a line
+    # budget on top would be the node arguing with them.
+    lines = None
     if not verses and seconds:
         verses = auto_verses(seconds)
+        lines = auto_lines(seconds)
 
     wanted = []
     if verses and verses >= 1:
@@ -241,6 +310,11 @@ def structure_clause(seconds, verses=VERSES_AUTO, bridge=False, instrumental=Fal
 
     if wanted:
         bits.append(_listy(wanted))
+    if lines:
+        # MEASURED WORDING. "with two lines in each section" gave 4, 4, 4 sung
+        # lines across three seeds; "about six lines in total" gave 8, 8, 8 and
+        # changed nothing. Do not reword this into a total.
+        bits.append("with %s lines in each section" % _NUMBER_WORDS.get(lines, lines))
     return ", ".join(bits)
 
 
@@ -249,7 +323,7 @@ def idea_text(idea, wired):
     return _join([as_text(idea), as_text(wired)], "\n")
 
 
-def build_caption_prompt(idea, wired):
+def build_caption_prompt(idea, wired, formula=""):
     """What the model is asked for the CAPTION.
 
     Deliberately gets the idea ALONE - no length, no structure. The caption
@@ -257,11 +331,13 @@ def build_caption_prompt(idea, wired):
     invites the number into a field that is meant to carry genre, key and
     instruments. Every measured caption run used a plain idea.
     """
-    return _join([CAPTION_FORMULA, idea_text(idea, wired)], "\n")
+    return _join([as_text(formula).strip() or CAPTION_FORMULA,
+                  idea_text(idea, wired)], "\n")
 
 
 def build_lyrics_prompt(idea, wired, caption="", seconds=DEFAULT_SECONDS,
-                        verses=VERSES_AUTO, bridge=False, instrumental=False):
+                        verses=VERSES_AUTO, bridge=False, instrumental=False,
+                        formula=""):
     """What the model is asked for the LYRICS.
 
     It sees the caption as well as the idea, and BOTH halves are load-bearing.
@@ -282,7 +358,23 @@ def build_lyrics_prompt(idea, wired, caption="", seconds=DEFAULT_SECONDS,
         # from the thing the song is about. Unlabelled, a caption reads as more
         # idea and its facts start turning up in sung lines.
         subject = "%s\n\nThe music it will be sung over:\n%s" % (subject, caption)
-    return _join([LYRICS_FORMULA, subject], "\n")
+    return _join([as_text(formula).strip() or LYRICS_FORMULA, subject], "\n")
+
+
+def sampling_for(which, state):
+    """The sampling for one pass, with the user's overrides applied.
+
+    The measured numbers are the DEFAULTS, not a cage. The caption wants a low
+    temperature to stay factual and the lyrics a high one, but a different model
+    may want different values entirely - and a REASONING model needs a far bigger
+    max_length than the prose alone, which no wording change can substitute for
+    (ai-prompt.md #14c).
+    """
+    base = CAPTION_SAMPLING if which == "caption" else LYRICS_SAMPLING
+    out = dict(base)
+    out["temperature"] = state.get("%s_temperature" % which, base["temperature"])
+    out["max_length"] = state.get("%s_max_length" % which, base["max_length"])
+    return out
 
 
 def will_generate(state, wired_text, has_clip):

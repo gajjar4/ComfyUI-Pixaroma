@@ -72,6 +72,17 @@ export const DEFAULT_STATE = {
   bridge: false,
   instrumental: false,
   release_model: false,
+  // --- the formula set ----------------------------------------------------
+  // EMPTY MEANS THE BUILT-IN. A blank box cannot be mistaken for a formula, and
+  // going back to the measured wording is just clearing it - so the node keeps
+  // following the built-in if that is ever re-measured. These MUST mirror
+  // DEFAULT_STATE in nodes/_music_prompt_helpers.py.
+  caption_formula: "",
+  lyrics_formula: "",
+  caption_temperature: 0.3,
+  caption_max_length: 500,
+  lyrics_temperature: 0.8,
+  lyrics_max_length: 900,
   // --- face only, never sent (see PROMPT_KEYS) ----------------------------
   seed_mode: SEED_FIXED,
   idea_share: IDEA_SHARE_DEFAULT,
@@ -85,6 +96,14 @@ export const DEFAULT_STATE = {
 const PROMPT_KEYS = [
   "idea", "model", "clip_type", "seed", "seconds", "verses",
   "bridge", "instrumental", "release_model",
+  // The formula set CHANGES THE OUTPUT, so it belongs in the cache signature -
+  // editing an instruction must re-run the model by itself, exactly as editing
+  // the idea does. That is the same property AI Prompt gets from keeping its
+  // formula on the node (ai-prompt.md #1), and it is why neither node needs an
+  // IS_CHANGED.
+  "caption_formula", "lyrics_formula",
+  "caption_temperature", "caption_max_length",
+  "lyrics_temperature", "lyrics_max_length",
 ];
 
 function num(value, fallback, lo, hi) {
@@ -110,6 +129,14 @@ export function readState(node) {
   st.bridge = st.bridge === true;
   st.instrumental = st.instrumental === true;
   st.release_model = st.release_model === true;
+  // The same ranges Python clamps to, so the panel can never show a value the
+  // node would silently refuse.
+  st.caption_formula = str(st.caption_formula, "");
+  st.lyrics_formula = str(st.lyrics_formula, "");
+  st.caption_temperature = num(st.caption_temperature, 0.3, 0.01, 2);
+  st.lyrics_temperature = num(st.lyrics_temperature, 0.8, 0.01, 2);
+  st.caption_max_length = Math.trunc(num(st.caption_max_length, 500, 1, 32768));
+  st.lyrics_max_length = Math.trunc(num(st.lyrics_max_length, 900, 1, 32768));
   st.idea_share = num(st.idea_share, IDEA_SHARE_DEFAULT, IDEA_SHARE_MIN, IDEA_SHARE_MAX);
   st.view = st.view === VIEW_LYRICS ? VIEW_LYRICS : VIEW_CAPTION;
   return st;

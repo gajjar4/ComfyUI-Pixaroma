@@ -26,13 +26,12 @@ from ._ai_prompt_helpers import (
     word_count,
 )
 from ._music_prompt_helpers import (
-    CAPTION_SAMPLING,
     COMMON_SAMPLING,
-    LYRICS_SAMPLING,
     build_caption_prompt,
     build_lyrics_prompt,
     idea_text,
     parse_state,
+    sampling_for,
     status_line,
     will_generate,
 )
@@ -221,8 +220,8 @@ class PixaromaMusicPrompt:
         # about) and the idea alone loses the mood the caption just settled.
         caption, cap_ran_out = self._ask(
             clip,
-            build_caption_prompt(st["idea"], wired),
-            CAPTION_SAMPLING,
+            build_caption_prompt(st["idea"], wired, st["caption_formula"]),
+            sampling_for("caption", st),
             st["seed"],
             model_name,
         )
@@ -232,8 +231,9 @@ class PixaromaMusicPrompt:
                 st["idea"], wired, caption,
                 seconds=st["seconds"], verses=st["verses"],
                 bridge=st["bridge"], instrumental=st["instrumental"],
+                formula=st["lyrics_formula"],
             ),
-            LYRICS_SAMPLING,
+            sampling_for("lyrics", st),
             st["seed"],
             model_name,
         )
