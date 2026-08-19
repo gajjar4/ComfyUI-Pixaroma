@@ -171,12 +171,46 @@ registerNodeHelp(CLASS, {
         ["The seed", "Click the number to type one. F keeps the same seed, so an "
           + "unchanged node is cached and Run is instant. R rolls a new one every "
           + "run, so every run is a different song."],
+        ["Tags", "Opens your tag library, the same one Prompt Pixaroma and AI "
+          + "Prompt use. Anything you save there can be used in all three."],
         ["Re-roll", "A new seed, then run again. The quickest way to try another "
           + "version of the same idea."],
         ["Copy", "Copies whichever of the two you are looking at."],
         ["Free VRAM", "Unloads the model when this node finishes. Turn it on when "
           + "a music model has to fit in the same card afterwards."],
         ["Generate", "Queues the whole workflow, the same as pressing Run."],
+      ],
+    },
+    {
+      heading: "Tags in your idea",
+      body:
+        "Your idea box understands the same @tags as Prompt Pixaroma and AI "
+        + "Prompt, out of the same library, so a phrase you saved once can be "
+        + "used in all three. Press Tags to open it.\n\n"
+        + "They are swapped for their real words before the model is asked "
+        + "anything, so it reads finished English and never sees an @ sign. Only "
+        + "your IDEA is read for tags: the instructions in the settings are left "
+        + "alone, because prose written for a model often contains things like "
+        + "\"step #1\" that are not meant to be tags.",
+      defs: [
+        ["@name", "Your saved snippet, exactly as you wrote it."],
+        ["*Category", "One random tag out of that category, rolled fresh on every Run."],
+        ["#name", "One random line out of that tag, rolled fresh on every Run."],
+      ],
+    },
+    {
+      heading: "Reading the colours as you type",
+      body:
+        "The colour tells you what a word will become, so you can see at a "
+        + "glance whether a tag is real before you Run anything.",
+      defs: [
+        ["Orange", "An @tag that exists."],
+        ["Green", "A *category that exists and has something in it."],
+        ["Violet", "A #list that exists and has lines in it."],
+        ["A red wavy underline", "That name is not in your library, so it will "
+          + "be sent to the model as the literal text you typed. Every name looks "
+          + "like this while you are still typing it, and it takes its real "
+          + "colour the moment it matches."],
       ],
     },
     {

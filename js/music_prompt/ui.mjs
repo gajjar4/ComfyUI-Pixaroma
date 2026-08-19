@@ -21,7 +21,15 @@
 
 import { app } from "/scripts/app.js";
 import { pixAsset } from "../shared/api_url.mjs";
-import { ACC, installNodeAccent } from "../shared/node_settings.mjs";
+import { ACC, accentOf, installNodeAccent } from "../shared/node_settings.mjs";
+// The @tag / *category / #list layer, shared with Prompt Pixaroma and AI Prompt so
+// all three read the SAME library and colour it the same way (prompt.md #24/#25 -
+// wildCat and listOf must stay the single source of "is this live").
+import {
+  acKeydown, backdropHTML, closeAC, injectTagCSS, insertTagAt,
+  maybeAC, syncColumns,
+} from "../prompt/tag_field.mjs";
+import { openLibraryEditor, closeLibraryEditorFor } from "../prompt/library_editor.mjs";
 import { applyAdaptiveCanvasOnly } from "../shared/nodes2.mjs";
 import { installCanvasZoomPassthrough } from "../shared/canvas_zoom.mjs";
 import { installNativeTextMenu } from "../shared/native_text_menu.mjs";
@@ -129,11 +137,47 @@ export function injectCSS() {
     /* ---- the two text boxes ---------------------------------------------- */
     .pix-mp-idea, .pix-mp-out { width:100%; box-sizing:border-box;
       border-radius:4px; padding:6px 8px; resize:none; outline:none; }
-    .pix-mp-idea { flex:var(--pix-mp-idea-grow,340) 1 0; min-height:44px;
-      background:#1d1d1d; border:1px solid #333; color:#e0e0e0;
-      font:12px monospace; }
-    .pix-mp-idea:focus { border-color:${ACC}; }
+    /* The idea box is TWO STACKED LAYERS so @tags can be coloured while you
+       type. The dark surface and the border live on the WRAPPER; the backdrop
+       underneath is the only VISIBLE text; the textarea on top has transparent
+       text and a visible caret. One visible text layer means the two can never
+       double or ghost - but their text COLUMNS must be identical or they wrap
+       at different characters and the caret drifts further off with every
+       wrapped line. scrollbar-gutter:stable on both is the first defence and
+       syncColumns() measures the rest (house convention #26, prompt.md #18).
+       The line-height is stated EXPLICITLY on both: a div and a textarea do not
+       have to resolve the keyword "normal" to the same number, and a half-pixel
+       difference per line is the same drift by another route. */
+    .pix-mp-ideawrap { position:relative; display:flex; box-sizing:border-box;
+      flex:var(--pix-mp-idea-grow,340) 1 0; min-height:44px;
+      background:#1d1d1d; border:1px solid #333; border-radius:4px; }
+    /* ONLY the idea box takes the accent on focus. The readout is readOnly, and
+       a focus ring is the strongest "you can type here" cue there is. */
+    .pix-mp-ideawrap:focus-within { border-color:${ACC}; }
+    .pix-mp-ideabd { position:absolute; inset:0; padding:6px 8px; border:0;
+      font:12px/1.45 monospace; color:#e0e0e0; white-space:pre-wrap;
+      word-wrap:break-word; overflow:hidden; scrollbar-gutter:stable;
+      pointer-events:none; box-sizing:border-box; }
+    /* overflow-wrap MUST match .pix-mp-ideabd's. syncColumns equalises the two
+       columns' WIDTH, and width parity is NOT wrap parity: the backdrop breaks
+       a long unbroken token where a textarea defaults to overflow-wrap:normal
+       and moves it whole to the next line, so the caret drifts a little further
+       on every such token. Same gap found and fixed on Prompt (prompt.md #18);
+       this node shares that backdrop, so it would share the bug. */
+    .pix-mp-idea { flex:1 1 auto; width:100%; height:100%; min-height:0;
+      background:transparent; color:transparent; caret-color:${ACC};
+      border:0; font:12px/1.45 monospace; scrollbar-gutter:stable;
+      white-space:pre-wrap; overflow-wrap:break-word; }
     .pix-mp-idea::placeholder { color:#5c5a57; }
+    /* Tags: opens the shared library, the same one Prompt Pixaroma uses. Sized
+       to the Caption/Lyrics segment beside it (20px, not the sibling's 23px)
+       because this row is tighter - it already carries the segment, the seed
+       and the meta readout. */
+    .pix-mp-tags { height:20px; flex:0 0 auto; border-radius:4px; padding:0 9px;
+      background:rgba(255,255,255,.05); border:1px solid rgba(255,255,255,.14);
+      color:#c9c6c2; font:10.5px 'Segoe UI', sans-serif; cursor:pointer;
+      display:flex; align-items:center; }
+    .pix-mp-tags:hover { background:${ACC}; border-color:${ACC}; color:#fff; }
     /* The readout is a PREVIEW, not an input, so it wears Prompt Pixaroma's
        read-only surface: a LIGHTER, raised panel rather than the sunken dark
        field an editable box uses. A dark field beside an editable one reads as
@@ -197,15 +241,30 @@ export function injectCSS() {
     .pix-mp-secs:focus { border-color:${ACC}; }
 
     /* ---- seed ------------------------------------------------------------ */
-    .pix-mp-seedwrap { display:flex; height:21px; flex:0 0 auto; border-radius:4px;
+    /* SHRINKABLE, not fixed. An <input> carries an intrinsic ~20-character
+       width, so this chip renders about 169px wide - mostly empty for a seed of
+       0. That was free while the row held only the segment and the meta label,
+       but the Tags button pushed the total 18px past the frame at MIN_W and the
+       controls spilled out of the node (the horizontal half of Nodes 2.0 recipe
+       #3, which the vertical resize floor does NOT cover).
+       A shrinkable flex changes nothing at a comfortable width - flexbox only
+       shrinks when there is a deficit - so the seed keeps its roomy field until
+       the node is genuinely narrow, and then gives up its slack instead of
+       pushing its neighbours out of sight. min-width on the input is the floor
+       that keeps the number readable. */
+    .pix-mp-seedwrap { display:flex; height:21px; flex:0 1 auto; min-width:0;
+      border-radius:4px;
       overflow:hidden; border:1px solid rgba(255,255,255,.14); }
     .pix-mp-seed { background:rgba(255,255,255,.05); color:#c9c6c2;
       font:10.5px monospace; border:none; padding:0 8px; cursor:text;
       display:flex; align-items:center; outline:none; min-width:56px;
-      text-align:center; }
+      flex:1 1 auto; width:100%; text-align:center; }
     .pix-mp-seed:hover { color:${ACC}; }
+    /* flex:0 0 auto so the F/R letter is never the thing that gets clipped when
+       the wrap above gives up its slack - the seed NUMBER has room to spare, a
+       one-letter button has none. */
     .pix-mp-seedmode { background:rgba(255,255,255,.05); color:#c9c6c2;
-      font:10.5px monospace; border:none;
+      font:10.5px monospace; border:none; flex:0 0 auto;
       border-left:1px solid rgba(255,255,255,.14);
       padding:0 7px; cursor:pointer; display:flex; align-items:center; }
     .pix-mp-seedmode.is-on { background:${ACC}; color:#fff;
@@ -338,8 +397,40 @@ export function applyShare(node) {
 // ---------------------------------------------------------------------------
 // Build
 // ---------------------------------------------------------------------------
+/**
+ * Open the shared tag library, with Insert writing into THIS node's idea box.
+ * The editor itself knows nothing about the node - it takes an accent, an
+ * optional prefill and an onInsert.
+ */
+export function openTagLibrary(node, ideaEl, ctx) {
+  openLibraryEditor(node, {
+    accent: accentOf(node),
+    // `sym` is "#" for a List tag (roll one line) and "@" for a snippet - the editor
+    // decides from the card's own kind so Insert drops in the useful form.
+    onInsert: (name, sym) => {
+      // Re-resolve rather than trusting the element captured when the library opened:
+      // Vue can rebuild the widget mid-session and Insert would write into a detached
+      // textarea, then stamp that dead element's value into node.properties.
+      const live = node._pixMpEls?.idea || ideaEl;
+      insertTagAt(live, ctx, name, sym);
+    },
+  });
+}
+
+/**
+ * Paint the highlight backdrop under the idea textarea.
+ *
+ * DOM only, so it is safe from the load path (Vue Compat #18).
+ */
+function renderIdeaTags(node) {
+  const els = node?._pixMpEls;
+  if (!els?.ideabd) return;
+  els.ideabd.innerHTML = backdropHTML(els.idea.value);
+}
+
 export function buildFace(node, openPanel, openIdeaEditor) {
   injectCSS();
+  injectTagCSS();   // the token colours + the autocomplete popup, shared with Prompt
 
   const root = el("div", "pix-mp-root");
   const inner = el("div", "pix-mp-inner");
@@ -364,14 +455,46 @@ export function buildFace(node, openPanel, openIdeaEditor) {
     openIdeaEditor(node);
   });
   cap1.append(el("span", "pix-mp-cap", "Your idea"), expand);
+  // Two layers: the backdrop is the visible text, the textarea on top owns the
+  // caret. See the CSS note for why the columns have to be kept identical.
+  const ideawrap = el("div", "pix-mp-ideawrap");
+  const ideabd = el("div", "pix-mp-ideabd");
   const idea = el("textarea", "pix-mp-idea");
   idea.placeholder = "a slow acoustic song about coming home in the rain";
   idea.spellcheck = true;
+  ideawrap.append(ideabd, idea);
+  inner.append(cap1, ideawrap);
+
+  // The @tag layer. ctx is re-resolved per call, never captured: Vue can tear down
+  // and rebuild a node's DOM widget mid-session (Vue Compat #5), and a stale closure
+  // would write into a detached textarea.
+  const acCtx = () => ({
+    accent: () => accentOf(node),
+    commit: (value) => { writeState(node, { idea: value }); renderFace(node); },
+  });
+
   idea.addEventListener("input", () => {
     writeState(node, { idea: idea.value });
     renderFace(node);
+    maybeAC(acCtx(), idea);
   });
-  inner.append(cap1, idea);
+  idea.addEventListener("keydown", (e) => {
+    // The autocomplete gets first refusal. It deliberately does not claim
+    // Ctrl/Cmd+Enter, so running the workflow from the idea box still works.
+    if (acKeydown(e)) return;
+    e.stopPropagation();
+  });
+  // Keep the visible layer scrolled with the invisible one, or the caret leaves the
+  // text behind as soon as the idea is taller than the box.
+  idea.addEventListener("scroll", () => {
+    ideabd.scrollTop = idea.scrollTop;
+    ideabd.scrollLeft = idea.scrollLeft;
+  });
+  // Belt for the column measurement: a theme stylesheet can land after the node was
+  // built and change the scrollbar width without ever resizing the textarea, which
+  // the ResizeObserver would not hear about.
+  idea.addEventListener("focus", () => syncColumns(idea, ideabd));
+  idea.addEventListener("blur", () => closeAC());
 
   const grip = el("div", "pix-mp-grip");
   grip.title = "Drag to change how the height is shared. Double-click to reset.";
@@ -547,6 +670,17 @@ export function buildFace(node, openPanel, openIdeaEditor) {
     renderFace(node);
   });
   seedwrap.append(seed, seedmode);
+
+  // ---- tags, AFTER the seed on the same row -------------------------------
+  // Where the user asked for it. It sits with the seed rather than up beside
+  // the idea box because this row is the one that already carries the small
+  // controls, and cap1 is the label-and-Expand line.
+  const tagsBtn = el("button", "pix-mp-tags", "Tags");
+  tagsBtn.title = "Your tag library: the same @tags Prompt Pixaroma uses";
+  tagsBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    openTagLibrary(node, idea, acCtx());
+  });
   // ON THE TAB ROW, between the Caption/Lyrics segment and the meta readout.
   //
   // It sat on the TIP line first, and the user reported the consequence:
@@ -562,6 +696,7 @@ export function buildFace(node, openPanel, openIdeaEditor) {
   // it produced.
   cap2.classList.add("has-seed");
   cap2.insertBefore(seedwrap, meta);
+  cap2.insertBefore(tagsBtn, meta);
 
   // ---- mount ---------------------------------------------------------------
   const widget = node.addDOMWidget(WIDGET_TYPE, WIDGET_TYPE, root, {
@@ -592,7 +727,8 @@ export function buildFace(node, openPanel, openIdeaEditor) {
   installNodeAccent(node, root);
 
   node._pixMpEls = {
-    root, inner, banner, bLabel, bHint, gear, idea, grip, out, meta,
+    root, inner, banner, bLabel, bHint, gear, idea, ideawrap, ideabd, tagsBtn,
+    grip, out, meta,
     lenChips, secs, verseChips, bridge, instr, modeChips, rowStruct, tip, tipV,
     seg, segCap, segLyr, seed, seedmode, seedwrap,
     acts, reroll, copy, vram, gen,
@@ -604,6 +740,16 @@ export function buildFace(node, openPanel, openIdeaEditor) {
   // rows cannot be squashed out of the frame - and because it is gone the rest
   // of the time it never inflates node.size on a load (Nodes 2.0 recipe #2).
   node._pixMpFloorOff = installResizeFloor(root, () => WIDGET_MIN_H);
+
+  // The two text columns must stay identical. Observe the TEXTAREA - never the
+  // backdrop, whose padding syncColumns mutates, or it re-fires forever. A
+  // ResizeObserver rather than onResize because that hook is not reliable for
+  // DOM widgets (Vue Compat #13), and it also covers the renderer flip and the
+  // textarea's own scrollbar appearing, which shrinks its content box.
+  try {
+    node._pixMpColRO = new ResizeObserver(() => syncColumns(idea, ideabd));
+    node._pixMpColRO.observe(idea);
+  } catch (e) { /* no observer: the focus listener still corrects it */ }
 
   applyShare(node);
   renderFace(node);
@@ -715,6 +861,9 @@ export function renderFace(node) {
 
   // ---- idea ----------------------------------------------------------------
   if (els.idea.value !== st.idea) els.idea.value = st.idea;
+  // The highlight has to follow EVERY path that can change the idea - typing, an
+  // Insert from the library, the full-screen editor, and a workflow load.
+  renderIdeaTags(node);
 
   // ---- controls ------------------------------------------------------------
   const chipValues = SECONDS_CHIPS.slice();
@@ -842,6 +991,12 @@ export function applyError(node, message) {
 export function destroyFace(node) {
   try { node._pixMpFloorOff?.(); } catch (_) { /* already gone */ }
   node._pixMpFloorOff = null;
+  try { node._pixMpColRO?.disconnect(); } catch (_) { /* already gone */ }
+  node._pixMpColRO = null;
+  // The autocomplete popup and the library are body-level singletons, so a
+  // deleted node must take its own down or they hang there pointing at nothing.
+  try { closeAC(); } catch (_) { /* already gone */ }
+  try { closeLibraryEditorFor(node); } catch (_) { /* already gone */ }
   node._pixMpEls = null;
   node._pixMpWidget = null;
 }

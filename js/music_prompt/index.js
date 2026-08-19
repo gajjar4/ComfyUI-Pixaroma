@@ -31,6 +31,12 @@ import {
   openIdeaEditor,
   openMusicPromptPanel,
 } from "./settings.mjs";
+// The @tag layer, shared with Prompt Pixaroma. beginPickBuild + makeRunResolvers are
+// what let a *category / #list in the idea roll a fresh pick per run and still be
+// held until a queue is actually accepted (prompt.md #31).
+import { beginPickBuild } from "../prompt/cursors.mjs";
+import { makeRunResolvers } from "../prompt/tag_field.mjs";
+import { expandAll } from "../prompt/expand.mjs";
 import "./help.mjs";
 
 // ---------------------------------------------------------------------------
@@ -224,6 +230,13 @@ app.graphToPrompt = async function (...args) {
   try {
     const out = result?.output;
     if (out) {
+      // Open the pick build BEFORE anything rolls. Prompt Pixaroma's hook does the
+      // same and beginPickBuild is idempotent per prompt OBJECT, so whichever of the
+      // hooks runs first opens the build and the others reuse it - extension load
+      // order is not stable, so none may assume it goes first. Get this wrong and one
+      // node's picks carry a build id the commit will skip, and its "In order" list
+      // never advances again.
+      beginPickBuild(out);
       let index = null;
       for (const id in out) {
         const entry = out[id];
@@ -232,8 +245,20 @@ app.graphToPrompt = async function (...args) {
         const node = findNode(index, id);
         if (!node) continue;
         try {
+          const st = injectedState(node);
+          // Expand @tags, and roll every *category and #list NOW, at queue time, so
+          // each run gets a fresh pick. A different pick changes this string, so the
+          // cache key changes and the model runs again - no nonce needed, exactly as
+          // the seed works.
+          //
+          // Only the IDEA is expanded. The two FORMULAS are prose written for a
+          // model and people write things like "step #1" in them, which would be
+          // scanned as a token; the idea box is where tags belong and where the
+          // highlight shows you what they did.
+          const res = expandAll(st.idea, makeRunResolvers());
+          st.idea = res.out;
           entry.inputs = entry.inputs || {};
-          entry.inputs[HIDDEN_INPUT] = JSON.stringify(injectedState(node));
+          entry.inputs[HIDDEN_INPUT] = JSON.stringify(st);
         } catch (nodeErr) {
           // Per-node guard: one bad node must not stop the others being injected.
           console.error("[Pixaroma.MusicPrompt] inject failed for node", id, nodeErr);
