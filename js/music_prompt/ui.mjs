@@ -701,7 +701,11 @@ export function renderFace(node) {
   }
   // Two runs on one load is the cost, and saying so before the user presses
   // anything is the point: it is the one surprising thing about this node.
-  els.bHint.textContent = willGenerate(node) ? "2 runs" : wiredSummary(node);
+  // Instrumental writes no lyrics, so it is ONE - and the count has to follow
+  // the switch or it is telling the user the wrong price for what they picked.
+  els.bHint.textContent = willGenerate(node)
+    ? (st.no_vocals ? "1 run" : "2 runs")
+    : wiredSummary(node);
 
   // ---- idea ----------------------------------------------------------------
   if (els.idea.value !== st.idea) els.idea.value = st.idea;
