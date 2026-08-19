@@ -470,10 +470,18 @@ function buildFormulaSet(node, body) {
   pick.append(val, el("span", "c", "▼"));
   pick.addEventListener("click", (e) => {
     e.stopPropagation();
+    // The size of the model the set was MEASURED on, not of the set itself.
+    // A set's name already says which model it is for ("Qwen3.5 4B int8") but
+    // not what that costs to load, and choosing a set IS choosing a model here.
+    // With 2b / 4b / 9b sets side by side this is the number that answers "will
+    // my card run this one", which is exactly why the user asked for it.
+    // Blank when that model is not on disk - a size for a file you do not have
+    // would be a lie.
     const values = allSets().map((s) => ({
       value: s.name,
       label: s.name,
       kind: isShipped(s) ? "shipped" : "user",
+      size: s.model_hint ? MODELS.sizes?.[s.model_hint] : undefined,
       title: [s.note, s.model_hint && "Measured on " + s.model_hint]
         .filter(Boolean).join("\n"),
     }));

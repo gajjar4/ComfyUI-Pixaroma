@@ -330,7 +330,7 @@ function openPop(anchor, values, current, onPick, opts) {
       none.style.color = "#888";
       list.appendChild(none);
     }
-    for (const [value, label, hoverTitle, kind] of hits) {
+    for (const [value, label, hoverTitle, kind, rowSize] of hits) {
       // The empty value is the "None" sentinel, not a file. Without this it got
       // marked "(no vision)" - nonsense for a state the node documents as a
       // working one - and because .is-blind is declared after .is-on at equal
@@ -341,11 +341,15 @@ function openPop(anchor, values, current, onPick, opts) {
       const dot = dotOf(kind);
       // A row with anything beside its label has to become a flex container, and
       // then the ellipsis has to move onto the label span with it.
-      // The model rows carry a SIZE, which is what tells 2b / 4b / 9b of one
-      // family apart now that several are installed. It is looked up by VALUE
-      // (the filename) and rendered in its own span, so the filter above keeps
-      // matching the name only - typing "9b" must not match a file size.
-      const sizeText = formatModelSize(opts?.sizes?.[value]);
+      // The SIZE, which is what tells 2b / 4b / 9b of one family apart now that
+      // several are installed. Two sources because the two pickers key
+      // differently: a MODEL row's value IS the filename, so it looks up
+      // opts.sizes; a PRESET row's value is the preset name, so it carries the
+      // size of the model it was MEASURED on as a fifth element. Either way it
+      // is rendered in its own span, so the filter above keeps matching the
+      // name only - typing "9b" must not match a file size.
+      const sizeText = formatModelSize(
+        rowSize != null ? rowSize : opts?.sizes?.[value]);
       const rich = !!dot || !!del || !!sizeText;
       const row = el("div", (value === current ? "is-on" : "") +
                             (vision ? "" : " is-blind") +
@@ -1445,7 +1449,12 @@ function renderPanel(node, body) {
     + (p.settings && p.settings.temperature != null
        ? "\nTemperature " + p.settings.temperature : "")
     + (p.note ? "\n\n" + p.note : ""),
-    isShipped(p) ? KIND_SHIPPED : KIND_MINE]);
+    isShipped(p) ? KIND_SHIPPED : KIND_MINE,
+    // Fifth element: the size of the model this preset was MEASURED on, so the
+    // row answers "will my card run this one" before you load it. Blank when
+    // that model is not on disk, which the hover already spells out - a size
+    // for a file you do not have would be a lie.
+    p.model_hint ? MODELS.sizes?.[p.model_hint] : undefined]);
   body.appendChild(pickRow(
     loaded ? loaded.name : (all.length ? "Load a preset…" : "No presets yet"),
     (anchor) => {
