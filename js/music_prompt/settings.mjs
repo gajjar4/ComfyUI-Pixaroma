@@ -404,6 +404,26 @@ function loadedSet(node) {
   // to node.properties would flag a clean workflow modified on load (Vue Compat
   // #18). After a reload the tie-break below takes over again, which is the
   // behaviour that was wanted in the first place.
+  // EMPTY formulas mean the node is following the BUILT-IN wording, and that is
+  // a DIFFERENT STATE from "a set of yours whose text happens to be identical".
+  // applySet stores the shipped set as empty on purpose (so the node keeps
+  // following it if it is ever re-measured), so empty can only mean the shipped
+  // one - whatever byte-identical copies exist.
+  //
+  // Without this a FRESH node reported the user's copy: its formulas are empty,
+  // `effective` resolves them to the shipped text, both sets then match, and
+  // the "theirs wins" tie-break below picked the copy. Reported as "why is get
+  // default new node to mine? even if i used minimax last" (2026-08-19) - and
+  // the node was never on their set at all, it was on the built-in one.
+  //
+  // This also outranks the runtime `_pixMpPickedSet` for the shipped set, and
+  // is better than it: matching on stored state SURVIVES a reload, where the
+  // runtime marker does not.
+  const st = readState(node);
+  const followingBuiltIn = !(st.caption_formula || "").trim()
+                        && !(st.lyrics_formula || "").trim();
+  if (followingBuiltIn) return (SETS.shipped || [])[0] || null;
+
   const picked = node._pixMpPickedSet;
   if (picked) {
     const all = (SETS.user || []).concat(SETS.shipped || []);
