@@ -1009,6 +1009,17 @@ async function refreshPresets() {
  *  it survives a reload and a duplicate with nothing extra stored. */
 function loadedPreset(node) {
   const formula = readState(node).formula;
+  // An EXPLICIT pick wins while its wording still matches. Without this a
+  // verbatim copy of a shipped preset can never be shown as loaded, because
+  // allPresets() is shipped-then-user and the original always matches first -
+  // so the row names the built-in, the "(mine)" Save-as suggestion misfires,
+  // and the panel treats your own preset as one of ours. The moment the
+  // formula is edited the pick is stale and the match below is the truth.
+  const picked = node?._pixApPickedPreset;
+  if (picked) {
+    const p = allPresets().find((x) => x.name === picked);
+    if (p && p.formula === formula) return p;
+  }
   return allPresets().find((p) => p.formula === formula) || null;
 }
 
@@ -1459,6 +1470,14 @@ function renderPanel(node, body) {
       openPop(anchor, presetRows(), loaded ? loaded.name : null, async (name) => {
         const preset = allPresets().find((p) => p.name === name);
         if (!preset) return;
+        // Remember WHICH one was chosen. loadedPreset matches on the formula
+        // text, and allPresets() is shipped-then-user, so a verbatim copy of a
+        // shipped preset is shadowed by the original: pick "my copy" and the
+        // row names the built-in instead. Reproduced against the real shipped
+        // file (2026-08-19), the mirror of the same fault in Music Prompt.
+        // Runtime-only, never node.properties - a display preference must not
+        // flag a clean workflow modified on load (Vue Compat #18).
+        node._pixApPickedPreset = name;
         // A dialog earns its place only when something would be LOST. Switching
         // away from a preset you have not edited loses nothing - the preset is
         // still in the list, one click away - so asking there is pure friction,
@@ -1603,7 +1622,13 @@ function renderPanel(node, body) {
       formula: recipe.formula,
       settings: recipe.settings,
       model_hint: recipe.model,
+      // Recorded with the preset so its row can show a size even on a machine
+      // where that model is not downloaded yet.
+      model_bytes: recipe.model ? MODELS.sizes?.[recipe.model] : undefined,
     });
+    // The preset just saved is the one to show. A verbatim copy of a shipped
+    // one is otherwise shadowed by the original the instant it is written.
+    node._pixApPickedPreset = name;
     if (!res.ok) {
       // Re-read BEFORE saying so. A refusal usually means the file went
       // unreadable underneath us, and returning early left the panel still
