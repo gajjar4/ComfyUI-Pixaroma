@@ -22,15 +22,34 @@ export const STATE_PROP = "musicPromptState";
 
 export const MIN_W = 330;
 export const DEFAULT_W = 360;
+
+// ⚠️ MIN_H is DERIVED, and it has to stay that way.
+//
 // MEASURED (2026-08-19): the face's rows at full squish need 350px of widget
-// (WIDGET_MIN_H in ui.mjs, 354 with slack) and this node's title plus its
-// three output slot rows cost a measured 86px on top - so anything under 440
-// pushes the readout's bottom and the button row below the node frame, which
-// is exactly what the user reported ("if i make it smaller it doesnt look
-// right"). The old 360 was a guess made before the face had settled. A node
-// SAVED between 360 and 440 gets grown by the Classic clamp after its load
-// gate clears - acceptable, because that saved state was visibly broken.
-export const MIN_H = 440;
+// (+4 slack for font-metric differences between machines), and this node's
+// title plus its three output slot rows cost a measured 86px on top - so
+// anything under 440 pushes the readout's bottom and the button row below the
+// node frame, which is exactly what the user reported ("if i make it smaller
+// it doesnt look right"). The old 360 was a guess made before the face had
+// settled.
+//
+// These live HERE, beside MIN_H, rather than in ui.mjs where the widget floor
+// is used, because the two numbers are ONE fact and a comment cannot enforce
+// an invariant. Split across two files, whoever adds a row to the face later
+// bumps the widget floor, gets a correct Nodes 2.0 floor for free (the resize
+// floor reads it directly) and a SILENTLY STALE Classic clamp - reproducing
+// this very bug in one renderer only, which is the hardest shape to notice.
+// ui.mjs imports core.mjs and core.mjs imports nothing, so the constant moves
+// DOWN here cycle-free; the reverse would not be.
+//
+// A node SAVED between 360 and 440 gets grown by the Classic clamp once its
+// load gate clears, so an untouched workflow will offer to save itself once.
+// Accepted deliberately: the node shipped 2026-08-18 and DEFAULT_H is 470, so
+// only a deliberately dragged-down node is affected, and for that node the
+// saved size was visibly broken.
+export const WIDGET_MIN_H = 354;
+export const SLOT_OVERHEAD = 86;
+export const MIN_H = WIDGET_MIN_H + SLOT_OVERHEAD;   // 440
 export const DEFAULT_H = 470;
 
 export const SEED_FIXED = "fixed";

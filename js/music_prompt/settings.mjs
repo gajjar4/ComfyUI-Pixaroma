@@ -572,6 +572,14 @@ function buildFormulaSet(node, body) {
       let warn = false;
       if (slotConnected(node, "clip")) {
         line = "Measured on " + hint + ". Your wired model is being used instead.";
+      } else if (!MODELS.ok) {
+        // "You do not have it" is a claim we have NO evidence for when the list
+        // never arrived - and the picker directly above is already saying it
+        // could not be read, so the old wording put two contradicting sentences
+        // on one panel and sent people hunting for a file that is on disk.
+        line = "Measured on " + hint + ", but the model list could not be read, "
+             + "so your own model was left alone.";
+        warn = true;
       } else if (!MODELS.models.includes(hint)) {
         line = "Measured on " + hint + ", which you do not have, so your own "
              + "model was left alone. Results may differ.";

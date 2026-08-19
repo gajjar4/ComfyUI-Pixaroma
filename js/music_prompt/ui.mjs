@@ -48,6 +48,7 @@ import {
   VERSES_AUTO,
   VIEW_CAPTION,
   VIEW_LYRICS,
+  WIDGET_MIN_H,
   displaySeed,
   readLast,
   readState,
@@ -63,15 +64,6 @@ import {
 
 const CSS_ID = "pixaroma-music-prompt-css";
 export const WIDGET_TYPE = "pixaroma_music_prompt";
-// MEASURED, not guessed (2026-08-19, user report "if i make it smaller it
-// doesnt look right"). With the idea at its 44px floor and the readout at its
-// 64px floor, the column's rows + 6px gaps sum to 350px (root.scrollHeight at
-// full squish). The old value of 300 was 50px short, so the drag floor let the
-// readout's bottom and the WHOLE button row be pushed below the node frame.
-// 354 = 350 + 4px slack for font-metric differences between machines.
-// core.mjs MIN_H (the Classic clamp) must stay = this + 86, the measured
-// title-plus-three-output-slot-rows overhead of this node.
-const WIDGET_MIN_H = 354;
 
 function el(tag, cls, text) {
   const node = document.createElement(tag);
