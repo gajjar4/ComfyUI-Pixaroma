@@ -16,6 +16,7 @@ export {
   allow_debug,
   PIXAROMA_LOGO,
   BRAND,
+  formatModelSize,
   createDummyWidget,
   installFocusTrap,
   hideJsonWidget,

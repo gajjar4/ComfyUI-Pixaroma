@@ -40,6 +40,7 @@ import { deletePreset, fetchPresets, savePreset } from "./api.mjs";
 // If a third consumer turns up, that is when it moves to js/shared.
 import { askConfirm, askName, openEditor, sayIt } from "../ai_prompt/settings.mjs";
 import { followNode, getNodeScreenRect, makeDraggable, placeBeside } from "../shared/node_panel.mjs";
+import { formatModelSize } from "../shared/utils.mjs";
 import {
   ACC,
   createAccentSection,
@@ -56,7 +57,7 @@ let ON_CHANGE = null;
 let USER_MOVED = false;
 let POP = null;
 let CP_HANDLE = null;
-let MODELS = { ok: false, models: [], error: null };
+let MODELS = { ok: false, models: [], sizes: {}, error: null };
 // The formula sets, fetched once per panel open beside the model list. Empty
 // until they land; the panel says so rather than offering a blank editor as
 // though it were the measured instruction.
@@ -125,6 +126,10 @@ function injectCSS() {
       font-size:11.5px; color:#ccc; }
     .pix-mps-item .lbl { flex:1 1 auto; min-width:0; overflow:hidden;
       text-overflow:ellipsis; white-space:nowrap; }
+    /* The model's size. flex:0 0 auto so the NAME ellipsises and the size never
+       does - a clipped size would defeat the point of showing it. */
+    .pix-mps-item .pix-mps-sz { flex:0 0 auto; color:#7d7d7d; font-size:10px; }
+    .pix-mps-item.on .pix-mps-sz { color:#ffd9cd; }
     .pix-mps-item:hover { background:#2a2a2a; color:#fff; }
     .pix-mps-item.on { background:${ACC}; color:#fff; }
     .pix-mps-empty { padding:7px 8px; font-size:11px; color:#7d7a76; }
@@ -293,6 +298,8 @@ function openPop(anchor, values, current, onPick, opts = {}) {
         it.appendChild(el("span", "pix-mps-dot is-" + v.kind));
       }
       it.appendChild(el("span", "lbl", v.label || v.value));
+      const sizeText = formatModelSize(v.size);
+      if (sizeText) it.appendChild(el("span", "pix-mps-sz", sizeText));
       it.title = v.title || v.label || v.value;
       it.addEventListener("click", (e) => { e.stopPropagation(); closePop(); onPick(v.value); });
       list.appendChild(it);
@@ -672,7 +679,13 @@ function renderPanel(node, body) {
   pick.addEventListener("click", (e) => {
     e.stopPropagation();
     const values = [{ value: "", label: "None - pass the text through" }];
-    for (const m of MODELS.models) values.push({ value: m, label: m });
+    // `size` rides on the value rather than being folded into the label, so the
+    // filter (which reads label || value) still matches the NAME only - typing
+    // "9b" must not match a file size. It is what tells 2b / 4b / 9b of one
+    // family apart now that several are installed.
+    for (const m of MODELS.models) {
+      values.push({ value: m, label: m, size: MODELS.sizes?.[m] });
+    }
     // filterFrom 2, like the sets picker: the user asked for the model list
     // to be filterable too, and two names are already worth narrowing.
     openPop(pick, values, st.model, (v) => {

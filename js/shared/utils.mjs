@@ -17,6 +17,28 @@ export const PIXAROMA_LOGO = `data:image/svg+xml;utf8,${encodeURIComponent(`
 export const BRAND = "#f66744";
 const LOGO_URL = "pixaroma_logo.svg";
 
+/**
+ * A model file's size, short enough to sit beside its name in a picker.
+ *
+ * The user asked for this once several sizes of the SAME model family were
+ * installed (qwen3.5 2b / 4b / 9b): the names differ by two characters and the
+ * size is what actually tells you which one you are about to load.
+ *
+ * One decimal under 10 GB and none above, so the column stays narrow and the
+ * numbers stay comparable at a glance. Returns "" for anything missing or
+ * nonsensical rather than "0 B" or "NaN" - a picker row with no size is fine,
+ * a row claiming a model is zero bytes is not.
+ */
+export function formatModelSize(bytes) {
+  const n = Number(bytes);
+  if (!Number.isFinite(n) || n <= 0) return "";
+  const gb = n / 1073741824;
+  if (gb >= 10) return `${Math.round(gb)} GB`;
+  if (gb >= 1) return `${gb.toFixed(1)} GB`;
+  const mb = n / 1048576;
+  return mb >= 1 ? `${Math.round(mb)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`;
+}
+
 export function createDummyWidget(titleText, subtitleText, instructionText) {
   const imgSrc = PIXAROMA_LOGO;
   const container = document.createElement("div");

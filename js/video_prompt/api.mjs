@@ -51,6 +51,7 @@ export async function fetchAll() {
       error: String(e && e.message ? e.message : e),
       modes: {},
       models: [],
+      sizes: {},
     };
   }
 }

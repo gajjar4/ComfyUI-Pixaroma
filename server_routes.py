@@ -3790,10 +3790,12 @@ async def api_video_prompt_formulas(request):
             }
     try:
         out["models"] = list(folder_paths.get_filename_list("text_encoders"))
+        out["sizes"] = _text_encoder_sizes(out["models"])
     except Exception:
         # A scan failure is not an empty folder - saying [] would make the panel
         # claim the user has no text encoders at all.
         out["models"] = []
+        out["sizes"] = {}
         out["models_error"] = True
     return web.json_response(out, headers=_vp_no_store())
 
@@ -3880,6 +3882,34 @@ async def api_video_prompt_reset(request):
 # ---------------------------------------------------------------------------
 # AI Prompt Pixaroma
 # ---------------------------------------------------------------------------
+def _text_encoder_sizes(names):
+    """Byte size per text-encoder file, for the picker's size labels.
+
+    The user asked for the size beside the name so a 2b / 4b / 9b of the same
+    family can be told apart at a glance, which matters now that several sizes
+    of the same model are installed.
+
+    Kept as a SEPARATE map rather than folding it into the `models` list: that
+    list is a plain array of strings and several `.includes(...)` checks in the
+    three panels depend on it (the wired-clip lock, the preset model hint, the
+    "model no longer on disk" warning). Changing its shape would break all of
+    them for a cosmetic label.
+
+    Best effort and never raises. A model whose path cannot be resolved simply
+    gets no size shown, which is better than failing the whole list - the list
+    is what the panel actually needs.
+    """
+    out = {}
+    for n in names:
+        try:
+            p = folder_paths.get_full_path("text_encoders", n)
+            if p:
+                out[n] = os.path.getsize(p)
+        except Exception:
+            pass
+    return out
+
+
 @PromptServer.instance.routes.get("/pixaroma/api/ai_prompt/models")
 async def api_ai_prompt_models(request):
     """The text encoders on disk, for the node's model picker.
@@ -3895,10 +3925,13 @@ async def api_ai_prompt_models(request):
     """
     try:
         models = list(folder_paths.get_filename_list("text_encoders"))
-        return web.json_response({"models": models}, headers=_vp_no_store())
+        return web.json_response(
+            {"models": models, "sizes": _text_encoder_sizes(models)},
+            headers=_vp_no_store(),
+        )
     except Exception as e:
         return web.json_response(
-            {"models": [], "error": str(e)}, headers=_vp_no_store()
+            {"models": [], "sizes": {}, "error": str(e)}, headers=_vp_no_store()
         )
 
 

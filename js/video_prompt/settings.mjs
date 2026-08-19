@@ -16,6 +16,7 @@ import {
 import {
   followNode, getNodeScreenRect, makeDraggable, placeBeside,
 } from "../shared/node_panel.mjs";
+import { formatModelSize } from "../shared/utils.mjs";
 // Duration Pixaroma's recipe list, shared rather than copied: it is pure data
 // with no imports and no side effects, and one list means the two nodes cannot
 // drift on what "Wan" means.
@@ -28,7 +29,7 @@ let PANEL = null;
 let PANEL_NODE = null;
 let USER_MOVED = false;
 let ON_CHANGE = null;
-let DATA = { modes: {}, models: [] };
+let DATA = { modes: {}, models: [], sizes: {} };
 let CP_HANDLE = null;   // an open Pixaroma colour picker, so close takes it too
 
 let _cssDone = false;
@@ -143,7 +144,13 @@ function injectCSS() {
   }
   .pix-vpp-pop .pix-vpp-poplist div{ padding:5px 9px; border-radius:3px; color:#ccc;
     font:11px 'Segoe UI', sans-serif; cursor:pointer;
+    display:flex; align-items:center; gap:8px;
     white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  /* the NAME shrinks and ellipsises; the SIZE never does, which is the point */
+  .pix-vpp-pop .pix-vpp-poplist .pix-vpp-nm{
+    overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .pix-vpp-pop .pix-vpp-poplist .pix-vpp-sz{
+    margin-left:auto; flex:0 0 auto; color:#7d7d7d; font-size:10px; }
   .pix-vpp-pop .pix-vpp-poplist div:hover{ background:#2a2a2a; }
   .pix-vpp-pop .pix-vpp-poplist div.is-on{ color:var(--pix-acc,#f66744); }
   /* cannot see a picture - dimmed, still selectable */
@@ -245,7 +252,17 @@ function openPop(anchor, values, current, onPick, opts) {
       // never saw. Marked, never blocked: a renamed VL file is legitimate.
       const vision = looksVision(v);
       const row = el("div", (v === current ? "is-on" : "") +
-                            (vision ? "" : " is-blind"), v);
+                            (vision ? "" : " is-blind"));
+      // The name gets its OWN span so the row can be a flex line: the name
+      // ellipsises when long, the size never does. Appending the size to the
+      // row text instead would let text-overflow eat the very thing this is
+      // for. And the filter above still runs on the raw name, so typing "9b"
+      // cannot accidentally match a file size, while onPick keeps the exact
+      // filename. Several sizes of one family are installed now and the names
+      // differ by two characters, so the size is what tells them apart.
+      row.appendChild(el("span", "pix-vpp-nm", v));
+      const shown = formatModelSize(opts?.sizes?.[v]);
+      if (shown) row.appendChild(el("span", "pix-vpp-sz", shown));
       row.title = vision ? v : v + "  -  does not look like a vision model, "
         + "so it cannot see your pictures";
       row.addEventListener("click", (e) => {
@@ -593,7 +610,8 @@ function renderPanel(node, body) {
   if (!clipWired) {
     pick.addEventListener("click", (e) => {
       e.stopPropagation();
-      openPop(pick, models, st.model, (v) => set({ model: v }), { filterFrom: 2 });
+      openPop(pick, models, st.model, (v) => set({ model: v }),
+              { filterFrom: 2, sizes: DATA.sizes });
     });
   }
   body.appendChild(pick);

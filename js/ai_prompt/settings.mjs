@@ -15,6 +15,7 @@
 import { installGraphUndoGuard } from "../shared/graph_undo_guard.mjs";
 import { createAccentSection } from "../shared/node_settings.mjs";
 import { followNode, getNodeScreenRect, makeDraggable, placeBeside } from "../shared/node_panel.mjs";
+import { formatModelSize } from "../shared/utils.mjs";
 import {
   ORDER_IDEA,
   ORDER_WIRED,
@@ -175,6 +176,9 @@ function injectCSS() {
        container, and preset names are long enough to need it. */
     .pix-app-poplist > div.is-flex > .nm { flex:1 1 auto; min-width:0;
       overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    /* The model's size, right of the name. flex:0 0 auto so it is never the
+       thing that ellipsises - a clipped size would defeat the point of it. */
+    .pix-app-sz { flex:0 0 auto; color:#7d7d7d; font-size:10px; }
 
     /* Delete, on the row it deletes. Hidden until the row is hovered, so six
        shipped presets are not six ✕ glyphs at rest, and it turns amber only
@@ -337,7 +341,12 @@ function openPop(anchor, values, current, onPick, opts) {
       const dot = dotOf(kind);
       // A row with anything beside its label has to become a flex container, and
       // then the ellipsis has to move onto the label span with it.
-      const rich = !!dot || !!del;
+      // The model rows carry a SIZE, which is what tells 2b / 4b / 9b of one
+      // family apart now that several are installed. It is looked up by VALUE
+      // (the filename) and rendered in its own span, so the filter above keeps
+      // matching the name only - typing "9b" must not match a file size.
+      const sizeText = formatModelSize(opts?.sizes?.[value]);
+      const rich = !!dot || !!del || !!sizeText;
       const row = el("div", (value === current ? "is-on" : "") +
                             (vision ? "" : " is-blind") +
                             (ears ? " is-ears" : "") +
@@ -349,6 +358,7 @@ function openPop(anchor, values, current, onPick, opts) {
           row.appendChild(bullet);
         }
         row.appendChild(el("span", "nm", label));
+        if (sizeText) row.appendChild(el("span", "pix-app-sz", sizeText));
       } else {
         row.textContent = label;
       }
@@ -774,7 +784,7 @@ let PANEL_NODE = null;
 let ON_CHANGE = null;
 let USER_MOVED = false;
 let CP_HANDLE = null;
-let MODELS = { ok: true, models: [], error: null };
+let MODELS = { ok: true, models: [], sizes: {}, error: null };
 // ok starts FALSE: it means "a read has succeeded at least once", not "this
 // object is fine".
 let PRESETS = { ok: false, shipped: [], user: [], userError: false };
@@ -1180,7 +1190,8 @@ function renderPanel(node, body) {
       .concat(MODELS.models.map((m) => [m, m]));
     // filterFrom 2, like the preset picker (19b): the user asked for the same
     // filter here, and two model names are already worth narrowing.
-    openPop(anchor, values, st.model, (v) => set({ model: v }), { filterFrom: 2 });
+    openPop(anchor, values, st.model, (v) => set({ model: v }),
+            { filterFrom: 2, sizes: MODELS.sizes });
   }, {
     locked: clipWired,
     none: !clipWired && !st.model,

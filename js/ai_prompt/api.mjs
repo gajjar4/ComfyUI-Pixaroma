@@ -87,9 +87,13 @@ export async function fetchModels() {
     return {
       ok: !data?.error,
       models: Array.isArray(data?.models) ? data.models : [],
+      // Byte size per name, for the picker's size label. A SEPARATE map on
+      // purpose: `models` stays a plain string array because several
+      // `.includes(...)` checks in the panels depend on it.
+      sizes: (data && typeof data.sizes === "object" && data.sizes) || {},
       error: data?.error ? String(data.error) : null,
     };
   } catch (e) {
-    return { ok: false, models: [], error: String(e?.message || e) };
+    return { ok: false, models: [], sizes: {}, error: String(e?.message || e) };
   }
 }
