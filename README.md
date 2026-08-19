@@ -375,6 +375,14 @@ Master the Pixaroma suite with our video guides and workflow deep-dives:
 
 ## 🛠 Changelog
 
+### **August 19, 2026 · v1.4.118**
+- **NEW: Music Prompt writes instrumental music.** A Voice / Instrumental switch. Instrumental runs the model once, so it is about two and a half times faster.
+- **Instr. is now Break**, so it is not confused with Instrumental. Avoid it on a 30 second song.
+- **Model sizes in every picker**, so 2B, 4B and 9B are told apart.
+- **Gemma 4 and Qwen3.5 are no longer marked "no vision"** in Video Prompt.
+- **The cursor lands where you click** in long prompts on Prompt and AI Prompt.
+- **The built-in formula set can be picked again** after saving your own copy.
+
 ### **August 18, 2026 · v1.4.115–v1.4.117**
 - **NEW: Music Prompt Pixaroma.** One idea in, a caption and lyrics out for MiniMax Music 3. Set the length and the words are written to fit. Replaces the two music presets.
 - **Find a model by typing.** The model lists in AI Prompt, Video Prompt and Music Prompt settings now filter as you type, like presets do.
