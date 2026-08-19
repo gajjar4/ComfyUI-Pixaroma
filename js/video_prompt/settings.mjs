@@ -17,6 +17,7 @@ import {
   followNode, getNodeScreenRect, makeDraggable, placeBeside,
 } from "../shared/node_panel.mjs";
 import { formatModelSize } from "../shared/utils.mjs";
+import { looksVision } from "../shared/model_kinds.mjs";
 // Duration Pixaroma's recipe list, shared rather than copied: it is pure data
 // with no imports and no side effects, and one list means the two nodes cannot
 // drift on what "Wan" means.
@@ -209,9 +210,6 @@ function el(tag, cls, text) {
 // ---------------------------------------------------------------------------
 /** Mirror of _score_model()'s vision test in _video_prompt_helpers.py. Kept
  *  deliberately simple and identical: a filename with "vl" in it. */
-function looksVision(name) {
-  return /vl/i.test(String(name || ""));
-}
 
 let POP = null;
 function closePop() {

@@ -16,6 +16,7 @@ import { installGraphUndoGuard } from "../shared/graph_undo_guard.mjs";
 import { createAccentSection } from "../shared/node_settings.mjs";
 import { followNode, getNodeScreenRect, makeDraggable, placeBeside } from "../shared/node_panel.mjs";
 import { formatModelSize } from "../shared/utils.mjs";
+import { looksAudio, looksVision } from "../shared/model_kinds.mjs";
 import {
   ORDER_IDEA,
   ORDER_WIRED,
@@ -242,18 +243,12 @@ function injectCSS() {
  *  the direction of "no mark" is the safe way round: an unmarked text-only
  *  model wastes a run, a model wrongly marked blind is a thing the user is
  *  told not to use when it would have worked. */
-function looksVision(name) {
-  return /vl|gemma\W?4|qwen\W?3\.?5/i.test(String(name || ""));
-}
 
 /** ...and can it HEAR? Gemma 4 is the only text encoder in ComfyUI whose
  *  tokenizer accepts an `audio` argument - every Qwen3-VL takes the audio,
  *  ignores it and answers anyway. Worth marking POSITIVELY: this node has an
  *  audio input, and nothing else on screen says which of thirty files can use
  *  it. */
-function looksAudio(name) {
-  return /gemma\W?4/i.test(String(name || ""));
-}
 
 // The two kinds of preset, and the colour that says which is which. Orange is
 // the pack's own accent, so an orange dot reading "this one came with Pixaroma"

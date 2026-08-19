@@ -481,7 +481,11 @@ function buildFormulaSet(node, body) {
       value: s.name,
       label: s.name,
       kind: isShipped(s) ? "shipped" : "user",
-      size: s.model_hint ? MODELS.sizes?.[s.model_hint] : undefined,
+      // On-disk first so a re-quantised file shows the user's own number, then
+      // the size RECORDED with the set - which is the one that matters when the
+      // model is not downloaded yet, exactly when you want to know.
+      size: (s.model_hint ? MODELS.sizes?.[s.model_hint] : undefined)
+            ?? s.model_bytes,
       title: [s.note, s.model_hint && "Measured on " + s.model_hint]
         .filter(Boolean).join("\n"),
     }));

@@ -70,6 +70,15 @@ _UNREADABLE = (
 # writes for and the LANGUAGE model it was measured on, because both matter.
 SHIPPED_NAME = "MiniMax Music 3 (Qwen3.5 4B int8)"
 SHIPPED_MODEL = "qwen3.5_4b_int8_convrot.safetensors"
+# The size of that file, RECORDED rather than measured off disk.
+#
+# The picker looks the size up from the user's own models folder when it can,
+# but that only ever works for a model they ALREADY have - and the moment
+# someone most wants the number is when deciding whether to download it. The
+# published file is the same everywhere, so the figure travels with the set.
+# The on-disk size still wins when the file is present, so a user who
+# re-quantised it sees their own.
+SHIPPED_MODEL_BYTES = 5588607110          # 5.2 GB
 
 
 def user_store_path():
@@ -86,6 +95,23 @@ def user_store_path():
 
 def _clean(value, cap):
     return value[:cap] if isinstance(value, str) else ""
+
+
+def _bytes_or_none(value):
+    """A recorded model size from an untrusted payload, or None.
+
+    Purely cosmetic - it labels a row in the picker - so anything odd becomes
+    None rather than raising. Bounded at 1 TB because a size is only useful
+    while it is plausible: a silly number would render as a silly label, and a
+    bool would otherwise sneak through int() as 1.
+    """
+    if isinstance(value, bool):
+        return None
+    try:
+        n = int(value)
+    except (TypeError, ValueError):
+        return None
+    return n if 0 < n <= (1 << 40) else None
 
 
 def normalise(raw):
@@ -112,6 +138,10 @@ def normalise(raw):
         "name": name,
         "note": _clean(raw.get("note"), MAX_NOTE).strip(),
         "model_hint": _clean(raw.get("model_hint"), 200).strip(),
+        # Recorded so the row can show a size even when that model is not on
+        # disk - which is exactly when someone wants to know. Older stored sets
+        # simply have None and show nothing.
+        "model_bytes": _bytes_or_none(raw.get("model_bytes")),
         "caption": caption,
         "lyrics": lyrics,
         "settings": settings,
@@ -125,6 +155,7 @@ def shipped():
         "note": "The measured pair. The caption is factual at a low temperature; "
                 "the lyrics need a high one or every song rhymes the same way.",
         "model_hint": SHIPPED_MODEL,
+        "model_bytes": SHIPPED_MODEL_BYTES,
         "caption": CAPTION_FORMULA,
         "lyrics": LYRICS_FORMULA,
         "settings": {
