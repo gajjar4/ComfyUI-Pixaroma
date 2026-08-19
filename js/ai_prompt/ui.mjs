@@ -204,10 +204,18 @@ export function injectCSS() {
       font:11.5px/1.45 monospace; color:#ddd9d4; white-space:pre-wrap;
       word-wrap:break-word; overflow:hidden; scrollbar-gutter:stable;
       pointer-events:none; box-sizing:border-box; }
+    /* overflow-wrap MUST match .pix-ap-ideabd's. syncColumns equalises the two
+       columns' WIDTH, and width parity is NOT wrap parity: the backdrop breaks a
+       long unbroken token, a textarea defaults to overflow-wrap:normal and moves
+       it whole to the next line, so the caret drifts a little further on every
+       such token. Same gap found and fixed on Prompt (prompt.md #18); this node
+       shares that backdrop, so it shares the bug. It does not reproduce on this
+       machine only because a ComfyUI stylesheet happens to supply break-word. */
     .pix-ap-idea { flex:1 1 auto; width:100%; height:100%; box-sizing:border-box;
       background:transparent; color:transparent; caret-color:${ACC}; border:0;
       border-radius:4px; padding:6px 8px; font:11.5px/1.45 monospace; resize:none;
-      outline:none; scrollbar-gutter:stable; }
+      outline:none; scrollbar-gutter:stable;
+      white-space:pre-wrap; overflow-wrap:break-word; }
 
     /* NO expanded-preview box here, deliberately - see ai-prompt.md #21. One was
        built and removed the same day: this face already carries a banner, two

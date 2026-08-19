@@ -125,8 +125,21 @@ function injectCSS() {
        syncBackdropBox() MEASURES both columns and corrects any leftover gap. */
     .pix-prm-backdrop { position:absolute; inset:0; padding:6px 8px; border:0;
       font:12px/1.5 monospace; color:#e0e0e0; white-space:pre-wrap; word-wrap:break-word; overflow:hidden; scrollbar-gutter:stable; pointer-events:none; box-sizing:border-box; }
+    /* overflow-wrap MUST match the backdrop's. syncBackdropBox equalises the two
+       columns' WIDTH, but width parity is not wrap parity: the backdrop breaks a
+       long unbroken token and a textarea defaults to overflow-wrap:normal, which
+       pushes it whole to the next line. Measured at 260px: a long @tag name laid
+       out 66px tall on the backdrop and 48px in the textarea (3 lines out), a URL
+       84 vs 66 - and the error is per-token, so it accumulates exactly like the
+       column gap #18 already documents. It does NOT reproduce here because some
+       ComfyUI rule happens to give the textarea break-word (body computes
+       normal, so it is a stylesheet we do not own) - which is the same borrowed
+       guarantee as the scrollbar-gutter guess that already failed for a user.
+       State it explicitly instead of inheriting it. A long tag name is exactly
+       what a tag library produces, so this node is the one most exposed. */
     .pix-prm-ta { flex:1 1 auto; width:100%; height:100%; box-sizing:border-box; background:transparent; color:transparent;
-      border:0; border-radius:4px; padding:6px 8px; font:12px/1.5 monospace; resize:none; outline:none; scrollbar-gutter:stable; caret-color:var(--acc); }
+      border:0; border-radius:4px; padding:6px 8px; font:12px/1.5 monospace; resize:none; outline:none; scrollbar-gutter:stable;
+      white-space:pre-wrap; overflow-wrap:break-word; caret-color:var(--acc); }
     .pix-prm-ta::placeholder { color:#6a6a6a; }
     /* preview GROWS with the node (flex, no fixed cap) so a big node shows more.
        LIGHTER gray (not the dark #1d1d1d of the editable inputs) so it reads as a
