@@ -79,8 +79,16 @@ registerNodeHelp(CLASS, {
         ["Auto", "The length decides everything. The most dependable setting."],
         ["1 to 3", "Ask for that many verses, each with a chorus."],
         ["Bridge", "Ask for a bridge: one different section, usually near the end."],
-        ["Instr.", "Ask for a section where the band plays and nobody sings. It "
-          + "still uses up time."],
+        ["Break", "Ask for one instrumental break inside the song, where the "
+          + "band plays and nobody sings. It uses up singing time. Do not use "
+          + "it on a 30 second song: in testing the chorus was never sung at "
+          + "all. It was called Instr. before, and was renamed because it sat "
+          + "next to the Instrumental setting and the two mean different "
+          + "things."],
+        ["Voice / Instrumental", "Voice writes a song with singing. "
+          + "Instrumental writes a piece with no singing at all, which runs the "
+          + "model once instead of twice and is about two and a half times "
+          + "faster."],
       ],
     },
     {
@@ -179,10 +187,10 @@ registerNodeHelp(CLASS, {
         + "to write, so it only writes the caption and sends [Instrumental] as "
         + "the lyrics.",
       bullets: [
-        "The verses, Bridge and Instr. controls dim on Instrumental, because "
+        "The verses, Bridge and Break controls dim on Instrumental, because "
         + "there are no sections to ask for. They keep your settings and come "
         + "back when you switch to Voice.",
-        "Do not confuse Instrumental with the Instr. button. Instr. adds one "
+        "Do not confuse Instrumental with the Break button. Break adds one "
         + "instrumental section to a song that still has singing. Instrumental "
         + "means no singing anywhere in the piece.",
         "Usually there is no voice at all, but sometimes a stray sound gets "
@@ -219,7 +227,7 @@ registerNodeHelp(CLASS, {
         "A section tag on its own with no words under it means the band plays "
         + "and nobody sings, which is how you get an intro or a break. It still "
         + "uses up time.",
-        "Do NOT use the Instr. button on a 30 second song. Tested by ear: the "
+        "Do NOT use the Break button on a 30 second song. Tested by ear: the "
         + "same song without it sang all four lines in 23 seconds, and with it "
         + "the chorus was never sung at all and the song cut off. The "
         + "instrumental time does not politely sit at the end either, it "

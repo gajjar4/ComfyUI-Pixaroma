@@ -416,9 +416,15 @@ export function buildFace(node, openPanel, openIdeaEditor) {
     writeState(node, { bridge: !readState(node).bridge });
     renderFace(node);
   });
-  const instr = el("button", "pix-mp-tog", "Instr.");
-  instr.title = "Ask for an instrumental section, where the band plays and nobody "
-    + "sings. It still uses up time.";
+  // "Break", not "Instr." - it sat next to the Instrumental MODE and the two
+  // mean opposite-sized things: this asks for ONE section inside a sung song,
+  // that one means no singing anywhere. The user called the pair confusing and
+  // was right. The state key stays `instrumental`, so saved workflows are
+  // untouched: this is a label, not a rename of the setting.
+  const instr = el("button", "pix-mp-tog", "Break");
+  instr.title = "Ask for one instrumental break inside the song, where the band "
+    + "plays and nobody sings. It uses up singing time, so avoid it on a 30 "
+    + "second song - in testing it cost the whole chorus.";
   instr.addEventListener("click", (e) => {
     e.stopPropagation();
     writeState(node, { instrumental: !readState(node).instrumental });
