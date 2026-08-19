@@ -47,7 +47,7 @@ import {
   registerNodeAccent,
   registerNodeSettings,
 } from "../shared/node_settings.mjs";
-import { CLASS, readState, writeState } from "./core.mjs";
+import { CLASS, readState, slotConnected, writeState } from "./core.mjs";
 
 const CSS_ID = "pixaroma-music-prompt-settings-css";
 
@@ -428,6 +428,22 @@ function applySet(node, set, body) {
   for (const k of SETTING_KEYS) {
     if (set.settings && set.settings[k] != null) patch[k] = set.settings[k];
   }
+  // A set IS a model choice here, so picking one picks its model too - which is
+  // what the sibling has always done (ai-prompt.md, the same three guards) and
+  // what this node was missing: choosing "MiniMax Music 3 (Qwen3.5 4B int8)"
+  // left the model on whatever was there, so a fresh node stayed on "None" and
+  // passed the idea straight through. Reported as "when I select a preset it
+  // didn't load the model like the AI Prompt does".
+  //
+  // Applied ONLY when that file is really here, and NEVER over a wired clip: a
+  // set shared from another machine must not silently point this node at a
+  // model that does not exist, and a wire is an explicit choice that outranks a
+  // recorded hint. When it cannot be applied the note under the picker says so
+  // rather than popping a dialog.
+  const hint = set.model_hint;
+  if (hint && !slotConnected(node, "clip") && MODELS.models.includes(hint)) {
+    patch.model = hint;
+  }
   // Remember WHICH set was chosen, so an identical copy cannot shadow it in the
   // row (loadedSet). Runtime-only, so it cannot dirty a saved workflow.
   node._pixMpPickedSet = set.name;
@@ -545,6 +561,30 @@ function buildFormulaSet(node, body) {
       "An orange dot ships with Pixaroma, a grey one is yours. Each set is "
       + "measured on one language model, so on a different one pick the closest, "
       + "change it below, then Save as."));
+    // ONE line about the model this set was measured on, and it goes amber only
+    // when picking the set did NOT leave the node using that model - which is
+    // the only case a person needs to act on. Picking a set applies its model
+    // when it can (applySet), so the quiet case really is the common one.
+    const hint = loaded.model_hint;
+    const st = readState(node);
+    if (hint) {
+      let line = "";
+      let warn = false;
+      if (slotConnected(node, "clip")) {
+        line = "Measured on " + hint + ". Your wired model is being used instead.";
+      } else if (!MODELS.models.includes(hint)) {
+        line = "Measured on " + hint + ", which you do not have, so your own "
+             + "model was left alone. Results may differ.";
+        warn = true;
+      } else if (st.model !== hint) {
+        line = "Measured on " + hint + ", but this node is set to "
+             + (st.model || "none") + ".";
+        warn = true;
+      } else {
+        line = "Measured on " + hint + ", which is what this node is using.";
+      }
+      wrap.appendChild(el("div", "pix-mps-note" + (warn ? " is-warn" : ""), line));
+    }
   }
 
   // ---- save / delete, ALWAYS VISIBLE --------------------------------------
