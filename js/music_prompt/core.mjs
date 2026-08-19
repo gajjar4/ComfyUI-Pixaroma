@@ -73,6 +73,10 @@ export const DEFAULT_STATE = {
   verses: VERSES_AUTO,
   bridge: false,
   instrumental: false,
+  // NOT the same as `instrumental`: that adds one instrumental SECTION to a
+  // sung song, this means no singing anywhere. Its own key so an old saved
+  // workflow simply reads false.
+  no_vocals: false,
   release_model: false,
   // --- the formula set ----------------------------------------------------
   // EMPTY MEANS THE BUILT-IN. A blank box cannot be mistaken for a formula, and
@@ -97,7 +101,7 @@ export const DEFAULT_STATE = {
 // (reference_cosmetic_key_in_injected_state_recaches).
 const PROMPT_KEYS = [
   "idea", "model", "clip_type", "seed", "seconds", "verses",
-  "bridge", "instrumental", "release_model",
+  "bridge", "instrumental", "no_vocals", "release_model",
   // The formula set CHANGES THE OUTPUT, so it belongs in the cache signature -
   // editing an instruction must re-run the model by itself, exactly as editing
   // the idea does. That is the same property AI Prompt gets from keeping its
@@ -130,6 +134,7 @@ export function readState(node) {
   st.verses = Math.trunc(num(st.verses, VERSES_AUTO, VERSES_AUTO, MAX_VERSES));
   st.bridge = st.bridge === true;
   st.instrumental = st.instrumental === true;
+  st.no_vocals = st.no_vocals === true;
   st.release_model = st.release_model === true;
   // The same ranges Python clamps to, so the panel can never show a value the
   // node would silently refuse.
@@ -316,6 +321,14 @@ export function shortModel(name) {
 export function songSummary(node) {
   const st = readState(node);
   const bits = [`${st.seconds}s`];
+  // With no singing the verse and section words would describe settings that
+  // are not being used, so the line says what it IS doing instead - including
+  // the one pass, because "twice as fast" is the reason to pick this mode and
+  // the node should say so where the user is looking.
+  if (st.no_vocals) {
+    bits.push("no singing", "one pass");
+    return bits.join(" · ");
+  }
   if (st.verses) bits.push(`${st.verses} verse${st.verses === 1 ? "" : "s"} asked for`);
   else bits.push("length decides the shape");
   if (st.bridge) bits.push("bridge");

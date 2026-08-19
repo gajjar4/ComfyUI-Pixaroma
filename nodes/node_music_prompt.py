@@ -27,6 +27,7 @@ from ._ai_prompt_helpers import (
 )
 from ._music_prompt_helpers import (
     COMMON_SAMPLING,
+    NO_VOCAL_LYRICS,
     build_caption_prompt,
     build_lyrics_prompt,
     idea_text,
@@ -220,23 +221,35 @@ class PixaromaMusicPrompt:
         # about) and the idea alone loses the mood the caption just settled.
         caption, cap_ran_out = self._ask(
             clip,
-            build_caption_prompt(st["idea"], wired, st["caption_formula"]),
+            build_caption_prompt(st["idea"], wired, st["caption_formula"],
+                                 no_vocals=st["no_vocals"]),
             sampling_for("caption", st),
             st["seed"],
             model_name,
         )
-        lyrics, lyr_ran_out = self._ask(
-            clip,
-            build_lyrics_prompt(
-                st["idea"], wired, caption,
-                seconds=st["seconds"], verses=st["verses"],
-                bridge=st["bridge"], instrumental=st["instrumental"],
-                formula=st["lyrics_formula"],
-            ),
-            sampling_for("lyrics", st),
-            st["seed"],
-            model_name,
-        )
+        if st["no_vocals"]:
+            # ONE PASS. A piece with no singing has no words to write, so asking
+            # the model for lyrics is pure waste - and it is the SLOWER half,
+            # about 28-34s of the ~49s a song costs. So instrumental mode is
+            # roughly twice as fast, which is most of the reason it exists.
+            #
+            # The tag comes from code rather than the model for the same reason
+            # a fixed string should never be generated: there is exactly one
+            # right answer and a model can only get it wrong.
+            lyrics, lyr_ran_out = NO_VOCAL_LYRICS, False
+        else:
+            lyrics, lyr_ran_out = self._ask(
+                clip,
+                build_lyrics_prompt(
+                    st["idea"], wired, caption,
+                    seconds=st["seconds"], verses=st["verses"],
+                    bridge=st["bridge"], instrumental=st["instrumental"],
+                    formula=st["lyrics_formula"],
+                ),
+                sampling_for("lyrics", st),
+                st["seed"],
+                model_name,
+            )
 
         # Both strings are plain text by now, so the model can go. Only ours: a
         # model that arrived on a wire belongs to a loader the user placed and

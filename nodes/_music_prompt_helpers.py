@@ -41,6 +41,8 @@ from ._music_prompt_formulas import CAPTION_FORMULA, LYRICS_FORMULA
 
 __all__ = [
     "CAPTION_FORMULA",
+    "CAPTION_FORMULA_NO_VOCALS",
+    "NO_VOCAL_LYRICS",
     "LYRICS_FORMULA",
     "CAPTION_SAMPLING",
     "LYRICS_SAMPLING",
@@ -205,6 +207,12 @@ DEFAULT_STATE = {
     "verses": VERSES_AUTO,
     "bridge": False,
     "instrumental": False,
+    # ⚠️ NOT the same thing as `instrumental` above, despite the names. That one
+    # asks for one instrumental SECTION inside a sung song. This one means the
+    # whole piece has NO SINGING AT ALL, which changes the caption formula and
+    # skips the lyrics pass entirely. Kept as its own key rather than a mode
+    # string so an old saved workflow simply reads False.
+    "no_vocals": False,
     "release_model": False,
     # ---- the escape hatch, added 2026-08-18 --------------------------------
     # #3 says the formulas are baked in, and that stands as the DEFAULT: both
@@ -271,6 +279,7 @@ def parse_state(raw):
 
     st["bridge"] = st["bridge"] is True
     st["instrumental"] = st["instrumental"] is True
+    st["no_vocals"] = st["no_vocals"] is True
     st["release_model"] = st["release_model"] is True
     return st
 
@@ -351,15 +360,74 @@ def idea_text(idea, wired):
     return _join([as_text(idea), as_text(wired)], "\n")
 
 
-def build_caption_prompt(idea, wired, formula=""):
+# The lyrics for a song with no singing. Emitted FROM CODE, never generated:
+# there are no words to write, so asking the model for them is pure waste - it
+# is the slower of the two passes (about 28-34s of the ~49s a song costs).
+#
+# `[Instrumental]` rather than an empty string, measured by ear: empty gave a
+# 14 second track, the tag gave 26 and 29 seconds for the same 30 second
+# request. ComfyUI's normalize_lyrics turns the empty string into a bare
+# `[start]` and the tag into `[start]` + `[instrumental]`, so the tag is simply
+# more for the model to hold on to.
+NO_VOCAL_LYRICS = "[Instrumental]"
+
+# The caption for a song with no singing.
+#
+# ⚠️ THE ABSENCE OF VOCAL WORDS IS THE WHOLE MECHANISM, and it is the opposite
+# of what it looks like. A caption that NEGATES the singing - "no lead vocal, no
+# backing vocals, no wordless humming or vowel sounds" - produced humming on
+# BOTH attempts ("huhuhaha", "ii ii uui"). Removing every vocal word instead,
+# and simply not having a Vocal Details part at all, produced clean instrumental
+# tracks. Naming the thing summons it; this is the same negative-rule overshoot
+# that made "with no section left empty" produce MORE empty sections (#6).
+# Never "fix" this by adding a clearer prohibition.
+#
+# The second half matters too: with no singer, something has to carry the tune,
+# so the formula asks for a named instrument that states the theme, develops it
+# and returns to it. Without that the model has no melodic job to do.
+#
+# Measured by ear over four renders, two very different genres (an ambient City
+# Pop ballad on three seeds, an instrumental disco funk on one): three came back
+# with no voice at all, one had a single stray "aaaha". So it strongly suppresses
+# vocals rather than guaranteeing their absence - re-roll is the remedy, exactly
+# as it is for the intro length and the verse count.
+CAPTION_FORMULA_NO_VOCALS = (
+    "You write the STRUCTURED CAPTION that a music model reads to compose a "
+    "piece of INSTRUMENTAL music. Turn the idea below into that caption and "
+    "write nothing else.\n\n"
+    "Write it as two short labelled parts, in this order, each on its own "
+    "line.\n\n"
+    "Global Metadata: name the genre and a subgenre, a BPM as a number, a key "
+    "and scale, how the feeling moves from the start to the end, where someone "
+    "would listen to it, and how the recording should sound.\n\n"
+    "Arrangement: name ONE instrument that carries the lead melody from start "
+    "to finish, and say that it states the theme, develops it, and returns to "
+    "it at the end. Then name the instruments that support it and what each one "
+    "does, the groove, what the bass and the drums do, and how much space the "
+    "recording has.\n\n"
+    "Choose words that suit THIS idea. Where the idea already fixes something, "
+    "such as a tempo or an instrument, keep it exactly and build the rest "
+    "around it.\n\n"
+    "Write about instruments and the recording ONLY. Do not use markdown, "
+    "headings, bullet points or asterisks. Do not introduce your answer or "
+    "repeat the idea back. Start with the words Global Metadata."
+)
+
+
+def build_caption_prompt(idea, wired, formula="", no_vocals=False):
     """What the model is asked for the CAPTION.
 
     Deliberately gets the idea ALONE - no length, no structure. The caption
     describes SOUND, and "120 seconds long" is not a sound; feeding it in only
     invites the number into a field that is meant to carry genre, key and
     instruments. Every measured caption run used a plain idea.
+
+    `no_vocals` swaps in the instrumental formula. A user's OWN formula still
+    wins over both, because an override that some other setting can silently
+    countermand is worse than no override.
     """
-    return _join([as_text(formula).strip() or CAPTION_FORMULA,
+    default = CAPTION_FORMULA_NO_VOCALS if no_vocals else CAPTION_FORMULA
+    return _join([as_text(formula).strip() or default,
                   idea_text(idea, wired)], "\n")
 
 

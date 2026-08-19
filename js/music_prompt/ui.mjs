@@ -154,6 +154,11 @@ export function injectCSS() {
 
     /* ---- control rows ---------------------------------------------------- */
     .pix-mp-row { display:flex; align-items:center; gap:6px; flex:0 0 auto; }
+    /* Not applicable rather than disabled: instrumental music has no verses or
+       choruses to ask for, but the row keeps working so the settings survive a
+       trip to Instrumental and back. Dimmed, never hidden - a row that vanishes
+       changes the node's height on a click and is harder to find again. */
+    .pix-mp-row.is-dim { opacity:.42; }
     .pix-mp-rowlbl { font-size:10px; letter-spacing:.09em; text-transform:uppercase;
       color:${ACC}; flex:0 0 auto; }
     /* The chips shrink together rather than wrapping: someone deliberately
@@ -422,6 +427,19 @@ export function buildFace(node, openPanel, openIdeaEditor) {
   rowStruct.append(bridge, instr);
   inner.appendChild(rowStruct);
 
+  // ---- voice or instrumental ----------------------------------------------
+  // A MODE, not another chip on the structure row, because it changes what the
+  // node does rather than what it asks for: instrumental writes no lyrics at
+  // all, so it runs the model ONCE and is about twice as fast. Putting it
+  // beside Bridge and Instr. would have read as a third structure option, and
+  // "Instr." (one instrumental SECTION) sitting next to "Instrumental" (no
+  // singing anywhere) is exactly the confusion to avoid.
+  const rowMode = el("div", "pix-mp-row");
+  rowMode.appendChild(el("span", "pix-mp-rowlbl", "Music"));
+  const modeChips = el("div", "pix-mp-chips");
+  rowMode.appendChild(modeChips);
+  inner.appendChild(rowMode);
+
   // ---- tip -----------------------------------------------------------------
   const tip = el("div", "pix-mp-tip");
   const tipK = el("b", null, "Song");
@@ -569,7 +587,7 @@ export function buildFace(node, openPanel, openIdeaEditor) {
 
   node._pixMpEls = {
     root, inner, banner, bLabel, bHint, gear, idea, grip, out, meta,
-    lenChips, secs, verseChips, bridge, instr, tip, tipV,
+    lenChips, secs, verseChips, bridge, instr, modeChips, rowStruct, tip, tipV,
     seg, segCap, segLyr, seed, seedmode, seedwrap,
     acts, reroll, copy, vram, gen,
   };
@@ -708,6 +726,26 @@ export function renderFace(node) {
 
   els.bridge.classList.toggle("is-on", st.bridge);
   els.instr.classList.toggle("is-on", st.instrumental);
+
+  // Voice / Instrumental. paintChips gives it the same look as the verse and
+  // length rows, so it reads as one of the node's pickers rather than a new
+  // kind of control.
+  paintChips(els.modeChips, [false, true], st.no_vocals, (v) => {
+    writeState(node, { no_vocals: v });
+    renderFace(node);
+    notifyGraphChanged();
+  }, (v) => (v ? "Instrumental" : "Voice"));
+
+  // With no singing there are no sections to shape, so the structure row is
+  // DIMMED rather than hidden: hiding it would make the node jump height on a
+  // click, and a control that vanishes is harder to find again than one that
+  // is visibly not applicable. It stays clickable, because an explicit choice
+  // still wins here and the settings are kept for when Voice comes back.
+  els.rowStruct.classList.toggle("is-dim", st.no_vocals);
+  els.rowStruct.title = st.no_vocals
+    ? "Instrumental music has no verses or choruses to ask for. These come back "
+      + "when you switch to Voice."
+    : "";
 
   // ---- tip + seed ----------------------------------------------------------
   els.tipV.textContent = songSummary(node);

@@ -172,6 +172,34 @@ registerNodeHelp(CLASS, {
       ],
     },
     {
+      heading: "Voice or Instrumental",
+      body: "The Music row switches between a song with singing and a piece of "
+        + "instrumental music. On Instrumental the node runs the model ONCE "
+        + "instead of twice, so it is about twice as fast: there are no words "
+        + "to write, so it only writes the caption and sends [Instrumental] as "
+        + "the lyrics.",
+      bullets: [
+        "The verses, Bridge and Instr. controls dim on Instrumental, because "
+        + "there are no sections to ask for. They keep your settings and come "
+        + "back when you switch to Voice.",
+        "Do not confuse Instrumental with the Instr. button. Instr. adds one "
+        + "instrumental section to a song that still has singing. Instrumental "
+        + "means no singing anywhere in the piece.",
+        "Usually there is no voice at all, but sometimes a stray sound gets "
+        + "through: across four test renders in two very different styles, "
+        + "three had no voice and one had a single “aah” near the end. "
+        + "Re-roll the seed if you get one.",
+        "It works because the caption never mentions voices at all. That is not "
+        + "an oversight: a caption that said no singing, no humming, no vowel "
+        + "sounds produced humming every time it was tried. Naming the thing "
+        + "summons it. If you write your own caption for an instrumental, say "
+        + "nothing about vocals rather than ruling them out.",
+        "With no singer, something has to carry the tune, so the instrumental "
+        + "caption names one instrument that states the theme, develops it and "
+        + "returns to it at the end.",
+      ],
+    },
+    {
       heading: "What the caption controls, and what the lyrics control",
       body: "These are two different jobs and mixing them makes songs worse. "
         + "The caption decides how the music SOUNDS. The lyrics decide the "
