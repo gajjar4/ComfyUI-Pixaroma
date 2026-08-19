@@ -24,6 +24,7 @@ node, so Python only ever sees the node's own state - which is why a preset can
 never affect a render, only what the browser puts on the node.
 """
 import json
+from ._ai_prompt_helpers import bytes_or_none
 import os
 import threading
 
@@ -85,6 +86,10 @@ def normalise(raw):
         "name": name,
         "note": _clean_text(raw.get("note"), MAX_NOTE).strip(),
         "model_hint": _clean_text(raw.get("model_hint"), 200).strip(),
+        # Recorded so a row can show a size even when that model is not on disk
+        # - which is when you most want it, deciding whether to download. Older
+        # stored presets simply have None and show nothing.
+        "model_bytes": bytes_or_none(raw.get("model_bytes")),
         "formula": formula,
         "settings": settings,
     }

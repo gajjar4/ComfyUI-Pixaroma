@@ -23,6 +23,7 @@ path is ever built from user input at all.
 """
 
 import json
+from ._ai_prompt_helpers import bytes_or_none
 import os
 import threading
 
@@ -97,23 +98,6 @@ def _clean(value, cap):
     return value[:cap] if isinstance(value, str) else ""
 
 
-def _bytes_or_none(value):
-    """A recorded model size from an untrusted payload, or None.
-
-    Purely cosmetic - it labels a row in the picker - so anything odd becomes
-    None rather than raising. Bounded at 1 TB because a size is only useful
-    while it is plausible: a silly number would render as a silly label, and a
-    bool would otherwise sneak through int() as 1.
-    """
-    if isinstance(value, bool):
-        return None
-    try:
-        n = int(value)
-    except (TypeError, ValueError):
-        return None
-    return n if 0 < n <= (1 << 40) else None
-
-
 def normalise(raw):
     """One set with every field present and bounded, or None if unusable.
 
@@ -141,7 +125,7 @@ def normalise(raw):
         # Recorded so the row can show a size even when that model is not on
         # disk - which is exactly when someone wants to know. Older stored sets
         # simply have None and show nothing.
-        "model_bytes": _bytes_or_none(raw.get("model_bytes")),
+        "model_bytes": bytes_or_none(raw.get("model_bytes")),
         "caption": caption,
         "lyrics": lyrics,
         "settings": settings,

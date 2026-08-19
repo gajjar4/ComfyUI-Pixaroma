@@ -320,3 +320,24 @@ def apply_no_think(prompt, thinking, clip_name):
 
 def word_count(text):
     return len([w for w in str(text or "").split() if w.strip()])
+
+
+def bytes_or_none(value):
+    """A recorded model size from an untrusted payload, or None.
+
+    Shared by both preset stores rather than copied: the same concept living in
+    two files is exactly how the vision heuristic drifted (js/shared/model_kinds
+    .mjs records that one).
+
+    Purely cosmetic - it labels a row in a picker - so anything odd becomes None
+    rather than raising. Bounded at 1 TB because a size is only useful while it
+    is plausible, and bools are refused explicitly or `int(True)` would sneak
+    through as 1 byte.
+    """
+    if isinstance(value, bool):
+        return None
+    try:
+        n = int(value)
+    except (TypeError, ValueError):
+        return None
+    return n if 0 < n <= (1 << 40) else None
