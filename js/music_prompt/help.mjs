@@ -191,6 +191,14 @@ registerNodeHelp(CLASS, {
         "A section tag on its own with no words under it means the band plays "
         + "and nobody sings, which is how you get an intro or a break. It still "
         + "uses up time.",
+        "Do NOT use the Instr. button on a 30 second song. Tested by ear: the "
+        + "same song without it sang all four lines in 23 seconds, and with it "
+        + "the chorus was never sung at all and the song cut off. The "
+        + "instrumental time does not politely sit at the end either, it "
+        + "spreads through the whole song, so a 15 second opening arrives "
+        + "before the first word. There is more room at 60 seconds and above. "
+        + "Also avoid asking for a bridge and an instrumental section together "
+        + "at 60 seconds, because that is already five sections.",
         "The lyrics do not rhyme reliably, and that is the model rather than "
         + "the wording. Asking it to rhyme was measured across ninety runs, "
         + "along with a lower temperature and a worked example, and none of "
