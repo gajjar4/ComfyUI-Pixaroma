@@ -172,6 +172,34 @@ registerNodeHelp(CLASS, {
       ],
     },
     {
+      heading: "What the caption controls, and what the lyrics control",
+      body: "These are two different jobs and mixing them makes songs worse. "
+        + "The caption decides how the music SOUNDS. The lyrics decide the "
+        + "words and the order of the sections, and nothing else.",
+      bullets: [
+        "Backing vocals, harmonies, instruments, tempo and production all go in "
+        + "the CAPTION. MiniMax does not support the round brackets some other "
+        + "music tools use for backing vocals: if you write (love) in the "
+        + "lyrics, the singer sings the word love. Ask for harmonies in the "
+        + "caption instead and you get them.",
+        "Square brackets in the lyrics are SECTION TAGS and nothing else: "
+        + "[Intro] [Verse] [Pre-Chorus] [Chorus] [Post-Chorus] [Bridge] "
+        + "[Instrumental] [Solo] [Outro]. Writing a description inside them, "
+        + "such as [soft piano plays alone], does not give you soft piano. "
+        + "MiniMax's own guide warns that describing instruments inside the "
+        + "lyrics confuses where the sections start and end.",
+        "A section tag on its own with no words under it means the band plays "
+        + "and nobody sings, which is how you get an intro or a break. It still "
+        + "uses up time.",
+        "The lyrics do not rhyme reliably, and that is the model rather than "
+        + "the wording. Asking it to rhyme was measured across ninety runs, "
+        + "along with a lower temperature and a worked example, and none of "
+        + "them beat chance. It rhymes about four line pairs in ten whatever "
+        + "you do, and one seed can give you a fully rhymed song where the next "
+        + "gives you none. Re-roll until you get one you like.",
+      ],
+    },
+    {
       heading: "Good to know",
       bullets: [
         "With no model chosen it passes your text straight through to both "
