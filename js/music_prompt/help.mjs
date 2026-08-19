@@ -100,12 +100,17 @@ registerNodeHelp(CLASS, {
         + "(Qwen3.5 4B int8)`, which names the music model it writes for and the "
         + "language model it was measured on.\n\n"
         + "On a different language model the wording may need changing. Press the "
-        + "gear and you will find it all there, nothing hidden.",
+        + "gear and you will find it all there, nothing hidden.\n\n"
+        + "A set also remembers which language model it was measured on. If you "
+        + "have that model it is chosen for you; if you do not, the line under "
+        + "the picker says so in amber and your own model is left alone, so a "
+        + "set from somebody else's machine can never point this node at "
+        + "something that is not there. A model on the clip wire always wins.",
       defs: [
         ["The set picker", "Every set you have. An orange dot ships with "
-          + "Pixaroma, a grey one is yours. Picking one copies its wording AND "
-          + "its numbers onto the node, so this is also how you go back after "
-          + "changing something."],
+          + "Pixaroma, a grey one is yours. Picking one copies its wording, its "
+          + "numbers AND its model onto the node, so this is also how you go "
+          + "back after changing something."],
         ["Edit", "Opens that instruction in a full screen box. It starts from "
           + "whatever the node is using now, so you can change a line rather "
           + "than write from nothing. Save it back unchanged and the node keeps "
