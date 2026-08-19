@@ -63,7 +63,15 @@ import {
 
 const CSS_ID = "pixaroma-music-prompt-css";
 export const WIDGET_TYPE = "pixaroma_music_prompt";
-const WIDGET_MIN_H = 300;
+// MEASURED, not guessed (2026-08-19, user report "if i make it smaller it
+// doesnt look right"). With the idea at its 44px floor and the readout at its
+// 64px floor, the column's rows + 6px gaps sum to 350px (root.scrollHeight at
+// full squish). The old value of 300 was 50px short, so the drag floor let the
+// readout's bottom and the WHOLE button row be pushed below the node frame.
+// 354 = 350 + 4px slack for font-metric differences between machines.
+// core.mjs MIN_H (the Classic clamp) must stay = this + 86, the measured
+// title-plus-three-output-slot-rows overhead of this node.
+const WIDGET_MIN_H = 354;
 
 function el(tag, cls, text) {
   const node = document.createElement(tag);
@@ -241,24 +249,34 @@ export function injectCSS() {
     .pix-mp-secs:focus { border-color:${ACC}; }
 
     /* ---- seed ------------------------------------------------------------ */
-    /* SHRINKABLE, not fixed. An <input> carries an intrinsic ~20-character
-       width, so this chip renders about 169px wide - mostly empty for a seed of
-       0. That was free while the row held only the segment and the meta label,
-       but the Tags button pushed the total 18px past the frame at MIN_W and the
-       controls spilled out of the node (the horizontal half of Nodes 2.0 recipe
-       #3, which the vertical resize floor does NOT cover).
-       A shrinkable flex changes nothing at a comfortable width - flexbox only
-       shrinks when there is a deficit - so the seed keeps its roomy field until
-       the node is genuinely narrow, and then gives up its slack instead of
-       pushing its neighbours out of sight. min-width on the input is the floor
-       that keeps the number readable. */
+    /* CONTENT-SIZED, like the sibling's seed chip. An <input> carries an
+       intrinsic ~20-character width, so left alone this chip rendered 169px
+       wide to show a seed of 0 - a giant empty box that read wrong at every
+       size and, once the Tags button joined the row, pushed the controls past
+       the frame at MIN_W (user report: "if i make it smaller you can see it
+       doesnt look right"). AI Prompt's chip never had the problem because it
+       is a BUTTON, sized by its text; this one stays an input so the seed is
+       typeable in place, so the intrinsic width has to be killed instead:
+       seed.size = 1 in buildFace (ai-prompt.md #10, the same trick that fixed
+       the settings-panel number fields), and fitSeedWidth() sets a ch width
+       from the digit count so the chip hugs the number - on render AND on
+       every keystroke, so typing a long seed grows it live.
+       The wrap stays shrinkable (flex:0 1 auto, min-width:0) as the last-
+       resort deficit valve; the input's min-width is the readability floor. */
     .pix-mp-seedwrap { display:flex; height:21px; flex:0 1 auto; min-width:0;
       border-radius:4px;
       overflow:hidden; border:1px solid rgba(255,255,255,.14); }
+    /* box-sizing is content-box ON PURPOSE, against ComfyUI's global
+       border-box reset: fitSeedWidth sets a width in ch from the DIGIT COUNT,
+       and under border-box the 16px of padding is subtracted out of that, so a
+       16 digit seed asked for 17ch and got 98px of box for 109px of text -
+       clipped inside its own chip. content-box makes the ch figure mean the
+       text column, which is what the digit count actually describes. */
     .pix-mp-seed { background:rgba(255,255,255,.05); color:#c9c6c2;
       font:10.5px monospace; border:none; padding:0 8px; cursor:text;
-      display:flex; align-items:center; outline:none; min-width:56px;
-      flex:1 1 auto; width:100%; text-align:center; }
+      box-sizing:content-box;
+      display:flex; align-items:center; outline:none; min-width:20px;
+      flex:0 1 auto; text-align:center; }
     .pix-mp-seed:hover { color:${ACC}; }
     /* flex:0 0 auto so the F/R letter is never the thing that gets clipped when
        the wrap above gives up its slack - the seed NUMBER has room to spare, a
@@ -415,6 +433,16 @@ export function openTagLibrary(node, ideaEl, ctx) {
       insertTagAt(live, ctx, name, sym);
     },
   });
+}
+
+/**
+ * Size the seed input to its digits, so the chip hugs the number instead of
+ * spreading an <input>'s intrinsic ~20-character width across the row.
+ * +1ch of air; the CSS min-width is the floor for one short digit. Style
+ * only, so it is safe from every path that repaints the face.
+ */
+function fitSeedWidth(seed) {
+  seed.style.width = (String(seed.value ?? "").length + 1) + "ch";
 }
 
 /**
@@ -647,6 +675,10 @@ export function buildFace(node, openPanel, openIdeaEditor) {
   const seedwrap = el("div", "pix-mp-seedwrap");
   const seed = el("input", "pix-mp-seed");
   seed.title = "The seed. Click to type one.";
+  // Kill the <input>'s intrinsic ~20-character width (ai-prompt.md #10); the
+  // ch width from fitSeedWidth is what sizes it from here on.
+  seed.size = 1;
+  seed.addEventListener("input", () => fitSeedWidth(seed));
   seed.addEventListener("focus", () => seed.select());
   seed.addEventListener("keydown", (e) => {
     e.stopPropagation();
@@ -917,6 +949,9 @@ export function renderFace(node) {
   if (document.activeElement !== els.seed) {
     els.seed.value = String(displaySeed(node));
   }
+  // After the value, always: a Random seed changes length between runs, and the
+  // chip has to follow it or the number is clipped by its own box.
+  fitSeedWidth(els.seed);
   els.seedmode.textContent = st.seed_mode === SEED_RANDOM ? "R" : "F";
   els.seedmode.classList.toggle("is-on", st.seed_mode === SEED_RANDOM);
   els.seedmode.title = st.seed_mode === SEED_RANDOM

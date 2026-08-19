@@ -22,7 +22,15 @@ export const STATE_PROP = "musicPromptState";
 
 export const MIN_W = 330;
 export const DEFAULT_W = 360;
-export const MIN_H = 360;
+// MEASURED (2026-08-19): the face's rows at full squish need 350px of widget
+// (WIDGET_MIN_H in ui.mjs, 354 with slack) and this node's title plus its
+// three output slot rows cost a measured 86px on top - so anything under 440
+// pushes the readout's bottom and the button row below the node frame, which
+// is exactly what the user reported ("if i make it smaller it doesnt look
+// right"). The old 360 was a guess made before the face had settled. A node
+// SAVED between 360 and 440 gets grown by the Classic clamp after its load
+// gate clears - acceptable, because that saved state was visibly broken.
+export const MIN_H = 440;
 export const DEFAULT_H = 470;
 
 export const SEED_FIXED = "fixed";
