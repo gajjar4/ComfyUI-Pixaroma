@@ -392,6 +392,27 @@ function loadedSet(node) {
   // made Save as look like it had done nothing - the row still named the
   // built-in one. If somebody went to the trouble of naming it, that is the
   // name they mean.
+  // AN EXPLICIT PICK WINS OVER THE TIE-BREAK BELOW, while its wording still
+  // matches. Saving a copy of the built-in without editing it leaves two sets
+  // that are byte-identical, and then "theirs wins" made the shipped one
+  // IMPOSSIBLE to show: selecting it applied correctly, the matcher re-ran,
+  // found the copy first, and the row snapped straight back to the copy. The
+  // user reported it as not being able to select the built-in at all
+  // (2026-08-19).
+  //
+  // Runtime-only, never serialized: it is a display preference, and writing it
+  // to node.properties would flag a clean workflow modified on load (Vue Compat
+  // #18). After a reload the tie-break below takes over again, which is the
+  // behaviour that was wanted in the first place.
+  const picked = node._pixMpPickedSet;
+  if (picked) {
+    const all = (SETS.user || []).concat(SETS.shipped || []);
+    const p = all.find((s) => s.name === picked);
+    // Only while it still matches - the moment the wording is edited the pick
+    // is stale and the content match is the truth again.
+    if (p && (p.caption || "").trim() === now.caption.trim()
+          && (p.lyrics || "").trim() === now.lyrics.trim()) return p;
+  }
   return hit(SETS.user || []) || hit(SETS.shipped || []) || null;
 }
 
@@ -407,6 +428,9 @@ function applySet(node, set, body) {
   for (const k of SETTING_KEYS) {
     if (set.settings && set.settings[k] != null) patch[k] = set.settings[k];
   }
+  // Remember WHICH set was chosen, so an identical copy cannot shadow it in the
+  // row (loadedSet). Runtime-only, so it cannot dirty a saved workflow.
+  node._pixMpPickedSet = set.name;
   writeState(node, patch);
   ON_CHANGE?.();
   renderPanel(node, body);
@@ -547,9 +571,17 @@ function buildFormulaSet(node, body) {
       caption: now.caption,
       lyrics: now.lyrics,
       model_hint: s.model,
+      // Recorded with the set so its row can show a size even on a machine
+      // where that model is not downloaded yet.
+      model_bytes: MODELS.sizes?.[s.model],
       settings: Object.fromEntries(SETTING_KEYS.map((k) => [k, s[k]])),
     });
     if (!res.ok) { await sayIt("Could not save", res.message); return; }
+    // The set just saved is the one to show. Without this an earlier explicit
+    // pick would shadow it when the wording is identical - which is exactly the
+    // "Save as looks like it did nothing" case the tie-break in loadedSet was
+    // added for, arriving through the new door.
+    node._pixMpPickedSet = name;
     // Keep the LAST GOOD list if the refresh hiccups. Wiping it would report
     // "no sets could be read" straight after a SUCCESSFUL save, and blind the
     // name-collision guard with it - the same guard openMusicPromptPanel
