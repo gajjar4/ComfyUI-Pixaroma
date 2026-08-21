@@ -1300,6 +1300,33 @@ app.graphToPrompt = async function (...args) {
         // SeedState. A ~1-in-2^53 random collision merely cache-hits an IDENTICAL
         // image (same seed = same result), which is correct, not a re-run we want.
         entry.inputs[HIDDEN_INPUT_NAME] = JSON.stringify({ runSeed });
+        // ALSO publish the seed as a PLAIN INT under the conventional key, so a
+        // pack that inspects the submitted prompt can find it. Ours is otherwise
+        // invisible: the value lives INSIDE a JSON string, and a generic reader
+        // looking for an int finds nothing.
+        //
+        // Concretely (Discord, 2026-08-21): ImpactWildcardProcessor in `populate`
+        // mode resolves a WIRED seed server-side in onprompt_populate_wildcards,
+        // via find_input_value(..., input_keys=('int','seed','value')). With no
+        // int under any of those keys it logs "Only ImpactInt, Seed (rgthree) and
+        // Primitive Node are allowed as the seed" and SKIPS populating, so the
+        // processed text silently never updates. One int fixes that, and any
+        // other pack doing the same introspection, without a Python change.
+        //
+        // Deliberately NOT declared in INPUT_TYPES (verified against ComfyUI
+        // 0.3.x): validate_inputs only iterates the class's required+optional, so
+        // an undeclared key is never validated, and get_input_data drops it
+        // (get_input_info returns category None), so get_seed and IS_CHANGED
+        // NEVER see it - their signatures and the cache key stay exactly as
+        // Pattern #2 left them. Declaring it hidden instead WOULD pass it to
+        // get_seed and force a signature change on a node with 13 invariants.
+        //
+        // Cache-safe: the signature does include every prompt key, but this int
+        // is the SAME runSeed already inside SeedState, so the two always move
+        // together - Random varies both, Fixed pins both, and "Use last seed"
+        // reproduces both, so issue #11 stays fixed. Locked by
+        // D:\Claude Tests\_impact_seed_interop_test.py.
+        entry.inputs.seed = runSeed;
       }
       // Remember the seeds that actually ran (global history; never touches
       // node.properties, so it can't dirty a saved workflow).
