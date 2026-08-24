@@ -309,7 +309,20 @@ function buildVueFace(node) {
   // Pinned only WHILE a resize handle is dragged, which is exactly when the
   // frontend takes its collapse measurement - so the node cannot be dragged
   // shorter than its own contents, and nothing is pinned the rest of the time.
-  node._pmFloorOff = installResizeFloor(root, () => Math.round(unitH(node) * stateScale(node)));
+  // The onRelease is the WIDTH floor: Nodes 2.0 ignores min-width and
+  // computeLayoutSize.minWidth for the width drag (the helper's own comment -
+  // this hook exists for exactly this), so a node dragged too narrow is
+  // snapped back out once, on release. A real gesture, so the write is
+  // legitimate; diff-gated so a normal release writes nothing (review
+  // finding, 2026-08-24).
+  node._pmFloorOff = installResizeFloor(
+    root,
+    () => Math.round(unitH(node) * stateScale(node)),
+    () => {
+      const minW = Math.round(MIN_W * stateScale(node));
+      if (node.size[0] < minW) node.setSize?.([minW, node.size[1]]);
+    },
+  );
   node._pmSig = null;
   repaint(node);
 }

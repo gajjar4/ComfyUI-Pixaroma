@@ -317,7 +317,15 @@ export function openSettingsPanel(node, onChange) {
   // No title/label/hint: `title` is what the helper puts in the "New <X> nodes"
   // BUTTON, and it already reads "Monitor" from the registry.
   body.appendChild(createAccentSection(node, {
-    onChange: () => _onChange?.(),
+    onChange: () => {
+      // re-tint THIS panel's own chrome too - applyAccent ran once at open, so
+      // without this the node recolours live while the open panel keeps the old
+      // colour until reopened (review finding, 2026-08-24)
+      try {
+        if (_panel) applyAccent(_panel, node);
+      } catch (_e) {}
+      _onChange?.();
+    },
     onPickerOpen: (h) => { _cpHandle = h; },
   }));
 

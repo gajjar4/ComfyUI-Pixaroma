@@ -53,7 +53,9 @@ export function injectCSS() {
     // decoration. Same priority as the classic painter's, so the two faces
     // degrade the same way.
     `.pix-pm-row{display:flex;align-items:center;gap:${px(7)};height:${px(M.rowH)};font-size:${px(M.font)};flex:none;overflow:hidden;}`,
-    `.pix-pm-row .lb{width:${px(M.labelW)};flex:0 1 auto;min-width:0;color:#8a8a8a;letter-spacing:.03em;overflow:hidden;white-space:nowrap;}`,
+    // text-overflow so a long label ("COMFY R") trims with an ellipsis like the
+    // canvas painter's fit() does, instead of a mid-glyph hard clip
+    `.pix-pm-row .lb{width:${px(M.labelW)};flex:0 1 auto;min-width:0;color:#8a8a8a;letter-spacing:.03em;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;}`,
     `.pix-pm-row .trk{flex:1 1 0;min-width:0;height:${px(M.barH)};border-radius:${px(M.barR)};background:rgba(255,255,255,.055);position:relative;overflow:hidden;}`,
     `.pix-pm-row .fl{position:absolute;left:0;top:0;bottom:0;width:0;border-radius:${px(M.barR)};background:${ACC};transition:width .18s linear;}`,
     // the peak mark: a pale hold line, the audio-meter idea. It is the reason
