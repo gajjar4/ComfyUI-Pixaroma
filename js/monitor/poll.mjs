@@ -132,8 +132,22 @@ async function tick() {
     return;
   }
   _inflight = true;
+  // A TIMEOUT IS WHAT KEEPS _inflight FROM LATCHING SHUT (review finding,
+  // 2026-08-24). Without one, a request that never settles - a server wedged
+  // mid-model-load, a proxy that eats the response - leaves _inflight true
+  // forever: the timer keeps rescheduling, so the sampler LOOKS alive, but
+  // every tick bails on the inflight guard and every monitor freezes on its
+  // last reading until the page is reloaded. The abort lands in the existing
+  // catch like any network error, and the next tick retries. Generous on
+  // purpose: a model load can stall the server's event loop for a while, and
+  // a slow answer is still an answer.
+  const aborter = typeof AbortController !== "undefined" ? new AbortController() : null;
+  const abortT = aborter ? setTimeout(() => aborter.abort(), 15000) : null;
   try {
-    const res = await fetch(pixApiUrl("/pixaroma/api/monitor/stats"), { cache: "no-store" });
+    const res = await fetch(pixApiUrl("/pixaroma/api/monitor/stats"), {
+      cache: "no-store",
+      signal: aborter ? aborter.signal : undefined,
+    });
     if (!res.ok) throw new Error("HTTP " + res.status);
     const data = await res.json();
     if (data && data.ok) {
@@ -149,6 +163,7 @@ async function tick() {
     // empties itself every time reads as broken.
     _error = String(e?.message || e || "offline");
   } finally {
+    if (abortT != null) clearTimeout(abortT);
     _inflight = false;
   }
   repaintAll();
