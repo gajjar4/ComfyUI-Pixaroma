@@ -4350,7 +4350,13 @@ _PIX_MON_GPU_MAX_FAILS = 3    # then stop spawning processes for good
 
 
 def _pix_mon_smi_path():
-    """nvidia-smi's path, or None. Cached in the same dict as the readings."""
+    """nvidia-smi's path, or None. Cached in the same dict as the readings.
+
+    Read/written WITHOUT the lock, which is safe only because this function's
+    single caller is _pix_mon_gpu_refresh, and refresh threads are serialized by
+    the lock-protected `busy` check-and-set. If a second caller is ever added,
+    move this under _PIX_MON_GPU_LOCK first (review note, 2026-08-24).
+    """
     p = _PIX_MON_GPU.get("path")
     if p is None:
         p = shutil.which("nvidia-smi") or ""
@@ -4359,12 +4365,18 @@ def _pix_mon_smi_path():
 
 
 def _pix_mon_gpu_refresh():
-    """Run nvidia-smi once and store the parsed rows. Background thread only."""
-    from .nodes._monitor_helpers import NVIDIA_SMI_ARGS, parse_nvidia_smi
-    import subprocess
+    """Run nvidia-smi once and store the parsed rows. Background thread only.
 
+    EVERYTHING that can raise must sit inside the try: if this function ever
+    escaped without reaching the lock block below, `busy` would stay True and
+    GPU extras would be silently dead until a ComfyUI restart (review finding,
+    2026-08-24). That is why the imports are inside it too.
+    """
     rows = None
     try:
+        from .nodes._monitor_helpers import NVIDIA_SMI_ARGS, parse_nvidia_smi
+        import subprocess
+
         exe = _pix_mon_smi_path()
         if exe:
             kwargs = {}
@@ -4417,9 +4429,17 @@ def _pix_mon_gpu_rows():
             start = False
         rows = list(_PIX_MON_GPU["rows"])
     if start:
-        threading.Thread(
-            target=_pix_mon_gpu_refresh, name="pixaroma-monitor-gpu", daemon=True
-        ).start()
+        # If .start() itself raises (OS thread exhaustion), `busy` must not stay
+        # latched True - that would silently end GPU extras for the whole
+        # session, and the 500 would also discard the CPU/RAM half of the
+        # response (review finding, 2026-08-24).
+        try:
+            threading.Thread(
+                target=_pix_mon_gpu_refresh, name="pixaroma-monitor-gpu", daemon=True
+            ).start()
+        except Exception:
+            with _PIX_MON_GPU_LOCK:
+                _PIX_MON_GPU["busy"] = False
     return rows
 
 
@@ -4476,7 +4496,7 @@ def _pix_mon_devices():
 
 @PromptServer.instance.routes.get("/pixaroma/api/monitor/stats")
 async def api_monitor_stats(request):
-    from .nodes._monitor_helpers import gpu_extras_for, pct
+    from .nodes._monitor_helpers import gpu_extras_for, parse_visible_devices, pct
 
     payload = {"ok": True}
 
@@ -4503,9 +4523,13 @@ async def api_monitor_stats(request):
         pass
 
     # ── VRAM, plus the driver's own view of the card ──
+    # CUDA_VISIBLE_DEVICES makes torch renumber the visible cards from 0 while
+    # nvidia-smi keeps physical indices, so the mask must be translated or a
+    # pinned box shows the OTHER card's temperature (review finding, 2026-08-24).
     devices = _pix_mon_devices()
     if devices:
-        payload["devices"] = gpu_extras_for(devices, _pix_mon_gpu_rows())
+        visible = parse_visible_devices(os.environ.get("CUDA_VISIBLE_DEVICES"))
+        payload["devices"] = gpu_extras_for(devices, _pix_mon_gpu_rows(), visible)
     else:
         rows = _pix_mon_gpu_rows()
         if rows:

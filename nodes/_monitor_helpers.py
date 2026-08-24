@@ -114,25 +114,71 @@ def pct(used, total):
     return (u / t) * 100.0
 
 
-def gpu_extras_for(devices, smi_rows):
+def parse_visible_devices(env_value):
+    """CUDA_VISIBLE_DEVICES, parsed into a logical->physical index list.
+
+    Returns None when the variable is unset or blank (no masking: logical and
+    physical indices agree), a list of ints when it is a plain index list
+    ("1" -> [1], "0,2" -> [0, 2]: torch's cuda:i is nvidia-smi's list[i]), and
+    [] when it is set but not an index list (GPU-<uuid> / MIG names, or
+    anything malformed) - meaning "masked, but we cannot know the mapping".
+
+    Review finding (2026-08-24): torch renumbers the VISIBLE devices from 0
+    while nvidia-smi always reports PHYSICAL indices, so on a box pinned with
+    CUDA_VISIBLE_DEVICES=1 an identity match attaches the idle card's
+    temperature and load to the busy card - confidently wrong data.
+    """
+    if env_value is None:
+        return None
+    s = str(env_value).strip()
+    if not s:
+        return None
+    out = []
+    for tok in s.split(","):
+        tok = tok.strip()
+        try:
+            i = int(tok)
+        except (TypeError, ValueError):
+            return []
+        if i < 0:
+            # CUDA treats a negative entry as "stop here"; anything after it is
+            # invisible. Rather than model that, give up on index mapping.
+            return []
+        out.append(i)
+    return out
+
+
+def gpu_extras_for(devices, smi_rows, visible=None):
     """Attach the nvidia-smi extras to our device list, matched BY INDEX.
 
-    Matching by index and not by position matters on a multi-GPU box where
-    CUDA_VISIBLE_DEVICES has been set: torch then sees "cuda:0" for what
-    nvidia-smi calls GPU 2, and pairing them positionally would show the wrong
-    card's temperature next to the right card's VRAM. When no row matches, the
-    device simply carries no extras and the face hides those readouts, which is
-    the same thing that happens on an AMD card or a Mac.
+    `visible` is parse_visible_devices(CUDA_VISIBLE_DEVICES): torch's index i
+    is nvidia-smi's physical index visible[i] when a mask is set, and the
+    identity without one. An unknowable mapping (visible == [], the UUID case)
+    matches ONLY the unambiguous one-card-one-row case; everything else gets no
+    extras, because an honest dash beats another card's temperature.
+
+    When no row matches, the device simply carries no extras and the face hides
+    those readouts, which is the same thing that happens on an AMD card or a
+    Mac.
     """
     by_index = {}
     for row in smi_rows or []:
         if isinstance(row, dict) and row.get("index") is not None:
             by_index.setdefault(int(row["index"]), row)
+    devices = devices or []
     out = []
-    for dev in devices or []:
+    for dev in devices:
         d = dict(dev)
         idx = d.get("index")
-        row = by_index.get(int(idx)) if isinstance(idx, int) else None
+        phys = None
+        if isinstance(idx, int):
+            if visible is None:
+                phys = idx
+            elif visible and 0 <= idx < len(visible):
+                phys = visible[idx]
+        row = by_index.get(phys) if isinstance(phys, int) else None
+        if row is None and visible == [] and len(devices) == 1 and len(by_index) == 1:
+            row = next(iter(by_index.values()))
         if row:
             d["util"] = row.get("util")
             d["temp"] = row.get("temp")
