@@ -235,7 +235,9 @@ function paintReadout(node, st, readout) {
   // state, which is what makes it safe as an OUTPUT_NODE.
   if (inputUnwired(node)) {
     readout.classList.add("warn");
-    lead.textContent = "wire something in to say when";
+    // "to say when" was left dangling - when WHAT? It has to name the job, in
+    // the fewest words that still finish the sentence.
+    lead.textContent = "wire in what to clean up after";
     lead.title = "Take the wire from whatever you want cleaned up after and drop " +
                  "it on this node's input. The output does not need connecting: " +
                  "connect it only when a particular later step must find the room " +

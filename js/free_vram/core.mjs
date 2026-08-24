@@ -68,13 +68,27 @@ export const DEFAULT_W = 290;
 // touch the node edge, but every vertical pixel here sits between the input dots
 // and the buttons, which is the gap the user kept pointing at.
 export const PAD_X = 6;
-export const PAD_Y = 1;
+// ZERO. Core already pads above and below the widget block in Nodes 2.0, and
+// LiteGraph gives the element a margin in Classic, so any vertical padding of
+// ours is padding on top of padding.
+export const PAD_Y = 0;
 // EXACTLY the chip's own height (4px padding x2 + 13.2 line + 1px border x2).
 // It was 26, which centred a 23px chip and left 1.5px of slack above it.
+// DO NOT shrink further by trimming the chip's padding: the chips are the
+// node's main control and the height that is left is the control itself.
 export const ROW_H = 23;
-export const BAR_H = 8;
-export const READOUT_H = 16;
-export const GAP = 3;
+// A rule, not a control - nobody clicks it, so it only has to be readable.
+export const BAR_H = 6;
+// MEASURED IN THE TALLEST STATE, which is the one with a result on screen: the
+// 13px bold freed-amount renders the row at 17px, while every other wording
+// needs 15-16. Declaring the tallest is what keeps the face a FIXED height
+// whatever it is saying - a height that changed after a run would leave Classic
+// (where the element gets exactly node.size[1] - 46) shaving the number.
+// Two wrong values were measured on the way here: 14 from the plain 11px text,
+// and 16 from the empty state, because the unwired hint correctly takes priority
+// over the report and hid the bold from the test.
+export const READOUT_H = 17;
+export const GAP = 2;
 // Nodes 2.0 puts `gap-1` (4px) between the slot block and the widget block.
 // A negative top margin on our root cancels it, which is the only way to reach
 // that particular 4px - it belongs to core's body, not to us. Vue-only: Classic
