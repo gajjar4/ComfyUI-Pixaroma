@@ -264,6 +264,37 @@ export function deviceLabel(dev) {
   return s || "GPU";
 }
 
+// ── the label column sizes itself to the longest ENABLED label ─────────────
+// M.labelW is only the MINIMUM. A fixed column truncated "COMFY R" to "COMF…"
+// at every size (user-reported with screenshots): the column is scaled by the
+// same factor as the text, so making the node larger grows the box and the
+// text together and the fit never changes. Measured once per label set on a
+// shared canvas ctx; both faces read this, so they stay in step.
+let _lwCanvas = null;
+const _lwCache = new Map();
+
+export function labelUnitWidth(rows) {
+  const key = rows.map((r) => r.label).join("|");
+  const hit = _lwCache.get(key);
+  if (hit) return hit;
+  let w = M.labelW;
+  try {
+    if (!_lwCanvas) _lwCanvas = document.createElement("canvas");
+    const c = _lwCanvas.getContext("2d");
+    c.font = `${M.font}px ui-monospace, "Cascadia Mono", Consolas, monospace`;
+    for (const r of rows) {
+      // +3 covers the DOM face's .03em letter-spacing, which the canvas
+      // measurement does not include
+      w = Math.max(w, Math.ceil(c.measureText(r.label).width) + 3);
+    }
+  } catch (_e) {
+    /* no canvas (tests): the minimum column */
+  }
+  if (_lwCache.size > 16) _lwCache.clear();
+  _lwCache.set(key, w);
+  return w;
+}
+
 export function barColor(pct, accent, warn) {
   if (!warn || pct == null) return accent;
   if (pct >= CRIT_PCT) return CRIT_COLOR;

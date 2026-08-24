@@ -13,7 +13,7 @@
 
 import { ACC } from "../shared/node_settings.mjs";
 import { pixAsset } from "../shared/api_url.mjs";
-import { M, barRows, scalarItems, visibleButtons, barColor, deviceLabel, pickDevice } from "./core.mjs";
+import { M, barRows, scalarItems, visibleButtons, barColor, deviceLabel, pickDevice, labelUnitWidth } from "./core.mjs";
 
 let _cssDone = false;
 
@@ -55,7 +55,7 @@ export function injectCSS() {
     `.pix-pm-row{display:flex;align-items:center;gap:${px(7)};height:${px(M.rowH)};font-size:${px(M.font)};flex:none;overflow:hidden;}`,
     // text-overflow so a long label ("COMFY R") trims with an ellipsis like the
     // canvas painter's fit() does, instead of a mid-glyph hard clip
-    `.pix-pm-row .lb{width:${px(M.labelW)};flex:0 1 auto;min-width:0;color:#8a8a8a;letter-spacing:.03em;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;}`,
+    `.pix-pm-row .lb{width:calc(var(--pm-lw,${M.labelW}) * var(--pm-s,1) * 1px);flex:0 1 auto;min-width:0;color:#8a8a8a;letter-spacing:.03em;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;}`,
     `.pix-pm-row .trk{flex:1 1 0;min-width:0;height:${px(M.barH)};border-radius:${px(M.barR)};background:rgba(255,255,255,.055);position:relative;overflow:hidden;}`,
     `.pix-pm-row .fl{position:absolute;left:0;top:0;bottom:0;width:0;border-radius:${px(M.barR)};background:${ACC};transition:width .18s linear;}`,
     // the peak mark: a pale hold line, the audio-meter idea. It is the reason
@@ -193,6 +193,9 @@ export function renderFace(node, st, sample, peak, onButton) {
   if (node._pmSig !== sig) {
     node._pmSig = sig;
     node._pmEls = buildFace(screen, st, rows, scal, btns, hasTitle, onButton);
+    // the label column fits the longest enabled label (a DOM style write only,
+    // so safe on any path; shape changes are the only time it can change)
+    root.style.setProperty("--pm-lw", String(labelUnitWidth(rows)));
   }
   writeFace(node, st, sample, peak, rows, scal, dev);
 }

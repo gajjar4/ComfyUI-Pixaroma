@@ -16,7 +16,7 @@
 import { app } from "/scripts/app.js";
 import { accentOf } from "../shared/node_settings.mjs";
 import { pixAsset } from "../shared/api_url.mjs";
-import { M, faceBlocks, barColor, barRows, scalarItems } from "./core.mjs";
+import { M, faceBlocks, barColor, barRows, scalarItems, labelUnitWidth } from "./core.mjs";
 
 // ── the bundled gear, drawn on a canvas ─────────────────────────────────────
 // Nodes 2.0 gets this icon for free as a CSS mask (house rule #28, the same one
@@ -172,6 +172,8 @@ function paintBlocks(node, ctx, st, sample, peak, blocks, s, W, H, acc) {
   const x1 = W - M.padX * s;
   const avail = x1 - x0;
   const rects = [];
+  // the label column fits the longest enabled label (core.mjs labelUnitWidth)
+  const lwPx = labelUnitWidth(blocks.filter((b) => b.kind === "bar").map((b) => b.row)) * s;
 
   let y = M.padY * s;
   blocks.forEach((b, i) => {
@@ -186,7 +188,7 @@ function paintBlocks(node, ctx, st, sample, peak, blocks, s, W, H, acc) {
     }
     switch (b.kind) {
       case "title": paintTitle(ctx, node, b, x0, x1, y, h, s, acc); break;
-      case "bar": paintBar(ctx, b.row, st, peak, x0, avail, y, h, s, acc); break;
+      case "bar": paintBar(ctx, b.row, st, peak, x0, avail, y, h, s, acc, lwPx); break;
       case "strip": paintStrip(ctx, b.items, x0, x1, y, h, s); break;
       case "strip1": paintStrip1(ctx, node, st, sample, peak, x0, avail, y, h, s, acc); break;
       case "buttons": paintButtons(ctx, node, b.items, x0, avail, y, h, s, acc, rects); break;
@@ -215,10 +217,10 @@ function paintTitle(ctx, node, b, x0, x1, y, h, s, acc) {
 // squeezed. In scale-1 pixels.
 const MIN_TRACK = 18;
 
-function paintBar(ctx, row, st, peak, x0, avail, y, h, s, acc) {
+function paintBar(ctx, row, st, peak, x0, avail, y, h, s, acc, lwPx) {
   const mid = y + h / 2;
   const g = 7 * s;
-  let lw = M.labelW * s;
+  let lw = lwPx != null ? lwPx : M.labelW * s;
   let vw = M.valueW * s;
   // WHAT GOES FIRST WHEN THERE IS NOT ENOUGH ROOM: the BAR, then the LABEL, and
   // the NUMBER survives to the end.
