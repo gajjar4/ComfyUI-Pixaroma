@@ -14,9 +14,10 @@ import { installCanvasZoomPassthrough } from "../shared/canvas_zoom.mjs";
 import { installNodeAccent, ACC } from "../shared/node_settings.mjs";
 import { installResizeFloor } from "../shared/resize_floor.mjs";
 import {
-  BAR_H, BODY_PAD, GAP, MODES, READOUT_H, ROW_H,
+  BAR_H, GAP, MODES, PAD_X, PAD_Y, READOUT_H, ROW_H, VUE_GAP_CANCEL,
   contentHeight, formatBytes, readReport, readState, writeState,
 } from "./core.mjs";
+import { isVueNodes } from "../shared/nodes2.mjs";
 
 const ROOT_CLASS = "pix-fv-root";
 const WIDGET_NAME = "free_vram_ui";
@@ -32,7 +33,7 @@ export function injectCSS() {
   const css = `
   .${ROOT_CLASS}{
     box-sizing:border-box; display:flex; flex-direction:column; gap:${GAP}px;
-    padding:${BODY_PAD}px; font:12px 'Segoe UI',sans-serif; user-select:none;
+    padding:${PAD_Y}px ${PAD_X}px; font:12px 'Segoe UI',sans-serif; user-select:none;
     /* Transparent, not a panel colour: an opaque root would cover the slot
        labels the node paints just above it. */
     background:transparent;
@@ -47,6 +48,10 @@ export function injectCSS() {
      the node. Cheap, and it makes the face immune to however a future frontend
      decides to size the widget row. */
   .${ROOT_CLASS} > *{ flex:0 0 auto; }
+  /* Nodes 2.0 only: cancel core's 4px body gap so the buttons sit right under
+     the input dots. Classic has no such gap, and pulling up there would ride
+     the buttons into the slot row. */
+  .${ROOT_CLASS}.is-vue{ margin-top:-${VUE_GAP_CANCEL}px; }
   .pix-fv-row{ display:flex; align-items:center; gap:6px; min-height:${ROW_H}px; }
 
   /* NEVER wrap. A wrapped chip row would push the bar and readout down into
@@ -309,6 +314,10 @@ export function renderFace(node) {
   const readout = node?._pixFvReadout;
   if (!row || !bar || !readout) return;
   const st = readState(node);
+  // Re-asserted on every render, not just at build: the renderer can be flipped
+  // while the node is on the canvas, and the gap this cancels only exists in one
+  // of them. A class, not an inline style, so it can never dirty a workflow.
+  node._pixFvRoot?.classList.toggle("is-vue", isVueNodes());
 
   row.textContent = "";
   renderChips(node, st, row);

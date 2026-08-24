@@ -64,16 +64,27 @@ export const DEFAULT_W = 290;
 // stack we own - and 6px on top of core's 4px read as a gap. Every value here
 // is deliberate: ROW_H is the chip height, BAR_H is thin enough to read as a
 // rule rather than a control, and READOUT_H fits 11px text with no clipping.
-export const BODY_PAD = 3;
-export const ROW_H = 26;
+// PAD_X and PAD_Y are separate: the sides need real padding so the chips do not
+// touch the node edge, but every vertical pixel here sits between the input dots
+// and the buttons, which is the gap the user kept pointing at.
+export const PAD_X = 6;
+export const PAD_Y = 1;
+// EXACTLY the chip's own height (4px padding x2 + 13.2 line + 1px border x2).
+// It was 26, which centred a 23px chip and left 1.5px of slack above it.
+export const ROW_H = 23;
 export const BAR_H = 8;
 export const READOUT_H = 16;
 export const GAP = 3;
+// Nodes 2.0 puts `gap-1` (4px) between the slot block and the widget block.
+// A negative top margin on our root cancels it, which is the only way to reach
+// that particular 4px - it belongs to core's body, not to us. Vue-only: Classic
+// has no such gap, and pulling up there would ride into the slot row.
+export const VUE_GAP_CANCEL = 4;
 
 /** The height the face's own content needs, with the bar shown or not. */
 export function contentHeight(showBar = true) {
   const bar = showBar ? BAR_H + GAP : 0;
-  return BODY_PAD * 2 + ROW_H + GAP + bar + READOUT_H;
+  return PAD_Y * 2 + ROW_H + GAP + bar + READOUT_H;
 }
 
 function clampNum(value, fallback, lo, hi) {
