@@ -160,6 +160,13 @@ export function injectCSS() {
     ".pix-pm-qsl::-moz-range-thumb{width:13px;height:13px;border-radius:50%;background:" + ACC + ";border:2px solid #1a1a1a;cursor:pointer;}",
     ".pix-pm-qsl::-moz-range-track{height:4px;border-radius:2px;background:transparent;}",
     ".pix-pm-qval{font-size:12px;color:#bbb;width:62px;text-align:right;flex:none;font-variant-numeric:tabular-nums;}",
+    // The SHARED accent section (createAccentSection) has no padding of its own:
+    // it expects the panel BODY to pad it, the way Save Video's 12px body does.
+    // This panel pads per-section instead, so without this rule the colour
+    // block sat flush against the panel edges (user-reported with a
+    // screenshot). Scoped to our panel so no other consumer moves.
+    ".pix-pm-panel .pix-nset-sec{padding:10px 12px 12px;}",
+
   ].join("\n");
   (document.head || document.documentElement).appendChild(s);
 }
