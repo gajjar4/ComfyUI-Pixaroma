@@ -45,11 +45,10 @@ export const M = {
 // widest line is what stops a 2x node clipping its own last readout.
 export const MIN_W = 215;
 
-// The width a fresh node opens at, and the width the Size control treats as
-// "this node is still wearing its design width" - see the ratchet note in
-// index.js::syncSize. A node sitting at BASE_W * its scale is one WE sized, so
-// the Size control may move it in BOTH directions; any other width was chosen by
-// the user and is only ever pushed UP to the floor, never taken away.
+// The width a fresh node opens at. (An earlier revision also used this in an
+// "is this width ours" ownership test for the Size control - that heuristic
+// ratcheted and is gone; see index.js::scaledWidth for the model that replaced
+// it.)
 export const BASE_W = 305;
 export const MIN_S = 1;     // the drag floor: never smaller than the design size
 export const MAX_S = 5;     // sanity cap, so one wild drag cannot fill the canvas
@@ -122,6 +121,7 @@ export const DEFAULT_STATE = {
     peak: true,
   },
   buttons: { free: true, unload: false, reset: true, settings: true },
+  stripW: null,              // strip only: parked width (null = hug the content)
   interval: 1000,            // ms between samples
   fastWhileRunning: true,    // sample 3x faster while a workflow is running
   warn: true,                // amber past 85%, red past 95%
@@ -292,6 +292,52 @@ export function labelUnitWidth(rows) {
   }
   if (_lwCache.size > 16) _lwCache.clear();
   _lwCache.set(key, w);
+  return w;
+}
+
+// ── how wide the STRIP layout needs to be, at scale 1 ───────────────────────
+// Deterministic from the SETTINGS ONLY, like the row set (#1 in the pattern
+// file): a width that followed the LIVE numbers would jitter as readings change
+// width, and node.size is serialized. So each enabled readout reserves room for
+// its widest plausible reading ("888.8" GB, "100%", "100°", "888 W"), measured
+// in the face's own font. Mirrors the classic painter's strip arithmetic
+// (label + space, 30px mini bar + gap, value, " · " separators) with slack on
+// top, so neither face can clip inside this width.
+const STRIP_MAX_VAL = {
+  vram: "888.8", ram: "888.8", comfy: "888.8", sysram: "888.8",
+  gpu: "100%", cpu: "100%",
+};
+const _swCache = new Map();
+
+export function stripUnitWidth(st) {
+  const segs = [];
+  for (const b of BARS) {
+    if (st.show[b.key]) segs.push({ label: b.label + " ", mini: true, val: STRIP_MAX_VAL[b.key] || "888.8" });
+  }
+  if (st.show.temp) segs.push({ label: "", mini: false, val: "100°" });
+  if (st.show.power) segs.push({ label: "", mini: false, val: "888 W" });
+  if (st.show.peak) segs.push({ label: "", mini: false, val: "88.8 GB" });
+  const key = segs.map((x) => x.label + "|" + x.val).join(";");
+  const hit = _swCache.get(key);
+  if (hit) return hit;
+  let w = M.padX * 2;
+  try {
+    if (!_lwCanvas) _lwCanvas = document.createElement("canvas");
+    const c = _lwCanvas.getContext("2d");
+    c.font = `${M.font}px ui-monospace, "Cascadia Mono", Consolas, monospace`;
+    segs.forEach((sg, i) => {
+      if (i) w += c.measureText(" · ").width;
+      w += c.measureText(sg.label).width;
+      if (sg.mini) w += 30 + 5;
+      w += c.measureText(sg.val).width;
+    });
+    w = Math.ceil(w) + 8;   // slack for the DOM face's flex gaps vs the spaces
+  } catch (_e) {
+    w = MIN_W;   // no canvas (tests): a sane constant
+  }
+  w = Math.max(w, MIN_W);
+  if (_swCache.size > 16) _swCache.clear();
+  _swCache.set(key, w);
   return w;
 }
 

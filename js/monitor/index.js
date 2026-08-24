@@ -45,6 +45,7 @@ import { registerNodeSettings, installNodeAccent } from "../shared/node_settings
 import { registerNodeHelp } from "../shared/help.mjs";
 import {
   NODE_NAME, readState, writeState, contentHeight, MIN_W, BASE_W, MIN_S, MAX_S,
+  stripUnitWidth,
 } from "./core.mjs";
 import { injectCSS, el, renderFace, flashButton } from "./ui.mjs";
 import { paintFace, hitButton, localMouse } from "./paint.mjs";
@@ -128,10 +129,11 @@ function scaleFromHeight(node) {
 function installClassicComputeSize(node) {
   node.computeSize = function () {
     const s = scaleFromHeight(this);
-    // strip: the width is the user's parking choice, so the drag floor stays
-    // scale-1 - same rule as scaledWidth, or dragging a strip taller would
-    // force it wider (the "it moves the bar" report, 2026-08-24)
-    if (readState(this).layout === "strip") return [MIN_W, unitH(this)];
+    // strip: the drag floor is what the TEXT needs at this scale, so a strip
+    // can never be dragged (or scaled) into clipping its own readouts; wider
+    // than that is the user's parking choice (see scaledWidth)
+    const stCS = readState(this);
+    if (stCS.layout === "strip") return [Math.round(stripUnitWidth(stCS) * s), unitH(this)];
     return [Math.round(MIN_W * s), unitH(this)];
   };
 }
@@ -177,16 +179,52 @@ function repaint(node) {
 function scaledWidth(node, s) {
   const prev = clamp(Number(node._pmScale) || s, MIN_S, MAX_S);
   const w = Math.round(node.size?.[0] || BASE_W * prev);
-  // A STRIP is a status bar: its width is WHERE THE USER PARKED IT, not part
-  // of its "size" - so the Size control scales the text and the height and
-  // leaves the width alone. Proportional width here made the right edge lunge
-  // across the canvas (900 -> 1575 at 1.75x), reported as "it moves the bar"
-  // (2026-08-24). The floor stays scale-1: a strip clips its overflow
-  // gracefully in both faces, and pushing the width up with the scale would be
-  // the same lunge through the back door.
-  if (readState(node).layout === "strip") return Math.max(w, MIN_W);
+  // A STRIP is a status bar, and its width answers to TWO masters that had to
+  // be reconciled across two user reports (both 2026-08-24):
+  //   - proportional width made the right edge LUNGE across the canvas
+  //     (900 -> 1575 at 1.75x): "it moves the bar";
+  //   - a PINNED width (the first fix) then CLIPPED the readouts the moment the
+  //     text scaled up: "when i do it larger it start to cut".
+  // The model that satisfies both: width = max(where the user PARKED it, what
+  // the TEXT NEEDS at this scale). It grows exactly as much as the readouts
+  // need and no further, and returns to the parked width on the way down -
+  // never a lunge, never a clip, never a ratchet. The parked width is
+  // state.stripW (null = no park: the strip hugs its content), committed only
+  // when a resize GESTURE ends wider than the content floor.
+  const st = readState(node);
+  if (st.layout === "strip") {
+    return Math.max(Math.round(st.stripW || 0), Math.round(stripUnitWidth(st) * s));
+  }
   const minW = Math.round(MIN_W * s);
   return Math.max(Math.round((w * s) / prev), minW);
+}
+
+/**
+ * End-of-resize-gesture width work, shared by the classic drag-end frame and
+ * the Nodes 2.0 release hook. A REAL GESTURE ONLY - it writes.
+ *
+ * Bars: snap the width up to MIN_W * scale (the one-frame clamp lag, see the
+ * caller). Strip: snap up to the CONTENT floor, then remember where the user
+ * parked it - state.stripW holds the width only when the gesture ended WIDER
+ * than the content needs (a deliberate park); ending AT the floor clears the
+ * park, so a strip resized down to its content goes back to hugging it. The
+ * park is what the Size control returns to on the way down (see scaledWidth).
+ */
+function commitWidthAfterGesture(node, s) {
+  const st = readState(node);
+  if (st.layout === "strip") {
+    const fl = Math.round(stripUnitWidth(st) * s);
+    if (node.size[0] < fl) node.setSize?.([fl, node.size[1]]);
+    const wNow = Math.round(node.size[0]);
+    const park = wNow > fl + 2 ? wNow : null;
+    if ((st.stripW || null) !== park) {
+      writeState(node, { stripW: park });
+      notifyGraphChanged();
+    }
+    return;
+  }
+  const minW = Math.round(MIN_W * s);
+  if (node.size[0] < minW) node.setSize?.([minW, node.size[1]]);
 }
 
 /** Put the node's size back in step with its settings. USER ACTIONS ONLY. */
@@ -332,10 +370,7 @@ function buildVueFace(node) {
   node._pmFloorOff = installResizeFloor(
     root,
     () => Math.round(unitH(node) * stateScale(node)),
-    () => {
-      const minW = Math.round(MIN_W * stateScale(node));
-      if (node.size[0] < minW) node.setSize?.([minW, node.size[1]]);
-    },
+    () => commitWidthAfterGesture(node, stateScale(node)),
   );
   node._pmSig = null;
   repaint(node);
@@ -527,8 +562,7 @@ app.registerExtension({
           // self-correcting, but a drag that ENDS on such a frame would leave
           // the node narrower than its contents. Catch it once, here, where we
           // are already inside a real gesture and allowed to write.
-          const want = Math.round(MIN_W * (readState(this).layout === "strip" ? 1 : s));
-          if (this.size[0] < want) this.setSize?.([want, this.size[1]]);
+          commitWidthAfterGesture(this, s);
         } else {
           const u = unitH(this);
           const want = Math.round(u * stateScale(this));
