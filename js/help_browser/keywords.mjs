@@ -99,6 +99,7 @@ export const KEYWORDS = {
   PixaromaXYPlot: "grid compare matrix sweep test chart contact sheet lora strength weight side by side versus vs combination example examples which sampler steps cfg",
   PixaromaRunTimer: "time clock how long duration speed stopwatch resize bigger larger size scale font typeface digits mute silent",
   PixaromaRunLog: "history times record log past runs hardware gpu graphics card vram ram memory specs rtx system benchmark",
+  PixaromaMonitor: "vram ram memory usage monitor system resources gpu load cpu usage temperature temp hot heat power draw watts performance meter gauge dashboard hud task manager afterburner nvidia smi free vram clear vram unload models out of memory oom how much memory am i using is my card full peak headroom fits will it fit slow overheating fan",
   NotifyPixaroma: "sound alert ding beep finished done chime",
   PixaromaVersionCheck: "version diagnostic about update which version",
 

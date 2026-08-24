@@ -4314,3 +4314,213 @@ async def api_music_prompt_presets_delete(request):
         return web.json_response({"ok": bool(ok), "message": message})
     except Exception as e:
         return web.json_response({"ok": False, "message": str(e)})
+
+
+# ╔══════════════════════════════════════════════════════════════════════════╗
+# ║  Monitor Pixaroma - live system stats                                    ║
+# ╚══════════════════════════════════════════════════════════════════════════╝
+#
+# ONE route, polled about once a second by every Monitor node on the canvas.
+# Everything it reads is cheap and in-process EXCEPT the GPU extras (load,
+# temperature, power), which only nvidia-smi can tell us:
+#
+#   • psutil ships with ComfyUI, so CPU and system RAM are free.
+#   • comfy.model_management already knows the VRAM figures (it is what
+#     /system_stats reports), so we reuse it rather than talking to torch.
+#   • pynvml is NOT a ComfyUI dependency, so the extras come from the nvidia-smi
+#     SUBPROCESS - measured at 85 ms on the dev box. That is far too slow to run
+#     inside a request that fires every second, so it runs on a background
+#     thread and the route always answers from the CACHE. The first poll has no
+#     extras, the second onwards does.
+#
+# Everything here degrades rather than fails: an AMD card, a Mac, a machine with
+# no nvidia-smi on PATH, or a psutil that has been removed all produce a payload
+# with those keys missing, and the node simply hides those readouts.
+
+_PIX_MON_GPU_LOCK = threading.Lock()
+_PIX_MON_GPU = {
+    "at": 0.0,      # monotonic time of the last successful read
+    "rows": [],     # parsed nvidia-smi rows
+    "busy": False,  # a refresh thread is already running
+    "fails": 0,     # consecutive failures
+    "off": False,   # give up permanently for this session
+}
+_PIX_MON_GPU_MIN_AGE = 0.75   # never spawn a refresh more often than this
+_PIX_MON_GPU_MAX_FAILS = 3    # then stop spawning processes for good
+
+
+def _pix_mon_smi_path():
+    """nvidia-smi's path, or None. Cached in the same dict as the readings."""
+    p = _PIX_MON_GPU.get("path")
+    if p is None:
+        p = shutil.which("nvidia-smi") or ""
+        _PIX_MON_GPU["path"] = p
+    return p or None
+
+
+def _pix_mon_gpu_refresh():
+    """Run nvidia-smi once and store the parsed rows. Background thread only."""
+    from .nodes._monitor_helpers import NVIDIA_SMI_ARGS, parse_nvidia_smi
+    import subprocess
+
+    rows = None
+    try:
+        exe = _pix_mon_smi_path()
+        if exe:
+            kwargs = {}
+            # Windows would flash a console window once a second otherwise.
+            flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+            if flags:
+                kwargs["creationflags"] = flags
+            out = subprocess.run(
+                [exe, *NVIDIA_SMI_ARGS],
+                capture_output=True,
+                text=True,
+                timeout=4.0,
+                **kwargs,
+            )
+            if out.returncode == 0:
+                rows = parse_nvidia_smi(out.stdout)
+    except Exception:
+        rows = None
+
+    with _PIX_MON_GPU_LOCK:
+        _PIX_MON_GPU["busy"] = False
+        if rows:
+            _PIX_MON_GPU["rows"] = rows
+            _PIX_MON_GPU["at"] = time.monotonic()
+            _PIX_MON_GPU["fails"] = 0
+        else:
+            _PIX_MON_GPU["fails"] += 1
+            if _PIX_MON_GPU["fails"] >= _PIX_MON_GPU_MAX_FAILS:
+                # No nvidia-smi, an AMD card, or a driver that keeps erroring:
+                # stop spawning a process every second for the rest of the
+                # session. A ComfyUI restart is the retry.
+                _PIX_MON_GPU["off"] = True
+                _PIX_MON_GPU["rows"] = []
+
+
+def _pix_mon_gpu_rows():
+    """The cached nvidia-smi rows, kicking a background refresh if stale.
+
+    NEVER waits on the subprocess: the request would then be as slow as the
+    slowest nvidia-smi call, once per second, forever.
+    """
+    with _PIX_MON_GPU_LOCK:
+        if _PIX_MON_GPU["off"]:
+            return []
+        stale = (time.monotonic() - _PIX_MON_GPU["at"]) >= _PIX_MON_GPU_MIN_AGE
+        if stale and not _PIX_MON_GPU["busy"]:
+            _PIX_MON_GPU["busy"] = True
+            start = True
+        else:
+            start = False
+        rows = list(_PIX_MON_GPU["rows"])
+    if start:
+        threading.Thread(
+            target=_pix_mon_gpu_refresh, name="pixaroma-monitor-gpu", daemon=True
+        ).start()
+    return rows
+
+
+def _pix_mon_torch_devices():
+    """Every torch device, primary first - the same list /system_stats reports.
+
+    `get_all_torch_devices` is what core's own system_stats calls (it is what
+    makes a multi-GPU box report every card). It is guarded because it is newer
+    than the pack's minimum ComfyUI: an older build falls back to the one primary
+    device, which is all it ever had.
+    """
+    import comfy.model_management as mm
+
+    primary = mm.get_torch_device()
+    try:
+        devices = list(mm.get_all_torch_devices())
+    except Exception:
+        devices = []
+    if not devices:
+        return [primary]
+    # primary first, so a face that only draws devices[0] draws the card the
+    # workflow is actually running on
+    return [primary] + [d for d in devices if d != primary]
+
+
+def _pix_mon_devices():
+    """VRAM per torch device, in the same shape /system_stats uses."""
+    out = []
+    try:
+        import comfy.model_management as mm
+
+        for dev in _pix_mon_torch_devices():
+            try:
+                total, torch_total = mm.get_total_memory(dev, torch_total_too=True)
+                free, torch_free = mm.get_free_memory(dev, torch_free_too=True)
+                out.append(
+                    {
+                        "name": mm.get_torch_device_name(dev),
+                        "type": getattr(dev, "type", "cuda"),
+                        "index": getattr(dev, "index", None),
+                        "total": int(total),
+                        "used": int(total) - int(free),
+                        # what TORCH itself is holding, i.e. ComfyUI's own share
+                        "torchTotal": int(torch_total),
+                        "torchUsed": int(torch_total) - int(torch_free),
+                    }
+                )
+            except Exception:
+                continue
+    except Exception:
+        pass
+    return out
+
+
+@PromptServer.instance.routes.get("/pixaroma/api/monitor/stats")
+async def api_monitor_stats(request):
+    from .nodes._monitor_helpers import gpu_extras_for, pct
+
+    payload = {"ok": True}
+
+    # ── CPU + system RAM (psutil ships with ComfyUI) ──
+    try:
+        import psutil
+
+        vm = psutil.virtual_memory()
+        payload["ram"] = {
+            "total": int(vm.total),
+            "used": int(vm.total - vm.available),
+            "pct": pct(vm.total - vm.available, vm.total),
+        }
+        # interval=None is non-blocking: it reports the load since the PREVIOUS
+        # call, which is exactly the poll interval. The very first answer after a
+        # restart is the average since boot; every one after that is live.
+        payload["cpu"] = {"pct": float(psutil.cpu_percent(interval=None))}
+        try:
+            rss = psutil.Process().memory_info().rss
+            payload["proc"] = {"used": int(rss), "pct": pct(rss, vm.total)}
+        except Exception:
+            pass
+    except Exception:
+        pass
+
+    # ── VRAM, plus the driver's own view of the card ──
+    devices = _pix_mon_devices()
+    if devices:
+        payload["devices"] = gpu_extras_for(devices, _pix_mon_gpu_rows())
+    else:
+        rows = _pix_mon_gpu_rows()
+        if rows:
+            payload["devices"] = [
+                {
+                    "name": r.get("name") or "GPU",
+                    "type": "cuda",
+                    "index": r.get("index"),
+                    "total": r.get("memTotal") or 0,
+                    "used": r.get("memUsed") or 0,
+                    "util": r.get("util"),
+                    "temp": r.get("temp"),
+                    "power": r.get("power"),
+                }
+                for r in rows
+            ]
+
+    return web.json_response(payload, headers={"Cache-Control": "no-store"})
