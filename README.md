@@ -375,11 +375,10 @@ Master the Pixaroma suite with our video guides and workflow deep-dives:
 
 ## 🛠 Changelog
 
-### **August 24, 2026 · v1.4.121**
-- **NEW: Monitor Pixaroma**, a live readout right on the canvas: video memory, system memory, GPU and processor load, temperature and power. Under Logic & Flow.
-- **The peak mark remembers the highest video memory of the last run**, so you can see how close a workflow came to filling your card.
-- **A Free VRAM button** unloads the models, the same as ComfyUI's own Free model and node cache.
-- **Bars or a one line strip**, every readout switchable, resizable, and bars turn amber then red as memory gets tight.
+### **August 24, 2026 · v1.4.121–1.4.122**
+- **NEW: Free VRAM Pixaroma**, hands the graphics card's memory back at the point you wire it in, so a second heavy model has room to load. Under Logic & Flow.
+- **NEW: Monitor Pixaroma**, a live readout on the canvas: video memory, system memory, GPU and processor load, temperature and power. Under Logic & Flow.
+- **Monitor also keeps a peak mark** from the last run, has its own Free VRAM button, and switches between bars and a one line strip.
 
 ### **August 21, 2026 · v1.4.120**
 - **Seed Pixaroma now works with Impact Pack's wildcard nodes.** Wired into ImpactWildcardProcessor in populate mode, the processed text stayed on the same words every run. It rerolls properly now.
