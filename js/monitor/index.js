@@ -128,6 +128,10 @@ function scaleFromHeight(node) {
 function installClassicComputeSize(node) {
   node.computeSize = function () {
     const s = scaleFromHeight(this);
+    // strip: the width is the user's parking choice, so the drag floor stays
+    // scale-1 - same rule as scaledWidth, or dragging a strip taller would
+    // force it wider (the "it moves the bar" report, 2026-08-24)
+    if (readState(this).layout === "strip") return [MIN_W, unitH(this)];
     return [Math.round(MIN_W * s), unitH(this)];
   };
 }
@@ -172,8 +176,16 @@ function repaint(node) {
  */
 function scaledWidth(node, s) {
   const prev = clamp(Number(node._pmScale) || s, MIN_S, MAX_S);
-  const minW = Math.round(MIN_W * s);
   const w = Math.round(node.size?.[0] || BASE_W * prev);
+  // A STRIP is a status bar: its width is WHERE THE USER PARKED IT, not part
+  // of its "size" - so the Size control scales the text and the height and
+  // leaves the width alone. Proportional width here made the right edge lunge
+  // across the canvas (900 -> 1575 at 1.75x), reported as "it moves the bar"
+  // (2026-08-24). The floor stays scale-1: a strip clips its overflow
+  // gracefully in both faces, and pushing the width up with the scale would be
+  // the same lunge through the back door.
+  if (readState(node).layout === "strip") return Math.max(w, MIN_W);
+  const minW = Math.round(MIN_W * s);
   return Math.max(Math.round((w * s) / prev), minW);
 }
 
@@ -515,7 +527,7 @@ app.registerExtension({
           // self-correcting, but a drag that ENDS on such a frame would leave
           // the node narrower than its contents. Catch it once, here, where we
           // are already inside a real gesture and allowed to write.
-          const want = Math.round(MIN_W * s);
+          const want = Math.round(MIN_W * (readState(this).layout === "strip" ? 1 : s));
           if (this.size[0] < want) this.setSize?.([want, this.size[1]]);
         } else {
           const u = unitH(this);
