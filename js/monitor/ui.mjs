@@ -12,6 +12,7 @@
 // node showing around a title-less body, and the comments say which.
 
 import { ACC } from "../shared/node_settings.mjs";
+import { pixAsset } from "../shared/api_url.mjs";
 import { M, barRows, scalarItems, visibleButtons, barColor, deviceLabel, pickDevice } from "./core.mjs";
 
 let _cssDone = false;
@@ -79,6 +80,16 @@ export function injectCSS() {
     `.pix-pm-btn{flex:1 1 auto;min-width:0;font:inherit;font-size:${px(M.btnFont)};line-height:1;padding:${px(5)} ${px(7)};border-radius:${px(4)};text-align:center;cursor:pointer;background:rgba(255,255,255,.045);border:1px solid rgba(255,255,255,.13);color:rgba(255,255,255,.72);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;box-sizing:border-box;}`,
     `.pix-pm-btn:hover{background:${ACC};border-color:${ACC};color:#fff;}`,
     ".pix-pm-btn.is-flashing,.pix-pm-btn.is-flashing:hover{background:#3ec371;border-color:#3ec371;color:#fff;}",
+    // The gear: the BUNDLED SVG as a CSS mask, exactly like Dropdown and LoRA
+    // Loader, never the ⚙ emoji (house rule #28) - an emoji is drawn by the
+    // operating system, so it is a different shape per platform and sits on its
+    // own baseline. Square and non-growing, so the two text buttons take the rest
+    // of the row.
+    `.pix-pm-btn.is-icon{flex:0 0 auto;width:${px(M.btnH)};padding:0;display:flex;align-items:center;justify-content:center;}`,
+    `.pix-pm-btn.is-icon::before{content:"";display:block;width:${px(14)};height:${px(14)};background:rgba(255,255,255,.72);`
+      + `-webkit-mask:url("${pixAsset("icons/note/gear.svg")}") center/contain no-repeat;`
+      + `mask:url("${pixAsset("icons/note/gear.svg")}") center/contain no-repeat;}`,
+    ".pix-pm-btn.is-icon:hover::before{background:#fff;}",
     ".pix-pm-btn:disabled{opacity:.45;cursor:default;}",
     ".pix-pm-btn:disabled:hover{background:rgba(255,255,255,.045);border-color:rgba(255,255,255,.13);color:rgba(255,255,255,.72);}",
 
@@ -243,9 +254,12 @@ function buildFace(screen, st, rows, scal, btns, hasTitle, onButton) {
   if (btns.length) {
     const acts = el("div", "pix-pm-acts");
     for (const b of btns) {
-      const btn = el("button", "pix-pm-btn", b.label);
+      // an icon button carries NO text: the glyph comes from the CSS mask, and a
+      // label under it would just be the same thing said twice
+      const btn = el("button", "pix-pm-btn" + (b.icon ? " is-icon" : ""), b.icon ? "" : b.label);
       btn.type = "button";
-      btn.title = b.hint || "";
+      btn.title = b.hint || b.label || "";
+      if (b.icon) btn.setAttribute("aria-label", b.label);
       btn.addEventListener("click", (e) => {
         e.stopPropagation();
         onButton?.(b.key, btn);

@@ -13,8 +13,76 @@
 // The buttons are hit-tested against the SAME rects this file paints, cached on
 // a runtime field, which is the Compare / Preview pattern for canvas controls.
 
+import { app } from "/scripts/app.js";
 import { accentOf } from "../shared/node_settings.mjs";
+import { pixAsset } from "../shared/api_url.mjs";
 import { M, faceBlocks, barColor, barRows, scalarItems } from "./core.mjs";
+
+// ── the bundled gear, drawn on a canvas ─────────────────────────────────────
+// Nodes 2.0 gets this icon for free as a CSS mask (house rule #28, the same one
+// Dropdown and LoRA Loader use). A canvas has no masks, so here the SVG is
+// loaded once as an image and TINTED into a small cached bitmap per size and
+// colour: draw the artwork, then composite "source-in" with the fill, which
+// keeps the shape's alpha and replaces its colour.
+//
+// It loads asynchronously, so the first frames have no bitmap and fall back to
+// the button's text label. That is deliberate: an icon that has not arrived must
+// never leave an empty button. The load is same-origin (our own asset route), so
+// drawing it does not taint the canvas.
+const GEAR_SRC = pixAsset("icons/note/gear.svg");
+let _gearImg = null;
+let _gearState = "idle"; // idle | loading | ready | failed
+const _gearCache = new Map();
+
+function ensureGear() {
+  if (_gearState !== "idle") return;
+  _gearState = "loading";
+  try {
+    const img = new Image();
+    img.onload = () => {
+      _gearImg = img;
+      _gearState = "ready";
+      // repaint now rather than waiting up to a second for the next sample
+      try {
+        app.canvas?.setDirty?.(true, true);
+      } catch (_e) {}
+    };
+    img.onerror = () => {
+      _gearState = "failed";
+    };
+    img.src = GEAR_SRC;
+  } catch (_e) {
+    _gearState = "failed";
+  }
+}
+
+function gearBitmap(px, color) {
+  ensureGear();
+  if (_gearState !== "ready" || !_gearImg) return null;
+  const size = Math.max(6, Math.round(px));
+  const key = size + "|" + color;
+  const hit = _gearCache.get(key);
+  if (hit) return hit;
+  try {
+    const cv = document.createElement("canvas");
+    cv.width = size;
+    cv.height = size;
+    const c = cv.getContext("2d");
+    c.drawImage(_gearImg, 0, 0, size, size);
+    c.globalCompositeOperation = "source-in";
+    c.fillStyle = color;
+    c.fillRect(0, 0, size, size);
+    // Keep the cache small: two colours (idle and hover) across a handful of
+    // scales is all a face ever asks for, but a slider drag can walk through
+    // many sizes.
+    if (_gearCache.size > 24) _gearCache.clear();
+    _gearCache.set(key, cv);
+    return cv;
+  } catch (_e) {
+    _gearState = "failed";
+    return null;
+  }
+}
 
 function rr(ctx, x, y, w, h, r) {
   const rad = Math.max(0, Math.min(r, w / 2, h / 2));
@@ -231,11 +299,18 @@ function paintStrip1(ctx, node, st, sample, peak, x0, avail, y, h, s, acc) {
 function paintButtons(ctx, node, items, x0, avail, y, h, s, acc, rects) {
   const g = 5 * s;
   const n = items.length;
-  const w = (avail - g * (n - 1)) / n;
-  if (w < 24 * s) return;   // no room: the gear panel still has the actions
+  // A compact button (the gear) is a square at its natural size; the rest share
+  // whatever is left, so the wording on the text buttons gets the room.
+  const compact = items.filter((b) => b.compact).length;
+  const compactW = h;
+  const flexN = n - compact;
+  const flexW = flexN > 0 ? (avail - g * (n - 1) - compact * compactW) / flexN : 0;
+  if (flexN > 0 && flexW < 24 * s) return;  // no room: the panel still has the actions
   const hoverKey = node._pmHoverBtn;
+  let x = x0;
   items.forEach((b, i) => {
-    const x = x0 + i * (w + g);
+    const w = b.compact ? compactW : flexW;
+    if (i) x += g;
     const hot = hoverKey === b.key;
     rr(ctx, x, y, w, h, 4 * s);
     ctx.fillStyle = hot ? acc : "rgba(255,255,255,0.045)";
@@ -244,16 +319,25 @@ function paintButtons(ctx, node, items, x0, avail, y, h, s, acc, rects) {
     ctx.strokeStyle = hot ? acc : "rgba(255,255,255,0.13)";
     ctx.stroke();
     ctx.font = `${Math.round(M.btnFont * s)}px ${MONO}`;
-    ctx.fillStyle = hot ? "#ffffff" : "rgba(255,255,255,0.72)";
+    let fg = hot ? "#ffffff" : "rgba(255,255,255,0.72)";
     const flash = node._pmFlash && node._pmFlash.key === b.key ? node._pmFlash.label : null;
     if (flash) {
       rr(ctx, x, y, w, h, 4 * s);
       ctx.fillStyle = "#3ec371";
       ctx.fill();
-      ctx.fillStyle = "#ffffff";
+      fg = "#ffffff";
     }
-    textVC(ctx, fit(ctx, flash || b.label, w - 8 * s), x + w / 2, y + h / 2, "center");
+    ctx.fillStyle = fg;
+
+    const icon = !flash && b.icon === "gear" ? gearBitmap(Math.round(14 * s), fg) : null;
+    if (icon) {
+      ctx.drawImage(icon, Math.round(x + (w - icon.width) / 2), Math.round(y + (h - icon.height) / 2));
+    } else {
+      // no icon (yet, or not an icon button): the label, never an empty box
+      textVC(ctx, fit(ctx, flash || b.label, w - 8 * s), x + w / 2, y + h / 2, "center");
+    }
     rects.push({ key: b.key, x, y, w, h });
+    x += w;
   });
 }
 

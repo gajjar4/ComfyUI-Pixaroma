@@ -17,7 +17,6 @@ import { api } from "/scripts/api.js";
 import { pixApiUrl } from "../shared/api_url.mjs";
 import { readState, pickDevice } from "./core.mjs";
 
-const STATS_URL = "/pixaroma/api/monitor/stats";
 
 const _nodes = new Set();
 let _timer = null;
@@ -134,7 +133,7 @@ async function tick() {
   }
   _inflight = true;
   try {
-    const res = await fetch(pixApiUrl(STATS_URL), { cache: "no-store" });
+    const res = await fetch(pixApiUrl("/pixaroma/api/monitor/stats"), { cache: "no-store" });
     if (!res.ok) throw new Error("HTTP " + res.status);
     const data = await res.json();
     if (data && data.ok) {

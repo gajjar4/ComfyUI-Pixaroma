@@ -95,6 +95,12 @@ export const BUTTONS = [
   {
     key: "settings",
     label: "Settings",
+    // The BUNDLED gear SVG, never the ⚙ emoji (house rule #28): an emoji is drawn
+    // by the operating system, so it is a different shape on Windows, Mac and
+    // Linux and sits on its own baseline. `compact` keeps it a square at the end
+    // of the row so the two text buttons get the rest of the width.
+    icon: "gear",
+    compact: true,
     hint: "Choose which readouts to show, the layout, the size and how often it updates. The same panel as right-clicking the node.",
   },
 ];
