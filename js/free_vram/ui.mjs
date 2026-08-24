@@ -231,6 +231,27 @@ function inputUnwired(node) {
   return inp.link == null;
 }
 
+/**
+ * "22.3 GB free of 24" - the where-you-stand-now figure.
+ *
+ * The unit is printed ONCE. It shipped as "22.3 GB / 24 GB free", which the user
+ * read as two separate numbers rather than one fraction: the slash carried the
+ * whole meaning and the trailing "free" looked like it belonged to the total.
+ * Saying "free of" puts the word against the number it describes and leaves
+ * nothing left to parse.
+ *
+ * The unit is dropped only when both sides carry the SAME one, so a device small
+ * enough to report in MB still reads correctly rather than losing its unit.
+ */
+function freeOfTotal(report) {
+  const free = formatBytes(report.after);
+  const total = formatBytes(report.total, 0);
+  const unit = total.split(" ")[1];
+  return unit && free.endsWith(` ${unit}`)
+    ? `${free} free of ${total.split(" ")[0]}`
+    : `${free} free of ${total}`;
+}
+
 function paintReadout(node, st, readout) {
   readout.textContent = "";
   readout.className = "pix-fv-readout";
@@ -278,7 +299,7 @@ function paintReadout(node, st, readout) {
     lead.title = report.message || "";
     // An unwired report carries no readings at all, so there is no figure to
     // print - "- free" would read as a broken measurement rather than none.
-    tail.textContent = report.after == null ? "" : `${formatBytes(report.after)} free`;
+    tail.textContent = report.after == null ? "" : freeOfTotal(report);
     tail.title = lead.title;
     return;
   }
@@ -303,7 +324,7 @@ function paintReadout(node, st, readout) {
     readout.classList.add("idle");
     lead.textContent = "nothing to free";
     lead.title = "It ran, and there was nothing loaded that it could let go of.";
-    tail.textContent = `${formatBytes(report.after)} / ${formatBytes(report.total, 0)} free`;
+    tail.textContent = freeOfTotal(report);
     tail.title = lead.title;
     return;
   }
@@ -318,7 +339,7 @@ function paintReadout(node, st, readout) {
     `The card reports: ${formatBytes(report.driverBefore)} free before, ` +
       `${formatBytes(report.driverAfter)} after`,
   ].join("\n");
-  tail.textContent = `${formatBytes(report.after)} / ${formatBytes(report.total, 0)} free`;
+  tail.textContent = freeOfTotal(report);
   tail.title = lead.title;
 }
 

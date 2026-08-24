@@ -74,9 +74,12 @@ export const FREE_VRAM_HELP = {
     {
       heading: "Reading the line underneath",
       body:
-        "It says how much came back, then how much of the card is free now. So `freed 8.4 GB` "
-        + "next to `11.6 / 24 GB free` means this node handed back 8.4 of the 11.6 that are now "
-        + "available on a 24 GB card.\n\n"
+        "Two figures answering two different questions. The orange one is what THIS NODE did. "
+        + "The grey one beside it is where you STAND NOW, which is the figure that decides "
+        + "whether the next stage fits.\n\n"
+        + "So `freed 8.4 GB` next to `11.6 GB free of 24` means the node handed back 8.4 GB, and "
+        + "11.6 GB of your 24 GB card is free as a result. That second figure is the orange and "
+        + "the dark parts of the bar added together: everything to the right of the grey.\n\n"
         + "With Cache it says returned rather than freed, because that memory went back to the "
         + "card rather than becoming newly available to ComfyUI.",
     },
