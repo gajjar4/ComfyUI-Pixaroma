@@ -39,13 +39,62 @@ registerNodeSettings(CLASS, {
 // So computeLayoutSize - the ONE number computeSize consumes - reports the
 // content height minus the difference, while getMinHeight and the resize floor
 // keep the TRUE content height, which is what stops the body being squeezed.
-const LG_COMPUTE_PAD = 38;
-const NODE_CHROME_H = 22;
-const LAYOUT_TRIM = LG_COMPUTE_PAD - NODE_CHROME_H;   // 16
+// ⚠️ BOTH NUMBERS ARE MEASURED ON THIS NODE, NOT COPIED. nodes2-preview-fill.md
+// spells out the formula for a node with NO slots and says to re-derive; this
+// node has one input and one output, so LiteGraph stacks a 20px slot row above
+// the widgets and `widgets_start_y` grows with it.
+//
+// Measured live at six heights (90, 100, 120, 150, 200, 260): the element always
+// receives exactly `node.size[1] - 46`, and `computeSize` always returns
+// `computeLayoutSize().minHeight + 38`. Copying the slot-less node's 22 made the
+// Classic face 24px short of its own content - clipped, and invisible to every
+// check that measured a detached clone instead of the live element.
+//
+// Re-measure if a slot is ever added or removed: set the node to a few known
+// heights and read `node.size[1] - root.offsetHeight`; it is a constant.
+const LG_COMPUTE_PAD = 38;   // what computeSize adds to computeLayoutSize().minHeight
+const NODE_CHROME_H = 46;    // what the element actually loses (slot row + margins)
+const LAYOUT_TRIM = LG_COMPUTE_PAD - NODE_CHROME_H;   // -8: here it ADDS
 
 /** The whole node's height for a given content height, in the legacy renderer. */
 function nodeHeight(node) {
   return contentHeight(readState(node).showBar) + NODE_CHROME_H;
+}
+
+/**
+ * ⚠️ THE TWO RENDERERS WANT OPPOSITE THINGS FROM `computeLayoutSize`, and the
+ * difference is not the NUMBER - it is whether the method EXISTS.
+ *
+ * Nodes 2.0 builds the node body as a CSS grid, one row per widget, and picks
+ * the track type from `hasLayoutSize = typeof w.computeLayoutSize === "function"`:
+ * a widget that HAS the method becomes an `auto` (GROWING) row and absorbs all
+ * the node's spare height. That is right for a preview that should fill the
+ * body, and wrong for this node, whose face is three fixed rows. With it
+ * defined, every pixel the node was taller than its content was pumped into our
+ * widget - which is what produced BOTH reported symptoms at once: a big empty
+ * band between the input dots and the buttons, and the readout pushed down out
+ * through the bottom of the node.
+ * So in Nodes 2.0 we SHADOW the DOMWidget prototype's method with `undefined`,
+ * which makes the row `min-content` and the face hug its own height exactly.
+ *
+ * LEGACY has no such grid: there, `computeLayoutSize().minHeight` is simply the
+ * number `LGraphNode.computeSize` consumes, and it then ADDS `LG_COMPUTE_PAD` -
+ * so it must be handed the PRE-TRIMMED height or the node ends up 16px taller
+ * than its content and cannot be dragged smaller.
+ *
+ * Re-applied on a renderer flip, because the answer differs per renderer.
+ */
+function applyLayoutSizing(node, widget) {
+  const w = widget || node?._pixFvWidget;
+  if (!w) return;
+  if (isVueNodes()) {
+    w.computeLayoutSize = undefined;
+  } else {
+    w.computeLayoutSize = () => ({
+      minHeight: contentHeight(readState(node).showBar) - LAYOUT_TRIM,
+      minWidth: 1,
+    });
+  }
 }
 
 function openPanel(node) {
@@ -94,16 +143,7 @@ app.registerExtension({
       // Makes the widget an 'auto' row in Nodes 2.0 so it can take the body,
       // and feeds LiteGraph's computeSize in legacy - which is why it reports
       // the TRIMMED height and getMinHeight does not.
-      // ⚠️ THE TRIM IS CLASSIC-ONLY. Both renderers read computeLayoutSize, but
-      // they want DIFFERENT numbers from it: LiteGraph feeds it to computeSize,
-      // which then adds LG_COMPUTE_PAD, so it must be pre-trimmed; the Nodes 2.0
-      // grid uses it as the row's real minimum, so trimming there under-allocates
-      // by exactly LAYOUT_TRIM and the last row hangs BELOW the node frame.
-      // Reported with a screenshot: the readout line sat outside the node.
-      widget.computeLayoutSize = () => {
-        const content = contentHeight(readState(this).showBar);
-        return { minHeight: isVueNodes() ? content : content - LAYOUT_TRIM, minWidth: 1 };
-      };
+      applyLayoutSizing(this, widget);
 
       // Fresh size, SYNCHRONOUSLY. configure() runs right after onNodeCreated
       // and restores a saved size, so a deferred write here would clobber the
@@ -125,6 +165,7 @@ app.registerExtension({
       // Nothing on this face grows with height, so the extra was empty band
       // anyway - which is the wart this is here to remove.
       this._pixFvRendererOff = onRendererChange(() => {
+        applyLayoutSizing(this);
         renderFace(this);
         syncSize(this);
       });

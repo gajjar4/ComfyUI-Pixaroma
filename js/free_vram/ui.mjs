@@ -36,7 +36,17 @@ export function injectCSS() {
     /* Transparent, not a panel colour: an opaque root would cover the slot
        labels the node paints just above it. */
     background:transparent;
+    /* Anything spare collects BELOW the rows rather than being shared out
+       between them. ComfyUI's host wrapper is "flex flex-col *:flex-1", so this
+       root is handed flex:1 and can be taller than its content whatever the row
+       type says - and a stretched root must never move the readout. */
+    justify-content:flex-start;
   }
+  /* THE BELT for the same thing, one layer in: every row keeps its own height,
+     so no amount of surplus can inflate the gaps or push the last row out of
+     the node. Cheap, and it makes the face immune to however a future frontend
+     decides to size the widget row. */
+  .${ROOT_CLASS} > *{ flex:0 0 auto; }
   .pix-fv-row{ display:flex; align-items:center; gap:6px; min-height:${ROW_H}px; }
 
   /* NEVER wrap. A wrapped chip row would push the bar and readout down into

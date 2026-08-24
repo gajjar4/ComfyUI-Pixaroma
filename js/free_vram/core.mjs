@@ -58,11 +58,17 @@ const PROMPT_KEYS = ["mode", "gc", "everyRun", "useThreshold", "thresholdGb"];
 // ── geometry ───────────────────────────────────────────────────────────────
 export const MIN_W = 250;
 export const DEFAULT_W = 290;
-export const BODY_PAD = 6;
+// Trimmed 2026-08-24 on the user's "save some space in height". Nodes 2.0
+// already puts a 4px gap above the widget and 12px of its own padding plus a
+// 20px node-pack badge row below it, so OUR padding is the only part of that
+// stack we own - and 6px on top of core's 4px read as a gap. Every value here
+// is deliberate: ROW_H is the chip height, BAR_H is thin enough to read as a
+// rule rather than a control, and READOUT_H fits 11px text with no clipping.
+export const BODY_PAD = 3;
 export const ROW_H = 26;
-export const BAR_H = 9;
-export const READOUT_H = 18;
-export const GAP = 4;
+export const BAR_H = 8;
+export const READOUT_H = 16;
+export const GAP = 3;
 
 /** The height the face's own content needs, with the bar shown or not. */
 export function contentHeight(showBar = true) {
