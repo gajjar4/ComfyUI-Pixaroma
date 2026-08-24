@@ -177,7 +177,18 @@ def gpu_extras_for(devices, smi_rows, visible=None):
             elif visible and 0 <= idx < len(visible):
                 phys = visible[idx]
         row = by_index.get(phys) if isinstance(phys, int) else None
-        if row is None and visible == [] and len(devices) == 1 and len(by_index) == 1:
+        # The one-card fallback may only adopt an INDEX-BASED device. Without
+        # the isinstance, a CPU/MPS device (index None - what torch reports in
+        # CPU-fallback mode, while nvidia-smi still sees the physical card)
+        # would wear the GPU's temperature and load - the exact wrong-data
+        # failure this mapping exists to prevent (round-2 review, 2026-08-24).
+        if (
+            row is None
+            and isinstance(idx, int)
+            and visible == []
+            and len(devices) == 1
+            and len(by_index) == 1
+        ):
             row = next(iter(by_index.values()))
         if row:
             d["util"] = row.get("util")
