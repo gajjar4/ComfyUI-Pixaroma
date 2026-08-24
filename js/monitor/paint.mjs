@@ -56,25 +56,47 @@ function ensureGear() {
   }
 }
 
-function gearBitmap(px, color) {
+// ⚠️ RASTERISE AT THE DEVICE SCALE, NOT IN NODE PIXELS ("the gear is blurred",
+// reported 2026-08-24). The node canvas carries a transform of canvas-zoom x
+// devicePixelRatio, so a bitmap made at its node-space size gets MAGNIFIED by
+// that transform on screen - a 20px gear stretched to 70px at high zoom is
+// visibly soft, while the text beside it stays sharp because text is drawn
+// vectorially under the same transform every frame. Same family as
+// canvasBackingScale in shared/nodes2.mjs: back a raster by the effective
+// on-screen pixels, then draw it DOWN at the logical size so the transform
+// lands it 1:1. Quantised to quarter steps so a smooth zoom does not mint a
+// bitmap per frame, capped so the cache stays tiny.
+function deviceScale() {
+  let zoom = 1;
+  try {
+    zoom = app.canvas?.ds?.scale || 1;
+  } catch (_e) {}
+  const dpr = (typeof window !== "undefined" && window.devicePixelRatio) || 1;
+  return Math.min(6, Math.max(1, Math.ceil(zoom * dpr * 4) / 4));
+}
+
+function gearBitmap(px, color, eff) {
   ensureGear();
   if (_gearState !== "ready" || !_gearImg) return null;
-  const size = Math.max(6, Math.round(px));
-  const key = size + "|" + color;
+  const raster = Math.max(6, Math.round(px * (eff || 1)));
+  const key = raster + "|" + color;
   const hit = _gearCache.get(key);
   if (hit) return hit;
   try {
     const cv = document.createElement("canvas");
-    cv.width = size;
-    cv.height = size;
+    cv.width = raster;
+    cv.height = raster;
     const c = cv.getContext("2d");
-    c.drawImage(_gearImg, 0, 0, size, size);
+    // drawImage renders the SVG vectorially at the DESTINATION size, so the
+    // raster is sharp at exactly this many pixels - the blur only ever comes
+    // from scaling the finished bitmap afterwards.
+    c.drawImage(_gearImg, 0, 0, raster, raster);
     c.globalCompositeOperation = "source-in";
     c.fillStyle = color;
-    c.fillRect(0, 0, size, size);
+    c.fillRect(0, 0, raster, raster);
     // Keep the cache small: two colours (idle and hover) across a handful of
-    // scales is all a face ever asks for, but a slider drag can walk through
-    // many sizes.
+    // sizes is all a face ever asks for, but a slider drag or a zoom can walk
+    // through many.
     if (_gearCache.size > 24) _gearCache.clear();
     _gearCache.set(key, cv);
     return cv;
@@ -355,9 +377,14 @@ function paintButtons(ctx, node, items, x0, avail, y, h, s, acc, rects) {
     }
     ctx.fillStyle = fg;
 
-    const icon = !flash && b.icon === "gear" ? gearBitmap(Math.round(14 * s), fg) : null;
+    const iconPx = Math.round(14 * s);
+    const icon = !flash && b.icon === "gear" ? gearBitmap(iconPx, fg, deviceScale()) : null;
     if (icon) {
-      ctx.drawImage(icon, Math.round(x + (w - icon.width) / 2), Math.round(y + (h - icon.height) / 2));
+      // Draw DOWN to the logical size: the raster is deviceScale() times
+      // bigger, and the canvas transform magnifies it back to exactly 1:1
+      // screen pixels. Centring uses iconPx, never icon.width - the raster
+      // size changes with the zoom.
+      ctx.drawImage(icon, Math.round(x + (w - iconPx) / 2), Math.round(y + (h - iconPx) / 2), iconPx, iconPx);
     } else {
       // no icon (yet, or not an icon button): the label, never an empty box
       textVC(ctx, fit(ctx, flash || b.label, w - 8 * s), x + w / 2, y + h / 2, "center");
