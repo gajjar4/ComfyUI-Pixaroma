@@ -44,11 +44,13 @@ import { notifyGraphChanged } from "../shared/graph_changed.mjs";
 import { registerNodeSettings, installNodeAccent } from "../shared/node_settings.mjs";
 import { registerNodeHelp } from "../shared/help.mjs";
 import {
-  NODE_NAME, readState, writeState, contentHeight, MIN_W, MIN_S, MAX_S,
+  NODE_NAME, readState, writeState, contentHeight, MIN_W, BASE_W, MIN_S, MAX_S,
 } from "./core.mjs";
 import { injectCSS, el, renderFace, flashButton } from "./ui.mjs";
 import { paintFace, hitButton, localMouse } from "./paint.mjs";
-import { openSettingsPanel, closeSettingsPanelFor } from "./settings.mjs";
+import {
+  openSettingsPanel, closeSettingsPanelFor, justClosedByOutsideClick,
+} from "./settings.mjs";
 import {
   addNode, removeNode, lastSample, peakFor, freeMemory, resetPeak, kick, isRunning,
 } from "./poll.mjs";
@@ -119,22 +121,45 @@ function repaint(node) {
   }
 }
 
-/** Put the node's height back in step with its settings. USER ACTIONS ONLY. */
+/**
+ * The width the Size control should move this node to.
+ *
+ * ⚠️ THE RATCHET THIS EXISTS TO STOP (reported 2026-08-24, reproduced first).
+ * Everything on the face grows with the scale, so raising the scale has to widen
+ * the node or the widest line clips. The first version only ever pushed the
+ * width UP, so a node walked 305 -> 323 -> 430 -> 645 on the way up and stayed
+ * at 645 all the way back down: the height shrank but the node did not, and a
+ * few goes on the slider left it enormous. The user's words were "when i try to
+ * make it larger and smaller from settings it get larger", which is exactly a
+ * one-way width.
+ *
+ * So the width follows the scale in BOTH directions - but ONLY while the node is
+ * still wearing the width we gave it (`BASE_W * its current scale`). A node the
+ * user has widened by hand, to get long bars, is theirs: it is only ever pushed
+ * up to the floor if the scale demands it, and never taken back down.
+ */
+function scaledWidth(node, s) {
+  const prev = clamp(Number(node._pmScale) || s, MIN_S, MAX_S);
+  const minW = Math.round(MIN_W * s);
+  const ours = Math.round(BASE_W * prev);
+  const w = Math.round(node.size?.[0] || ours);
+  if (Math.abs(w - ours) <= 2) return Math.max(Math.round(BASE_W * s), minW);
+  return Math.max(w, minW);
+}
+
+/** Put the node's size back in step with its settings. USER ACTIONS ONLY. */
 function syncSize(node) {
   const s = stateScale(node);
+  const w = scaledWidth(node, s);
   node._pmScale = s;
-  // Everything on the face grows with the scale, so the node has to be at least
-  // as wide as this scale needs or the widest line (the temp / power / peak
-  // strip) clips its own last reading.
-  const minW = Math.round(MIN_W * s);
   if (isVueNodes()) {
     node._pmRoot?.style.setProperty("--pm-s", String(s));
     // The HEIGHT is the layout store's here and a write to it is discarded, but
     // the WIDTH does take (measured on Run Timer). The height follows the
     // content by itself.
-    if (node.size[0] < minW) node.setSize?.([minW, node.size[1]]);
+    if (Math.round(node.size[0]) !== w) node.setSize?.([w, node.size[1]]);
   } else if (typeof node.setSize === "function") {
-    node.setSize([Math.max(node.size[0] || minW, minW), Math.round(unitH(node) * s)]);
+    node.setSize([w, Math.round(unitH(node) * s)]);
   }
   repaint(node);
 }
@@ -156,6 +181,18 @@ async function runButton(node, key, domBtn) {
       }, 900);
     }
   };
+  if (key === "settings") {
+    // A TOGGLE, and getting that right differs by renderer. In classic the
+    // button is painted on the canvas, so the pointerdown that presses it is a
+    // canvas pointerdown - which the panel's own outside-close guard has ALREADY
+    // acted on by the time LiteGraph routes the click to us. Without this check
+    // the panel would close and instantly reopen, so it could never be shut from
+    // the button that opened it. In Nodes 2.0 the button is a real DOM element
+    // inside our own subtree, the guard exempts it, and openSettingsPanel's own
+    // was-open check does the toggling.
+    if (!justClosedByOutsideClick(node)) openPanel(node);
+    return;
+  }
   if (key === "reset") {
     resetPeak(readState(node));
     flash("Reset");
@@ -315,7 +352,7 @@ function setupNode(node) {
   // so this only ever decides what a brand-new drop looks like. Deferring it
   // into a microtask would flatten every user-resized monitor back to small
   // (node UI convention #9).
-  const fresh = [MIN_W + 90, Math.round(unitH(node) * node._pmScale)];
+  const fresh = [Math.round(BASE_W * node._pmScale), Math.round(unitH(node) * node._pmScale)];
   if (Array.isArray(node.size)) {
     node.size[0] = fresh[0];
     node.size[1] = fresh[1];

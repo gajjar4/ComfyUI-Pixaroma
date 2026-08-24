@@ -33,6 +33,17 @@ function stopFollowing() {
   _stopFollow = null;
 }
 
+// The node whose panel an OUTSIDE CLICK last dismissed, and when. The face's own
+// Settings button needs it: in the classic renderer that button is painted on
+// the canvas, so pressing it IS an outside pointerdown and closes the panel
+// before LiteGraph has even routed the click to the node. Without this the
+// button could open the panel but never close it again (see index.js).
+let _lastOutsideClose = { node: null, at: 0 };
+
+export function justClosedByOutsideClick(node, withinMs = 400) {
+  return _lastOutsideClose.node === node && Date.now() - _lastOutsideClose.at < withinMs;
+}
+
 function outsideClose(e) {
   if (!_panel) return;
   if (_panel.contains(e.target)) return;
@@ -42,6 +53,11 @@ function outsideClose(e) {
   // the gear that opened us acts on click; without this exemption the panel
   // closes on its pointerdown and instantly reopens
   if (e.target.closest?.(".pix-nset-gear, [data-pix-monitor-gear]")) return;
+  // the face's OWN buttons (Nodes 2.0, where they are real DOM): pressing Free
+  // VRAM should not dismiss the panel, and Settings toggles it through
+  // openSettingsPanel's was-open check instead
+  if (e.target.closest?.(".pix-pm-btn")) return;
+  _lastOutsideClose = { node: _panelNode, at: Date.now() };
   closeSettingsPanel();
 }
 

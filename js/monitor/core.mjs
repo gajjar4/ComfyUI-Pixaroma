@@ -44,6 +44,13 @@ export const M = {
 // the width the auto-widen pulls a scaled-up node out to, so getting it from the
 // widest line is what stops a 2x node clipping its own last readout.
 export const MIN_W = 215;
+
+// The width a fresh node opens at, and the width the Size control treats as
+// "this node is still wearing its design width" - see the ratchet note in
+// index.js::syncSize. A node sitting at BASE_W * its scale is one WE sized, so
+// the Size control may move it in BOTH directions; any other width was chosen by
+// the user and is only ever pushed UP to the floor, never taken away.
+export const BASE_W = 305;
 export const MIN_S = 1;     // the drag floor: never smaller than the design size
 export const MAX_S = 5;     // sanity cap, so one wild drag cannot fill the canvas
 
@@ -85,6 +92,11 @@ export const BUTTONS = [
     hint: "Unload the models but keep the cached results, so parts of the graph that did not change are not recomputed.",
   },
   { key: "reset", label: "Reset peak", hint: "Clear the peak mark and start measuring again." },
+  {
+    key: "settings",
+    label: "Settings",
+    hint: "Choose which readouts to show, the layout, the size and how often it updates. The same panel as right-clicking the node.",
+  },
 ];
 
 export const DEFAULT_STATE = {
@@ -103,7 +115,7 @@ export const DEFAULT_STATE = {
     power: true,
     peak: true,
   },
-  buttons: { free: true, unload: false, reset: true },
+  buttons: { free: true, unload: false, reset: true, settings: true },
   interval: 1000,            // ms between samples
   fastWhileRunning: true,    // sample 3x faster while a workflow is running
   warn: true,                // amber past 85%, red past 95%
