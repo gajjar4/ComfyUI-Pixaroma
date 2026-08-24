@@ -91,9 +91,21 @@ export function injectCSS() {
     display:flex; flex:none;
   }
   .pix-fv-bar i{ display:block; height:100%; min-width:0; }
-  .pix-fv-used{ background:#3f3f3f; }
+  /* THREE TONES THAT ARE ACTUALLY TELLABLE APART (user could not read the bar).
+     The old pair were #3f3f3f and #242424, and the second sat 7 steps off the
+     #1d1d1d track - so "already free" looked like nothing was drawn there at
+     all, which is exactly how it was read. Now the occupied mass is the
+     LIGHTEST tone (it is the thing you are trying to see the size of), the
+     already-free tail is a clear band rather than a hole, and the accent sits
+     between them where the change happened. */
+  .pix-fv-used{ background:#4d4d4d; }
   .pix-fv-just{ background:${ACC}; }
-  .pix-fv-was{ background:#242424; }
+  .pix-fv-was{ background:#2f2f2f; }
+  /* A hairline on the LEADING edge of every segment after the first, so the
+     boundaries stay crisp where two tones meet. An inset shadow rather than a
+     border or a flex gap: it costs no layout, so the three widths still sum to
+     exactly the card and nothing gets clipped or rescaled. */
+  .pix-fv-bar i + i{ box-shadow:inset 1px 0 0 #191919; }
 
   .pix-fv-readout{
     min-height:${READOUT_H}px; display:flex; align-items:center; gap:6px;

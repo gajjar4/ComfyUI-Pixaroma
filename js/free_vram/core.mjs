@@ -78,7 +78,9 @@ export const PAD_Y = 0;
 // node's main control and the height that is left is the control itself.
 export const ROW_H = 23;
 // A rule, not a control - nobody clicks it, so it only has to be readable.
-export const BAR_H = 6;
+// 8, not 6: it carries THREE tones plus hairline separators, and at 6 the two
+// greys were not tellable apart. Readability wins the 2px back off the trim.
+export const BAR_H = 8;
 // MEASURED IN THE TALLEST STATE, which is the one with a result on screen: the
 // 13px bold freed-amount renders the row at 17px, while every other wording
 // needs 15-16. Declaring the tallest is what keeps the face a FIXED height

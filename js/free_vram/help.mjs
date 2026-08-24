@@ -52,12 +52,31 @@ export const FREE_VRAM_HELP = {
       ],
     },
     {
-      heading: "Reading the node",
+      heading: "Reading the bar",
       body:
-        "The bar is the whole card. Grey is still in use, orange is what this node just "
-        + "released, and the dark part was already free before it ran. Hover it for the exact "
-        + "numbers.\n\n"
-        + "Underneath, the line says how much came back and how much of the card is free now. "
+        "The whole bar is your whole graphics card. It never changes length: what changes is how "
+        + "it is divided. Left to right it is always used, then what this node released, then "
+        + "what was already free.\n\n"
+        + "The one rule: everything to the RIGHT of the grey is free memory, and the orange is "
+        + "the part of it you gained by adding this node. A wide orange band means it did real "
+        + "work. A sliver means it barely helped, so something else is holding the card and the "
+        + "node is probably in the wrong place. No orange at all means there was nothing loaded "
+        + "to let go of.\n\n"
+        + "Hover the bar for the four figures as text.",
+      defs: [
+        ["Grey", "Still in use after the cleanup. This is the card minus whatever is free now."],
+        ["Orange", "What this node just released: how much was free afterwards, minus how much "
+          + "was free before."],
+        ["Dark", "What was already free before it ran. Nothing to do with this node, it is just "
+          + "the room you already had."],
+      ],
+    },
+    {
+      heading: "Reading the line underneath",
+      body:
+        "It says how much came back, then how much of the card is free now. So `freed 8.4 GB` "
+        + "next to `11.6 / 24 GB free` means this node handed back 8.4 of the 11.6 that are now "
+        + "available on a 24 GB card.\n\n"
         + "With Cache it says returned rather than freed, because that memory went back to the "
         + "card rather than becoming newly available to ComfyUI.",
     },
