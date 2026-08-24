@@ -150,29 +150,31 @@ function repaint(node) {
 }
 
 /**
- * The width the Size control should move this node to.
+ * The width the Size control should move this node to: the CURRENT width,
+ * scaled proportionally from the previous scale to the new one, floored at
+ * MIN_W * scale.
  *
- * ⚠️ THE RATCHET THIS EXISTS TO STOP (reported 2026-08-24, reproduced first).
- * Everything on the face grows with the scale, so raising the scale has to widen
- * the node or the widest line clips. The first version only ever pushed the
- * width UP, so a node walked 305 -> 323 -> 430 -> 645 on the way up and stayed
- * at 645 all the way back down: the height shrank but the node did not, and a
- * few goes on the slider left it enormous. The user's words were "when i try to
- * make it larger and smaller from settings it get larger", which is exactly a
- * one-way width.
- *
- * So the width follows the scale in BOTH directions - but ONLY while the node is
- * still wearing the width we gave it (`BASE_W * its current scale`). A node the
- * user has widened by hand, to get long bars, is theirs: it is only ever pushed
- * up to the floor if the scale demands it, and never taken back down.
+ * ⚠️ NO OWNERSHIP HEURISTIC - the second width-ratchet report proved one
+ * cannot work (2026-08-24, reproduced both times before fixing).
+ * - Ratchet v1: the width only ever went UP with the scale and never came
+ *   back (305 -> 645 and stuck).
+ * - Ratchet v2, the fix's own bug: v1's fix scaled the width both ways ONLY
+ *   for a node still wearing `BASE_W * scale`, treating everything else as a
+ *   user-chosen width to preserve. But the SYSTEM creates other widths too - a
+ *   corner drag floors the width to MIN_W * scale - and those were mistaken
+ *   for user choices: reproduced, a floored 323 node wiggled 1 -> 2 -> 1 on
+ *   the slider ended 430 wide at scale 1, forever.
+ * Proportional needs no guess about whose width it is: up-then-down lands back
+ * where it started (rounding self-corrects, verified 305 -> 610 -> 915 -> 610
+ * -> 305), a user-widened node keeps its PROPORTION (2x means twice the node
+ * you shaped, matching what the corner drag does), and the floor still stops
+ * the widest line from clipping.
  */
 function scaledWidth(node, s) {
   const prev = clamp(Number(node._pmScale) || s, MIN_S, MAX_S);
   const minW = Math.round(MIN_W * s);
-  const ours = Math.round(BASE_W * prev);
-  const w = Math.round(node.size?.[0] || ours);
-  if (Math.abs(w - ours) <= 2) return Math.max(Math.round(BASE_W * s), minW);
-  return Math.max(w, minW);
+  const w = Math.round(node.size?.[0] || BASE_W * prev);
+  return Math.max(Math.round((w * s) / prev), minW);
 }
 
 /** Put the node's size back in step with its settings. USER ACTIONS ONLY. */

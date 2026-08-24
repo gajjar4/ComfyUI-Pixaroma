@@ -142,6 +142,10 @@ function chipRow(wrap, items, isOn, onPick, isDisabled) {
 function switchRow(wrap, node, key, label, sub, after) {
   const row = el("div", "pix-pm-prow");
   const sw = el("span", "pix-pm-sw" + (readState(node)[key] ? " on" : ""));
+  // the KNOB. The CSS styles `.pix-pm-sw i` but nothing created it, so every
+  // switch rendered as a bare orange pill with no visible on/off state
+  // (user-reported with a screenshot, 2026-08-24)
+  sw.appendChild(el("i"));
   sw.setAttribute("role", "switch");
   sw.setAttribute("aria-checked", String(!!readState(node)[key]));
   sw.tabIndex = 0;
