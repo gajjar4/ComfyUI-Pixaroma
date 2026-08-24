@@ -124,6 +124,13 @@ function chipRow(wrap, items, isOn, onPick, isDisabled) {
     b.onclick = () => {
       onPick(it);
       sync();
+      // Same contract as switchRow/sliderRow: the node must be resized and
+      // re-rendered to fit what was just chosen. This was MISSING here, so
+      // toggling Layout/Show/Buttons changed the state but never the node -
+      // in classic the leftover height was then re-read as a BIGGER scale
+      // (the height carries the scale), so hiding rows made the remaining
+      // ones grow instead of the box shrinking (review finding, 2026-08-24).
+      _onChange?.();
     };
     grid.appendChild(b);
   }
@@ -298,6 +305,9 @@ export function openSettingsPanel(node, onChange) {
   rBtn.onclick = () => {
     const keep = readState(node).scale;
     writeState(node, { ...DEFAULT_STATE, scale: keep });
+    // apply the restored rows to the node BEFORE closing - closeSettingsPanel
+    // nulls _onChange, and opening a panel deliberately applies nothing
+    _onChange?.();
     closeSettingsPanel();
     _panelSoftReopen(node, onChange);
   };
@@ -324,7 +334,11 @@ export function openSettingsPanel(node, onChange) {
     document.addEventListener("pointerdown", outsideClose, true);
     document.addEventListener("keydown", escClose, true);
   }, 0);
-  _onChange?.();
+  // Deliberately NO _onChange call here: opening a panel is looking, not
+  // changing, and syncSize's height recompute can differ from a drag-set height
+  // by 1px (the committed scale is rounded to 2dp), so an apply-on-open
+  // rewrote node.size and flagged an untouched workflow modified from merely
+  // viewing the settings (review finding, 2026-08-24; measured 201 -> 202).
   return panel;
 }
 

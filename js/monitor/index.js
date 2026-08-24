@@ -187,7 +187,12 @@ function syncSize(node) {
     // content by itself.
     if (Math.round(node.size[0]) !== w) node.setSize?.([w, node.size[1]]);
   } else if (typeof node.setSize === "function") {
-    node.setSize([w, Math.round(unitH(node) * s)]);
+    // Diff-gated like the Vue branch above: a syncSize that changes nothing
+    // must WRITE nothing, or any future no-op caller re-dirties the workflow.
+    const h = Math.round(unitH(node) * s);
+    if (Math.round(node.size[0]) !== w || Math.round(node.size[1]) !== h) {
+      node.setSize([w, h]);
+    }
   }
   repaint(node);
 }
