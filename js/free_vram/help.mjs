@@ -118,45 +118,40 @@ export const FREE_VRAM_HELP = {
         + "to let go of costs you the time to load it back, so on a run where there was plenty "
         + "of room anyway the node is pure delay.\n\n"
         + "The number to set is not about your card. It is about the NEXT thing that has to "
-        + "load: set the limit to roughly the size of the model waiting downstream, so the node "
-        + "acts when that model would not fit and stays out of the way when it would. If you do "
-        + "not know the size, the file on disk is close enough.",
+        + "load: set the limit to how much free memory that stage needs, so the node acts when "
+        + "it would not have fitted and stays out of the way when it would. The next section "
+        + "works through it.",
     },
     {
       heading: "What to set the limit to",
       body:
-        "Run the workflow once with the limit OFF and read the bar. The number you want is a "
-        + "little more than the grey part, because the grey is what the next stage will be "
-        + "asking for.\n\n"
-        + "As a starting point, by card:",
+        "The limit is measured against FREE memory, not used memory. The node acts when less "
+        + "than that much is free, and stays out of the way when more is.\n\n"
+        + "So the number is not your card size. It is HOW MUCH FREE MEMORY THE NEXT STAGE NEEDS. "
+        + "Set it to that, and the node acts exactly on the runs where that stage would not have "
+        + "fitted.\n\n"
+        + "Monitor Pixaroma tells you the number directly: run that stage and read its PEAK. "
+        + "A peak of 21 GB means the stage needs 21 GB, so the limit is 21.",
       table: {
-        headers: ["Your card", "Try a limit of", "Because"],
+        headers: ["The next stage needs", "Set the limit to", "On a 24 GB card it then acts when"],
         rows: [
-          ["8 GB", "6 GB",
-           "Almost nothing fits twice, so you want it firing on nearly every run. A low limit "
-           + "here mostly protects you from the pointless case where the workflow only ran a "
-           + "small model."],
-          ["12 GB", "8 GB",
-           "Enough room for one big model but not two. Fires whenever a real model is still "
-           + "resident, skips when only a VAE or an upscaler was used."],
-          ["16 GB", "10 GB",
-           "A common SDXL or Flux setup. Leaves the node quiet on light runs and acting before "
-           + "anything large loads."],
-          ["24 GB", "12 GB",
-           "You can usually hold one big model with room to spare, so only bother when half the "
-           + "card is gone. Raise it towards 16 GB if you run video models."],
-          ["32 GB and up", "half the card",
-           "At this size the limit is only there to stop needless reloads. Set it to half and "
-           + "forget it."],
+          ["4 GB, a VAE or an upscaler", "4 GB", "over 20 GB is in use, so hardly ever"],
+          ["8 GB, SD1.5 or SDXL", "8 GB", "over 16 GB is in use"],
+          ["12 GB, Flux or a big SDXL stack", "12 GB", "over 12 GB is in use"],
+          ["21 GB, a video model", "21 GB, or 22 for headroom", "over 3 GB is in use, so nearly every run"],
         ],
       },
       bullets: [
-        "Higher limit means it acts more often. Lower means it acts less.",
-        "Set it too high and it fires on every run, which is the same as leaving the limit off.",
-        "Set it too low and it never fires, and you are back to the out of memory error it was "
-          + "meant to prevent.",
-        "Two stages of similar size on one card is the case where this matters most: set the "
-          + "limit just above what stage two needs.",
+        "Round UP, never down. A limit below what the stage needs lets the node skip on a run "
+          + "where the room was genuinely needed, which is the out of memory error it was added "
+          + "to prevent.",
+        "Do NOT set it from your card size. A 24 GB card running a 21 GB video model wants 21, "
+          + "not 12: at 12 the node would skip with 19 GB free and the model still would not fit.",
+        "When the next stage needs most of the card, the limit stops being much use. It will act "
+          + "on nearly every run, which is correct, and all it saves you is the pointless "
+          + "cleanup right after a fresh start.",
+        "If you have no idea what the stage needs, start at half your card and watch the face. "
+          + "Seeing skipped on a run that then failed means the number is too low.",
       ],
     },
     {
