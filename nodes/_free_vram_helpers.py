@@ -166,23 +166,44 @@ def format_bytes(value, places=1):
     return "%s%d B" % (sign, int(num))
 
 
+def uses_driver_view(state):
+    """Whether this mode's meaningful 'free' number is the DRIVER's, not ComfyUI's.
+
+    THE single decision behind the whole readout, and every consumer must ask
+    it - the threshold gate, the headline and the bar alike. Getting it right in
+    one place and wrong in the others is exactly how the face ended up able to
+    claim "returned 6 GB" above a bar with no orange in it at all.
+
+    * Unloading models raises what ComfyUI can see as free, so ComfyUI's own
+      number is the meaningful one there.
+    * Emptying the cache does NOT move it: get_free_memory already counts
+      torch's spare reserved blocks as free. What actually changes is how much
+      the DRIVER has back - the number nvidia-smi shows, and the one that
+      matters when something outside ComfyUI wants the card, which is the whole
+      reason Cache mode exists.
+    """
+    return not plan(state)["models"]
+
+
+def reading_pair(state, before, after, driver_before, driver_after):
+    """The (before, after) pair that means something for this mode."""
+    if uses_driver_view(state):
+        return driver_before, driver_after
+    return before, after
+
+
+def headline_label(state):
+    return "returned" if uses_driver_view(state) else "freed"
+
+
 def headline_freed(state, before, after, driver_before, driver_after):
     """(bytes, label) - the one number the node face leads with.
 
-    Which number is meaningful depends ENTIRELY on the mode, so it is picked
-    from the settings and never from which delta happens to be bigger (a
-    guess like that misreads a run where nothing was there to free):
-
-    * Unloading models raises what ComfyUI can see as free, so the headline is
-      that delta.
-    * Emptying the cache does NOT: get_free_memory already counts torch's spare
-      reserved blocks as free, so that number barely moves. What actually
-      changes is how much the DRIVER has back - the number nvidia-smi shows,
-      and the one that matters when something outside ComfyUI wants the card.
+    Picked from the MODE, never from which delta happens to be bigger: a guess
+    like that misreads a run where there was simply nothing to free.
     """
-    if plan(state)["models"]:
-        return _delta(before, after), "freed"
-    return _delta(driver_before, driver_after), "returned"
+    lo, hi = reading_pair(state, before, after, driver_before, driver_after)
+    return _delta(lo, hi), headline_label(state)
 
 
 def _delta(before, after):

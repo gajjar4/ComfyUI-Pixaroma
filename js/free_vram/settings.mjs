@@ -214,12 +214,21 @@ export function openSettingsPanel(node, onChange) {
   thSl.step = "0.5";
   thSl.value = String(readState(node).thresholdGb);
   const thVal = el("span", "pix-fv-qval", "");
+  // ⚠️ READ THE STATE, NOT `thSl.value`. A range input SANITISES on assignment:
+  // giving it 100 when its max is 64 stores 64, and reading `.value` back
+  // returns "64". The stored setting still says 100 - readState allows up to 128
+  // so a value set on a bigger machine survives a round trip - so printing the
+  // input's value made the panel say "under 64 GB" while the node's own face
+  // correctly said 100. The panel and the face disagreed about one setting.
   syncThreshold = () => {
     const st = readState(node);
     thSl.disabled = !st.useThreshold;
     thVal.style.opacity = st.useThreshold ? "1" : "0.35";
-    thVal.textContent = `under ${thSl.value} GB`;
-    thSl.title = `Only free when less than ${thSl.value} GB is already free`;
+    thVal.textContent = `under ${st.thresholdGb} GB`;
+    thSl.title = st.thresholdGb > THRESHOLD_MAX_SLIDER
+      ? `Only free when less than ${st.thresholdGb} GB is already free. That is above `
+        + `this slider's range, so the handle sits at its end - moving it will lower the value.`
+      : `Only free when less than ${st.thresholdGb} GB is already free`;
     thVal.title = thSl.title;
   };
   thSl.oninput = () => {

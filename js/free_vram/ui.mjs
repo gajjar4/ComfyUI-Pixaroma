@@ -333,9 +333,14 @@ function paintReadout(node, st, readout) {
   amount.textContent = formatBytes(report.freed);
   lead.textContent = `${report.label || "freed"} `;
   lead.appendChild(amount);
+  // The RAW pairs, not report.before/after - those two now follow whichever view
+  // the MODE reasons in, so reading them here would print one view twice and
+  // label one of them wrongly. comfyBefore/comfyAfter ride along for exactly
+  // this, and fall back to before/after for a report from an older build.
+  const cBefore = report.comfyBefore ?? report.before;
+  const cAfter = report.comfyAfter ?? report.after;
   lead.title = [
-    `ComfyUI can see: ${formatBytes(report.before)} free before, ` +
-      `${formatBytes(report.after)} after`,
+    `ComfyUI can see: ${formatBytes(cBefore)} free before, ${formatBytes(cAfter)} after`,
     `The card reports: ${formatBytes(report.driverBefore)} free before, ` +
       `${formatBytes(report.driverAfter)} after`,
   ].join("\n");

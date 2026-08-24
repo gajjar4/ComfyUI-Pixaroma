@@ -30,11 +30,13 @@ from ._free_vram_helpers import (
     bar_segments,
     format_bytes,
     headline_freed,
+    headline_label,
     parse_state,
     plan,
     should_always_run,
     should_free,
     threshold_bytes,
+    uses_driver_view,
 )
 
 
@@ -146,13 +148,24 @@ class PixaromaFreeVram:
             }
         steps = plan(state)
         try:
-            total, before, driver_before, device = _read_memory()
+            total, comfy_before, driver_before, device = _read_memory()
         except Exception as exc:  # no torch device, an exotic backend, anything
             return {
                 "ok": False,
                 "message": "Could not read the graphics memory: %s" % exc,
                 "mode": state["mode"],
             }
+
+        # ONE decision, taken once, drives the THRESHOLD GATE, the headline, the
+        # bar and the readout - so they can never contradict each other.
+        #
+        # It was applied to the headline alone at first, and the two consumers
+        # left behind both misbehaved in Cache mode: the gate measured ComfyUI's
+        # free figure (which cache-emptying does not move), so it skipped exactly
+        # when an outside app was starving; and the bar drew its orange from the
+        # same unmoving pair, so the face could read "returned 6.0 GB" above a bar
+        # with no orange in it. Both reproduced before this was changed.
+        before = driver_before if uses_driver_view(state) else comfy_before
 
         go, reason = should_free(state, before)
         if not go:
@@ -166,8 +179,11 @@ class PixaromaFreeVram:
                     format_bytes(before), format_bytes(limit)),
                 "mode": state["mode"], "device": device,
                 "total": total, "before": before, "after": before,
+                "comfyBefore": comfy_before, "comfyAfter": comfy_before,
                 "driverBefore": driver_before, "driverAfter": driver_before,
-                "freed": 0, "label": "freed",
+                # The mode's own word even here, so a skipped Cache run does not
+                # call itself "freed" when a real one would say "returned".
+                "freed": 0, "label": headline_label(state),
                 "bar": [used, just, was],
             }
 
@@ -192,11 +208,13 @@ class PixaromaFreeVram:
             }
 
         try:
-            _t, after, driver_after, _d = _read_memory()
+            _t, comfy_after, driver_after, _d = _read_memory()
         except Exception:
-            after, driver_after = before, driver_before
+            comfy_after, driver_after = comfy_before, driver_before
 
-        freed, label = headline_freed(state, before, after, driver_before, driver_after)
+        after = driver_after if uses_driver_view(state) else comfy_after
+        freed, label = headline_freed(state, comfy_before, comfy_after,
+                                      driver_before, driver_after)
         used, just, was = bar_segments(total, before, after)
         return {
             "ok": True,
@@ -204,7 +222,11 @@ class PixaromaFreeVram:
             "reason": "",
             "message": "",
             "mode": state["mode"], "device": device,
+            # before/after are the pair this MODE reasons in - the bar and the
+            # readout follow them. The two raw pairs ride along unchanged so the
+            # hover tooltip can still show both views side by side.
             "total": total, "before": before, "after": after,
+            "comfyBefore": comfy_before, "comfyAfter": comfy_after,
             "driverBefore": driver_before, "driverAfter": driver_after,
             "freed": freed, "label": label,
             "bar": [used, just, was],
