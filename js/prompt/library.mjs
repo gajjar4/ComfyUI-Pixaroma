@@ -654,3 +654,40 @@ export function applyImport(parsed, mode) {
   for (const name of replaced) { try { resetCursor(listKey(name)); } catch { /* ignore */ } }
   return { added: toAdd.length, replaced: replaced.length };
 }
+
+export async function parseTxtWildcards(filesList) {
+  const tags = [];
+  for (const file of filesList) {
+    const rawName = file.name.replace(/\.txt$/i, "").trim();
+    const tagName = cleanName(rawName);
+    if (!tagName) continue;
+    try {
+      const content = await file.text();
+      const lines = content
+        .split(/\r?\n/)
+        .map((l) => l.trim())
+        .filter((l) => l && !l.startswith?.("#") && !l.startsWith("//"));
+      if (lines.length === 0) continue;
+      tags.push({
+        name: tagName,
+        cat: "Wildcards",
+        text: lines.join("\n"),
+        kind: "list",
+      });
+    } catch {
+      // Skip unreadable file
+    }
+  }
+  return {
+    valid: tags.length > 0,
+    version: 1,
+    data: {
+      version: 1,
+      categories: [],
+      listCats: ["Wildcards"],
+      catModes: { Wildcards: "roll" },
+      tags,
+    },
+  };
+}
+

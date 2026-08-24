@@ -321,6 +321,7 @@ export function syncColumns(ta, bd) {
 const TAG_TOKEN_RE = /@([a-zA-Z0-9_\-]*)$/;
 const WILD_TOKEN_RE = /\*([a-zA-Z0-9_\-]*)$/;
 const LIST_TOKEN_RE = /#([a-zA-Z0-9_\-]*)$/;
+const SLASH_TOKEN_RE = /\/([a-zA-Z0-9_\-]*)$/;
 let _acEl = null;
 let _ac = null; // { ctx, ta, start, items, sel, sym }
 
@@ -382,6 +383,15 @@ export function maybeAC(ctx, ta) {
     openAC(ctx, ta, start, ml[1].toLowerCase(), "list");
     return;
   }
+  // /list autocomplete - same boundary for slash alias.
+  const ms = SLASH_TOKEN_RE.exec(upto);
+  if (ms) {
+    const start = pos - ms[0].length;
+    const prev = prevCodePoint(ta.value, start);
+    if (prev && /[\p{L}\p{N}\p{M}_\/]/u.test(prev)) { closeAC(); return; }
+    openAC(ctx, ta, start, ms[1].toLowerCase(), "slash_list");
+    return;
+  }
   closeAC();
 }
 function openAC(ctx, ta, start, q, mode) {
@@ -390,12 +400,12 @@ function openAC(ctx, ta, start, q, mode) {
   el.style.setProperty("--acc", ctx.accent ? ctx.accent() : BRAND);
   el.innerHTML = "";
   const flat = [];
-  const sym = mode === "wild" ? "*" : mode === "list" ? "#" : "@";
+  const sym = mode === "slash_list" ? "/" : (mode === "wild" ? "*" : (mode === "list" ? "#" : "@"));
 
-  if (mode === "list") {
+  if (mode === "list" || mode === "slash_list") {
     // #lists offer ONLY the tags on the List side (the Text / List switch in the
     // library), grouped by their List category, with the number of options they roll
-    // from - straight out of listOf so the count is exactly the pool. Inserts #name.
+    // from - straight out of listOf so the count is exactly the pool. Inserts #name or /name.
     const lists = getTags()
       .filter((t) => isListTag(t) && t.name.toLowerCase().includes(q))
       .map((t) => ({ name: t.name, cat: catOf(t), lines: listOf(t.name)?.lines || [] }))
@@ -404,7 +414,7 @@ function openAC(ctx, ta, start, q, mode) {
       const e = document.createElement("div");
       e.className = "pix-prm-ac-empty";
       e.textContent = q
-        ? `No list matches "#${q}".`
+        ? `No list matches "${sym}${q}".`
         : "No lists yet. Open Tags, then switch a tag to List and put one option per line.";
       el.appendChild(e);
     } else {
@@ -421,7 +431,7 @@ function openAC(ctx, ta, start, q, mode) {
           const d = document.createElement("div");
           d.className = "pix-prm-ac-i list" + (idx === 0 ? " sel" : "");
           d.dataset.i = String(idx);
-          d.innerHTML = `<div class="pix-prm-ac-n">#${escapeHTML(t.name)}</div>` +
+          d.innerHTML = `<div class="pix-prm-ac-n">${sym}${escapeHTML(t.name)}</div>` +
             `<div class="pix-prm-ac-d">${t.lines.length} option${t.lines.length === 1 ? "" : "s"} · ${escapeHTML(t.lines.slice(0, 3).join(" · "))}</div>`;
           d.addEventListener("mousedown", (e) => { e.preventDefault(); pickAC(flat[idx]); });
           el.appendChild(d);

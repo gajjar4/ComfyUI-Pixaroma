@@ -11,7 +11,7 @@ import { installGraphUndoGuard } from "../shared/graph_undo_guard.mjs";
 import { pixAsset } from "../shared/api_url.mjs";
 import { BRAND } from "../shared/utils.mjs";
 import {
-  getLibrary, reloadLibrary, isSameAsStored, commitLibrary, flushLibrary, exportLibraryJSON, parseImport, applyImport,
+  getLibrary, reloadLibrary, isSameAsStored, commitLibrary, flushLibrary, exportLibraryJSON, parseImport, applyImport, parseTxtWildcards,
   importCategories, subsetImport, isListTag, tagLines, catOf, sideOfCat, tagMode, catMode,
   reorderCategoryStep, reorderCategoryTo, canMoveCategory,
   TEXT_BUCKET, LIST_BUCKET, NAME_RE,
@@ -1459,6 +1459,41 @@ function openExportMenu(anchor) {
   placeMenu(menu, anchor);
   _catMenu = menu;
 }
+function pickTxtWildcardFiles() {
+  const inp = document.createElement("input");
+  inp.type = "file";
+  inp.accept = ".txt,text/plain";
+  inp.multiple = true;
+  inp.style.display = "none";
+  inp.addEventListener("change", () => {
+    const files = inp.files ? Array.from(inp.files) : [];
+    inp.remove();
+    if (!files.length) return;
+    startTxtImport(files);
+  });
+  inp.addEventListener("cancel", () => inp.remove());
+  document.body.appendChild(inp);
+  inp.click();
+}
+async function startTxtImport(files) {
+  if (!_overlay || !_data) return;
+  flushLibrary();
+  const parsed = await parseTxtWildcards(files);
+  if (!parsed.valid || !parsed.data.tags.length) {
+    toast("warn", "No valid .txt wildcard files found.");
+    return;
+  }
+  if (!parsed.conflicts?.length) {
+    const sub = subsetImport(parsed, ["Wildcards"]);
+    if (sub.conflicts && sub.conflicts.length) {
+      showImportModal(sub);
+    } else {
+      applyLibraryImport(sub, "both");
+    }
+  } else {
+    showImportModal(parsed);
+  }
+}
 function pickImportFile() {
   const inp = document.createElement("input");
   inp.type = "file"; inp.accept = ".json,application/json"; inp.style.display = "none";
@@ -1704,6 +1739,7 @@ export function openLibraryEditor(node, opts) {
     `<div class="pix-prled-content"></div></div>` +
     `<div class="pix-prled-foot"><button class="pix-prled-btn imp-export" title="Save your tags to a file: everything, or just one category"><span>⭳</span> Export ▾</button>` +
     `<button class="pix-prled-btn imp-import" title="Bring tags in from a file - you choose which categories"><span>⭱</span> Import</button>` +
+    `<button class="pix-prled-btn imp-txt-wildcard" title="Import standard wildcard .txt files (each file becomes a list tag)"><span>📄</span> Import Wildcards (.txt)</button>` +
     `<button class="pix-prled-btn imp-more" title="More library actions">⋯</button>` +
     `<button class="pix-prled-btn push imp-done">Done</button></div>`;
   document.body.appendChild(ov);
@@ -1717,6 +1753,7 @@ export function openLibraryEditor(node, opts) {
   ov.querySelector(".imp-done").addEventListener("click", closeLibraryEditor);
   ov.querySelector(".imp-export").addEventListener("click", (e) => openExportMenu(e.currentTarget));
   ov.querySelector(".imp-import").addEventListener("click", pickImportFile);
+  ov.querySelector(".imp-txt-wildcard").addEventListener("click", pickTxtWildcardFiles);
   ov.querySelector(".imp-more").addEventListener("click", (e) => openLibraryMenu(e.currentTarget));
   installSidebarResize(ov);
   // A dragged category row carries its name as text/plain as well, so the drag starts
