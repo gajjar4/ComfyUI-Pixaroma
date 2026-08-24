@@ -53,6 +53,19 @@ export const FREE_VRAM_HELP = {
     },
     {
       heading: "Reading the bar",
+      // A REAL bar, not a description of one. Naming the three colours in prose
+      // was already here and still did not land, because the words were not the
+      // thing (free-vram.md #11b).
+      bar: {
+        caption: ["0 GB", "the whole card", "24 GB"],
+        segments: [
+          { pct: 51.7, color: "#4d4d4d", value: "12.4 GB", label: "still in use" },
+          { pct: 35, color: "#f66744", value: "8.4 GB", label: "this node just freed" },
+          { pct: 13.3, color: "#2f2f2f", value: "3.2 GB", label: "was already free" },
+        ],
+        note: "Everything to the RIGHT of the grey is free memory: 8.4 + 3.2 = 11.6 GB free. "
+            + "The three parts always add up to the whole card.",
+      },
       body:
         "The whole bar is your whole graphics card. It never changes length: what changes is how "
         + "it is divided. Left to right it is always used, then what this node released, then "
@@ -100,10 +113,51 @@ export const FREE_VRAM_HELP = {
       heading: "Only when memory is low",
       body:
         "Also behind the gear. Set a limit and the node does nothing while more than that much "
-        + "is already free.\n\n"
+        + "is already free. When it skips, the face says skipped.\n\n"
         + "Worth turning on once a workflow is settled. Letting go of a model you did not need "
         + "to let go of costs you the time to load it back, so on a run where there was plenty "
-        + "of room anyway the node is pure delay. When it skips, the face says so.",
+        + "of room anyway the node is pure delay.\n\n"
+        + "The number to set is not about your card. It is about the NEXT thing that has to "
+        + "load: set the limit to roughly the size of the model waiting downstream, so the node "
+        + "acts when that model would not fit and stays out of the way when it would. If you do "
+        + "not know the size, the file on disk is close enough.",
+    },
+    {
+      heading: "What to set the limit to",
+      body:
+        "Run the workflow once with the limit OFF and read the bar. The number you want is a "
+        + "little more than the grey part, because the grey is what the next stage will be "
+        + "asking for.\n\n"
+        + "As a starting point, by card:",
+      table: {
+        headers: ["Your card", "Try a limit of", "Because"],
+        rows: [
+          ["8 GB", "6 GB",
+           "Almost nothing fits twice, so you want it firing on nearly every run. A low limit "
+           + "here mostly protects you from the pointless case where the workflow only ran a "
+           + "small model."],
+          ["12 GB", "8 GB",
+           "Enough room for one big model but not two. Fires whenever a real model is still "
+           + "resident, skips when only a VAE or an upscaler was used."],
+          ["16 GB", "10 GB",
+           "A common SDXL or Flux setup. Leaves the node quiet on light runs and acting before "
+           + "anything large loads."],
+          ["24 GB", "12 GB",
+           "You can usually hold one big model with room to spare, so only bother when half the "
+           + "card is gone. Raise it towards 16 GB if you run video models."],
+          ["32 GB and up", "half the card",
+           "At this size the limit is only there to stop needless reloads. Set it to half and "
+           + "forget it."],
+        ],
+      },
+      bullets: [
+        "Higher limit means it acts more often. Lower means it acts less.",
+        "Set it too high and it fires on every run, which is the same as leaving the limit off.",
+        "Set it too low and it never fires, and you are back to the out of memory error it was "
+          + "meant to prevent.",
+        "Two stages of similar size on one card is the case where this matters most: set the "
+          + "limit just above what stage two needs.",
+      ],
     },
     {
       heading: "Good to know",

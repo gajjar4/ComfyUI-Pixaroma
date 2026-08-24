@@ -236,6 +236,64 @@ function buildSection(section) {
     }
     if (row.childElementCount) sec.appendChild(row);
   }
+  // `bar: { segments: [{pct, color, value, label}], caption?, note? }` - a real
+  // proportional bar with a legend, for explaining a readout that IS a bar.
+  // Describing colours in prose does not work: Free VRAM's help named all three
+  // and the user still could not read the node, because the words were not the
+  // thing. Generic on purpose - any node whose face carries a meter can use it.
+  //
+  // `color` is validated to a hex literal or a CSS variable, and anything else
+  // falls back to grey. These defs are ours, not user input, but this string
+  // goes into a style attribute and an allow-list costs one line.
+  if (section.bar && Array.isArray(section.bar.segments)) {
+    const wrap = el("div", "pixhb-meterwrap");
+    // caption: a plain string, or an ARRAY of parts spread across the bar's
+    // width (["0 GB", "the whole card", "24 GB"]). The array form exists so a
+    // scale can be labelled at both ends without padding a string with spaces,
+    // which would only line up at one font size.
+    if (section.bar.caption) {
+      const cap = el("div", "pixhb-metercap");
+      const parts = Array.isArray(section.bar.caption) ? section.bar.caption : [section.bar.caption];
+      for (const part of parts) {
+        const span = el("span");
+        span.innerHTML = fmt(String(part));
+        cap.appendChild(span);
+      }
+      wrap.appendChild(cap);
+    }
+    const bar = el("div", "pixhb-meter");
+    const safeColor = (c) =>
+      (typeof c === "string" && /^(#[0-9a-fA-F]{3,8}|var\(--[\w-]+(,\s*#[0-9a-fA-F]{3,8})?\))$/.test(c.trim()))
+        ? c.trim() : "#4d4d4d";
+    for (const seg of section.bar.segments) {
+      const i = el("i");
+      const pct = Math.max(0, Math.min(100, Number(seg?.pct) || 0));
+      i.style.width = `${pct}%`;
+      i.style.background = safeColor(seg?.color);
+      if (seg?.value || seg?.label) i.title = [seg.value, seg.label].filter(Boolean).join(" - ");
+      bar.appendChild(i);
+    }
+    wrap.appendChild(bar);
+    const key = el("div", "pixhb-meterkey");
+    for (const seg of section.bar.segments) {
+      if (!seg?.value && !seg?.label) continue;
+      const item = el("div", "pixhb-meterkeyitem");
+      const sw = el("span", "pixhb-metersw");
+      sw.style.background = safeColor(seg?.color);
+      item.appendChild(sw);
+      const txt = el("span");
+      txt.innerHTML = (seg.value ? `<b>${fmt(String(seg.value))}</b> ` : "") + fmt(String(seg.label || ""));
+      item.appendChild(txt);
+      key.appendChild(item);
+    }
+    if (key.childElementCount) wrap.appendChild(key);
+    if (section.bar.note) {
+      const note = el("div", "pixhb-meternote");
+      note.innerHTML = fmt(section.bar.note);
+      wrap.appendChild(note);
+    }
+    sec.appendChild(wrap);
+  }
   if (section.table && Array.isArray(section.table.rows)) {
     const table = el("table", "pixhb-table");
     if (Array.isArray(section.table.headers)) {

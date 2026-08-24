@@ -303,6 +303,25 @@ export function injectHelpBrowserCSS() {
 .pixhb-defs { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; align-items: baseline; font-size: 12.5px; }
 .pixhb-defs dt { color: #fff; font-weight: 600; white-space: nowrap; }
 .pixhb-defs dd { margin: 0; color: #bcb6b3; }
+/* The bar block: a real proportional meter with a legend, for a node whose face
+   carries one. Deliberately taller than the node's own bar (14 vs 8px) - here it
+   is the subject of the page, not a glance-at readout.
+   NB: no backticks in this file's comments - it is one big template literal. */
+.pixhb-meterwrap { margin: 2px 0 4px; }
+.pixhb-metercap {
+  display: flex; justify-content: space-between; font-size: 11px;
+  color: #9a9a9a; margin-bottom: 5px;
+}
+.pixhb-meter {
+  height: 14px; border-radius: 4px; overflow: hidden; display: flex; background: #1d1d1d;
+}
+.pixhb-meter i { display: block; height: 100%; min-width: 0; }
+.pixhb-meter i + i { box-shadow: inset 1px 0 0 #191919; }
+.pixhb-meterkey { display: flex; flex-wrap: wrap; gap: 6px 16px; margin-top: 8px; font-size: 12px; }
+.pixhb-meterkeyitem { display: flex; align-items: center; gap: 6px; color: #bcb6b3; }
+.pixhb-meterkeyitem b { color: #fff; font-weight: 600; }
+.pixhb-metersw { width: 12px; height: 12px; border-radius: 3px; flex: none; }
+.pixhb-meternote { margin-top: 8px; font-size: 12.5px; color: #cfcac7; }
 .pixhb-table { width: 100%; border-collapse: collapse; font-size: 12px; }
 .pixhb-table th {
   text-align: left; padding: 5px 8px; color: #9a9a9a; font-weight: 600; font-size: 10px;
