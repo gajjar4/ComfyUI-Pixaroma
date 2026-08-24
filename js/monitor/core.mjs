@@ -121,7 +121,6 @@ export const DEFAULT_STATE = {
     peak: true,
   },
   buttons: { free: true, unload: false, reset: true, settings: true },
-  stripW: null,              // strip only: parked width (null = hug the content)
   interval: 1000,            // ms between samples
   fastWhileRunning: true,    // sample 3x faster while a workflow is running
   warn: true,                // amber past 85%, red past 95%

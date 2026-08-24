@@ -179,22 +179,18 @@ function repaint(node) {
 function scaledWidth(node, s) {
   const prev = clamp(Number(node._pmScale) || s, MIN_S, MAX_S);
   const w = Math.round(node.size?.[0] || BASE_W * prev);
-  // A STRIP is a status bar, and its width answers to TWO masters that had to
-  // be reconciled across two user reports (both 2026-08-24):
-  //   - proportional width made the right edge LUNGE across the canvas
-  //     (900 -> 1575 at 1.75x): "it moves the bar";
-  //   - a PINNED width (the first fix) then CLIPPED the readouts the moment the
-  //     text scaled up: "when i do it larger it start to cut".
-  // The model that satisfies both: width = max(where the user PARKED it, what
-  // the TEXT NEEDS at this scale). It grows exactly as much as the readouts
-  // need and no further, and returns to the parked width on the way down -
-  // never a lunge, never a clip, never a ratchet. The parked width is
-  // state.stripW (null = no park: the strip hugs its content), committed only
-  // when a resize GESTURE ends wider than the content floor.
+  // A STRIP always HUGS ITS CONTENT: width = what the enabled readouts need at
+  // this scale, exactly - nothing more to remember. Three user reports, one per
+  // cleverer attempt (all 2026-08-24), led here:
+  //   - proportional width LUNGED ("it moves the bar");
+  //   - pinned width CLIPPED when scaled up ("it start to cut");
+  //   - a remembered parked width kept a bar LONG at small sizes ("even when
+  //     is small is still long") - the user expects small = compact.
+  // Exact-fit satisfies all three: compact when small, grown only as much as
+  // the text needs when big, symmetric by construction. Someone who wants a
+  // wide dashboard has the Bars layout.
   const st = readState(node);
-  if (st.layout === "strip") {
-    return Math.max(Math.round(st.stripW || 0), Math.round(stripUnitWidth(st) * s));
-  }
+  if (st.layout === "strip") return Math.round(stripUnitWidth(st) * s);
   const minW = Math.round(MIN_W * s);
   return Math.max(Math.round((w * s) / prev), minW);
 }
@@ -204,23 +200,16 @@ function scaledWidth(node, s) {
  * the Nodes 2.0 release hook. A REAL GESTURE ONLY - it writes.
  *
  * Bars: snap the width up to MIN_W * scale (the one-frame clamp lag, see the
- * caller). Strip: snap up to the CONTENT floor, then remember where the user
- * parked it - state.stripW holds the width only when the gesture ended WIDER
- * than the content needs (a deliberate park); ending AT the floor clears the
- * park, so a strip resized down to its content goes back to hugging it. The
- * park is what the Size control returns to on the way down (see scaledWidth).
+ * caller). Strip: snap up to the CONTENT floor so no gesture can end clipped.
  */
 function commitWidthAfterGesture(node, s) {
   const st = readState(node);
   if (st.layout === "strip") {
+    // only ever snap UP to the content floor: a drag below it would clip, and
+    // a drag above it is left alone until the Size control next runs (which
+    // re-hugs - the strip owns no remembered width, see scaledWidth)
     const fl = Math.round(stripUnitWidth(st) * s);
     if (node.size[0] < fl) node.setSize?.([fl, node.size[1]]);
-    const wNow = Math.round(node.size[0]);
-    const park = wNow > fl + 2 ? wNow : null;
-    if ((st.stripW || null) !== park) {
-      writeState(node, { stripW: park });
-      notifyGraphChanged();
-    }
     return;
   }
   const minW = Math.round(MIN_W * s);
