@@ -104,6 +104,34 @@ function scaleFromHeight(node) {
   return clamp((node.size?.[1] || u) / u, MIN_S, MAX_S);
 }
 
+/**
+ * LiteGraph's resize floor for the classic node - and the ONLY thing that can
+ * actually stop a corner drag going too narrow.
+ *
+ * ⚠️ THE WIDTH FLOOR MUST FOLLOW THE SCALE (reported with a screenshot, then
+ * reproduced, 2026-08-24). It used to be the flat scale-1 `MIN_W`, so a node
+ * dragged to 5x could still be squeezed to 215px while its contents needed
+ * 1075: the bars went, the labels went, the buttons truncated to "Free…" and
+ * "Rese…", and the temp / power / peak line ran straight out over the canvas.
+ *
+ * A direct `node.size[0] = …` write from the draw hook does NOT fix this, which
+ * is why one was there and did nothing: LiteGraph recomputes the size from the
+ * POINTER on every move (absolute, not a delta), so our write is overwritten on
+ * the very next frame and the pointer always wins. `computeSize` is the hook
+ * LiteGraph itself clamps against, so it is the one that holds.
+ *
+ * The HEIGHT floor deliberately stays at scale 1: the height is what carries the
+ * scale, so a floor of `unitH * scale` would be the current height and the node
+ * could never be made smaller again. Dragging the height down lowers the scale,
+ * which lowers the width floor with it.
+ */
+function installClassicComputeSize(node) {
+  node.computeSize = function () {
+    const s = scaleFromHeight(this);
+    return [Math.round(MIN_W * s), unitH(this)];
+  };
+}
+
 // ── repaint ─────────────────────────────────────────────────────────────────
 
 function repaint(node) {
@@ -322,7 +350,7 @@ function applyRenderer(node, vue) {
     // Classic derives its scale from the height, so put the height where the
     // stored scale says it should be - otherwise the node keeps whatever Vue's
     // layout left behind and comes back the wrong size.
-    node.computeSize = function () { return [MIN_W, unitH(this)]; };
+    installClassicComputeSize(node);
     if (typeof node.setSize === "function") {
       node.setSize([Math.max(node.size[0] || MIN_W, MIN_W), Math.round(unitH(node) * stateScale(node))]);
     }
@@ -446,15 +474,11 @@ app.registerExtension({
           // The height IS the scale, so the face always fills the node exactly
           // and there is nothing to write back for it.
           this._pmScale = scaleFromHeight(this);
-          // The WIDTH does have to keep up though: everything on the face grows
-          // with the scale, so a node dragged tall but left at its old width
-          // runs out of room and starts dropping labels and truncating the
-          // buttons. Pull the width up to the minimum THIS scale needs - only
-          // ever up, and only during a real gesture, so it can never touch a
-          // node nobody is dragging. Written by index so it cannot re-enter
-          // onResize.
-          const minW = Math.round(MIN_W * this._pmScale);
-          if (this.size[0] < minW) this.size[0] = minW;
+          // NOTE: there is deliberately NO width write here any more. One used
+          // to sit on this line and did nothing, because LiteGraph recomputes
+          // the size from the pointer every move and overwrites it on the next
+          // frame. The width floor lives in computeSize, which LiteGraph clamps
+          // against itself - see installClassicComputeSize.
         } else if (this._pmWasResizing) {
           // The drag just ended: remember the size the user chose, so it
           // survives a switch to the other renderer. A real gesture, so it is
@@ -465,6 +489,14 @@ app.registerExtension({
             notifyGraphChanged();
           }
           this._pmScale = s;
+          // The drag clamp reads computeSize() BEFORE it applies the frame, so
+          // the width floor is always one frame behind the height (verified in
+          // the frontend's own resize handler). Mid-drag that is invisible and
+          // self-correcting, but a drag that ENDS on such a frame would leave
+          // the node narrower than its contents. Catch it once, here, where we
+          // are already inside a real gesture and allowed to write.
+          const want = Math.round(MIN_W * s);
+          if (this.size[0] < want) this.setSize?.([want, this.size[1]]);
         } else {
           const u = unitH(this);
           const want = Math.round(u * stateScale(this));

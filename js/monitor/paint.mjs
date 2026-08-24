@@ -124,6 +124,25 @@ export function paintFace(node, ctx, st, sample, peak) {
   const acc = accentOf(node);
   const blocks = faceBlocks(node, st, sample, peak);
 
+  // ⚠️ CLIP TO THE NODE. A canvas painter has no overflow rule, so a line that
+  // is wider than the node simply keeps drawing over the graph behind it - which
+  // is what a narrow, tall node did: the temp / power / peak strip ran straight
+  // out past the right edge and over the canvas. The DOM face has always clipped
+  // (overflow:hidden on the screen), so without this the two faces disagree
+  // about what happens when something does not fit.
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(0, 0, W, H);
+  ctx.clip();
+  try {
+    paintBlocks(node, ctx, st, sample, peak, blocks, s, W, H, acc);
+  } finally {
+    ctx.restore();
+  }
+}
+
+function paintBlocks(node, ctx, st, sample, peak, blocks, s, W, H, acc) {
+
   // The node BODY is already painted as the dark screen by the drawNode wrap in
   // index.js (matching bgcolor + radius + no shadow), so there is no panel to
   // draw here - only the contents.
@@ -146,7 +165,7 @@ export function paintFace(node, ctx, st, sample, peak) {
     switch (b.kind) {
       case "title": paintTitle(ctx, node, b, x0, x1, y, h, s, acc); break;
       case "bar": paintBar(ctx, b.row, st, peak, x0, avail, y, h, s, acc); break;
-      case "strip": paintStrip(ctx, b.items, x0, y, h, s); break;
+      case "strip": paintStrip(ctx, b.items, x0, x1, y, h, s); break;
       case "strip1": paintStrip1(ctx, node, st, sample, peak, x0, avail, y, h, s, acc); break;
       case "buttons": paintButtons(ctx, node, b.items, x0, avail, y, h, s, acc, rects); break;
       default: break;
@@ -179,13 +198,19 @@ function paintBar(ctx, row, st, peak, x0, avail, y, h, s, acc) {
   const g = 7 * s;
   let lw = M.labelW * s;
   let vw = M.valueW * s;
-  // WHAT GOES FIRST WHEN THERE IS NOT ENOUGH ROOM: the bar, then the label, and
-  // the NUMBER survives to the end. The number is the reading; a bar with no
-  // number beside it is decoration. (The first version dropped the number
-  // first, and a node dragged tall but left narrow showed four unlabelled bars.)
+  // WHAT GOES FIRST WHEN THERE IS NOT ENOUGH ROOM: the BAR, then the LABEL, and
+  // the NUMBER survives to the end.
+  //
+  // The order matters and the first version had it wrong: it dropped the label
+  // before the bar, so a node dragged narrow showed a column of bare numbers
+  // with nothing to say which was VRAM and which was RAM - reported with a
+  // screenshot. The bar is the decoration; the label is what makes the number
+  // mean anything. This is also the order the DOM face has always used (the
+  // track is `flex:1 1 0` so it gives way first, the label `flex:0 1 auto`
+  // second, the value `flex:0 0 auto` never), and the two must agree.
   let tw = avail - lw - vw - g * 2;
-  if (tw < MIN_TRACK * s) { lw = 0; tw = avail - vw - g; }   // drop the label
-  if (tw < MIN_TRACK * s) { tw = 0; }                        // drop the bar too
+  if (tw < MIN_TRACK * s) { tw = 0; }                        // drop the bar first
+  if (lw + vw + g > avail) { lw = 0; }                       // then the label
 
   let x = x0;
   ctx.font = `${Math.round(M.font * s)}px ${MONO}`;
@@ -230,10 +255,11 @@ function paintBar(ctx, row, st, peak, x0, avail, y, h, s, acc) {
   }
 }
 
-function paintStrip(ctx, items, x0, y, h, s) {
+function paintStrip(ctx, items, x0, x1, y, h, s) {
   const mid = y + h / 2;
   let x = x0;
   for (const it of items) {
+    if (x >= x1) return;   // out of room: stop rather than run off the node
     ctx.font = `${Math.round(M.stripFont * s)}px ${MONO}`;
     ctx.fillStyle = "#8a8a8a";
     const lab = it.label + " ";
