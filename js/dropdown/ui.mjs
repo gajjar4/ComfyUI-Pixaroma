@@ -41,6 +41,11 @@ const TOP_INSET = 12;
 // ROW_H per row under-counted the body by 4px each and the last value row was
 // clipped by the node frame. Nodes 2.0 spaces its widget rows by the same 30.
 const ROW_PITCH = 30;
+// Shaved off the bottom once there ARE value rows. The 12px the base carries
+// reads right under a single row but a touch loose under a stack of them, so a
+// multi-output node sits on 8. User's call, by eye, on the rendered node.
+// Applies to the value-row case ONLY - a one-output Dropdown keeps its 12.
+const MULTI_TRIM = 4;
 
 const ROW_CLASS = "pix-dd-row";
 // One read-only row per output, shown only when the node has more than one.
@@ -224,7 +229,7 @@ export function bodyHeight(node) {
   // Called with no node in a couple of places that predate multi-output, and
   // with no value rows for every plain one-output Dropdown; BOTH still get the
   // historic height byte-for-byte, because extra is 0 there.
-  return TOP_INSET * 2 + ROW_H + extra * ROW_PITCH;
+  return TOP_INSET * 2 + ROW_H + extra * ROW_PITCH - (extra ? MULTI_TRIM : 0);
 }
 
 // ── The row ────────────────────────────────────────────────────────────────
