@@ -14,6 +14,9 @@ It came from a Windows shell redirect, which defaults to UTF-8-WITH-BOM here.
 Same family as the literal-control-character trap recorded in CLAUDE.md convention #25.
 """
 
+import ast
+import glob
+import io
 import os
 import re
 import subprocess
@@ -252,11 +255,60 @@ def check_changelog(data):
               "%d per version." % (per_bullet, len(bullets), per_version))
 
 
+
+def check_output_arity():
+    """A node's RETURN_TYPES / RETURN_NAMES / OUTPUT_TOOLTIPS must be the same length.
+
+    ComfyUI sends the three lists to the browser separately and zips them BY
+    INDEX, so a mismatch is silent: outputs simply lose their names or their
+    tooltips. Dropdown Pixaroma builds RETURN_TYPES from a MAX_OUTS constant
+    while the other two are literals, so raising the cap without editing them is
+    an easy mistake to make and an invisible one to ship.
+
+    This lives HERE rather than as an assert in the module, deliberately. The
+    node is imported by __init__.py with no try/except, and ComfyUI's
+    load_custom_node catches the failure with a logging.warning and moves on -
+    so an assert would make every node in the pack disappear over a console line
+    nobody reads. Failing the RELEASE instead costs nothing and catches the same
+    mistake, and unlike an assert it survives `python -O`.
+
+    Parsed rather than imported: this script must not need torch or ComfyUI.
+    """
+    for path in sorted(glob.glob(os.path.join(REPO, "nodes", "node_*.py"))):
+        try:
+            tree = ast.parse(io.open(path, encoding="utf-8").read())
+        except SyntaxError as exc:
+            failures.append("%s does not parse: %s" % (os.path.basename(path), exc))
+            continue
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.ClassDef):
+                continue
+            lens = {}
+            for stmt in node.body:
+                if not isinstance(stmt, ast.Assign) or len(stmt.targets) != 1:
+                    continue
+                name = getattr(stmt.targets[0], "id", None)
+                if name not in ("RETURN_TYPES", "RETURN_NAMES", "OUTPUT_TOOLTIPS"):
+                    continue
+                # Only a plain literal tuple/list can be counted statically.
+                # `(ANY,) * MAX_OUTS` and friends are skipped on purpose.
+                if isinstance(stmt.value, (ast.Tuple, ast.List)):
+                    lens[name] = len(stmt.value.elts)
+            counted = set(lens.values())
+            if len(counted) > 1:
+                failures.append(
+                    "%s.%s: %s disagree in length (%s). ComfyUI zips them by index, "
+                    "so outputs would silently lose names or tooltips."
+                    % (os.path.basename(path), node.name, " / ".join(sorted(lens)),
+                       ", ".join("%s=%d" % kv for kv in sorted(lens.items()))))
+
+
 def main():
     check_files()
     data = check_pyproject()
     check_version_lockstep(data)
     check_changelog(data)
+    check_output_arity()
 
     if failures:
         print("RELEASE PREFLIGHT FAILED (%d problem%s)\n"

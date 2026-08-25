@@ -334,11 +334,18 @@ export function syncOutputs(node) {
   const outs = readState(node).outs;
   const n = outs.length;
 
-  // Grow/shrink to match. Python always declares MAX_OUTS, so a freshly created
-  // node arrives with four and is trimmed here; a LOADED node already carries
-  // the saved count, so both loops are no-ops and nothing serialized is
-  // touched. Shrinking cuts the wires on the outputs that go away, which is
-  // correct for the user action that causes it and cannot happen on load.
+  // Grow/shrink to match.
+  //
+  // ⚠ The trim is NOT a no-op on load, and an earlier version of this comment
+  // wrongly said it was. Python always declares MAX_OUTS, and ComfyUI's
+  // `ComfyNode.configure` ZIPS the node-def slots onto the saved ones - lodash
+  // `zip` pads to the LONGER array and `cloneObject` copies indices in without
+  // truncating - so a saved ONE-output Dropdown arrives here carrying FOUR.
+  // Trimming is what makes serialize() match the file again; delete it and every
+  // workflow containing this node opens flagged "modified" (Vue Compat #18).
+  //
+  // The three phantom slots carry `links: null`, which is why the gate below
+  // never trips on them and only a genuinely damaged file reaches it.
   while (node.outputs.length > n) {
     const last = node.outputs[node.outputs.length - 1];
     // NEVER destroy a wire because a file was merely OPENED. removeOutput calls

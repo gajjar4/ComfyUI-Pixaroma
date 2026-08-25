@@ -52,6 +52,14 @@ class PixaromaDropdown:
     # chosen count, exactly as Sliders Pixaroma does with its 16. Declaring them
     # here rather than growing them later keeps the node definition stable, so a
     # saved workflow never sees the def change under it.
+    # RETURN_TYPES is built from MAX_OUTS while the two below are literals,
+    # and ComfyUI zips the three lists BY INDEX - so a mismatch is silent,
+    # costing outputs their names or tooltips. scripts/release_preflight.py
+    # fails the release on it. NOT an assert here: this module is imported by
+    # __init__.py with no try/except, and ComfyUI answers an import failure
+    # with a logging.warning, so raising would make all ~40 Pixaroma nodes
+    # vanish over a console line nobody reads. It would also be stripped by
+    # python -O, which preflight is not.
     RETURN_TYPES = (ANY,) * MAX_OUTS
     RETURN_NAMES = ("value", "value_2", "value_3", "value_4")
     OUTPUT_TOOLTIPS = (
@@ -70,17 +78,6 @@ class PixaromaDropdown:
     def run(self, DropdownState="{}"):
         return selected_values(DropdownState)
 
-
-# The three lists are sent to the browser separately and zipped BY INDEX, so a
-# length mismatch is silent: outputs would simply lose their names or tooltips.
-# RETURN_TYPES grows automatically with MAX_OUTS and the other two do not, so
-# raising the cap without editing them is a mistake this catches at import.
-assert (
-    len(PixaromaDropdown.RETURN_TYPES)
-    == len(PixaromaDropdown.RETURN_NAMES)
-    == len(PixaromaDropdown.OUTPUT_TOOLTIPS)
-    == MAX_OUTS
-), "Dropdown Pixaroma: RETURN_TYPES, RETURN_NAMES and OUTPUT_TOOLTIPS must all be MAX_OUTS long"
 
 NODE_CLASS_MAPPINGS = {"PixaromaDropdown": PixaromaDropdown}
 NODE_DISPLAY_NAME_MAPPINGS = {"PixaromaDropdown": "Dropdown Pixaroma"}

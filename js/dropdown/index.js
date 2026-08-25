@@ -147,11 +147,13 @@ app.registerExtension({
       const r = _configure?.apply(this, arguments);
       this.widgets_start_y = 2;
       // Nothing here may write node.size, or an untouched workflow opens
-      // flagged "modified" (Vue Compat #18). The slot COUNT is reconciled here
-      // on purpose: Python declares MAX_OUTS outputs and the saved workflow has
-      // however many it was using, so syncOutput trims back to the saved count.
-      // That is a no-op for an unchanged file - configure has already restored
-      // the saved outputs by the time this runs.
+      // flagged "modified" (Vue Compat #18).
+      //
+      // The slot COUNT is reconciled here ON PURPOSE, and this call is NOT
+      // removable: ComfyUI hands a saved one-output Dropdown four slots (it
+      // zips the node-def outputs onto the saved ones), so without the trim the
+      // node serializes four against a file holding one and dirties every
+      // workflow on open. See the note in core.mjs syncOutputs.
       syncOutput(this);
       syncValueRows(this);
       renderRow(this);

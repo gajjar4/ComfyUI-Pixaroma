@@ -497,16 +497,26 @@ def _pix_dropdown_extract(inputs: dict, slot=0) -> Optional[str]:
     if isinstance(values, list):
         kinds = state.get("types")
         kinds = kinds if isinstance(kinds, list) else []
-        i = slot if slot < len(values) else 0
-        if not _is_text_kind(kinds[i] if i < len(kinds) else None):
+        # No such output in this state: REFUSE rather than fall back to output
+        # one. Clamping recorded output one's text for a consumer wired to
+        # output three, which is the "splicing it in corrupts the reading"
+        # failure this function exists to avoid - and the full-shape branch
+        # below already refuses, so clamping also made the two disagree.
+        if slot >= len(values):
             return None
-        value = values[i] if i < len(values) else None
+        if not _is_text_kind(kinds[slot] if slot < len(kinds) else None):
+            return None
+        value = values[slot]
         return value if isinstance(value, str) and value else None
 
     # Anything that is not explicitly text is refused, INCLUDING a missing type.
     # An unknown/absent type most likely means a newer schema, and guessing
     # "probably text" is how a stray number ends up inside someone's prompt.
     if "value" in state:                       # lean single shape
+        # This shape describes exactly ONE output, so it can say nothing about
+        # output two onward - same reason as above, don't answer for them.
+        if slot != 0:
+            return None
         if not _is_text_kind(state.get("type")):
             return None
         value = state.get("value")
