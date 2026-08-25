@@ -256,6 +256,64 @@ def check_changelog(data):
 
 
 
+def _module_int(tree, want):
+    """Module-level `want = <int literal>` in an already-parsed tree, else None."""
+    for stmt in tree.body:
+        if (isinstance(stmt, ast.Assign) and len(stmt.targets) == 1
+                and getattr(stmt.targets[0], "id", None) == want
+                and isinstance(stmt.value, ast.Constant)
+                and isinstance(stmt.value.value, int)
+                and not isinstance(stmt.value.value, bool)):
+            return stmt.value.value
+    return None
+
+
+def _resolve_int(tree, name):
+    """Resolve a bare NAME to an int: defined here, or imported from a sibling.
+
+    Only a module-level int LITERAL counts, in this file or in the one relative
+    import that names it. Anything else returns None and the caller skips the
+    value, so this can never invent a length and fail a clean release.
+    """
+    here = _module_int(tree, name)
+    if here is not None:
+        return here
+    for stmt in tree.body:
+        if not isinstance(stmt, ast.ImportFrom) or stmt.level != 1 or not stmt.module:
+            continue
+        if not any(a.name == name and a.asname is None for a in stmt.names):
+            continue
+        sib = os.path.join(REPO, "nodes", stmt.module + ".py")
+        try:
+            with io.open(sib, encoding="utf-8") as fh:
+                return _module_int(ast.parse(fh.read()), name)
+        except (SyntaxError, ValueError, UnicodeDecodeError, OSError):
+            return None
+    return None
+
+
+def _static_len(value, tree):
+    """Length of a RETURN_* value when it can be known statically, else None."""
+    if isinstance(value, (ast.Tuple, ast.List)):
+        return len(value.elts)
+    # `(ANY,) * MAX_OUTS` - the shape Dropdown Pixaroma uses. Without this the
+    # check silently skips the ONE list that moves when the cap is raised, which
+    # is measurably the mistake it was written to catch: setting MAX_OUTS to 5
+    # left RETURN_NAMES and OUTPUT_TOOLTIPS at 4 and preflight still said OK.
+    if isinstance(value, ast.BinOp) and isinstance(value.op, ast.Mult):
+        for seq, other in ((value.left, value.right), (value.right, value.left)):
+            if not isinstance(seq, (ast.Tuple, ast.List)):
+                continue
+            if isinstance(other, ast.Constant) and isinstance(other.value, int) \
+                    and not isinstance(other.value, bool):
+                return len(seq.elts) * other.value
+            if isinstance(other, ast.Name):
+                n = _resolve_int(tree, other.id)
+                if n is not None:
+                    return len(seq.elts) * n
+    return None
+
+
 def check_output_arity():
     """A node's RETURN_TYPES / RETURN_NAMES / OUTPUT_TOOLTIPS must be the same length.
 
@@ -269,16 +327,24 @@ def check_output_arity():
     node is imported by __init__.py with no try/except, and ComfyUI's
     load_custom_node catches the failure with a logging.warning and moves on -
     so an assert would make every node in the pack disappear over a console line
-    nobody reads. Failing the RELEASE instead costs nothing and catches the same
-    mistake, and unlike an assert it survives `python -O`.
+    nobody reads. Failing the RELEASE instead costs nothing, covers every node
+    rather than the one that carried the assert, and survives `python -O`.
 
     Parsed rather than imported: this script must not need torch or ComfyUI.
     """
     for path in sorted(glob.glob(os.path.join(REPO, "nodes", "node_*.py"))):
         try:
-            tree = ast.parse(io.open(path, encoding="utf-8").read())
-        except SyntaxError as exc:
-            failures.append("%s does not parse: %s" % (os.path.basename(path), exc))
+            with io.open(path, encoding="utf-8") as fh:
+                tree = ast.parse(fh.read())
+        except (SyntaxError, ValueError, UnicodeDecodeError, OSError) as exc:
+            # NOT just SyntaxError. check_files() runs first but reads in BINARY
+            # and only tests for a UTF-8 BOM plus a small control-byte set, so a
+            # stray \xff sails past it and lands here as a UnicodeDecodeError.
+            # A raw traceback in exactly the invisible-byte scenario this script
+            # exists to explain would be the worst possible output. ValueError
+            # covers the null byte on Pythons older than 3.14.
+            failures.append("%s could not be parsed (%s): %s"
+                            % (os.path.basename(path), type(exc).__name__, exc))
             continue
         for node in ast.walk(tree):
             if not isinstance(node, ast.ClassDef):
@@ -290,10 +356,12 @@ def check_output_arity():
                 name = getattr(stmt.targets[0], "id", None)
                 if name not in ("RETURN_TYPES", "RETURN_NAMES", "OUTPUT_TOOLTIPS"):
                     continue
-                # Only a plain literal tuple/list can be counted statically.
-                # `(ANY,) * MAX_OUTS` and friends are skipped on purpose.
-                if isinstance(stmt.value, (ast.Tuple, ast.List)):
-                    lens[name] = len(stmt.value.elts)
+                # A literal tuple/list, or a `(X,) * N` repeat whose N resolves
+                # to a module-level int. Anything else is skipped, so a value
+                # this script cannot read is never guessed at.
+                n = _static_len(stmt.value, tree)
+                if n is not None:
+                    lens[name] = n
             counted = set(lens.values())
             if len(counted) > 1:
                 failures.append(

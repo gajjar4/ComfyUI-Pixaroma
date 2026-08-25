@@ -337,12 +337,15 @@ export function syncOutputs(node) {
   // Grow/shrink to match.
   //
   // ⚠ The trim is NOT a no-op on load, and an earlier version of this comment
-  // wrongly said it was. Python always declares MAX_OUTS, and ComfyUI's
-  // `ComfyNode.configure` ZIPS the node-def slots onto the saved ones - lodash
-  // `zip` pads to the LONGER array and `cloneObject` copies indices in without
-  // truncating - so a saved ONE-output Dropdown arrives here carrying FOUR.
+  // wrongly said it was. Python always declares MAX_OUTS, so the ComfyNode
+  // CONSTRUCTOR (`addOutputs(this, nodeData.outputs)`) has already built FOUR
+  // slots before `configure` runs, and nothing on the load path shrinks them
+  // back: `configure` zips the def slots onto the saved ones, and that zip pads
+  // to the LONGER array. Either mechanism alone yields four, so a saved
+  // ONE-output Dropdown arrives here carrying four regardless.
   // Trimming is what makes serialize() match the file again; delete it and every
   // workflow containing this node opens flagged "modified" (Vue Compat #18).
+  // (Verified by executing the frontend's own configure, 1.49.6.)
   //
   // The three phantom slots carry `links: null`, which is why the gate below
   // never trips on them and only a genuinely damaged file reaches it.

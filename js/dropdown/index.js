@@ -150,10 +150,11 @@ app.registerExtension({
       // flagged "modified" (Vue Compat #18).
       //
       // The slot COUNT is reconciled here ON PURPOSE, and this call is NOT
-      // removable: ComfyUI hands a saved one-output Dropdown four slots (it
-      // zips the node-def outputs onto the saved ones), so without the trim the
-      // node serializes four against a file holding one and dirties every
-      // workflow on open. See the note in core.mjs syncOutputs.
+      // removable: ComfyUI hands a saved one-output Dropdown four slots (the
+      // constructor builds all four from the node def and nothing on the load
+      // path shrinks them back), so without the trim the node serializes four
+      // against a file holding one and dirties every workflow on open. See the
+      // note in core.mjs syncOutputs.
       syncOutput(this);
       syncValueRows(this);
       renderRow(this);

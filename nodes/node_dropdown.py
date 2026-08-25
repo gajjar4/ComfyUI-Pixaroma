@@ -55,7 +55,10 @@ class PixaromaDropdown:
     # RETURN_TYPES is built from MAX_OUTS while the two below are literals,
     # and ComfyUI zips the three lists BY INDEX - so a mismatch is silent,
     # costing outputs their names or tooltips. scripts/release_preflight.py
-    # fails the release on it. NOT an assert here: this module is imported by
+    # resolves the MAX_OUTS repeat and fails the release on it (mutation-tested
+    # both directions). Raising the cap means editing FOUR places: both lists
+    # below, _dropdown_helpers.MAX_OUTS, and MAX_OUTS in js/dropdown/core.mjs -
+    # preflight sees the first three, the browser constant it cannot. NOT an assert here: this module is imported by
     # __init__.py with no try/except, and ComfyUI answers an import failure
     # with a logging.warning, so raising would make all ~40 Pixaroma nodes
     # vanish over a console line nobody reads. It would also be stripped by
