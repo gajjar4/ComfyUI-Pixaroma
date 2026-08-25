@@ -36,6 +36,17 @@ export const ZW = "\u200B";
 
 export const OUT_NAME = "value";
 
+// How many values one entry can carry. Python declares exactly this many ANY
+// outputs and always returns this many; the browser shows only the first
+// `outs.length` of them. Four covers sampler+scheduler, width+height,
+// steps+cfg and model+clip; raising it means changing RETURN_NAMES too.
+export const MAX_OUTS = 4;
+
+/** Default name for output i (0-based). Output 1 keeps the historic "value". */
+export function defaultOutName(i) {
+  return i === 0 ? OUT_NAME : `${OUT_NAME}_${i + 1}`;
+}
+
 // How the node picks an entry when the workflow RUNS.
 //   fixed     - always the one you chose. The default, and the only mode that
 //               leaves the node completely predictable.
@@ -75,14 +86,69 @@ export function readState(node) {
       st.options.push({
         name: typeof o.name === "string" ? o.name : "",
         value: typeof o.value === "string" ? o.value : (o.value == null ? "" : String(o.value)),
+        // Outputs 2..N. An entry saved before multi-output has no `v` at all,
+        // which is exactly why there is nothing to migrate: it reads as an
+        // empty list here and writeState drops it again on the way out.
+        v: Array.isArray(o.v)
+          ? o.v.map((x) => (typeof x === "string" ? x : (x == null ? "" : String(x))))
+          : [],
       });
     }
   }
+
+  st.outs = normalizeOuts(raw.outs, st.type);
 
   const n = Number(raw.index);
   st.index = Number.isFinite(n) ? Math.max(0, Math.min(st.options.length - 1, Math.trunc(n))) : 0;
   if (!st.options.length) st.index = 0;
   return st;
+}
+
+/**
+ * raw.outs -> a valid array of {name, type}, always at least one entry long.
+ *
+ * Synthesised from `type` when absent, which is what makes an old single-output
+ * state a valid multi-output state with no rewrite: the default IS the old
+ * shape. Output 1's type mirrors `state.type` so the two can never disagree,
+ * and Python keeps reading `type` exactly as it always has.
+ */
+function normalizeOuts(raw, type) {
+  const outs = [];
+  if (Array.isArray(raw)) {
+    for (const o of raw.slice(0, MAX_OUTS)) {
+      if (!o || typeof o !== "object" || Array.isArray(o)) continue;
+      outs.push({ name: typeof o.name === "string" ? o.name : "", type: normalizeType(o.type) });
+    }
+  }
+  if (!outs.length) outs.push({ name: OUT_NAME, type });
+  outs[0].type = type;
+  for (let i = 0; i < outs.length; i++) if (!outs[i].name) outs[i].name = defaultOutName(i);
+  return outs;
+}
+
+/** How many outputs this node currently shows. Always 1..MAX_OUTS. */
+export function outCount(node) {
+  return readState(node).outs.length;
+}
+
+/** One entry -> exactly `n` value strings, padded with "". */
+export function valuesOf(opt, n) {
+  const out = [];
+  for (let i = 0; i < n; i++) {
+    if (i === 0) out.push(opt && typeof opt.value === "string" ? opt.value : "");
+    else out.push(opt && Array.isArray(opt.v) && typeof opt.v[i - 1] === "string" ? opt.v[i - 1] : "");
+  }
+  return out;
+}
+
+/** Write value `i` (0-based) onto an entry, growing `v` only as far as needed. */
+export function setValueAt(opt, i, text) {
+  const str = typeof text === "string" ? text : String(text == null ? "" : text);
+  if (i === 0) { opt.value = str; return opt; }
+  if (!Array.isArray(opt.v)) opt.v = [];
+  while (opt.v.length < i) opt.v.push("");
+  opt.v[i - 1] = str;
+  return opt;
 }
 
 /**
@@ -102,13 +168,30 @@ export function writeState(node, patch) {
   next.version = 1;
   next.type = normalizeType(next.type);
   next.mode = normalizeMode(next.mode);
-  next.options = Array.isArray(next.options) ? next.options.map((o) => ({
-    name: typeof o?.name === "string" ? o.name : "",
-    value: typeof o?.value === "string" ? o.value : (o?.value == null ? "" : String(o.value)),
-  })) : [];
+  next.outs = normalizeOuts(next.outs, next.type);
+  next.options = Array.isArray(next.options) ? next.options.map((o) => {
+    const row = {
+      name: typeof o?.name === "string" ? o.name : "",
+      value: typeof o?.value === "string" ? o.value : (o?.value == null ? "" : String(o.value)),
+    };
+    // Keep `v` only when it actually holds something. An entry that has never
+    // had a second value stays byte-identical to how it was saved, so opening
+    // an existing workflow cannot flag it modified (Vue Compat #18). Trailing
+    // blanks are trimmed for the same reason.
+    const v = Array.isArray(o?.v)
+      ? o.v.map((x) => (typeof x === "string" ? x : (x == null ? "" : String(x))))
+      : [];
+    while (v.length && v[v.length - 1] === "") v.pop();
+    if (v.length) row.v = v;
+    return row;
+  }) : [];
   const n = Number(next.index);
   next.index = Number.isFinite(n) ? Math.max(0, Math.min(next.options.length - 1, Math.trunc(n))) : 0;
   if (!next.options.length) next.index = 0;
+
+  // A plain one-output Dropdown never grows an `outs` key, so its stored shape
+  // is exactly what it was before this feature existed.
+  if (next.outs.length <= 1 && next.outs[0].name === OUT_NAME) delete next.outs;
 
   node.properties[STATE_PROP] = next;
   return next;
@@ -212,7 +295,19 @@ export function shownIndex(node) {
 export function injectedState(node) {
   const st = readState(node);
   const opt = st.options[pendingIndex(node)];
-  return { version: 1, type: st.type, value: opt ? opt.value : null };
+
+  // ONE output: emit the historic shape, byte for byte. The injected string is
+  // the node's cache key, so any change here would re-run every existing
+  // workflow the first time it was opened after an update. Multi-output is
+  // strictly additive precisely so this line can stay as it was.
+  if (st.outs.length <= 1) {
+    return { version: 1, type: st.type, value: opt ? opt.value : null };
+  }
+  return {
+    version: 1,
+    types: st.outs.map((o) => o.type),
+    values: valuesOf(opt, st.outs.length),
+  };
 }
 
 /**
@@ -224,14 +319,33 @@ export function injectedState(node) {
  * value still counts as a change on some builds, which would flag a clean
  * workflow "modified" the moment it was opened (Vue Compat #18).
  */
-export function syncOutput(node) {
-  if (!node?.outputs?.length) return;
-  const want = SOCKET_TYPES[readState(node).type] || "*";
-  const out = node.outputs[0];
-  if (out.name !== OUT_NAME) out.name = OUT_NAME;
-  if (out.label !== ZW) out.label = ZW;
-  if (out.type !== want) out.type = want;
+export function syncOutputs(node) {
+  if (!node?.outputs) return;
+  const outs = readState(node).outs;
+  const n = outs.length;
+
+  // Grow/shrink to match. Python always declares MAX_OUTS, so a freshly created
+  // node arrives with four and is trimmed here; a LOADED node already carries
+  // the saved count, so both loops are no-ops and nothing serialized is
+  // touched. Shrinking cuts the wires on the outputs that go away, which is
+  // correct for the user action that causes it and cannot happen on load.
+  while (node.outputs.length > n) node.removeOutput?.(node.outputs.length - 1);
+  while (node.outputs.length < n && node.addOutput) node.addOutput(defaultOutName(node.outputs.length), "*");
+
+  for (let i = 0; i < n && i < node.outputs.length; i++) {
+    const out = node.outputs[i];
+    const want = SOCKET_TYPES[outs[i].type] || "*";
+    const nm = outs[i].name || defaultOutName(i);
+    // Every write diff-gated: slots are serialized, and rewriting an identical
+    // value still counts as a change on some builds (Vue Compat #18).
+    if (out.name !== nm) out.name = nm;
+    if (out.label !== ZW) out.label = ZW;
+    if (out.type !== want) out.type = want;
+  }
 }
+
+/** Kept so older call sites keep working; the node has had N outputs since. */
+export const syncOutput = syncOutputs;
 
 /**
  * Drop a wire the new type can no longer feed. A real user action ONLY.
@@ -243,12 +357,16 @@ export function syncOutput(node) {
  */
 export function dropIncompatibleLinks(node) {
   if (!node?.outputs?.length || isGraphLoading()) return 0;
-  const out = node.outputs[0];
-  const links = Array.isArray(out.links) ? out.links.slice() : [];
-  if (!links.length) return 0;
-
   const graph = node.graph;
   if (!graph) return 0;
+  let cut = 0;
+  for (const out of node.outputs) cut += dropOnOutput(graph, out);
+  return cut;
+}
+
+function dropOnOutput(graph, out) {
+  const links = Array.isArray(out?.links) ? out.links.slice() : [];
+  if (!links.length) return 0;
   const want = out.type;
   let cut = 0;
 
