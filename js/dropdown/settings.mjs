@@ -9,6 +9,7 @@ import { isVueNodes } from "../shared/nodes2.mjs";
 import { createAccentSection, BRAND } from "../shared/node_settings.mjs";
 import {
   readState, writeState, accentOf, syncOutput, dropIncompatibleLinks,
+  MAX_OUTS, valuesOf, setValueAt, defaultOutName,
   MODES, MODE_LETTERS, MODE_LABELS,
 } from "./core.mjs";
 import { TYPES, TYPE_LABELS, readable, previewText } from "./coerce.mjs";
@@ -105,6 +106,19 @@ function injectCSS() {
       padding:5px 7px; outline:none; resize:none; overflow:hidden; line-height:1.45; }
     .pix-ddp-vl:focus { border-color:var(--acc,${BRAND}); }
     .pix-ddp-vl.bad { border-color:#a8552f; }
+    /* One editor row per output: its name, then its type chips. The name box
+       only appears above one output, so a plain Dropdown's panel is unchanged. */
+    .pix-ddp-outrow { display:flex; align-items:center; gap:6px; margin-top:5px; }
+    .pix-ddp-outnm { width:118px; flex:none; box-sizing:border-box; background:#1d1d1d;
+      border:1px solid #444; border-radius:4px; color:#ddd; font:11px 'Segoe UI',sans-serif;
+      padding:5px 7px; outline:none; }
+    .pix-ddp-outnm:focus { border-color:var(--acc,${BRAND}); }
+    .pix-ddp-outrow .pix-ddp-seg { flex:1 1 auto; margin:0; }
+    /* One heading per output over the entry list, so you can see which value
+       feeds which output without counting boxes. Same metrics as .b above so
+       the headings stay over their boxes; accented to read as output names. */
+    .pix-ddp-cols .vh { flex:1; min-width:0; font-size:11px; color:var(--acc,${BRAND});
+      opacity:.85; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
     .pix-ddp-warn { flex:none; width:13px; text-align:center; padding-top:5px;
       color:#e0703a; font-size:11px; cursor:default; }
     .pix-ddp-warn.hide { display:none; }
@@ -395,8 +409,12 @@ export function openDropdownPanel(node, onChange) {
   // ── What comes out ──────────────────────────────────────────────────────
   const typeSec = el("div");
   typeSec.append(el("div", "pix-ddp-lab", "WHAT COMES OUT"));
-  const seg = el("div", "pix-ddp-seg");
-  typeSec.appendChild(seg);
+  // How many values one entry carries. Hidden at 1 would be worse than shown:
+  // the whole feature is invisible otherwise.
+  const cntSeg = el("div", "pix-ddp-seg");
+  typeSec.appendChild(cntSeg);
+  const outsWrap = el("div");
+  typeSec.appendChild(outsWrap);
   const typeHint = el("div", "pix-ddp-sub");
   typeSec.appendChild(typeHint);
 
@@ -416,10 +434,25 @@ export function openDropdownPanel(node, onChange) {
   head.appendChild(count);
   listSec.appendChild(head);
   const cols = el("div", "pix-ddp-cols");
-  const ca = el("span", "a", "Name in the list");
-  const cb = el("span", "b", "What it sends out");
-  cols.append(ca, cb);
   listSec.appendChild(cols);
+  /**
+   * Headings over the entry list. At one output this is exactly the wording the
+   * panel has always shown; above one, each output names its own column.
+   * Called on its own from setOutName so typing a name does not re-render (and
+   * so destroy) the input being typed in.
+   */
+  function renderCols() {
+    const st = readState(node);
+    cols.textContent = "";
+    cols.appendChild(el("span", "a", "Name in the list"));
+    if (st.outs.length <= 1) {
+      cols.appendChild(el("span", "b", "What it sends out"));
+      return;
+    }
+    st.outs.forEach((o, k) => {
+      cols.appendChild(el("span", "vh", o.name || defaultOutName(k)));
+    });
+  }
   const list = el("div", "pix-ddp-list");
   listSec.appendChild(list);
 
@@ -465,29 +498,115 @@ export function openDropdownPanel(node, onChange) {
                                    : "Picks a different entry at random each run."));
   }
 
-  function renderTypes() {
-    const st = readState(node);
-    seg.textContent = "";
-    for (const t of TYPES) {
-      const b = el("button", st.type === t ? "on" : null, TYPE_LABELS[t]);
-      b.title = `Send ${TYPE_LABELS[t].toLowerCase()} out of this node`;
-      b.addEventListener("click", () => setType(t));
-      seg.appendChild(b);
+  /** Every value of every entry, flattened, for the "does it read" counts. */
+  function badCount(st) {
+    let bad = 0;
+    for (const o of st.options) {
+      const vals = valuesOf(o, st.outs.length);
+      for (let k = 0; k < st.outs.length; k++) if (!readable(vals[k], st.outs[k].type)) bad++;
     }
-    const st2 = readState(node);
-    const bad = st2.options.filter((o) => !readable(o.value, st2.type)).length;
-    typeHint.textContent = bad
-      ? `${bad} of ${st2.options.length} ${bad === 1 ? "entry does" : "entries do"} not read as ${TYPE_LABELS[st2.type].toLowerCase()}. They are kept, and send the fallback until you change them.`
-      : "Changing this renames the output and unplugs anything that no longer fits. Your text is always kept.";
+    return bad;
   }
 
-  function setType(t) {
+  function renderTypes() {
     const st = readState(node);
-    if (st.type === t) return;
-    writeState(node, { type: t });
+    const n = st.outs.length;
+
+    // How many values per entry.
+    cntSeg.textContent = "";
+    for (let c = 1; c <= MAX_OUTS; c++) {
+      const b = el("button", n === c ? "on" : null, String(c));
+      b.title = c === 1
+        ? "One value per entry, one output"
+        : `${c} values per entry, ${c} outputs - one pick sets all of them`;
+      b.addEventListener("click", () => setOutCount(c));
+      cntSeg.appendChild(b);
+    }
+
+    // One editor row per output.
+    outsWrap.textContent = "";
+    st.outs.forEach((o, k) => {
+      const row = el("div", "pix-ddp-outrow");
+      if (n > 1) {
+        const nm = el("input", "pix-ddp-outnm");
+        nm.value = o.name;
+        nm.placeholder = defaultOutName(k);
+        nm.title = "What this output is called, on the node and on its dot";
+        nm.addEventListener("input", () => setOutName(k, nm.value));
+        row.appendChild(nm);
+      }
+      const seg = el("div", "pix-ddp-seg");
+      for (const t of TYPES) {
+        const b = el("button", o.type === t ? "on" : null, TYPE_LABELS[t]);
+        b.title = n > 1
+          ? `Send ${TYPE_LABELS[t].toLowerCase()} out of ${o.name}`
+          : `Send ${TYPE_LABELS[t].toLowerCase()} out of this node`;
+        b.addEventListener("click", () => setOutType(k, t));
+        seg.appendChild(b);
+      }
+      row.appendChild(seg);
+      outsWrap.appendChild(row);
+    });
+
+    const st2 = readState(node);
+    const bad = badCount(st2);
+    typeHint.textContent = bad
+      ? `${bad} ${bad === 1 ? "value does" : "values do"} not read as the type set for ${bad === 1 ? "its" : "their"} output. They are kept, and send the fallback until you change them.`
+      : (st2.outs.length > 1
+        ? "Each entry carries one value per output, so a single pick sets them all together."
+        : "Changing this renames the output and unplugs anything that no longer fits. Your text is always kept.");
+  }
+
+  /**
+   * Change how many values an entry carries.
+   *
+   * Reducing it REMOVES those outputs and cuts their wires, so it says so. The
+   * values themselves are kept on the entries: setting 3 back to 2 and then to
+   * 3 again must not quietly lose what you typed.
+   */
+  function setOutCount(n) {
+    const st = readState(node);
+    if (st.outs.length === n) return;
+    const outs = st.outs.slice(0, n);
+    while (outs.length < n) outs.push({ name: defaultOutName(outs.length), type: "text" });
+    const losing = st.outs.length - n;
+    writeState(node, { outs, type: outs[0].type });
+    syncOutput(node);
+    if (losing > 0) {
+      toast(`${losing} ${losing === 1 ? "output was" : "outputs were"} removed. Any wires on them were unplugged; your typed values are kept.`, "warn");
+    }
+    renderTypes();
+    renderList();
+    fire();
+  }
+
+  function setOutName(k, name) {
+    const st = readState(node);
+    if (!st.outs[k]) return;
+    st.outs[k].name = name;
+    writeState(node, { outs: st.outs });
+    syncOutput(node);
+    // Deliberately NOT re-rendering the panel: that would destroy the input
+    // being typed in. The node face and the column headings are enough.
+    renderCols();
+    fire();
+  }
+
+  function setOutType(k, t) {
+    const st = readState(node);
+    if (!st.outs[k] || st.outs[k].type === t) return;
+    st.outs[k].type = t;
+    // Output 1's type and state.type are the same thing, and Python still
+    // reads `type`; keeping them in step is what lets an old workflow load.
+    const patch = { outs: st.outs };
+    if (k === 0) patch.type = t;
+    writeState(node, patch);
     syncOutput(node);
     const cut = dropIncompatibleLinks(node);
-    const bad = readState(node).options.filter((o) => !readable(o.value, t)).length;
+
+    const st2 = readState(node);
+    let bad = 0;
+    for (const o of st2.options) if (!readable(valuesOf(o, st2.outs.length)[k], t)) bad++;
 
     // Say what happened. A silent warning mark is too quiet for something that
     // changes what the node sends, and a silently cut wire is worse.
@@ -521,6 +640,7 @@ export function openDropdownPanel(node, onChange) {
 
   function renderList() {
     const st = readState(node);
+    renderCols();
     count.textContent = st.options.length === 1 ? "1 option" : `${st.options.length} options`;
     list.textContent = "";
 
@@ -553,15 +673,32 @@ export function openDropdownPanel(node, onChange) {
       nm.placeholder = PLACEHOLDERS[st.type].name;
       nm.title = "The short name you pick from the dropdown";
 
-      const vl = el("textarea", "pix-ddp-vl");
-      vl.value = o.value;
-      vl.rows = 1;
-      vl.placeholder = PLACEHOLDERS[st.type].value;
-      vl.title = "The value this entry sends out. It can run to several lines.";
-      if (!readable(o.value, st.type)) vl.classList.add("bad");
+      // One box per output. At one output this is the single box the panel has
+      // always had, in the same place with the same class.
+      const vals = valuesOf(o, st.outs.length);
+      const boxes = st.outs.map((out, k) => {
+        const vl = el("textarea", "pix-ddp-vl");
+        vl.value = vals[k];
+        vl.rows = 1;
+        vl.placeholder = st.outs.length > 1
+          ? (out.name || defaultOutName(k))
+          : PLACEHOLDERS[st.type].value;
+        vl.title = st.outs.length > 1
+          ? `The value this entry sends out of ${out.name}. It can run to several lines.`
+          : "The value this entry sends out. It can run to several lines.";
+        if (!readable(vals[k], out.type)) vl.classList.add("bad");
+        return vl;
+      });
 
-      const warn = el("span", "pix-ddp-warn" + (readable(o.value, st.type) ? " hide" : ""), "⚠");
-      warn.title = `This does not read as ${TYPE_LABELS[st.type].toLowerCase()}. It is kept as you typed it, and sends ${JSON.stringify(previewText(o.value, st.type))} until you change it.`;
+      const anyBad = () => {
+        const cur = readState(node);
+        const vv = valuesOf(cur.options[i] || {}, cur.outs.length);
+        return cur.outs.some((out, k) => !readable(vv[k], out.type));
+      };
+      const warn = el("span", "pix-ddp-warn" + (anyBad() ? "" : " hide"), "⚠");
+      warn.title = st.outs.length > 1
+        ? "One of these values does not read as the type set for its output. It is kept as you typed it, and sends the fallback until you change it."
+        : `This does not read as ${TYPE_LABELS[st.type].toLowerCase()}. It is kept as you typed it, and sends ${JSON.stringify(previewText(o.value, st.type))} until you change it.`;
 
       // The glyph is drawn by the ::before chip, so the button itself is empty.
       const ins = el("button", "pix-ddp-ins");
@@ -569,9 +706,9 @@ export function openDropdownPanel(node, onChange) {
       const del = el("button", "pix-ddp-del", "✕");
       del.title = "Delete this row";
 
-      row.append(grip, nm, vl, warn, ins, del);
+      row.append(grip, nm, ...boxes, warn, ins, del);
       list.appendChild(row);
-      autoGrow(vl);
+      boxes.forEach(autoGrow);
 
       // Live edits write straight through; re-rendering on every keystroke would
       // destroy the field being typed in.
@@ -582,17 +719,19 @@ export function openDropdownPanel(node, onChange) {
         writeState(node, { options: cur.options });
         fire();
       });
-      vl.addEventListener("input", () => {
-        const cur = readState(node);
-        if (!cur.options[i]) return;
-        cur.options[i].value = vl.value;
-        writeState(node, { options: cur.options });
-        autoGrow(vl);
-        const ok = readable(vl.value, readState(node).type);
-        vl.classList.toggle("bad", !ok);
-        warn.classList.toggle("hide", ok);
-        renderTypes();
-        fire();
+      boxes.forEach((vl, k) => {
+        vl.addEventListener("input", () => {
+          const cur = readState(node);
+          if (!cur.options[i]) return;
+          setValueAt(cur.options[i], k, vl.value);
+          writeState(node, { options: cur.options });
+          autoGrow(vl);
+          const kind = readState(node).outs[k]?.type || "text";
+          vl.classList.toggle("bad", !readable(vl.value, kind));
+          warn.classList.toggle("hide", !anyBad());
+          renderTypes();
+          fire();
+        });
       });
 
       ins.addEventListener("click", () => {

@@ -26,6 +26,7 @@ import { placeZoomedPopup } from "../shared/popup_zoom.mjs";
 import { installNodeAccent, accentOf, ACC } from "../shared/node_settings.mjs";
 import {
   ROW_H, MIN_W, BODY_PAD, readState, writeState, shownIndex, MODE_LETTERS, MODE_LABELS, MODES,
+  valuesOf,
 } from "./core.mjs";
 import { SOCKET_LABELS, previewText, readable } from "./coerce.mjs";
 
@@ -36,6 +37,8 @@ import { SOCKET_LABELS, previewText, readable } from "./coerce.mjs";
 const TOP_INSET = 12;
 
 const ROW_CLASS = "pix-dd-row";
+// One read-only row per output, shown only when the node has more than one.
+const VROW_CLASS = "pix-dd-vrow";
 const WIDGET_NAME = "dropdown_ui";
 // Namespaced so a future frontend cannot start claiming the type name and
 // render its OWN widget instead of our element (the Show Text bug).
@@ -59,6 +62,33 @@ export function injectCSS() {
        another 16px here put a visible hole between the type word and the dot. */
     padding-right:2px;
   }
+  /* A value row is a READ-ONLY readout, so it deliberately does NOT wear the
+     sunken #1d1d1d field surface the picker uses - in this pack that surface
+     means "you can type here" (node UI convention #3). A raised translucent
+     panel reads as "look only", and being translucent it still adapts to a
+     recoloured node (convention #1). */
+  .${VROW_CLASS}{
+    height:${ROW_H}px; min-height:${ROW_H}px; box-sizing:border-box;
+    display:flex; align-items:center; gap:5px; padding-right:2px;
+    font:12px 'Segoe UI',sans-serif; user-select:none;
+  }
+  .pix-dd-vbox{
+    flex:1 1 auto; min-width:0; height:${ROW_H - 6}px; box-sizing:border-box;
+    display:flex; align-items:center; gap:6px;
+    background:rgba(255,255,255,.05); border:1px solid rgba(255,255,255,.12);
+    border-radius:4px; padding:0 6px; cursor:default;
+  }
+  .pix-dd-vname{ flex:none; color:${ACC}; font-size:11px; opacity:.92; white-space:nowrap; }
+  .pix-dd-vval{
+    flex:1 1 auto; min-width:0; text-align:right; color:#ddd;
+    overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+  }
+  .pix-dd-vval.empty{ color:#888; font-style:italic; }
+  /* Same warning colour the settings panel uses for a value that will not read
+     as its type - a row silently sending the fallback must not look identical
+     to a working one. */
+  .pix-dd-vval.bad{ color:#e0855f; }
+
   .pix-dd-arrow{
     flex:none; width:13px; text-align:center; cursor:pointer;
     color:${ACC}; font-size:10px; line-height:1; background:none; border:none; padding:0;
@@ -175,8 +205,11 @@ export function injectCSS() {
  *
  * NODES 2.0 applies no such margin; its own chrome is added at the call site.
  */
-export function bodyHeight() {
-  return isVueNodes() ? ROW_H + BODY_PAD * 2 : TOP_INSET * 2 + ROW_H;
+export function bodyHeight(node) {
+  // Called with no node in a couple of places that predate multi-output; that
+  // path must keep returning the historic one-row height exactly.
+  const extra = (node?._pixDdVRows?.length || 0) * ROW_H;
+  return (isVueNodes() ? ROW_H + BODY_PAD * 2 : TOP_INSET * 2 + ROW_H) + extra;
 }
 
 // ── The row ────────────────────────────────────────────────────────────────
@@ -308,6 +341,91 @@ export function renderRow(node) {
   const many = st.options.length > 1;
   parts.prev.classList.toggle("dim", !many);
   parts.next.classList.toggle("dim", !many);
+}
+
+// ── Value rows (multi-output only) ─────────────────────────────────────────
+//
+// With one output the face is exactly what it has always been: the picker row,
+// with the dot on it. Above one, the picker keeps the top row and each output
+// gains a read-only row beneath showing `name: value`, with that output's dot
+// on its own row. So a pick visibly resolves to the values it is about to send
+// before anything runs, which is the whole point of holding a pair together.
+
+function buildValueRow(node, idx) {
+  injectCSS();
+  const el = document.createElement("div");
+  el.className = VROW_CLASS;
+  const box = document.createElement("div");
+  box.className = "pix-dd-vbox";
+  const nm = document.createElement("span");
+  nm.className = "pix-dd-vname";
+  const vl = document.createElement("span");
+  vl.className = "pix-dd-vval";
+  box.append(nm, vl);
+  el.appendChild(box);
+
+  const w = node.addDOMWidget(`${WIDGET_NAME}_v${idx}`, WIDGET_TYPE, el, {
+    serialize: false,
+    getValue: () => "",
+    setValue: () => {},
+  });
+  if (w) {
+    w.serialize = false;                    // stays out of the saved workflow
+    w.computeSize = () => [node.size?.[0] || MIN_W, ROW_H];
+    w.computeLayoutSize = undefined;        // hug the content, do not grow
+    applyAdaptiveCanvasOnly(w);
+  }
+  installCanvasZoomPassthrough(el);
+  installNodeAccent(node, el);
+  return { widget: w, el, name: nm, value: vl };
+}
+
+/**
+ * Make the number of value rows match the number of outputs. Idempotent, so it
+ * is safe to call on every render.
+ *
+ * A removed widget MUST have onRemove() called: ComfyUI's own widget store
+ * re-mounts a DOM widget that was dropped without it, which is how Monitor
+ * ended up with six orphaned faces after three renderer flips.
+ */
+export function syncValueRows(node) {
+  const want = readState(node).outs.length;
+  const rows = (node._pixDdVRows = node._pixDdVRows || []);
+  const target = want > 1 ? want : 0;
+
+  while (rows.length > target) {
+    const r = rows.pop();
+    try { r.widget?.onRemove?.(); } catch { /* already gone */ }
+    const i = node.widgets ? node.widgets.indexOf(r.widget) : -1;
+    if (i > -1) node.widgets.splice(i, 1);
+    r.el?.remove();
+  }
+  while (rows.length < target) rows.push(buildValueRow(node, rows.length));
+  return rows;
+}
+
+/** Repaint the value rows. DOM only - never touches serialized node state. */
+export function renderValueRows(node) {
+  const rows = node._pixDdVRows;
+  if (!rows || !rows.length) return;
+  const st = readState(node);
+  const opt = st.options[shownIndex(node)];
+  const vals = valuesOf(opt, st.outs.length);
+
+  rows.forEach((r, i) => {
+    const o = st.outs[i];
+    if (!o || !r) return;
+    r.name.textContent = o.name;
+    const raw = vals[i];
+    const blank = raw === "";
+    const ok = blank || readable(raw, o.type);
+    r.value.textContent = blank ? "(empty)" : previewText(raw, o.type);
+    r.value.classList.toggle("empty", blank);
+    r.value.classList.toggle("bad", !ok);
+    r.el.title = ok
+      ? `${o.name} sends ${blank ? "an empty value" : previewText(raw, o.type)}`
+      : `${o.name}: "${raw}" does not read as ${SOCKET_LABELS[o.type]}, so it sends the fallback`;
+  });
 }
 
 /** Step the selection. Wraps, so a short list is quick to cycle. */
@@ -509,18 +627,26 @@ export function openPopup(node) {
  * Nodes 2.0 has no such margin, which is why the same maths looks right there.
  */
 export function alignOutputLegacy(node) {
-  const w = node._pixDdWidget;
-  const out = node.outputs?.[0];
-  if (!w || !out) return;
-  const y = w.y;
-  if (!Number.isFinite(y)) return;
-  const margin = Number.isFinite(w.margin) ? w.margin : 10;
-  const nx = node.size[0];
-  const ny = y + margin + ROW_H * 0.5;
-  const pos = out.pos;
-  // Diff-gated: output.pos is serialized, and rewriting an identical value
-  // still counts as a change on some builds (Vue Compat #18).
-  if (!pos || pos[0] !== nx || Math.abs(pos[1] - ny) > 0.5) out.pos = [nx, ny];
+  const nx = node.size?.[0];
+  if (!Number.isFinite(nx)) return;
+
+  const park = (out, w) => {
+    if (!out || !w) return;
+    const y = w.y;
+    if (!Number.isFinite(y)) return;
+    const margin = Number.isFinite(w.margin) ? w.margin : 10;
+    const ny = y + margin + ROW_H * 0.5;
+    const pos = out.pos;
+    // Diff-gated: output.pos is serialized, and rewriting an identical value
+    // still counts as a change on some builds (Vue Compat #18).
+    if (!pos || pos[0] !== nx || Math.abs(pos[1] - ny) > 0.5) out.pos = [nx, ny];
+  };
+
+  const n = readState(node).outs.length;
+  if (n <= 1) { park(node.outputs?.[0], node._pixDdWidget); return; }
+  // Above one output the dots follow the VALUE rows, not the picker.
+  const rows = node._pixDdVRows || [];
+  for (let i = 0; i < n; i++) park(node.outputs?.[i], rows[i]?.widget);
 }
 
 function isAligned(rowEl, dot) {
@@ -542,9 +668,18 @@ export function alignOutput(node) {
   try {
     const el = document.querySelector(`.lg-node[data-node-id="${node.id}"]`);
     if (!el) return;
-    const rowEl = el.querySelector(`.${ROW_CLASS}`);
+    // Above one output the dots ride the VALUE rows; at one, the picker row.
+    const n = readState(node).outs.length;
+    const rowEls = n > 1
+      ? Array.from(el.querySelectorAll(`.${VROW_CLASS}`))
+      : [el.querySelector(`.${ROW_CLASS}`)].filter(Boolean);
+    const rowEl = rowEls[0];
     const outs = el.querySelectorAll(".lg-slot--output");
     if (!rowEl || !outs.length) return;
+    // Vue can render a newly added row a frame after the slots; aligning
+    // against a half-built body bakes in a wrong offset the poll would then
+    // early-return on. Wait for the counts to agree.
+    if (n > 1 && (rowEls.length < n || outs.length < n)) return;
     if (isAligned(rowEl, outs[0])) return;
 
     const col = outs[0].parentElement;
@@ -566,11 +701,20 @@ export function alignOutput(node) {
     const rowH = rowEl.offsetHeight || ROW_H;
     const toLayout = rowH / (rowEl.getBoundingClientRect().height || rowH);
 
-    // STEP ONE: size the dot's slot to one row. Changes the block's height.
+    // The gap between consecutive value rows, measured rather than assumed:
+    // Nodes 2.0 puts its own spacing between widget rows, so a dot pitch of
+    // rowH alone would drift further out of line with every extra output.
+    const pitch = rowEls[1]
+      ? Math.max(rowH, (rowEls[1].getBoundingClientRect().top
+                        - rowEls[0].getBoundingClientRect().top) * toLayout)
+      : rowH;
+
+    // STEP ONE: size each dot's slot to one row and space it by the row pitch.
+    // Changes the block's height, which is why it must come before the measure.
     for (const o of outs) {
       o.style.height = rowH + "px";
       o.style.minHeight = rowH + "px";
-      o.style.marginBottom = "0px";
+      o.style.marginBottom = (pitch - rowH) + "px";
     }
     // STEP TWO: take the now-correctly-sized block out of the flow.
     block.style.marginBottom = (-block.offsetHeight) + "px";

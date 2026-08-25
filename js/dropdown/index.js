@@ -17,6 +17,7 @@ import {
 } from "./core.mjs";
 import {
   buildRow, renderRow, bodyHeight, alignOutputLegacy, scheduleAlign,
+  syncValueRows, renderValueRows,
   watchAlign, unwatchAlign, closePopupFor, injectCSS,
 } from "./ui.mjs";
 import { openDropdownPanel, closeDropdownPanelFor } from "./settings.mjs";
@@ -36,10 +37,24 @@ registerNodeSettings(CLASS, {
   closeFor: (node) => closeDropdownPanelFor(node),
 });
 
+/**
+ * Re-fit the node after the number of outputs changed. A REAL USER ACTION only
+ * - never on the load path, where writing node.size would flag an untouched
+ * workflow modified (Vue Compat #18/#19).
+ */
+function resizeToBody(node) {
+  if (isGraphLoading()) return;
+  const h = bodyHeight(node) + (isVueNodes() ? 52 : 0);
+  if (Math.abs((node.size?.[1] ?? 0) - h) > 0.5) node.setSize?.([node.size[0], h]);
+}
+
 function openPanel(node) {
   openDropdownPanel(node, (n) => {
     syncOutput(n);
+    syncValueRows(n);
     renderRow(n);
+    renderValueRows(n);
+    resizeToBody(n);
     repaintAccent(n);
     n.setDirtyCanvas?.(true, true);
     app.graph?.setDirtyCanvas?.(true, true);
@@ -72,14 +87,16 @@ app.registerExtension({
 
       buildRow(this, openPanel);
       syncOutput(this);
+      syncValueRows(this);
       renderRow(this);
+      renderValueRows(this);
 
       // Legacy reserves a 20px slot row per output; our dot lives on the row, so
       // we own the size. MIN_W and NEVER this.size[0]: computeSize()[0] is also
       // the drag MINIMUM, so returning the live width would ratchet the floor up
       // on every widen and the node could then only ever grow.
       if (!isVueNodes()) {
-        this.computeSize = function () { return [MIN_W, bodyHeight()]; };
+        this.computeSize = function () { return [MIN_W, bodyHeight(this)]; };
       }
 
       // Fresh size, SYNCHRONOUSLY. configure() runs right after onNodeCreated
@@ -87,11 +104,13 @@ app.registerExtension({
       // user's size on every reload and every duplicate (convention #9).
       if (!Array.isArray(this.size)) this.size = [DEFAULT_W, 60];
       this.size[0] = DEFAULT_W;
-      this.size[1] = bodyHeight() + (isVueNodes() ? 52 : 0);
+      this.size[1] = bodyHeight(this) + (isVueNodes() ? 52 : 0);
 
       queueMicrotask(() => {
         renderRow(this);
         syncOutput(this);
+        syncValueRows(this);
+        renderValueRows(this);
         watchAlign(this);
         scheduleAlign(this);
       });
@@ -105,9 +124,12 @@ app.registerExtension({
       // DOM + slot only. Nothing here may write node.size or add/remove slots,
       // or an untouched workflow opens flagged "modified" (Vue Compat #18).
       syncOutput(this);
+      syncValueRows(this);
       renderRow(this);
+      renderValueRows(this);
       queueMicrotask(() => {
         renderRow(this);
+        renderValueRows(this);
         watchAlign(this);
         scheduleAlign(this);
       });
@@ -150,7 +172,7 @@ app.registerExtension({
     nodeType.prototype.onResize = function (size) {
       if (!isVueNodes()) {
         if (size[0] < MIN_W) size[0] = MIN_W;
-        size[1] = bodyHeight();   // one row: the height is ours, not the drag's
+        size[1] = bodyHeight(this);   // the rows own the height, not the drag
       }
       return _resize?.apply(this, arguments);
     };

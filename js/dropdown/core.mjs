@@ -292,9 +292,12 @@ export function shownIndex(node) {
  * you have NOT selected must all be free. So the names, the rest of the list,
  * the mode and the accent stay out, and Python accepts this lean shape directly.
  */
-export function injectedState(node) {
+export function injectedState(node, indexOverride) {
   const st = readState(node);
-  const opt = st.options[pendingIndex(node)];
+  // XY Plot names the entry for the square being rendered; everything else
+  // takes whatever this build is due to send.
+  const idx = Number.isInteger(indexOverride) ? indexOverride : pendingIndex(node);
+  const opt = st.options[idx];
 
   // ONE output: emit the historic shape, byte for byte. The injected string is
   // the node's cache key, so any change here would re-run every existing

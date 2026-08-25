@@ -13,7 +13,7 @@
 // entries sharing a name are ambiguous - see note().
 
 import { registerSweepProvider } from "../shared/sweep_targets.mjs";
-import { HIDDEN_INPUT, readState, injectedState } from "./core.mjs";
+import { HIDDEN_INPUT, readState, injectedState, valuesOf } from "./core.mjs";
 import { coerceValue, previewText } from "./coerce.mjs";
 
 const CLASS = "PixaromaDropdown";
@@ -69,7 +69,10 @@ function preview(node) {
   const st = readState(node);
   const opt = st.options[st.index];
   if (!opt) return "(no entries yet)";
-  return `${labelOf(opt, st.index)} - ${previewText(opt.value, st.type)}`;
+  const vals = valuesOf(opt, st.outs.length);
+  const shown = st.outs.map((o, k) => (st.outs.length > 1 ? `${o.name}: ` : "")
+    + previewText(vals[k], o.type)).join(", ");
+  return `${labelOf(opt, st.index)} - ${shown}`;
 }
 
 // The axis title drawn on the grid. The node's own title when the user has given
@@ -118,23 +121,34 @@ function inject(entry, axis, value, node) {
   }
 
   entry.inputs = entry.inputs || {};
-  // Build from the node's own lean shape so the type travels with the value and
-  // Python needs no special case for a swept run.
-  const base = injectedState(node);
-  base.value = st.options[idx].value;
+  // Build from the node's own lean shape so the types travel with the values and
+  // Python needs no special case for a swept run. The index is passed IN rather
+  // than the value patched on afterwards: above one output the lean shape holds
+  // a `values` array, and writing `.value` onto it would be silently ignored -
+  // every square would then run the node's current pick instead of the swept
+  // one, which looks exactly like a sweep that is being ignored.
+  const base = injectedState(node, idx);
   entry.inputs[HIDDEN_INPUT] = JSON.stringify(base);
 
   // Sanity: a value that does not read as the node's type still runs (Python
   // falls back), but in a GRID that produces a square silently identical to
   // every other broken one, which reads as a plot that did not work.
-  const resolved = coerceValue(base.value, base.type);
-  if (base.type !== "text" && (resolved === 0 || resolved === false) && String(base.value || "").trim()) {
-    console.warn(
-      `[Dropdown Pixaroma] the entry "${want}" does not read as ${base.type}, so this square `
-      + `ran with the fallback value. Fix it in the node's settings, or the grid will have `
-      + `identical squares in it.`,
-    );
-  }
+  // Works on BOTH lean shapes: the single-output one carries value/type, the
+  // multi-output one carries values/types. Reading only the first pair would
+  // miss a broken second value entirely.
+  const sent = Array.isArray(base.values) ? base.values : [base.value];
+  const kinds = Array.isArray(base.types) ? base.types : [base.type];
+  sent.forEach((v, k) => {
+    const kind = kinds[k] || "text";
+    const resolved = coerceValue(v, kind);
+    if (kind !== "text" && (resolved === 0 || resolved === false) && String(v || "").trim()) {
+      console.warn(
+        `[Dropdown Pixaroma] the entry "${want}" does not read as ${kind}, so this square `
+        + `ran with the fallback value. Fix it in the node's settings, or the grid will have `
+        + `identical squares in it.`,
+      );
+    }
+  });
 }
 
 registerSweepProvider(CLASS, { owns, enumerate, lookup, preview, displayName, note, inject });
