@@ -4,7 +4,7 @@ Thin wrapper. All the real logic is pure and lives in _dropdown_helpers.py so
 it can be tested without ComfyUI.
 """
 
-from ._dropdown_helpers import selected_value
+from ._dropdown_helpers import MAX_OUTS, selected_values
 from ._type_helpers import ANY
 
 
@@ -24,7 +24,8 @@ class PixaromaDropdown:
         "of the input they are wired to.\n\n"
         "The list is saved inside the workflow, so sending someone the workflow sends your "
         "entries with it. Export and Import move a list between workflows.\n\n"
-        "Find it by searching for dropdown, list, options, preset, choose, pick, or trigger."
+        "Find it by searching for dropdown, list, options, preset, choose, pick, combination, "
+        "pair, or trigger."
     )
 
     @classmethod
@@ -41,17 +42,27 @@ class PixaromaDropdown:
     # is a frontend concern: js/dropdown/ sets node.outputs[0].type so LiteGraph
     # refuses an incompatible drag on the canvas. There is no second, server-side
     # type check behind that - same as Switch and Control Panel.
-    RETURN_TYPES = (ANY,)
-    RETURN_NAMES = ("value",)
+    # Four ANY outputs are always declared; the browser hides the ones beyond the
+    # chosen count, exactly as Sliders Pixaroma does with its 16. Declaring them
+    # here rather than growing them later keeps the node definition stable, so a
+    # saved workflow never sees the def change under it.
+    RETURN_TYPES = (ANY,) * MAX_OUTS
+    RETURN_NAMES = ("value", "value_2", "value_3", "value_4")
     OUTPUT_TOOLTIPS = (
         "The value behind the entry you picked. What kind of value it is follows the type set "
         "on the node: text, a whole number, a decimal, or on/off.",
+        "The second value of the entry you picked. Only shown when the node is set to two or "
+        "more outputs.",
+        "The third value of the entry you picked. Only shown when the node is set to three or "
+        "more outputs.",
+        "The fourth value of the entry you picked. Only shown when the node is set to four "
+        "outputs.",
     )
     FUNCTION = "run"
     CATEGORY = "👑 Pixaroma/🔢 Values"
 
     def run(self, DropdownState="{}"):
-        return (selected_value(DropdownState),)
+        return selected_values(DropdownState)
 
 
 NODE_CLASS_MAPPINGS = {"PixaromaDropdown": PixaromaDropdown}

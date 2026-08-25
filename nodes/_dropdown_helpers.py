@@ -333,3 +333,82 @@ def selected_value(raw):
     if not options or index < 0 or index >= len(options):
         return FALLBACKS[parsed["type"]]
     return coerce_value(options[index].get("value"), parsed["type"])
+
+
+# ---------------------------------------------------------------------------
+# Multi-output support (added 2026-08-25)
+#
+# A Dropdown can carry up to MAX_OUTS values per entry, so one pick sets several
+# wires at once - a sampler AND its scheduler, a width AND a height. Output 1 is
+# unchanged in every respect, which is the whole point: a saved single-output
+# Dropdown must keep the same stored shape, the same injected string and the
+# same cache key, or shipping this would re-run every existing workflow and
+# flag every saved file modified.
+#
+# THE SHAPES, and why each exists:
+#   LEAN 1-out   {"type": t, "value": v}                  <- byte-identical to before
+#   LEAN N-out   {"types": [...], "values": [...]}         <- only when outputs > 1
+#   FULL         {"type", "index", "options": [...], "outs": [...]}
+# In the FULL shape an entry keeps `value` for output 1 and puts outputs 2..N in
+# `v`, so an old entry is already a valid new entry with nothing to migrate.
+# ---------------------------------------------------------------------------
+
+MAX_OUTS = 4
+
+
+def _pad_to(values, count, kinds):
+    """values -> exactly `count` coerced values, padding with each type's fallback."""
+    out = []
+    for i in range(count):
+        kind = kinds[i] if i < len(kinds) else "text"
+        if i < len(values):
+            out.append(coerce_value(values[i], kind))
+        else:
+            out.append(FALLBACKS[kind])
+    return tuple(out)
+
+
+def selected_values(raw, count=MAX_OUTS):
+    """The hidden state string -> the `count` values this node outputs.
+
+    `selected_value` (singular) is left exactly as it was and still handles the
+    single-output contract; this is additive so the tested path cannot regress.
+
+    Anything unreadable degrades to the type's fallback rather than raising, for
+    the same reason as the singular version: one malformed row must never take
+    down a whole queue.
+    """
+    state = _loads(raw)
+
+    # LEAN, multi-output. Checked first and by KEY: a list is only ever written
+    # by the browser when the node really has more than one output.
+    if isinstance(state.get("values"), list):
+        raw_kinds = state.get("types")
+        kinds = [normalize_type(k) for k in raw_kinds] if isinstance(raw_kinds, list) else []
+        if not kinds:
+            kinds = [normalize_type(state.get("type"))]
+        return _pad_to(state["values"], count, kinds)
+
+    # LEAN, single output - the shape every existing workflow injects.
+    if "value" in state:
+        kind = normalize_type(state.get("type"))
+        return _pad_to([state.get("value")], count, [kind])
+
+    # FULL shape: a hand-written API file, or a run where injection was missed.
+    parsed = parse_state(state)
+    index = parsed["index"]
+    kinds = [parsed["type"]]
+    outs = state.get("outs")
+    if isinstance(outs, list) and outs:
+        kinds = [normalize_type(o.get("type") if isinstance(o, dict) else None) for o in outs]
+
+    # Read the raw option, not the parsed one: parse_state normalizes to
+    # {name, value} and drops `v`, which is where outputs 2..N live.
+    raw_opts = state.get("options") if isinstance(state.get("options"), list) else []
+    opt = raw_opts[index] if 0 <= index < len(raw_opts) else None
+    if not isinstance(opt, dict):
+        return _pad_to([], count, kinds)
+
+    extra = opt.get("v")
+    values = [opt.get("value")] + (list(extra) if isinstance(extra, list) else [])
+    return _pad_to(values, count, kinds)
