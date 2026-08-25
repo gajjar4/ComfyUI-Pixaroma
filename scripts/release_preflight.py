@@ -274,6 +274,13 @@ def _resolve_int(tree, name):
     Only a module-level int LITERAL counts, in this file or in the one relative
     import that names it. Anything else returns None and the caller skips the
     value, so this can never invent a length and fail a clean release.
+
+    KNOWN LIMIT: the FIRST module-level binding wins. A later rebind, an
+    `x += 1`, or a class-body shadow of the same name would be read wrong and
+    could fail a clean release. Left as is deliberately - every count constant
+    in the pack (NUM, MAX_SLIDERS, MAX_ROWS, MAX_OUTS) is bound exactly once at
+    module level, and a binding-counter to close it is easy to get subtly wrong
+    in the direction that blocks a good release.
     """
     here = _module_int(tree, name)
     if here is not None:
@@ -342,7 +349,9 @@ def check_output_arity():
             # stray \xff sails past it and lands here as a UnicodeDecodeError.
             # A raw traceback in exactly the invisible-byte scenario this script
             # exists to explain would be the worst possible output. ValueError
-            # covers the null byte on Pythons older than 3.14.
+            # is belt-and-braces for older interpreters: measured, BOTH 3.12.10
+            # and 3.14.4 raise SyntaxError for a null byte, and
+            # UnicodeDecodeError is itself a ValueError subclass.
             failures.append("%s could not be parsed (%s): %s"
                             % (os.path.basename(path), type(exc).__name__, exc))
             continue
