@@ -8,7 +8,7 @@
 import { isGraphLoading } from "../shared/graph_loading.mjs";
 import { accentOf } from "../shared/node_settings.mjs";
 import { slotAccepts } from "../shared/slot_types.mjs";
-import { SOCKET_TYPES, normalizeType } from "./coerce.mjs";
+import { SOCKET_TYPES, WIRE_TYPES, normalizeType } from "./coerce.mjs";
 
 export const CLASS = "PixaromaDropdown";
 
@@ -378,7 +378,10 @@ export function syncOutputs(node) {
 
   for (let i = 0; i < n && i < node.outputs.length; i++) {
     const out = node.outputs[i];
-    const want = SOCKET_TYPES[outs[i].type] || "*";
+    // WIRE_TYPES, not SOCKET_TYPES: a plain "STRING" cannot be DRAGGED onto a
+    // COMBO widget input (sampler_name, ckpt_name, ...). Stripped back to the
+    // plain name on serialize, so the saved file is unchanged. See coerce.mjs.
+    const want = WIRE_TYPES[outs[i].type] || "*";
     const nm = outs[i].name || defaultOutName(i);
     // Every write diff-gated: slots are serialized, and rewriting an identical
     // value still counts as a change on some builds (Vue Compat #18).

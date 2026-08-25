@@ -20,6 +20,7 @@ import {
   syncValueRows, renderValueRows,
   watchAlign, unwatchAlign, closePopupFor, injectCSS,
 } from "./ui.mjs";
+import { WIRE_SUFFIX } from "./coerce.mjs";
 import { openDropdownPanel, closeDropdownPanelFor } from "./settings.mjs";
 import { DROPDOWN_HELP } from "./help.mjs";
 import "./sweep.mjs";   // side-effect: registers the XY Plot sweep provider
@@ -191,7 +192,17 @@ app.registerExtension({
     nodeType.prototype.serialize = function () {
       const out = _serialize?.apply(this, arguments);
       try {
-        for (const o of out?.outputs || []) delete o.pos;
+        for (const o of out?.outputs || []) {
+          delete o.pos;
+          // The ",COMBO" the live slot carries is a DRAG-TIME affordance only
+          // (coerce.mjs explains why it has to be there). Strip it so the saved
+          // file keeps the exact type it always had - otherwise every existing
+          // Dropdown would be rewritten on open and flag a clean workflow
+          // "modified" (Vue Compat #18).
+          if (typeof o.type === "string" && o.type.endsWith(WIRE_SUFFIX)) {
+            o.type = o.type.slice(0, -WIRE_SUFFIX.length);
+          }
+        }
       } catch {}
       return out;
     };

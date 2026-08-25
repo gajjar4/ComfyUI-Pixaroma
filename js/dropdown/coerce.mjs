@@ -27,6 +27,28 @@ export const SOCKET_LABELS = { text: "text", int: "int", float: "float", bool: "
 // drag. Python declares ANY; this is the frontend half of that story.
 export const SOCKET_TYPES = { text: "STRING", int: "INT", float: "FLOAT", bool: "BOOLEAN" };
 
+// ⚠ The SAVED type above is not the type the canvas may use for a drag.
+// A plain "STRING" output CANNOT be dragged onto a COMBO widget input -
+// LiteGraph's isValidConnection("STRING", "COMBO") is false (measured) - and a
+// COMBO widget is exactly what a sampler_name / scheduler / ckpt_name is. So
+// the node could drive them only if the wire already existed in the file: once
+// the user disconnected one, it could never be reconnected by hand. That is the
+// main thing this node is for, so the type has to say COMBO as well.
+//
+// LiteGraph reads a comma-joined type as a LIST of accepted names (the same
+// mechanism behind core's multi-type inputs, Vue Compat #22), so this keeps the
+// real refusals: "STRING,COMBO" -> COMBO true, -> STRING true, -> IMAGE FALSE.
+//
+// Only `text` gets it. A ComfyUI combo carries STRINGS, so an int/float/bool
+// Dropdown has no business claiming it can feed one.
+//
+// The suffix is a DRAG-TIME concern only and is stripped again in the
+// `serialize` wrap (js/dropdown/index.js), so saved workflows keep the exact
+// output type they have always had and no existing file is flagged modified
+// just by being opened (Vue Compat #18).
+export const WIRE_SUFFIX = ",COMBO";
+export const WIRE_TYPES = { ...SOCKET_TYPES, text: SOCKET_TYPES.text + WIRE_SUFFIX };
+
 export const FALLBACKS = { text: "", int: 0, float: 0.0, bool: false };
 
 const TRUE_WORDS = new Set(["true", "yes", "on", "y", "t"]);
