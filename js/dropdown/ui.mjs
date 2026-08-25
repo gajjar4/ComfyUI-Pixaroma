@@ -36,6 +36,17 @@ import { SOCKET_LABELS, previewText, readable } from "./coerce.mjs";
 // reserving the matching space below.
 const TOP_INSET = 12;
 
+// MEASURED, not assumed: Classic stacks widgets 30px apart, not ROW_H - it adds
+// a 4px gap between them (five rows landed at y = 2, 32, 62, 92, 122). Counting
+// ROW_H per row under-counted the body by 4px each and the last value row was
+// clipped by the node frame. Nodes 2.0 spaces its widget rows by the same 30.
+const ROW_PITCH = 30;
+// node.widgets_start_y, set in index.js.
+const WIDGETS_START_Y = 2;
+// BaseDOMWidgetImpl.DEFAULT_MARGIN - Classic insets a DOM widget's ELEMENT by
+// this while widget.y itself carries none (see alignOutputLegacy).
+const DOM_MARGIN = 10;
+
 const ROW_CLASS = "pix-dd-row";
 // One read-only row per output, shown only when the node has more than one.
 const VROW_CLASS = "pix-dd-vrow";
@@ -206,10 +217,16 @@ export function injectCSS() {
  * NODES 2.0 applies no such margin; its own chrome is added at the call site.
  */
 export function bodyHeight(node) {
-  // Called with no node in a couple of places that predate multi-output; that
-  // path must keep returning the historic one-row height exactly.
-  const extra = (node?._pixDdVRows?.length || 0) * ROW_H;
-  return (isVueNodes() ? ROW_H + BODY_PAD * 2 : TOP_INSET * 2 + ROW_H) + extra;
+  const extra = node?._pixDdVRows?.length || 0;
+  if (isVueNodes()) return ROW_H + BODY_PAD * 2 + extra * ROW_PITCH;
+  // Called with no node in a couple of places that predate multi-output, and
+  // with no value rows for every plain one-output Dropdown; BOTH must keep
+  // returning the historic height byte-for-byte.
+  if (!extra) return TOP_INSET * 2 + ROW_H;
+  // The last value row's bottom edge, derived rather than guessed: where the
+  // widget stack starts, plus one pitch per row, plus the element inset and the
+  // row itself. Exact - four rows gives 158, which is where the row really ends.
+  return WIDGETS_START_Y + extra * ROW_PITCH + DOM_MARGIN + ROW_H;
 }
 
 // ── The row ────────────────────────────────────────────────────────────────

@@ -44,8 +44,37 @@ registerNodeSettings(CLASS, {
  */
 function resizeToBody(node) {
   if (isGraphLoading()) return;
-  const h = bodyHeight(node) + (isVueNodes() ? 52 : 0);
-  if (Math.abs((node.size?.[1] ?? 0) - h) > 0.5) node.setSize?.([node.size[0], h]);
+
+  if (!isVueNodes()) {
+    const h = bodyHeight(node);
+    if (Math.abs((node.size?.[1] ?? 0) - h) > 0.5) node.setSize?.([node.size[0], h]);
+    return;
+  }
+
+  // NODES 2.0: the body is laid out from the widget rows, so the FRAME already
+  // knows the right height while node.size does not - measured 158 stored
+  // against 218 rendered with four rows. node.size IS serialized and the node
+  // is rebuilt from it on the next load, so leaving it short is exactly what
+  // clips the last value row after a reload (user-reported: "value 4 is out of
+  // the node").
+  //
+  // Do NOT compute the height here. Vue adds its own gap between widget rows
+  // (measured 4px per row on top of ROW_H), and any constant for that is a
+  // guess that drifts with the frontend. Measure the frame and subtract the
+  // title, which LiteGraph excludes from node.size.
+  requestAnimationFrame(() => {
+    if (isGraphLoading()) return;
+    const el = document.querySelector(`.lg-node[data-node-id="${node.id}"]`);
+    if (!el) return;
+    // getBoundingClientRect is SCREEN px - the Vue node is CSS-scaled by the
+    // graph zoom - so divide it back out before writing a LAYOUT value.
+    const zoom = app.canvas?.ds?.scale || 1;
+    const titleH = window.LiteGraph?.NODE_TITLE_HEIGHT ?? 30;
+    const h = Math.round(el.getBoundingClientRect().height / zoom - titleH);
+    if (Number.isFinite(h) && h > 0 && Math.abs((node.size?.[1] ?? 0) - h) > 1) {
+      node.setSize?.([node.size[0], h]);
+    }
+  });
 }
 
 function openPanel(node) {
