@@ -41,6 +41,10 @@ const TOP_INSET = 12;
 // ROW_H per row under-counted the body by 4px each and the last value row was
 // clipped by the node frame. Nodes 2.0 spaces its widget rows by the same 30.
 const ROW_PITCH = 30;
+// The Nodes 2.0 body height with no value rows, measured on the rendered node.
+// Its chrome differs from Classic's, so it gets its own number rather than
+// being assembled from ROW_H + BODY_PAD.
+const VUE_BASE = 68;
 // Shaved off the bottom once there ARE value rows. The 12px the base carries
 // reads right under a single row but a touch loose under a stack of them, so a
 // multi-output node sits on 8. User's call, by eye, on the rendered node.
@@ -218,7 +222,17 @@ export function injectCSS() {
  */
 export function bodyHeight(node) {
   const extra = node?._pixDdVRows?.length || 0;
-  if (isVueNodes()) return ROW_H + BODY_PAD * 2 + extra * ROW_PITCH;
+  // Nodes 2.0 wraps the rows in its own chrome, so the base is MEASURED rather
+  // than assembled from ROW_H and BODY_PAD: a node with no value rows settles
+  // at 68, and each value row adds exactly one pitch (68 / 128 / 158 / 188 for
+  // 0 / 2 / 3 / 4 rows, confirmed twice by independent measurement).
+  //
+  // This is computed, NOT read back from the rendered node, and that is the
+  // whole point. The frame FOLLOWS node.size whenever node.size is the larger
+  // of the two, so measuring it only ever hands back what the node already is -
+  // a ratchet that grows and never shrinks, which is what left a node stuck
+  // tall after going from four outputs down to one.
+  if (isVueNodes()) return VUE_BASE + extra * ROW_PITCH;
   // One row per output on top of the picker row. The base already carries the
   // SAME 12px below the last row as it does above the first: a one-output node
   // is 50 tall with its row's element spanning 12..38, so 12 top and 12 bottom.

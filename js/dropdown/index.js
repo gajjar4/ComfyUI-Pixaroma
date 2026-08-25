@@ -44,38 +44,20 @@ registerNodeSettings(CLASS, {
  */
 function resizeToBody(node) {
   if (isGraphLoading()) return;
-
-  if (!isVueNodes()) {
+  const apply = () => {
+    if (isGraphLoading()) return;
     const h = bodyHeight(node);
     if (Math.abs((node.size?.[1] ?? 0) - h) > 0.5) node.setSize?.([node.size[0], h]);
-    return;
-  }
-
-  // NODES 2.0: the body is laid out from the widget rows, so the FRAME already
-  // knows the right height while node.size does not - measured 158 stored
-  // against 218 rendered with four rows. node.size IS serialized and the node
-  // is rebuilt from it on the next load, so leaving it short is exactly what
-  // clips the last value row after a reload (user-reported: "value 4 is out of
-  // the node").
-  //
-  // Do NOT compute the height here. Vue adds its own gap between widget rows
-  // (measured 4px per row on top of ROW_H), and any constant for that is a
-  // guess that drifts with the frontend. Measure the frame and subtract the
-  // title, which LiteGraph excludes from node.size.
-  requestAnimationFrame(() => {
-    if (isGraphLoading()) return;
-    const el = document.querySelector(`.lg-node[data-node-id="${node.id}"]`);
-    if (!el) return;
-    // getBoundingClientRect is SCREEN px - the Vue node is CSS-scaled by the
-    // graph zoom - so divide it back out before writing a LAYOUT value.
-    const zoom = app.canvas?.ds?.scale || 1;
-    const titleH = window.LiteGraph?.NODE_TITLE_HEIGHT ?? 30;
-    const h = Math.round(el.getBoundingClientRect().height / zoom - titleH);
-    if (Number.isFinite(h) && h > 0 && Math.abs((node.size?.[1] ?? 0) - h) > 1) {
-      node.setSize?.([node.size[0], h]);
-    }
-  });
+  };
+  apply();
+  // Nodes 2.0 can clamp the write UP the FIRST time a row count is laid out -
+  // measured 188 asked for and 248 landed, then correct on the second visit to
+  // the same count. Re-assert once its layout has settled. Safe to repeat: the
+  // height is COMPUTED, not measured, so re-applying it cannot drift, and the
+  // load gate is re-checked inside.
+  if (isVueNodes()) setTimeout(apply, 260);
 }
+
 
 function openPanel(node) {
   openDropdownPanel(node, (n) => {
@@ -133,7 +115,11 @@ app.registerExtension({
       // user's size on every reload and every duplicate (convention #9).
       if (!Array.isArray(this.size)) this.size = [DEFAULT_W, 60];
       this.size[0] = DEFAULT_W;
-      this.size[1] = bodyHeight(this) + (isVueNodes() ? 52 : 0);
+      // No renderer fudge any more: bodyHeight's Nodes 2.0 base is the MEASURED
+      // body height including Vue's own chrome, so it is already the real
+      // number. The old "+52 in Vue" was a guess on top of a base that only
+      // described Classic, and it left a fresh node 24px taller than its body.
+      this.size[1] = bodyHeight(this);
 
       queueMicrotask(() => {
         renderRow(this);
