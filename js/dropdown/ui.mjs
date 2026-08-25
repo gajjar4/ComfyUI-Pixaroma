@@ -41,11 +41,6 @@ const TOP_INSET = 12;
 // ROW_H per row under-counted the body by 4px each and the last value row was
 // clipped by the node frame. Nodes 2.0 spaces its widget rows by the same 30.
 const ROW_PITCH = 30;
-// node.widgets_start_y, set in index.js.
-const WIDGETS_START_Y = 2;
-// BaseDOMWidgetImpl.DEFAULT_MARGIN - Classic insets a DOM widget's ELEMENT by
-// this while widget.y itself carries none (see alignOutputLegacy).
-const DOM_MARGIN = 10;
 
 const ROW_CLASS = "pix-dd-row";
 // One read-only row per output, shown only when the node has more than one.
@@ -219,14 +214,17 @@ export function injectCSS() {
 export function bodyHeight(node) {
   const extra = node?._pixDdVRows?.length || 0;
   if (isVueNodes()) return ROW_H + BODY_PAD * 2 + extra * ROW_PITCH;
+  // One row per output on top of the picker row. The base already carries the
+  // SAME 12px below the last row as it does above the first: a one-output node
+  // is 50 tall with its row's element spanning 12..38, so 12 top and 12 bottom.
+  // Adding a pitch per value row keeps that bottom breathing space instead of
+  // ending flush against the frame - which the user spotted as "cut too abrupt"
+  // when the height was derived to land exactly on the last row's edge.
+  //
   // Called with no node in a couple of places that predate multi-output, and
-  // with no value rows for every plain one-output Dropdown; BOTH must keep
-  // returning the historic height byte-for-byte.
-  if (!extra) return TOP_INSET * 2 + ROW_H;
-  // The last value row's bottom edge, derived rather than guessed: where the
-  // widget stack starts, plus one pitch per row, plus the element inset and the
-  // row itself. Exact - four rows gives 158, which is where the row really ends.
-  return WIDGETS_START_Y + extra * ROW_PITCH + DOM_MARGIN + ROW_H;
+  // with no value rows for every plain one-output Dropdown; BOTH still get the
+  // historic height byte-for-byte, because extra is 0 there.
+  return TOP_INSET * 2 + ROW_H + extra * ROW_PITCH;
 }
 
 // ── The row ────────────────────────────────────────────────────────────────
