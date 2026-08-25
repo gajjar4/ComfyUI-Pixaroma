@@ -147,6 +147,50 @@ def _write_wav_pcm16(path, waveform, sample_rate, label="Save Mp4"):
         f.writeframes(interleaved)
 
 
+#: Longest fade we will accept, in milliseconds. A fade is meant to hide a click
+#: at the very start, not to be a creative effect - past a couple of seconds the
+#: user is editing their audio and should do it in an editor.
+MAX_AUDIO_FADE_MS = 2000
+
+
+def audio_fade_args(fade_ms):
+    """ffmpeg args for a short fade-in on the audio, or [] when it is off.
+
+    WHY THIS EXISTS: MiniMax H3 (and other AV models) generate audio that is
+    silent for ~20 ms and then switches on at FULL LEVEL in a single step.
+    Measured on a real clip: 0.001 -> 0.005 -> 0.162 across three 10 ms slices.
+    That instantaneous step is audible as a click or "dit" at the start of every
+    clip. It is the MODEL, not this encoder - a tap on the raw audio before it
+    reaches ffmpeg shows the identical opening - and it cannot be prompted away
+    (asking for a gradual fade-in was measured to make it LOUDER, not softer).
+
+    Measured effect on the size of that first step, on a real H3 clip:
+        no fade  0.157   |   30 ms  0.144   |   60 ms  0.072   |   120 ms  0.036
+    30 ms is too short to help, because the sound only starts at 20 ms.
+
+    DEFAULT OFF, deliberately. These nodes are also used for plain load-and-save
+    round trips, and silently fading somebody's existing sound track would be an
+    unrequested edit to their content. The user turns it on for AV-model clips.
+
+    Never raises: an unreadable value is treated as off, because a bad number in
+    a settings blob must not be able to fail a whole render.
+    """
+    try:
+        ms = int(float(fade_ms))
+    except (TypeError, ValueError, OverflowError):
+        # OverflowError is NOT hypothetical: this value arrives from a JSON state
+        # blob, and json.loads accepts the literal `Infinity`, on which
+        # int(float(x)) raises OverflowError rather than ValueError.
+        return []
+    if ms <= 0:
+        return []
+    ms = min(ms, MAX_AUDIO_FADE_MS)
+    # afade wants seconds. 3 decimals is 1 ms resolution, which is finer than
+    # anything audible here, and avoids a float like 0.12000000000000001 in the
+    # command line.
+    return ["-af", "afade=t=in:st=0:d=%.3f" % (ms / 1000.0)]
+
+
 def validate_rgb_frames(frames, label="Save Mp4", pix_fmt="yuv420p"):
     """Refuse anything -pix_fmt rgb24 cannot carry. Returns (n_frames, H, W).
 

@@ -175,6 +175,43 @@ export function openSettingsPanel(node, onChange) {
   cdRow.appendChild(cdVal);
   cdWrap.appendChild(cdRow);
 
+  // ── audio fade-in ──
+  // AI video models (MiniMax H3 and friends) start their sound at full level in
+  // a single step, which is heard as a click at the top of every clip. It is the
+  // model, not the encoder - measured on the raw audio before it reaches ffmpeg -
+  // and it cannot be prompted away. A short fade hides it: measured on a real
+  // clip the opening step went 0.157 -> 0.072 at 60ms -> 0.036 at 120ms, while
+  // 30ms was too short to help because the sound only starts at 20ms.
+  // OFF by default on purpose: this node is also used to re-save an existing
+  // video, and fading somebody's own sound track uninvited would be wrong.
+  const afWrap = section(body, "Audio fade-in",
+    "Fades the sound in at the very start. AI video clips often begin with a "
+    + "click; about 120 removes it and is too short to hear as a fade. Leave at "
+    + "0 when re-saving audio you do not want altered.");
+  const afRow = el("div", "pix-sv-prow");
+  const afSl = el("input", "pix-sv-qsl");
+  afSl.type = "range";
+  afSl.min = "0";
+  afSl.max = "500";
+  afSl.step = "10";
+  afSl.value = String(readState(node).audioFadeMs ?? 0);
+  const afVal = el("span", "pix-sv-qval", "");
+  const showAf = () => {
+    const v = parseInt(afSl.value, 10);
+    afVal.textContent = v > 0 ? `${v} ms` : "off";
+  };
+  showAf();
+  afSl.oninput = () => {
+    const st = readState(node);
+    st.audioFadeMs = parseInt(afSl.value, 10);
+    writeState(node, st);
+    showAf();
+    _onChange?.();
+  };
+  afRow.appendChild(afSl);
+  afRow.appendChild(afVal);
+  afWrap.appendChild(afRow);
+
   // ── quality ──
   // Shown as 1-100 because the encoder's own number (CRF) runs BACKWARDS, which
   // is a bad thing to put in front of anyone. The CRF is printed beside it so

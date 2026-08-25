@@ -7,6 +7,7 @@ import folder_paths
 # share ONE copy (extracted 2026-08-10). Its invariants are recorded in
 # .claude/patterns/save-mp4.md - read that before changing either file.
 from ._video_encode_helpers import (
+    audio_fade_args,
     build_video_meta_json,
     claim_counter_path,
     encode_frames,
@@ -98,6 +99,12 @@ class PixaromaSaveMp4:
                     "tooltip": "save: write to ComfyUI's output/ folder, kept across restarts. preview: write to ComfyUI's temp/ folder, auto-cleared on restart, so use it while iterating and you will not clutter output/. The in-node video preview works the same in both modes."}),
                 "trim_to_audio": ("BOOLEAN", {"default": False,
                     "tooltip": "Off (default): keep every video frame; the audio simply ends where it ends. On: end the video exactly at the audio's length (ffmpeg -shortest), for when the audio is the master (e.g. with Audio React). On can drop the last frame or two when the audio is slightly shorter than the video."}),
+                # Appended LAST on purpose: widgets_values is positional, so a new
+                # widget must go after the existing ones or every saved node reads
+                # its values shifted by one. Hidden on the node face and set from
+                # the settings panel, so it costs no height.
+                "audio_fade_ms": ("INT", {"default": 0, "min": 0, "max": 2000, "step": 10,
+                    "tooltip": "Fade the sound in over this many milliseconds at the very start. 0 is off. AI video models often start their audio at full level in a single step, which is heard as a click; about 120 helps a lot and is too short to notice as a fade. Leave it at 0 when you are just re-saving a video whose sound you do not want altered."}),
             },
             "optional": {
                 "audio": ("AUDIO", {"tooltip": "Optional audio track to mux into the mp4 as AAC 192k. Connect Audio React Pixaroma's audio output here."}),
@@ -112,8 +119,8 @@ class PixaromaSaveMp4:
     OUTPUT_NODE = True
     CATEGORY = "👑 Pixaroma/🖼️ Image"
 
-    def save(self, video_frames, fps, filename_prefix, save_mode, trim_to_audio, audio=None,
-             prompt=None, extra_pnginfo=None):
+    def save(self, video_frames, fps, filename_prefix, save_mode, trim_to_audio,
+             audio_fade_ms=0, audio=None, prompt=None, extra_pnginfo=None):
         crf = self._CRF
         pix_fmt = self._PIX_FMT
         fps_int = max(1, int(round(float(fps))))
@@ -269,6 +276,8 @@ class PixaromaSaveMp4:
         ]
         if temp_audio_path is not None:
             cmd += ["-c:a", "aac", "-b:a", "192k"]
+            # Only when there IS audio - an -af with no audio stream is an error.
+            cmd += audio_fade_args(audio_fade_ms)
             if trim_to_audio:
                 cmd += ["-shortest"]
         if meta_input_index is not None:

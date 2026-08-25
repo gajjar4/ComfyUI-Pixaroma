@@ -37,6 +37,7 @@ from ._save_helpers import (
     strip_stale_preview,
 )
 from ._video_encode_helpers import (
+    audio_fade_args,
     build_video_meta_json,
     claim_counter_path,
     encode_frames,
@@ -57,6 +58,7 @@ DEFAULT_STATE = {
     "quality": 75,              # 1-100, mapped to the encoder's CRF below
     "bitDepth": 10,             # 8 | 10 - only read for mp4hq
     "trimToAudio": False,
+    "audioFadeMs": 0,           # ms of fade-in on the sound; 0 = off (see audio_fade_args)
     "embedWorkflow": True,
     "saveOnRun": True,
     "dateStyle": "yyyy-MM-dd",  # JS-only (what the + Date chip inserts)
@@ -514,6 +516,8 @@ class PixaromaSaveVideo:
             cmd += ["-tag:v", fmt["tag"]]
         if temp_audio_path is not None:
             cmd += ["-c:a", "aac", "-b:a", "192k"]
+            # Only when there IS audio - an -af with no audio stream is an error.
+            cmd += audio_fade_args(state.get("audioFadeMs", 0))
             if trim_to_audio:
                 cmd += ["-shortest"]
         if meta_input_index is not None:

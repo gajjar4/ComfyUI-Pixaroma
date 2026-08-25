@@ -542,6 +542,27 @@ app.registerExtension({
     nodeType.prototype.onConfigure = function () {
       const r = onConfigure?.apply(this, arguments);
       const node = this;
+      // A workflow saved BEFORE audio_fade_ms existed has one widgets_values
+      // entry too few, and LiteGraph fills the gap positionally - the entry that
+      // lands here is the video preview widget's persisted "" (that widget sets
+      // options.serialize but not the top-level widget.serialize, so it has
+      // always saved a junk empty string). Python already reads "" as "off", so
+      // nothing renders wrong, but the number field on the node shows EMPTY,
+      // which reads as broken. Coerce it to a real number.
+      // Only fires when the value is not already numeric, so a node that has a
+      // genuine value is never rewritten.
+      // In a microtask, NOT inline: measured on frontend 1.49.x, the widget
+      // value is still "" when this hook runs, so an inline fix silently does
+      // nothing (it did, first try). By the microtask it is settled.
+      queueMicrotask(() => {
+        const fw = node.widgets?.find((w) => w.name === "audio_fade_ms");
+        // ⚠ Test the TYPE, not Number(value). Number("") is 0, not NaN, so a
+        // `!Number.isFinite(Number(v))` guard is FALSE for the empty string and
+        // the fix silently never runs - which is exactly what happened first try.
+        if (fw && (typeof fw.value !== "number" || !Number.isFinite(fw.value))) {
+          fw.value = 0;
+        }
+      });
       queueMicrotask(() => restorePreview(node));
       return r;
     };

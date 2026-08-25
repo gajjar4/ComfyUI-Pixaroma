@@ -1071,6 +1071,7 @@ const HELP = {
           "The preview remembers the last clip, so it comes back when you switch workflows. If that file has since been deleted, moved, or cleared from temp by a restart, the node tells you instead of showing a black player: just run again.",
           "Set `filename_prefix` to name the file; a 5-digit counter is added automatically. You can print another node's value into the name with a token like `%Seed Pixaroma.seed%`.",
           "Enable `trim_to_audio` to end the video at the audio length.",
+          "Set `audio_fade_ms` to fade the sound in at the very start. AI video models often begin their audio at full level in a single step, which is heard as a click; about `120` removes it and is too short to notice as a fade. Leave it at `0` when you are re-saving a video whose sound you do not want changed.",
         ],
       },
       {
@@ -1168,6 +1169,7 @@ const HELP = {
           ["Quality", "Shows a word beside the number: Small file, Medium, High or Maximum. It is NOT a percentage. High is the default and the point where you cannot see the difference; it is also exactly what Save Mp4 Pixaroma uses, so moving a workflow between the two changes nothing. Winding it to Maximum mostly just grows the file."],
           ["Colour depth", "8 or 10 bit, for MP4 HQ only."],
           ["Trim to audio", "Ends the video exactly where the sound ends, for when the audio is the master. Off keeps every frame and the sound simply stops when it stops."],
+          ["Audio fade-in", "Fades the sound in at the very start. AI video clips often begin with a click because the model starts the audio at full level in one step; about 120 ms removes it and is too short to hear as a fade. Leave it off when re-saving audio you do not want altered."],
           ["Save workflow inside the video", "Lets you drag the file back into ComfyUI to rebuild the graph. Saving it always works; reading it back needs your ComfyUI to support dropping a video onto the canvas."],
           ["Date style, counter digits", "What the + Date chip inserts, and how many digits the counter uses."],
           ["Buttons on the node", "Hide the ones you never use. The format you are currently saving as always stays visible."],

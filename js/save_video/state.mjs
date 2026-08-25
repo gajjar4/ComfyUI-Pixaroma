@@ -16,6 +16,9 @@ export const DEFAULT_STATE = {
   quality: 75,
   bitDepth: 10,
   trimToAudio: false,
+  // ms of fade-in on the sound; 0 = off. MIRRORS nodes/node_save_video.py
+  // DEFAULT_STATE - the two must stay in lockstep.
+  audioFadeMs: 0,
   embedWorkflow: true,
   saveOnRun: true,
   dateStyle: "yyyy-MM-dd", // what the + Date chip inserts (regional order)
