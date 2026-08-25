@@ -375,11 +375,11 @@ Master the Pixaroma suite with our video guides and workflow deep-dives:
 
 ## 🛠 Changelog
 
-### **August 25, 2026 · v1.4.123–1.4.124**
+### **August 25, 2026 · v1.4.123–1.4.125**
 - **Dropdown Pixaroma now holds up to four values in one entry.** Name each output, and one pick sets several wires at once: a sampler and its scheduler, or a width and a height.
 - **Fixed: a Dropdown would not connect to a sampler or scheduler by hand.** It worked if the wire was already saved, but once unplugged it could not be plugged back.
-- **Each output has its own type**, and the node shows what your pick turned into before you run.
-- Dropdowns you already have keep working as they did.
+- **Each output has its own type.** Dropdowns you already have keep working as they did.
+- **New: Save Mp4 and Save Video can fade the sound in.** AI video clips often start with a click; 120 removes it.
 
 ### **August 24, 2026 · v1.4.121–1.4.122**
 - **NEW: Free VRAM Pixaroma**, hands the graphics card's memory back at the point you wire it in, so a second heavy model has room to load. Under Logic & Flow.
