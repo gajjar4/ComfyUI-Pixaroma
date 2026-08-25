@@ -21,6 +21,13 @@ let _cpHandle = null;   // an open colour picker, so the panel can close it too
 let _followRaf = null;  // the canvas-follow loop, see startFollowing()
 let _userMoved = false; // has the user dragged the panel somewhere deliberately?
 
+// The shipped panel width, and what each EXTRA output adds to it. 430 is what a
+// one-output Dropdown has always been; the step is one name box (118) plus its
+// gap (6), which is exactly what the output rows and the entry rows each gain
+// per output. See fitPanelWidth().
+const PANEL_W = 430;
+const PANEL_W_PER_OUT = 124;
+
 function el(tag, cls, text) {
   const e = document.createElement(tag);
   if (cls) e.className = cls;
@@ -202,6 +209,12 @@ function placeBeside(panel, rect) {
   let left = rect.right + gap;
   if (left + mw > vw - pad) left = rect.left - gap - mw;
   if (left < pad) left = Math.max(pad, vw - mw - pad);
+  // ...and clamp the other way too. Both branches above can still leave `left`
+  // far to the RIGHT when the node itself is off-screen that way, and nothing
+  // below caught it - measured 802px of panel sitting 621px past the window
+  // edge. Only the too-small case was handled, which the narrow panel made rare
+  // enough to miss.
+  if (left + mw > vw - pad) left = Math.max(pad, vw - mw - pad);
   let top = rect.top;
   if (top + mh > vh - pad) top = vh - mh - pad;
   if (top < pad) top = pad;
@@ -498,6 +511,29 @@ export function openDropdownPanel(node, onChange) {
                                    : "Picks a different entry at random each run."));
   }
 
+  /**
+   * Widen the panel to match the number of outputs.
+   *
+   * The type chips are `min-width:78px` and there are four of them, so one row
+   * of them needs 4*78 + 3*5 = 327px. At one output the row has the panel's
+   * whole ~398px inner width and they fit. Adding the 118px name box leaves
+   * 274px and "On / off" wrapped to a second line, which the user reported as
+   * hard to read. The entry list has the same problem from the other side: four
+   * value boxes inside 398px would be about 52px each.
+   *
+   * So the panel grows by one name-box-plus-gap per extra output, and stays at
+   * its original 430 for a plain one-output Dropdown - the width that has
+   * shipped, and the one that already looks right.
+   */
+  function fitPanelWidth(n) {
+    const want = n <= 1 ? PANEL_W : PANEL_W + (n - 1) * PANEL_W_PER_OUT;
+    if (panel.style.width === want + "px") return;
+    panel.style.width = want + "px";
+    // Re-place it: a wider panel opened near the right edge would otherwise
+    // hang off screen, and placeBeside already does that clamping.
+    if (!_userMoved) placeBeside(panel, getNodeScreenRect(node));
+  }
+
   /** Every value of every entry, flattened, for the "does it read" counts. */
   function badCount(st) {
     let bad = 0;
@@ -511,6 +547,7 @@ export function openDropdownPanel(node, onChange) {
   function renderTypes() {
     const st = readState(node);
     const n = st.outs.length;
+    fitPanelWidth(n);
 
     // How many values per entry.
     cntSeg.textContent = "";
