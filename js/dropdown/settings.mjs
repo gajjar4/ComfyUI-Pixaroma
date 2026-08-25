@@ -21,12 +21,6 @@ let _cpHandle = null;   // an open colour picker, so the panel can close it too
 let _followRaf = null;  // the canvas-follow loop, see startFollowing()
 let _userMoved = false; // has the user dragged the panel somewhere deliberately?
 
-// The shipped panel width, and what each EXTRA output adds to it. 430 is what a
-// one-output Dropdown has always been; the step is one name box (118) plus its
-// gap (6), which is exactly what the output rows and the entry rows each gain
-// per output. See fitPanelWidth().
-const PANEL_W = 430;
-const PANEL_W_PER_OUT = 124;
 
 function el(tag, cls, text) {
   const e = document.createElement(tag);
@@ -115,12 +109,26 @@ function injectCSS() {
     .pix-ddp-vl.bad { border-color:#a8552f; }
     /* One editor row per output: its name, then its type chips. The name box
        only appears above one output, so a plain Dropdown's panel is unchanged. */
-    .pix-ddp-outrow { display:flex; align-items:center; gap:6px; margin-top:5px; }
-    .pix-ddp-outnm { width:118px; flex:none; box-sizing:border-box; background:#1d1d1d;
+    /* The output's NAME sits ABOVE its chips, not beside them. The four chips
+       are a fixed 4*78 + 3*5 = 327px whatever the output count, so the only
+       thing that ever squeezed them was the name box sharing their row - and
+       adding outputs adds ROWS, not columns, so the panel must grow in height
+       only. Beside them, "On / off" wrapped to a second line. */
+    .pix-ddp-outrow { display:flex; flex-direction:column; gap:4px; margin-top:7px; }
+    .pix-ddp-outnm { width:100%; box-sizing:border-box; background:#1d1d1d;
       border:1px solid #444; border-radius:4px; color:#ddd; font:11px 'Segoe UI',sans-serif;
       padding:5px 7px; outline:none; }
     .pix-ddp-outnm:focus { border-color:var(--acc,${BRAND}); }
-    .pix-ddp-outrow .pix-ddp-seg { flex:1 1 auto; margin:0; }
+    .pix-ddp-outrow .pix-ddp-seg { margin:0; }
+
+    /* Entry values stack for the same reason. Side by side they would be 93px
+       at two outputs and 44px at four; stacked with a fixed-width label each
+       box is ~125px whatever the count. */
+    .pix-ddp-vals { flex:1 1 auto; min-width:0; display:flex; flex-direction:column; gap:4px; }
+    .pix-ddp-vrow2 { display:flex; align-items:flex-start; gap:6px; }
+    .pix-ddp-vlab { flex:none; width:62px; padding-top:6px; font:10px 'Segoe UI',sans-serif;
+      color:var(--acc,${BRAND}); opacity:.85;
+      overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
     /* One heading per output over the entry list, so you can see which value
        feeds which output without counting boxes. Same metrics as .b above so
        the headings stay over their boxes; accented to read as output names. */
@@ -458,13 +466,11 @@ export function openDropdownPanel(node, onChange) {
     const st = readState(node);
     cols.textContent = "";
     cols.appendChild(el("span", "a", "Name in the list"));
-    if (st.outs.length <= 1) {
-      cols.appendChild(el("span", "b", "What it sends out"));
-      return;
-    }
-    st.outs.forEach((o, k) => {
-      cols.appendChild(el("span", "vh", o.name || defaultOutName(k)));
-    });
+    // Two headings, always. The values used to sit in per-output COLUMNS, so
+    // each one was named up here; now they stack and carry their own label, so
+    // repeating the names as column heads would point at nothing.
+    cols.appendChild(el("span", "b",
+      st.outs.length > 1 ? "What it sends out, one per output" : "What it sends out"));
   }
   const list = el("div", "pix-ddp-list");
   listSec.appendChild(list);
@@ -511,29 +517,6 @@ export function openDropdownPanel(node, onChange) {
                                    : "Picks a different entry at random each run."));
   }
 
-  /**
-   * Widen the panel to match the number of outputs.
-   *
-   * The type chips are `min-width:78px` and there are four of them, so one row
-   * of them needs 4*78 + 3*5 = 327px. At one output the row has the panel's
-   * whole ~398px inner width and they fit. Adding the 118px name box leaves
-   * 274px and "On / off" wrapped to a second line, which the user reported as
-   * hard to read. The entry list has the same problem from the other side: four
-   * value boxes inside 398px would be about 52px each.
-   *
-   * So the panel grows by one name-box-plus-gap per extra output, and stays at
-   * its original 430 for a plain one-output Dropdown - the width that has
-   * shipped, and the one that already looks right.
-   */
-  function fitPanelWidth(n) {
-    const want = n <= 1 ? PANEL_W : PANEL_W + (n - 1) * PANEL_W_PER_OUT;
-    if (panel.style.width === want + "px") return;
-    panel.style.width = want + "px";
-    // Re-place it: a wider panel opened near the right edge would otherwise
-    // hang off screen, and placeBeside already does that clamping.
-    if (!_userMoved) placeBeside(panel, getNodeScreenRect(node));
-  }
-
   /** Every value of every entry, flattened, for the "does it read" counts. */
   function badCount(st) {
     let bad = 0;
@@ -547,7 +530,6 @@ export function openDropdownPanel(node, onChange) {
   function renderTypes() {
     const st = readState(node);
     const n = st.outs.length;
-    fitPanelWidth(n);
 
     // How many values per entry.
     cntSeg.textContent = "";
@@ -743,7 +725,18 @@ export function openDropdownPanel(node, onChange) {
       const del = el("button", "pix-ddp-del", "✕");
       del.title = "Delete this row";
 
-      row.append(grip, nm, ...boxes, warn, ins, del);
+      // One output: the single box sits where it always has. Above one, the
+      // boxes STACK, each with its output's name beside it - side by side they
+      // would be 93px wide at two outputs and 44px at four, while stacked they
+      // are ~125px whatever the count, and the panel stays its shipped width.
+      const valsWrap = el("div", "pix-ddp-vals");
+      boxes.forEach((vl, k) => {
+        if (st.outs.length <= 1) { valsWrap.appendChild(vl); return; }
+        const vr = el("div", "pix-ddp-vrow2");
+        vr.append(el("span", "pix-ddp-vlab", st.outs[k].name || defaultOutName(k)), vl);
+        valsWrap.appendChild(vr);
+      });
+      row.append(grip, nm, valsWrap, warn, ins, del);
       list.appendChild(row);
       boxes.forEach(autoGrow);
 
