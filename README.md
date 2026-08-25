@@ -375,6 +375,12 @@ Master the Pixaroma suite with our video guides and workflow deep-dives:
 
 ## 🛠 Changelog
 
+### **August 25, 2026 · v1.4.123**
+- **Dropdown Pixaroma now holds up to four values in one entry.** Set how many outputs you want in the settings, name each one, and a single pick sets several wires at once: a sampler and its scheduler, a width and a height, steps and cfg.
+- **Every output has its own type**, so one entry can send words out of one wire and a number out of the next.
+- **The node shows what your pick turned into** before you run anything.
+- Dropdowns you already have keep working exactly as they did.
+
 ### **August 24, 2026 · v1.4.121–1.4.122**
 - **NEW: Free VRAM Pixaroma**, hands the graphics card's memory back at the point you wire it in, so a second heavy model has room to load. Under Logic & Flow.
 - **NEW: Monitor Pixaroma**, a live readout on the canvas: video memory, system memory, GPU and processor load, temperature and power. Under Logic & Flow.
