@@ -99,15 +99,21 @@ class PixaromaSaveMp4:
                     "tooltip": "save: write to ComfyUI's output/ folder, kept across restarts. preview: write to ComfyUI's temp/ folder, auto-cleared on restart, so use it while iterating and you will not clutter output/. The in-node video preview works the same in both modes."}),
                 "trim_to_audio": ("BOOLEAN", {"default": False,
                     "tooltip": "Off (default): keep every video frame; the audio simply ends where it ends. On: end the video exactly at the audio's length (ffmpeg -shortest), for when the audio is the master (e.g. with Audio React). On can drop the last frame or two when the audio is slightly shorter than the video."}),
-                # Appended LAST on purpose: widgets_values is positional, so a new
-                # widget must go after the existing ones or every saved node reads
-                # its values shifted by one. Hidden on the node face and set from
-                # the settings panel, so it costs no height.
-                "audio_fade_ms": ("INT", {"default": 0, "min": 0, "max": 2000, "step": 10,
-                    "tooltip": "Fade the sound in over this many milliseconds at the very start. 0 is off. AI video models often start their audio at full level in a single step, which is heard as a click; about 120 helps a lot and is too short to notice as a fade. Leave it at 0 when you are just re-saving a video whose sound you do not want altered."}),
             },
             "optional": {
                 "audio": ("AUDIO", {"tooltip": "Optional audio track to mux into the mp4 as AAC 192k. Connect Audio React Pixaroma's audio output here."}),
+                # ⚠️ OPTIONAL, not required, and NOT for stylistic reasons.
+                # A new REQUIRED input silently breaks every API-format prompt
+                # captured before it existed: ComfyUI logs "Required input is
+                # missing" then "Output will be ignored", DROPS the save node,
+                # and still reports the whole prompt as SUCCESS. Measured here -
+                # the video rendered for 30s and was thrown away with no error
+                # anywhere the user would see. Optional means a prompt without
+                # the field just gets the default.
+                # Still listed AFTER the required block so widgets_values stays
+                # positional-compatible with nodes saved before it existed.
+                "audio_fade_ms": ("INT", {"default": 0, "min": 0, "max": 2000, "step": 10,
+                    "tooltip": "Fade the sound in over this many milliseconds at the very start. 0 is off. AI video models often start their audio at full level in a single step, which is heard as a click; about 120 helps a lot and is too short to notice as a fade. Leave it at 0 when you are just re-saving a video whose sound you do not want altered."}),
             },
             # The workflow + prompt, embedded into the mp4 so dragging it back into
             # ComfyUI restores the graph (read by the drag-a-video loader).
