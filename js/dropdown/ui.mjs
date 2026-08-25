@@ -362,19 +362,39 @@ export function renderRow(node) {
   } else {
     parts.name.textContent = opt?.name?.trim() || "(unnamed)";
     parts.name.classList.remove("empty");
-    parts.field.title = opt ? `Sends: ${previewText(opt.value, st.type)}` : "";
+    // Above one output this must list them ALL - "Sends: euler" on a node
+    // that sends three things is simply untrue.
+    parts.field.title = opt
+      ? (st.outs.length > 1
+        ? "Sends:\n" + st.outs.map((out, k) =>
+            `  ${out.name}: ${previewText(valuesOf(opt, st.outs.length)[k], out.type)}`).join("\n")
+        : `Sends: ${previewText(opt.value, st.type)}`)
+      : "";
   }
 
   parts.mode.textContent = MODE_LETTERS[st.mode] || "F";
   parts.mode.title = `${MODE_LABELS[st.mode] || ""}\nClick to change`;
   parts.mode.classList.toggle("on", st.mode !== "fixed");
 
+  // The chip names output 1's type. Above one output each value row carries its
+  // own type, so saying "this node sends text" would be flatly wrong on a mixed
+  // node - name the output it actually describes instead.
   parts.type.textContent = SOCKET_LABELS[st.type] || st.type;
-  parts.type.title = `This node sends ${SOCKET_LABELS[st.type]}. Change it in the settings.`;
+  parts.type.title = st.outs.length > 1
+    ? `${st.outs[0].name} sends ${SOCKET_LABELS[st.type]}. Each output has its own type, set in the settings.`
+    : `This node sends ${SOCKET_LABELS[st.type]}. Change it in the settings.`;
 
   const many = st.options.length > 1;
   parts.prev.classList.toggle("dim", !many);
   parts.next.classList.toggle("dim", !many);
+
+  // The value rows show what the picked entry will SEND, so they must never be
+  // able to disagree with the picker above them. Repainting them from here -
+  // rather than from each caller - is what guarantees it: the arrows, the mode
+  // badge, the popup and the post-run commit all call renderRow and none of
+  // them called renderValueRows, so picking B left the rows showing A's values
+  // while the node sent B's. Visible on the first click a user makes.
+  renderValueRows(node);
 }
 
 // ── Value rows (multi-output only) ─────────────────────────────────────────
@@ -452,13 +472,21 @@ export function renderValueRows(node) {
     r.name.textContent = o.name;
     const raw = vals[i];
     const blank = raw === "";
-    const ok = blank || readable(raw, o.type);
+    // NO free pass for blank. An empty box on a Whole number output really does
+    // send 0, and the settings panel already says so - excusing it here was the
+    // face and the panel telling two different stories about one value, and it
+    // is the face you read while wiring. `readable("")` is TRUE for text, so an
+    // empty text row stays quiet, which is correct: there the empty value IS
+    // what gets sent.
+    const ok = readable(raw, o.type);
     r.value.textContent = blank ? "(empty)" : previewText(raw, o.type);
     r.value.classList.toggle("empty", blank);
     r.value.classList.toggle("bad", !ok);
     r.el.title = ok
       ? `${o.name} sends ${blank ? "an empty value" : previewText(raw, o.type)}`
-      : `${o.name}: "${raw}" does not read as ${SOCKET_LABELS[o.type]}, so it sends the fallback`;
+      : (blank
+        ? `${o.name} is empty, so it sends ${previewText(raw, o.type)}`
+        : `${o.name}: "${raw}" does not read as ${SOCKET_LABELS[o.type]}, so it sends the fallback`);
   });
 }
 
@@ -593,7 +621,13 @@ export function openPopup(node) {
       // shownIndex, NOT st.index: in In-order or Random the face shows the
       // entry that is queued or last ran, and the list highlighting a
       // different one made the node look like it was ignoring the mode.
-      const ok = readable(o.value, st.type);
+      // EVERY output, not just the first. With the check on `o.value`/`st.type`
+      // alone, an entry whose SECOND value did not read as its type showed the
+      // warning mark in the settings panel and on the node's value row, but sat
+      // clean in this popup - three surfaces built together, one disagreeing.
+      const vals = valuesOf(o, st.outs.length);
+      const badAt = st.outs.findIndex((out, k) => !readable(vals[k], out.type));
+      const ok = badAt === -1;
       item.className = "pix-dd-opt" + (i === shown ? " sel" : "") + (ok ? "" : " bad");
       const nm = document.createElement("span");
       nm.className = "pix-dd-oname";
@@ -607,9 +641,16 @@ export function openPopup(node) {
       if (!ok) item.append(Object.assign(document.createElement("span"), {
         className: "pix-dd-obad", textContent: "⚠",
       }));
+      // Above one output the title has to NAME the culprit, or it points at the
+      // wrong value: "does not read as whole number" is useless on an entry
+      // carrying four values of three different types.
+      const multi = st.outs.length > 1;
       item.title = ok
-        ? (o.value || "")
-        : `Does not read as ${SOCKET_LABELS[st.type]}, so this one sends ${previewText(o.value, st.type)}.`;
+        ? (multi ? st.outs.map((out, k) => `${out.name}: ${vals[k]}`).join("\n") : (o.value || ""))
+        : (multi
+          ? `${st.outs[badAt].name} does not read as ${SOCKET_LABELS[st.outs[badAt].type]}, `
+            + `so it sends ${previewText(vals[badAt], st.outs[badAt].type)}.`
+          : `Does not read as ${SOCKET_LABELS[st.type]}, so this one sends ${previewText(o.value, st.type)}.`);
       item.addEventListener("pointerdown", (e) => {
         e.stopPropagation();
         writeState(node, { index: i });

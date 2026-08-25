@@ -339,7 +339,31 @@ export function syncOutputs(node) {
   // the saved count, so both loops are no-ops and nothing serialized is
   // touched. Shrinking cuts the wires on the outputs that go away, which is
   // correct for the user action that causes it and cannot happen on load.
-  while (node.outputs.length > n) node.removeOutput?.(node.outputs.length - 1);
+  while (node.outputs.length > n) {
+    const last = node.outputs[node.outputs.length - 1];
+    // NEVER destroy a wire because a file was merely OPENED. removeOutput calls
+    // disconnectOutput whenever node.graph is set, and by onConfigure time the
+    // graph, its links and every target node all exist - so without this gate a
+    // state that disagreed with the saved slot count silently cut those wires
+    // on load. That happens for real on a version skew: a 4-output Dropdown
+    // saved by a newer build, re-saved by an older one (which drops `outs`
+    // while keeping the 4 slots and links), then reopened here.
+    //
+    // A state that disagrees with the saved slots is a DAMAGED FILE, not an
+    // instruction to cut. Leave the extra slots in place - they are recoverable
+    // by setting the output count back up, and the values are still stored - and
+    // say so rather than doing it invisibly.
+    if (isGraphLoading() && Array.isArray(last?.links) && last.links.length) {
+      console.warn(
+        `[Pixaroma.Dropdown] node ${node.id}: the saved workflow has `
+        + `${node.outputs.length} outputs with wires attached but its settings say `
+        + `${n}. Keeping the wires. Set the output count back to `
+        + `${node.outputs.length} in the node's settings to use them.`,
+      );
+      break;
+    }
+    node.removeOutput?.(node.outputs.length - 1);
+  }
   while (node.outputs.length < n && node.addOutput) node.addOutput(defaultOutName(node.outputs.length), "*");
 
   for (let i = 0; i < n && i < node.outputs.length; i++) {

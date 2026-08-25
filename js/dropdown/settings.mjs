@@ -129,11 +129,6 @@ function injectCSS() {
     .pix-ddp-vlab { flex:none; width:62px; padding-top:6px; font:10px 'Segoe UI',sans-serif;
       color:var(--acc,${BRAND}); opacity:.85;
       overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-    /* One heading per output over the entry list, so you can see which value
-       feeds which output without counting boxes. Same metrics as .b above so
-       the headings stay over their boxes; accented to read as output names. */
-    .pix-ddp-cols .vh { flex:1; min-width:0; font-size:11px; color:var(--acc,${BRAND});
-      opacity:.85; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
     .pix-ddp-warn { flex:none; width:13px; text-align:center; padding-top:5px;
       color:#e0703a; font-size:11px; cursor:default; }
     .pix-ddp-warn.hide { display:none; }
@@ -605,9 +600,20 @@ export function openDropdownPanel(node, onChange) {
     st.outs[k].name = name;
     writeState(node, { outs: st.outs });
     syncOutput(node);
-    // Deliberately NOT re-rendering the panel: that would destroy the input
-    // being typed in. The node face and the column headings are enough.
-    renderCols();
+
+    // Deliberately NOT calling renderList(): that would destroy the <input>
+    // being typed in. But the entry list labels each value box with its
+    // output's name, so leaving them alone meant every row below went on
+    // showing the OLD name until something else happened to re-render. Update
+    // them in place instead.
+    //
+    // Read the name back from state rather than using the raw input: clearing
+    // the box entirely normalises to defaultOutName(k), so the raw value would
+    // leave the label blank while the slot is called value_2.
+    const shown = readState(node).outs[k]?.name || defaultOutName(k);
+    for (const lab of list.querySelectorAll(`.pix-ddp-vrow2[data-k="${k}"] .pix-ddp-vlab`)) {
+      lab.textContent = shown;
+    }
     fire();
   }
 
@@ -733,6 +739,10 @@ export function openDropdownPanel(node, onChange) {
       boxes.forEach((vl, k) => {
         if (st.outs.length <= 1) { valsWrap.appendChild(vl); return; }
         const vr = el("div", "pix-ddp-vrow2");
+        // Stamped so setOutName can find this label without a positional
+        // selector - nth-child would silently target the wrong row the moment
+        // anything else is added inside .pix-ddp-vals.
+        vr.dataset.k = String(k);
         vr.append(el("span", "pix-ddp-vlab", st.outs[k].name || defaultOutName(k)), vl);
         valsWrap.appendChild(vr);
       });
@@ -870,6 +880,17 @@ export function openDropdownPanel(node, onChange) {
           .map((o) => ({
             name: typeof o.name === "string" ? o.name : "",
             value: typeof o.value === "string" ? o.value : (o.value == null ? "" : String(o.value)),
+            // Outputs 2..N. Export writes these (readState puts `v` on every
+            // entry), so dropping them here silently WIPED the second, third
+            // and fourth value of every row while toasting "Loaded N entries" -
+            // and Clear-the-list actively points at Export/Import as the way to
+            // get your work back, so the documented recovery path was the one
+            // losing it. Capped at MAX_OUTS - 1 so a hand-edited file cannot
+            // park an unbounded array in the saved workflow.
+            v: Array.isArray(o.v)
+              ? o.v.slice(0, MAX_OUTS - 1)
+                  .map((x) => (typeof x === "string" ? x : (x == null ? "" : String(x))))
+              : [],
           }));
         if (!clean.length) { toast("That file has no entries in it.", "error"); return; }
 

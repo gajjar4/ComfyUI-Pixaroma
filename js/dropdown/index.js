@@ -13,7 +13,7 @@ import { registerNodeHelp } from "../shared/help.mjs";
 import { registerNodeSettings, repaintAccent } from "../shared/node_settings.mjs";
 import {
   CLASS, HIDDEN_INPUT, MIN_W, DEFAULT_W, readState, writeState,
-  syncOutput, injectedState, commitPick,
+  syncOutput, injectedState, commitPick, outCount,
 } from "./core.mjs";
 import {
   buildRow, renderRow, bodyHeight, alignOutputLegacy, scheduleAlign,
@@ -65,7 +65,14 @@ function openPanel(node) {
     syncValueRows(n);
     renderRow(n);
     renderValueRows(n);
-    resizeToBody(n);
+    // ONLY when the output count actually moved. This callback runs on every
+    // keystroke in a name or value box, and re-fitting there had two costs:
+    // in Nodes 2.0 the height clamp is Classic-only, so a node the user had
+    // dragged taller snapped back to its content height on the next character
+    // typed; and each keystroke scheduled its own 260ms re-assert timer.
+    // Height depends only on the value-row count, so nothing else can need it.
+    const now = outCount(n);
+    if (n._pixDdOutN !== now) { n._pixDdOutN = now; resizeToBody(n); }
     repaintAccent(n);
     n.setDirtyCanvas?.(true, true);
     app.graph?.setDirtyCanvas?.(true, true);
@@ -101,6 +108,9 @@ app.registerExtension({
       syncValueRows(this);
       renderRow(this);
       renderValueRows(this);
+      // Runtime only (never serialized): what the panel callback compares
+      // against to know the output count really moved.
+      this._pixDdOutN = outCount(this);
 
       // Legacy reserves a 20px slot row per output; our dot lives on the row, so
       // we own the size. MIN_W and NEVER this.size[0]: computeSize()[0] is also
@@ -136,12 +146,17 @@ app.registerExtension({
     nodeType.prototype.onConfigure = function () {
       const r = _configure?.apply(this, arguments);
       this.widgets_start_y = 2;
-      // DOM + slot only. Nothing here may write node.size or add/remove slots,
-      // or an untouched workflow opens flagged "modified" (Vue Compat #18).
+      // Nothing here may write node.size, or an untouched workflow opens
+      // flagged "modified" (Vue Compat #18). The slot COUNT is reconciled here
+      // on purpose: Python declares MAX_OUTS outputs and the saved workflow has
+      // however many it was using, so syncOutput trims back to the saved count.
+      // That is a no-op for an unchanged file - configure has already restored
+      // the saved outputs by the time this runs.
       syncOutput(this);
       syncValueRows(this);
       renderRow(this);
       renderValueRows(this);
+      this._pixDdOutN = outCount(this);
       queueMicrotask(() => {
         renderRow(this);
         renderValueRows(this);

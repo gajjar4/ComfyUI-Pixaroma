@@ -103,7 +103,6 @@ function note(node) {
 // Write this cell's value into the node's prompt entry.
 function inject(entry, axis, value, node) {
   if (!entry || !owns(axis)) return;
-  const st = readState(node);
   const names = optionNames(node);
   const want = String(value);
 

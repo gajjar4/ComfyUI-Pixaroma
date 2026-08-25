@@ -33,7 +33,7 @@ export const DROPDOWN_HELP = {
     {
       heading: "Choosing on the canvas",
       body:
-        "The node itself is one row. Click it to open your list, or use the `◀` and `▶` "
+        "The node itself is one row, plus one read-only row per output when you use more than one. Click it to open your list, or use the `◀` and `▶` "
         + "arrows to step through without opening anything.\n\n"
         + "The list shows just your names, sized so they fit, and its text follows your zoom "
         + "so it stays in step with the node. Hold the mouse over an entry to peek at its "
@@ -133,5 +133,5 @@ export const DROPDOWN_HELP = {
       ],
     },
   ],
-  footer: "Find it under 👑 Pixaroma / 🔢 Values, or search for dropdown, list, options, preset or trigger.",
+  footer: "Find it under 👑 Pixaroma / 🔢 Values, or search for dropdown, list, options, preset, combination, pair or trigger.",
 };

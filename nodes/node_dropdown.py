@@ -1,4 +1,4 @@
-"""Dropdown Pixaroma - a list you write, one value out.
+"""Dropdown Pixaroma - a list you write, up to four values out.
 
 Thin wrapper. All the real logic is pure and lives in _dropdown_helpers.py so
 it can be tested without ComfyUI.
@@ -16,6 +16,12 @@ class PixaromaDropdown:
         "Open the settings from the gear on the node, add your entries, and choose what the node "
         "sends out: text, a whole number, a decimal, or on/off. The output dot renames itself to "
         "match, so you can see at a glance what will come out.\n\n"
+        "One entry can carry up to four values at once. Set how many outputs you want in the "
+        "settings and give each one a name, and every entry then holds one value per output, so "
+        "a single pick sets several wires together: a sampler and its scheduler, a width and a "
+        "height, steps and cfg. Each output has its own type, and the node shows what your pick "
+        "resolved to before you run anything. With one output it behaves exactly as it always "
+        "has.\n\n"
         "The small letter on the node decides which entry it sends each time you run, and you "
         "can click it to change: F keeps the entry you picked, I steps to the next one every "
         "run, and R picks any of them at random.\n\n"
@@ -50,7 +56,7 @@ class PixaromaDropdown:
     RETURN_NAMES = ("value", "value_2", "value_3", "value_4")
     OUTPUT_TOOLTIPS = (
         "The value behind the entry you picked. What kind of value it is follows the type set "
-        "on the node: text, a whole number, a decimal, or on/off.",
+        "for this output: text, a whole number, a decimal, or on/off.",
         "The second value of the entry you picked. Only shown when the node is set to two or "
         "more outputs.",
         "The third value of the entry you picked. Only shown when the node is set to three or "
@@ -64,6 +70,17 @@ class PixaromaDropdown:
     def run(self, DropdownState="{}"):
         return selected_values(DropdownState)
 
+
+# The three lists are sent to the browser separately and zipped BY INDEX, so a
+# length mismatch is silent: outputs would simply lose their names or tooltips.
+# RETURN_TYPES grows automatically with MAX_OUTS and the other two do not, so
+# raising the cap without editing them is a mistake this catches at import.
+assert (
+    len(PixaromaDropdown.RETURN_TYPES)
+    == len(PixaromaDropdown.RETURN_NAMES)
+    == len(PixaromaDropdown.OUTPUT_TOOLTIPS)
+    == MAX_OUTS
+), "Dropdown Pixaroma: RETURN_TYPES, RETURN_NAMES and OUTPUT_TOOLTIPS must all be MAX_OUTS long"
 
 NODE_CLASS_MAPPINGS = {"PixaromaDropdown": PixaromaDropdown}
 NODE_DISPLAY_NAME_MAPPINGS = {"PixaromaDropdown": "Dropdown Pixaroma"}

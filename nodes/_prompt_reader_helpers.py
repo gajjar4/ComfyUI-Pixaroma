@@ -450,17 +450,29 @@ def _pix_prompt_multi_extract(inputs: dict) -> Optional[str]:
     return txt or None
 
 
-def _pix_dropdown_extract(inputs: dict) -> Optional[str]:
+def _is_text_kind(kind) -> bool:
+    """True only for an explicitly text-ish type name."""
+    return isinstance(kind, str) and kind.strip().lower() in ("text", "string", "str")
+
+
+def _pix_dropdown_extract(inputs: dict, slot=0) -> Optional[str]:
     """Read the chosen value from a PixaromaDropdown's saved state.
 
     The hidden DropdownState is normally the LEAN shape the browser injects:
         { "version": 1, "type": "text"|"int"|"float"|"bool", "value": <chosen> }
+    Since the node gained multiple outputs there is a second lean shape, used
+    whenever it is set to more than one output - note it has NO "type" key:
+        { "version": 1, "types": [...], "values": [...] }
     A hand-written API file may instead carry the FULL shape:
-        { "type": ..., "index": N, "options": [{"name","value"}, ...] }
+        { "type": ..., "index": N, "options": [{"name","value","v":[...]}, ...],
+          "outs": [{"name","type"}, ...] }
 
-    Returns the value only when the node is set to TEXT, else None: a number or
-    a true/false is not prompt text, and splicing it into the recovered prompt
-    would corrupt the reading rather than improve it.
+    `slot` is the OUTPUT the consumer is wired to, so a node feeding its third
+    output into a prompt contributes that value rather than output one's.
+
+    Returns the value only when THAT output is set to TEXT, else None: a number
+    or a true/false is not prompt text, and splicing it into the recovered
+    prompt would corrupt the reading rather than improve it.
     """
     raw = inputs.get("DropdownState")
     if not isinstance(raw, str) or not raw:
@@ -472,16 +484,44 @@ def _pix_dropdown_extract(inputs: dict) -> Optional[str]:
     if not isinstance(state, dict):
         return None
 
-    kind = state.get("type")
+    # A JSON `true` is an int in Python, and a short link tuple leaves slot None.
+    if isinstance(slot, bool) or not isinstance(slot, int) or slot < 0:
+        slot = 0
+
+    # LEAN MULTI. Checked first and by key: only a genuinely multi-output node
+    # ever writes `values`. Without this branch the guard below refused every
+    # such node for having no "type", so a workflow whose prompt text came from
+    # a Dropdown silently stopped recording it the moment a second output was
+    # added - invisible until someone re-read an old image.
+    values = state.get("values")
+    if isinstance(values, list):
+        kinds = state.get("types")
+        kinds = kinds if isinstance(kinds, list) else []
+        i = slot if slot < len(values) else 0
+        if not _is_text_kind(kinds[i] if i < len(kinds) else None):
+            return None
+        value = values[i] if i < len(values) else None
+        return value if isinstance(value, str) and value else None
+
     # Anything that is not explicitly text is refused, INCLUDING a missing type.
     # An unknown/absent type most likely means a newer schema, and guessing
     # "probably text" is how a stray number ends up inside someone's prompt.
-    if not isinstance(kind, str) or kind.strip().lower() not in ("text", "string", "str"):
-        return None
-
-    if "value" in state:                       # lean shape
+    if "value" in state:                       # lean single shape
+        if not _is_text_kind(state.get("type")):
+            return None
         value = state.get("value")
     else:                                      # full shape
+        # `type` is output ONE's type; the rest live in `outs`.
+        outs = state.get("outs")
+        outs = outs if isinstance(outs, list) else []
+        if slot == 0:
+            kind = state.get("type")
+        else:
+            entry_out = outs[slot] if slot < len(outs) else None
+            kind = entry_out.get("type") if isinstance(entry_out, dict) else None
+        if not _is_text_kind(kind):
+            return None
+
         options = state.get("options")
         if not isinstance(options, list):
             return None
@@ -503,7 +543,12 @@ def _pix_dropdown_extract(inputs: dict) -> Optional[str]:
         entry = options[idx]
         if not isinstance(entry, dict):
             return None
-        value = entry.get("value")
+        # Output one keeps `value`; outputs two onward live in `v`.
+        if slot == 0:
+            value = entry.get("value")
+        else:
+            extra = entry.get("v")
+            value = extra[slot - 1] if isinstance(extra, list) and slot - 1 < len(extra) else None
 
     if not isinstance(value, str):
         return None
@@ -751,7 +796,10 @@ def _walk_for_text(
     # Pixaroma -> the sampler, so without this branch a workflow built that way
     # records a prompt with the trigger words missing.
     if cls == _DROPDOWN_CLASS:
-        text = _pix_dropdown_extract(inputs)
+        # Pass the slot we arrived on: the node can carry several values now,
+        # and a consumer wired to output three must contribute THAT text, not
+        # output one's. Same treatment Switch Source already gets above.
+        text = _pix_dropdown_extract(inputs, origin_slot)
         if text:
             captured.append(text)
         return
