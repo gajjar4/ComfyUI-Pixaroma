@@ -54,6 +54,31 @@ export const DROPDOWN_HELP = {
       },
     },
     {
+      heading: "One pick, several values",
+      body:
+        "An entry can carry up to four values at once. In the settings, set how many outputs you "
+        + "want, give each one a name, and every entry then holds one value per output. Picking "
+        + "an entry sets all of them together, and the node shows what it resolved to before you "
+        + "run anything.\n\n"
+        + "This is what makes settings that belong together stay together. A sampler and its "
+        + "scheduler are the clearest case: some pairings work and some ruin the picture, so "
+        + "holding them as one named choice means you cannot accidentally mix a good sampler "
+        + "with the wrong scheduler.",
+      table: {
+        headers: ["Entry name", "sampler", "scheduler"],
+        rows: [
+          ["Safe", "`euler`", "`simple`"],
+          ["Alternative look", "`euler`", "`beta`"],
+          ["Avoid", "`res_multistep`", "`ddim_uniform`"],
+        ],
+      },
+      bullets: [
+        "Each output has its own type, so you can mix text with numbers and on/off.",
+        "Leave it on one output and the node behaves exactly as it always has.",
+        "Turning the count down keeps the values you typed, in case you turn it back up.",
+      ],
+    },
+    {
       heading: "Changing entry on its own each run",
       body:
         "The small letter on the node says which entry it will send when you press Run, and you "

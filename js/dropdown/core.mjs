@@ -61,7 +61,14 @@ export const MODE_LABELS = {
 };
 
 export function defaultState() {
-  return { version: 1, type: "text", index: 0, mode: "fixed", options: [] };
+  // `outs` is part of the IN-MEMORY shape and every reader may rely on it being
+  // present - readState returns this object verbatim when a node has no state
+  // yet, which is every freshly created node. writeState deletes it again when
+  // it is trivial, so nothing extra is ever written to a saved workflow.
+  return {
+    version: 1, type: "text", index: 0, mode: "fixed", options: [],
+    outs: [{ name: OUT_NAME, type: "text" }],
+  };
 }
 
 function normalizeMode(m) {
