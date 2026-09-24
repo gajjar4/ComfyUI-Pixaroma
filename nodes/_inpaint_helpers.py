@@ -619,6 +619,11 @@ def stitch_back(crop_info, image, mask, blend, blend_mode, color_match):
     patch = image
     if not isinstance(patch, torch.Tensor) or patch.dim() != 4:
         patch = base.new_zeros((1, ch, cw, base.shape[3]))
+    elif int(patch.shape[-1]) > 3:
+        # Qwen Image 2.1's VAE decodes RGBA. The paste below only ever used the first
+        # three channels, but resize_image_tensor reads each frame as RGB, so a 4-channel
+        # patch that needed resizing came back scrambled (a grey see-through patch).
+        patch = patch[..., :3].contiguous()
     if int(patch.shape[1]) != ch or int(patch.shape[2]) != cw:
         patch = resize_image_tensor(patch, cw, ch, "lanczos").to(base.device, base.dtype)
 
