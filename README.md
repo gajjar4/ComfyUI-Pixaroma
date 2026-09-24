@@ -392,6 +392,10 @@ Master the Pixaroma suite with our video guides and workflow deep-dives:
 
 ## 🛠 Changelog
 
+### **September 24, 2026 · v1.4.162**
+- **New: four Qwen Image 2.1 presets for AI Prompt Pixaroma**: a prompt from an idea, a transparent picture, a prompt from an image, and an edit instruction.
+- **Fixed: Inpaint Stitch Pixaroma pasted a grey patch** when the model returned a picture with transparency, as Qwen Image 2.1 does. It pastes clean colours now.
+
 ### **September 22, 2026 · v1.4.159–v1.4.161**
 - **Fixed: Music Prompt Pixaroma closed ComfyUI part way through a run**, on ComfyUI 0.37.0. It writes the caption and the lyrics again.
 - **Fixed: in Prompt Pixaroma the cursor could sit away from the words you typed**, further out the longer the prompt. The box now follows your theme's font exactly.
