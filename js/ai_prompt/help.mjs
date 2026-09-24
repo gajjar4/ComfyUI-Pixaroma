@@ -228,6 +228,10 @@ export const AI_PROMPT_HELP = {
         ["Sound - describe what you hear (Gemma 4 E4B)", "Wire a Load Audio in and it says what kind of sound it is, quotes any words spoken or sung, names the instruments and gives the mood. Gemma 4 is the ONLY text encoder ComfyUI can feed audio to, so a Qwen3-VL will take the audio, ignore it and answer anyway. Send its text into a second AI Prompt node to turn it into an image prompt."],
         ["Krea 2 - prompt from an idea", "Turns a rough idea into a full Krea 2 prompt. Built from Krea's own published prompt-expansion instructions, then tightened by watching where it went wrong. Measured on Qwen3-VL 4B and 8B."],
         ["Krea 2 - prompt from an image", "Wire a Load Image into the image input and it writes the prompt that would make a similar picture, naming the medium, the framing and the light. Leave Your idea empty for this one. Needs a vision model. Photographs come back cleanest."],
+        ["Qwen Image 2.1 - prompt from an idea", "Turns a short idea into the long, detailed prompt Qwen Image 2.1 likes, built from Qwen's own published prompt enhancer: the style and the medium first, everything placed in the frame, and your exact text kept in quotes. Qwen Image 2.1's text encoder is Qwen3-VL 8B, so wire the workflow's Load CLIP into the clip input and one model does both jobs."],
+        ["Qwen Image 2.1 - transparent picture from an idea", "For a subject on a transparent background. It wraps your idea in the exact words Qwen Image 2.1 needs to make a real transparency channel and describes only the subject. In testing a plain idea gave a solid background every time, and this preset made most of the picture transparent. Save the result as a PNG."],
+        ["Qwen Image 2.1 - prompt from an image", "Wire a Load Image into the image input and it writes the Qwen Image 2.1 prompt that would make a picture like it, naming the style as well as the medium, so a cartoon stays a cartoon. Leave Your idea empty for this one."],
+        ["Qwen Image 2.1 - edit from an instruction", "For Qwen Image 2.1's image edit. Wire your picture into the image input, or two pictures through a Batch Images node, type the change in Your idea, and it writes a clear edit instruction that leads with the change and keeps everything else. Qwen Image 2.1 already follows short edits well, so this helps most with vague requests, style changes and two-picture edits."],
         ["Z-Image - prompt from an idea", "The same job as the Krea one, written for Z-Image Turbo, which wants a much longer and more detailed prompt. Built from the makers' own guidance, so its Max len is set high to leave room for one. Leave Thinking off, which is the default: Z-Image's encoder is a reasoning model, and thinking costs about three times the wait for no better prompt."],
       ],
     },
@@ -235,7 +239,8 @@ export const AI_PROMPT_HELP = {
       heading: "Sharing a workflow's model instead of loading a second one",
       body:
         "Some image models use a language model as their text encoder. Krea 2 "
-        + "uses Qwen3-VL, which is exactly the kind of model this node wants. "
+        + "and Qwen Image 2.1 both use Qwen3-VL, which is exactly the kind of "
+        + "model this node wants. "
         + "When that is true you can wire the workflow's own CLIP loader "
         + "straight into this node's clip input and write your prompts with the "
         + "model that is already in memory. Nothing extra loads, and a whole "
