@@ -4,6 +4,7 @@ import { api } from "/scripts/api.js";
 import { isVueNodes, applyAdaptiveCanvasOnly } from "../shared/nodes2.mjs";
 import { installResizeFloor } from "../shared/resize_floor.mjs";
 import { isGraphLoading } from "../shared/graph_loading.mjs";
+import { onRendererChange } from "../shared/renderer_switch.mjs";
 import {
   registerNodeSettings, createAccentSection, accentOf, applyAccent, installNodeAccent,
 } from "../shared/node_settings.mjs";
@@ -795,22 +796,35 @@ function onScreen(node) {
   const vn = app.canvas && app.canvas.visible_nodes;
   return Array.isArray(vn) ? vn.includes(node) : true;
 }
+// ONE broken timer must never stop the others, or the loop itself. Every
+// per-node block below runs inside its own try: a throw that escaped loop()
+// skipped the `_rafId = ...` line, left _rafId set for good, and ensureLoop()
+// then never restarted it - REPRODUCED with one sabotaged timer beside a healthy
+// one: the healthy clock froze two seconds into the run and showed nothing at
+// all on the next run, until a page reload. Warn once per node, not per frame.
+function warnOnce(node, where, e) {
+  if (node && node._rtWarned === where) return;
+  if (node) node._rtWarned = where;
+  console.warn("[Run Timer Pixaroma] " + where + " failed:", (e && e.message) || e);
+}
 function loop() {
   let anyRunning = false;
   const now = performance.now();
   for (const node of _timers) {
     if (!node._rtRunning) continue;
     anyRunning = true;
-    node._rtDisplayMs = now - node._rtStart;
-    const p = clockParts(node._rtDisplayMs, node._pixRtDecimals ?? DEFAULT_STATE.decimals);
-    const sig = readoutSigOf(p);
-    if (sig === node._rtShownSig || sig === node._rtAskedSig) continue;
-    const secMoved = readoutSigOf({ groups: p.groups, frac: "" }) !== node._rtShownSec;
-    if (!secMoved && now - Math.max(node._rtShownAt || 0, node._rtAskedAt || 0) < LIVE_FRAC_GAP_MS) continue;
-    node._rtAskedSig = sig;
-    node._rtAskedAt = now;
-    if (!isVueNodes() && !onScreen(node)) continue;
-    refreshClock(node);
+    try {
+      node._rtDisplayMs = now - node._rtStart;
+      const p = clockParts(node._rtDisplayMs, node._pixRtDecimals ?? DEFAULT_STATE.decimals);
+      const sig = readoutSigOf(p);
+      if (sig === node._rtShownSig || sig === node._rtAskedSig) continue;
+      const secMoved = readoutSigOf({ groups: p.groups, frac: "" }) !== node._rtShownSec;
+      if (!secMoved && now - Math.max(node._rtShownAt || 0, node._rtAskedAt || 0) < LIVE_FRAC_GAP_MS) continue;
+      node._rtAskedSig = sig;
+      node._rtAskedAt = now;
+      if (!isVueNodes() && !onScreen(node)) continue;
+      refreshClock(node);
+    } catch (e) { warnOnce(node, "live update", e); }
   }
   _rafId = anyRunning ? requestAnimationFrame(loop) : null;
 }
@@ -852,13 +866,15 @@ function startAll() {
   _runName = activeWorkflowName(); // capture the workflow NOW (at start), not at
                                    // finish — the active tab may change mid-run
   for (const node of _timers) {
-    clearTimeout(node._rtDotT);
-    node._rtRunning = true;
-    node._rtStart = _runStart; // share it so the frozen clock == the recorded time
-    node._rtDisplayMs = 0;
-    forgetLiveMarks(node);
-    setDot(node, "run");
-    refreshClock(node);
+    try {
+      clearTimeout(node._rtDotT);
+      node._rtRunning = true;
+      node._rtStart = _runStart; // share it so the frozen clock == the recorded time
+      node._rtDisplayMs = 0;
+      forgetLiveMarks(node);
+      setDot(node, "run");
+      refreshClock(node);
+    } catch (e) { warnOnce(node, "run start", e); }
   }
   if (_timers.size) ensureLoop();
 }
@@ -893,18 +909,20 @@ function finishAll(success) {
   for (const node of _timers) {
     if (!node._rtRunning) continue;   // idempotent: first finish wins
     anyFinished = true;
-    node._rtRunning = false;
-    node._rtDisplayMs = performance.now() - node._rtStart;
-    // Persist the frozen total (see restoreLastRun). A genuine run-completion
-    // write (flags "modified", accepted); never written on the load path.
-    if (!node.properties) node.properties = {};
-    node.properties.runTimerLastMs = node._rtDisplayMs;
-    refreshClock(node);
-    setDot(node, "done");
-    flashScreen(node);
-    if (success) maybeChime(node);
-    clearTimeout(node._rtDotT);
-    node._rtDotT = setTimeout(() => setDot(node, "idle"), 2200);
+    try {
+      node._rtRunning = false;
+      node._rtDisplayMs = performance.now() - node._rtStart;
+      // Persist the frozen total (see restoreLastRun). A genuine run-completion
+      // write (flags "modified", accepted); never written on the load path.
+      if (!node.properties) node.properties = {};
+      node.properties.runTimerLastMs = node._rtDisplayMs;
+      refreshClock(node);
+      setDot(node, "done");
+      flashScreen(node);
+      if (success) maybeChime(node);
+      clearTimeout(node._rtDotT);
+      node._rtDotT = setTimeout(() => setDot(node, "idle"), 2200);
+    } catch (e) { warnOnce(node, "run finish", e); }
   }
   // Record ONE history entry per run — successes only (an interrupted / errored
   // run gives a partial, misleading time). anyFinished guards a double finish
@@ -1624,6 +1642,139 @@ function installVueScaleObserver(node, root) {
   return () => { node._pixRtApplyScale = null; try { ro.disconnect(); } catch (_e) {} };
 }
 
+// ── the face, per renderer, rebuilt LIVE when the renderer flips ────────────
+// The two renderers need DIFFERENT faces (classic: canvas paint and no DOM
+// widget; Nodes 2.0: a DOM widget), and "Modern Node Design (Nodes 2.0)" can be
+// flipped with no reload, under a live node. Building the face once in setupNode
+// left the clock EMPTY after a flip to Nodes 2.0 (no DOM widget existed) and
+// DOUBLED after a flip back (the old DOM face stayed on screen over the canvas
+// paint, and the node kept the Nodes 2.0 layout's stub height, so the classic
+// clock was drawn squashed). Both reproduced 2026-09-26; both cleared on F5.
+// Same recipe as Monitor (monitor.md #8/#9) and Switch (CLAUDE.md Nodes 2.0).
+function buildVueFace(node) {
+  if (node._pixRtRoot) return;
+  // Nodes 2.0: a DOM-widget clock (frameless + click-through via the CSS above).
+  const root = el("div", "pix-rt-root");
+  installNodeAccent(node, root);   // the status dot follows this node's accent
+  const screen = el("div", "pix-rt-screen");
+  const dot = el("span", "pix-rt-dot");
+  const time = el("div", "pix-rt-time");
+  screen.appendChild(dot); screen.appendChild(time);
+  root.appendChild(screen);
+  node._pixRtRoot = root;
+  node._pixRtScreen = screen;
+  node._pixRtDot = dot;
+  node._pixRtTime = time;
+  // A NEW time element: paint() must build its segments, not update the spans
+  // of a face that was torn down (they are detached, so the clock would stay
+  // empty after a round trip).
+  node._rtShapeSig = null; node._rtNumEls = null; node._rtFracEl = null;
+  paint(node); // initial 00:00
+  installCanvasZoomPassthrough(root);
+  const widget = node.addDOMWidget("run_timer_ui", "pixaroma_run_timer", root, {
+    getValue: () => readState(node),
+    setValue: () => {},
+    // CONSTANTS, not a live measurement: these feed the layout's floor, and a
+    // measured value creeps node.size bigger on every workflow switch
+    // (CLAUDE.md). The clock grows via the font scale, not via this floor.
+    getMinHeight: () => BASE_H,
+    serialize: false, // state lives on node.properties
+  });
+  node._pixRtWidget = widget;
+  applyAdaptiveCanvasOnly(widget);
+  // 0 in CLASSIC, deliberately. After a flip to classic the torn-down face is
+  // still on the node for up to one renderer poll (300 ms), and core arranges the
+  // node in that window: _arrangeWidgets read minHeight 50 here and grew a 1x
+  // clock to 52 tall, onResize turned that into scale 1.04, and the node came
+  // back 141x50 -> 147x52 (reproduced; review finding 2026-09-26). In Nodes 2.0
+  // nothing changes.
+  widget.computeLayoutSize = () => ({ minHeight: isVueNodes() ? BASE_H : 0, minWidth: 1 });
+  // The floor must follow the SCALE, not sit at BASE_H. It is pinned only
+  // while a resize handle is dragged, which is exactly when the frontend takes
+  // its collapse measurement - so a constant 50 let the bottom edge be dragged
+  // up through a 4x clock, spilling 200px of digits out of the frame.
+  node._pixRtFloorOff = installResizeFloor(root, () => Math.round(BASE_H * (node._rtScale || 1)));
+  node._pixRtScaleOff = installVueScaleObserver(node, root);
+}
+function teardownVueFace(node) {
+  try { if (node._pixRtFloorOff) node._pixRtFloorOff(); } catch (_e) {}
+  node._pixRtFloorOff = null;
+  try { if (node._pixRtScaleOff) node._pixRtScaleOff(); } catch (_e) {}
+  node._pixRtScaleOff = null;
+  // ⚠️ The widget's OWN onRemove FIRST (monitor.md #8): ComfyUI also keeps DOM
+  // widgets in its own store and re-mounts everything in it, so splicing the
+  // widget out and removing the element is NOT enough - the face comes back.
+  const w = node._pixRtWidget || (node.widgets || []).find((x) => x && x.name === "run_timer_ui");
+  try { if (w && w.onRemove) w.onRemove(); } catch (_e) {}
+  if (w && Array.isArray(node.widgets)) {
+    const i = node.widgets.indexOf(w);
+    if (i >= 0) node.widgets.splice(i, 1);
+  }
+  try {
+    const wrap = node._pixRtRoot && node._pixRtRoot.closest && node._pixRtRoot.closest(".dom-widget");
+    if (wrap) wrap.remove();
+    if (node._pixRtRoot) node._pixRtRoot.remove();
+  } catch (_e) {}
+  node._pixRtWidget = null; node._pixRtRoot = null; node._pixRtScreen = null;
+  node._pixRtDot = null; node._pixRtTime = null;
+  node._rtNumEls = null; node._rtFracEl = null; node._rtShapeSig = null;
+}
+function useClassicFace(node) {
+  // Classic: NO DOM widget - the clock is painted on the node canvas
+  // (onDrawForeground), so the node is a real canvas node: draggable +
+  // right-clickable, no DOM element eating clicks.
+  //
+  // computeSize is the SCALE-1 size, which is also LiteGraph's resize floor:
+  // the corner drag cannot make the clock smaller than its original look, and
+  // it grows freely from there. It is a live value (a wider readout at 3
+  // decimals, or a wide font, raises the floor) - never a constant.
+  node.computeSize = function () { return [clockUnitWidth(this), BASE_H]; };
+}
+// `live` is true only for a flip of the setting (a user action). setupNode's
+// first call is on the node-creation path and must write nothing serialized.
+function applyRenderer(node, vue, live) {
+  vue = !!vue;
+  if (node._pixRtVue === vue) return;
+  node._pixRtVue = vue;
+  if (vue) {
+    // back to the prototype's computeSize; the Nodes 2.0 face sizes itself
+    if (Object.prototype.hasOwnProperty.call(node, "computeSize")) delete node.computeSize;
+    buildVueFace(node);
+  } else {
+    teardownVueFace(node);
+    useClassicFace(node);
+  }
+  if (!live) return;
+  // The marks describe the face that is gone; the loop must repaint the new one.
+  forgetLiveMarks(node);
+  if (vue) {
+    // applyClockFont memoizes a font it already applied and returns early, so a
+    // REBUILT face would come up in the default face. Apply it to the new element.
+    applyDomFont(node);
+    if (node._pixRtScreen) node._pixRtScreen.style.setProperty("--cc", readState(node).color || BRAND);
+    setDot(node, node._rtDotState || "idle");
+    refreshClock(node);
+  } else {
+    // Classic reads the scale from the HEIGHT, and Nodes 2.0 left a stub there
+    // (rendered - 30, run-timer.md #1f), which drew the clock squashed. Put the
+    // node back at the scale the Nodes 2.0 face was showing - its WIDTH carried
+    // it. Read it from node.size[0], NOT from _rtScale: ComfyUI re-parents the
+    // old face into its classic overlay a moment BEFORE this runs, the resize
+    // observer sees that narrower box (node width minus the overlay margins) and
+    // overwrites _rtScale - MEASURED, a 2x clock came back 1.86x and lost ~7% on
+    // every round trip (282 -> 262 -> 243 -> 223 wide). Skipped while a chosen
+    // font is still downloading: widths are in the fallback face until then.
+    if (!fontPending(node) && typeof node.setSize === "function") {
+      const u = clockUnitWidth(node);
+      const s = Math.max(1, Math.min(MAX_S, (node.size[0] || u) / u));
+      const w = Math.round(u * s), h = Math.round(BASE_H * s);
+      if (Math.abs((node.size[0] || 0) - w) > 0.5 || Math.abs((node.size[1] || 0) - h) > 0.5) node.setSize([w, h]);
+    }
+    syncScaleFromSize(node);
+    if (node.setDirtyCanvas) node.setDirtyCanvas(true, false);
+  }
+}
+
 function setupNode(node) {
   injectCSS();
   node._rtDisplayMs = 0;
@@ -1638,49 +1789,16 @@ function setupNode(node) {
   node.flags = node.flags || {};
   if (!node.flags.no_title) node.flags.no_title = true;
 
-  if (isVueNodes()) {
-    // Nodes 2.0: a DOM-widget clock (frameless + click-through via the CSS above).
-    const root = el("div", "pix-rt-root");
-    installNodeAccent(node, root);   // the status dot follows this node's accent
-    const screen = el("div", "pix-rt-screen");
-    const dot = el("span", "pix-rt-dot");
-    const time = el("div", "pix-rt-time");
-    screen.appendChild(dot); screen.appendChild(time);
-    root.appendChild(screen);
-    node._pixRtRoot = root;
-    node._pixRtScreen = screen;
-    node._pixRtDot = dot;
-    node._pixRtTime = time;
-    paint(node); // initial 00:00
-    installCanvasZoomPassthrough(root);
-    const widget = node.addDOMWidget("run_timer_ui", "pixaroma_run_timer", root, {
-      getValue: () => readState(node),
-      setValue: () => {},
-      // CONSTANTS, not a live measurement: these feed the layout's floor, and a
-      // measured value creeps node.size bigger on every workflow switch
-      // (CLAUDE.md). The clock grows via the font scale, not via this floor.
-      getMinHeight: () => BASE_H,
-      serialize: false, // state lives on node.properties
-    });
-    applyAdaptiveCanvasOnly(widget);
-    widget.computeLayoutSize = () => ({ minHeight: BASE_H, minWidth: 1 });
-    // The floor must follow the SCALE, not sit at BASE_H. It is pinned only
-    // while a resize handle is dragged, which is exactly when the frontend takes
-    // its collapse measurement - so a constant 50 let the bottom edge be dragged
-    // up through a 4x clock, spilling 200px of digits out of the frame.
-    node._pixRtFloorOff = installResizeFloor(root, () => Math.round(BASE_H * (node._rtScale || 1)));
-    node._pixRtScaleOff = installVueScaleObserver(node, root);
-  } else {
-    // Classic: NO DOM widget — the clock is painted on the node canvas
-    // (onDrawForeground), so the node is a real canvas node: draggable +
-    // right-clickable, no DOM element eating clicks.
-    //
-    // computeSize is the SCALE-1 size, which is also LiteGraph's resize floor:
-    // the corner drag cannot make the clock smaller than its original look, and
-    // it grows freely from there. It is a live value (a wider readout at 3
-    // decimals, or a wide font, raises the floor) - never a constant.
-    node.computeSize = function () { return [clockUnitWidth(this), BASE_H]; };
-  }
+  // The face the CURRENT renderer needs, and a rebuild whenever the user flips
+  // "Nodes 2.0" without reloading (see applyRenderer). A clone that is never
+  // added to a graph (Ctrl+C, Alt-drag) never gets onRemoved, so its listener
+  // stays registered - the node.graph check just makes it do nothing. (A timer
+  // left inside a subgraph of a workflow you switched away from keeps a dead
+  // graph and gets a harmless build/teardown per flip; it is never shown, and
+  // it is the same leak _timers already has - Vue Compat #8's open task.)
+  node._pixRtVue = null;
+  applyRenderer(node, isVueNodes(), false);
+  node._pixRtRendererOff = onRendererChange((vue) => { if (node.graph) applyRenderer(node, vue, true); });
 
   // A FRESH node opens at SCALE 1 - the original compact clock. Assigned
   // synchronously (convention #9): configure() runs after this and restores the
@@ -1790,6 +1908,8 @@ app.registerExtension({
     nodeType.prototype.onRemoved = function () {
       _timers.delete(this);
       clearTimeout(this._rtDotT);
+      try { if (this._pixRtRendererOff) this._pixRtRendererOff(); } catch (_e) {}
+      this._pixRtRendererOff = null;
       try { if (this._pixRtFloorOff) this._pixRtFloorOff(); } catch (_e) {}
       this._pixRtFloorOff = null;
       try { if (this._pixRtScaleOff) this._pixRtScaleOff(); } catch (_e) {}
