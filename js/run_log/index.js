@@ -578,8 +578,12 @@ function injectCSS() {
     ".pix-rl-caplbl{font-family:'Consolas','DejaVu Sans Mono',ui-monospace,monospace;font-size:10px;letter-spacing:0.14em;text-transform:uppercase;color:#6c6960;}",
     ".pix-rl-status{font-family:'Consolas','DejaVu Sans Mono',ui-monospace,monospace;font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:#57544d;display:flex;align-items:center;gap:5px;}",
     ".pix-rl-running{color:#49c97a;}",
-    ".pix-rl-rdot{width:6px;height:6px;border-radius:50%;background:#49c97a;animation:pixRlPulse 1.1s infinite;}",
-    "@keyframes pixRlPulse{0%,100%{opacity:1;}50%{opacity:0.25;}}",
+    // A STEADY dot, never an endless CSS animation (2026-09-26). An infinite
+    // pulse makes the browser composite a fresh frame 60 times a second for the
+    // whole run, on the same GPU that is generating: MEASURED in Nodes 2.0, the
+    // pulse alone cost ~2% of every generation. Green + the word "running" is
+    // the signal; nothing needs to move.
+    ".pix-rl-rdot{width:6px;height:6px;border-radius:50%;background:#49c97a;}",
     // flex:none + an exact height — see SCREEN_H. Never flex:1, or the panel
     // stretches and leaves a black strip under the last row.
     ".pix-rl-screen{flex:none;height:" + SCREEN_H + "px;overflow:hidden;background:#141417;border:1px solid #050506;border-radius:6px;box-shadow:inset 0 1px 0 rgba(255,255,255,0.03),inset 0 0 20px rgba(0,0,0,0.35);padding:5px;box-sizing:border-box;}",
@@ -669,7 +673,6 @@ function injectCSS() {
     ".pix-rl-fbtn:focus-visible{outline-offset:-2px;}",
     ".pix-rl-ico{width:13px;height:13px;background-color:#7a776f;-webkit-mask-position:center;mask-position:center;-webkit-mask-repeat:no-repeat;mask-repeat:no-repeat;-webkit-mask-size:contain;mask-size:contain;transition:background-color 0.12s;}",
     ".pix-rl-fbtn:hover:not(:disabled) .pix-rl-ico{background-color:var(--pix-acc,#f66744);}",
-    "@media (prefers-reduced-motion:reduce){.pix-rl-rdot{animation:none;}}",
     // Hide any native widget-input dot column beside our DOM widget in Nodes 2.0
     // (the node has no inputs, so there is nothing to plug in).
     ".lg-node:has(.pix-rl-root) .lg-node-widget > *:first-child:empty{display:none;}",

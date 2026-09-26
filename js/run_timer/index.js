@@ -193,14 +193,29 @@ function clockParts(ms, dec) {
   else if (dec === 2) frac = "." + pad(Math.floor((ms % 1000) / 10), 2);
   return { groups, frac };
 }
-// The exact string the face is showing. The rAF loop repaints ONLY when this
-// changes, which at the DEFAULT 0 decimals is once a SECOND instead of 60 times
-// (see the loop for the measurement). Derived from the same clockParts() both
-// painters use, so it can never be coarser than what is on screen: at 2 or 3
-// decimals it differs every frame and the repaint rate is unchanged.
-function readoutSig(node) {
-  const p = clockParts(node._rtDisplayMs || 0, node._pixRtDecimals ?? DEFAULT_STATE.decimals);
-  return p.groups.map((g) => g.num + g.unit).join(":") + p.frac;
+// The exact string a face shows for these parts. The rAF loop repaints ONLY when
+// it changes, which at the DEFAULT 0 decimals is once a SECOND instead of 60
+// times (see the loop for the measurements). Derived from the same clockParts()
+// both painters use. At 2 or 3 decimals it differs every frame, so the loop also
+// caps how often the digits after the point repaint (LIVE_FRAC_GAP_MS).
+function readoutSigOf(parts) {
+  return parts.groups.map((g) => g.num + g.unit).join(":") + parts.frac;
+}
+// Both painters call this once they have put a readout on screen. The live loop
+// compares against what was actually SHOWN, not against what it last asked for,
+// so a redraw ComfyUI makes for its own reasons (it repaints the whole canvas on
+// every sampler step) updates the clock for free and the loop asks for nothing.
+function noteShown(node, parts) {
+  node._rtShownSig = readoutSigOf(parts);
+  node._rtShownSec = readoutSigOf({ groups: parts.groups, frac: "" });
+  node._rtShownAt = performance.now();
+}
+// The status dot "ticks" while a run is going: bright on even seconds, dim on
+// odd ones. It replaces an endless CSS pulse, which kept the browser producing a
+// new frame 60 times a second for the whole run. The tick costs nothing extra:
+// the face is repainted when the seconds change anyway.
+function dotDim(node) {
+  return !!node._rtRunning && Math.floor((node._rtDisplayMs || 0) / 1000) % 2 === 1;
 }
 
 // ── display (Nodes 2.0 DOM clock) ───────────────────────────────────────────
@@ -234,6 +249,10 @@ function paint(node) {
     parts.groups.forEach((g, i) => { if (node._rtNumEls && node._rtNumEls[i]) node._rtNumEls[i].textContent = g.num; });
     if (node._rtFracEl) node._rtFracEl.textContent = parts.frac;
   }
+  // toggle(name, force) with an unchanged force writes nothing, so a repaint
+  // inside the same second never touches the dot's style
+  if (node._pixRtDot) node._pixRtDot.classList.toggle("tick", dotDim(node));
+  noteShown(node, parts);
 }
 function setDot(node, mode) {
   node._rtDotState = mode; // the classic canvas painter reads this
@@ -755,19 +774,43 @@ let _runLive = false;
 // Every OTHER caller of refreshClock is a discrete event (run start, finish,
 // colour, font, decimals) and still repaints unconditionally, so nothing that
 // changes the face for a non-text reason can be skipped here.
+//
+// ROUND TWO (2026-09-26, "people still say the timer slows generation"). Timed
+// on real generations (SD1.5, RTX 2060, 4K screen, a separate Chrome driven by
+// script, arms interleaved): 0 decimals was already free, but 2 or 3 decimals
+// still cost 6-9% of the whole generation, because at those settings the
+// readout changes every frame and every change was a full canvas repaint (the
+// canvas is ONE bitmap: a ticking millisecond redraws every node and wire on
+// screen, on the same GPU that is generating). Three rules now:
+//   1. Compare against what the face last SHOWED (noteShown), not against what
+//      this loop last asked for. ComfyUI repaints the whole canvas itself on
+//      every sampler step, and those repaints update the clock for free.
+//   2. The digits after the point repaint at most every LIVE_FRAC_GAP_MS. The
+//      whole seconds still flip on time, and the frozen total at the end is
+//      exact to the millisecond - it is set and painted by finishAll.
+//   3. Classic: a timer that is not on screen asks for nothing. It is painted
+//      with the live value the moment a pan or zoom brings it back.
+const LIVE_FRAC_GAP_MS = 250;
+function onScreen(node) {
+  const vn = app.canvas && app.canvas.visible_nodes;
+  return Array.isArray(vn) ? vn.includes(node) : true;
+}
 function loop() {
   let anyRunning = false;
   const now = performance.now();
   for (const node of _timers) {
-    if (node._rtRunning) {
-      anyRunning = true;
-      node._rtDisplayMs = now - node._rtStart;
-      const sig = readoutSig(node);
-      if (node._rtReadoutSig !== sig) {
-        node._rtReadoutSig = sig;
-        refreshClock(node);
-      }
-    }
+    if (!node._rtRunning) continue;
+    anyRunning = true;
+    node._rtDisplayMs = now - node._rtStart;
+    const p = clockParts(node._rtDisplayMs, node._pixRtDecimals ?? DEFAULT_STATE.decimals);
+    const sig = readoutSigOf(p);
+    if (sig === node._rtShownSig || sig === node._rtAskedSig) continue;
+    const secMoved = readoutSigOf({ groups: p.groups, frac: "" }) !== node._rtShownSec;
+    if (!secMoved && now - Math.max(node._rtShownAt || 0, node._rtAskedAt || 0) < LIVE_FRAC_GAP_MS) continue;
+    node._rtAskedSig = sig;
+    node._rtAskedAt = now;
+    if (!isVueNodes() && !onScreen(node)) continue;
+    refreshClock(node);
   }
   _rafId = anyRunning ? requestAnimationFrame(loop) : null;
 }
@@ -797,6 +840,7 @@ function adoptLiveRun(node) {
   node._rtRunning = true;
   node._rtStart = _runStart;
   node._rtDisplayMs = performance.now() - _runStart;
+  forgetLiveMarks(node);
   setDot(node, "run");
   refreshClock(node);
   ensureLoop();
@@ -812,10 +856,20 @@ function startAll() {
     node._rtRunning = true;
     node._rtStart = _runStart; // share it so the frozen clock == the recorded time
     node._rtDisplayMs = 0;
+    forgetLiveMarks(node);
     setDot(node, "run");
     refreshClock(node);
   }
   if (_timers.size) ensureLoop();
+}
+// The loop's "already shown / already asked" marks belong to ONE run. Left over,
+// the previous run's last ASKED readout can equal this run's first new one: a
+// run that lasted 1-2 s at 0 decimals last asked for 00m:01s, so the next run
+// skipped its own 00m:01s and showed 00:00 -> 00:02 (reproduced in Nodes 2.0 by
+// removing this call; later marks are overwritten by the run's own asks).
+function forgetLiveMarks(node) {
+  node._rtShownSig = null; node._rtShownSec = null; node._rtShownAt = 0;
+  node._rtAskedSig = null; node._rtAskedAt = 0;
 }
 async function maybeChime(node) {
   const st = readState(node);
@@ -1308,10 +1362,14 @@ function injectCSS() {
     ".pix-rt-colon{font-size:calc(30px * var(--rt-s,1));line-height:1;opacity:0.7;}",
     ".pix-rt-unit{font-size:calc(13px * var(--rt-s,1));line-height:1;margin-left:calc(2px * var(--rt-s,1));margin-top:calc(2px * var(--rt-s,1));opacity:0.5;}",
     ".pix-rt-dot{position:absolute;top:calc(6px * var(--rt-s,1));left:calc(7px * var(--rt-s,1));width:calc(7px * var(--rt-s,1));height:calc(7px * var(--rt-s,1));border-radius:50%;background:#6b6b72;}",
-    ".pix-rt-dot.run{background:#3ec371;animation:pixRtPulse 1s infinite;}",
+    // NO endless animation here, on purpose: an infinite CSS pulse makes the
+    // browser composite a new frame 60 times a second for the whole run, on the
+    // same GPU that is generating. The dot ticks once a second instead (see
+    // dotDim), driven by the repaint the seconds already cause.
+    ".pix-rt-dot.run{background:#3ec371;}",
+    ".pix-rt-dot.run.tick{opacity:.35;}",
     ".pix-rt-dot.done{background:var(--pix-acc,#f66744);}",
     ".pix-rt-screen.flash{animation:pixRtFlash 0.6s;}",
-    "@keyframes pixRtPulse{0%,100%{opacity:1;}50%{opacity:.3;}}",
     "@keyframes pixRtFlash{0%{box-shadow:0 0 0 3px var(--cc,#f66744);}100%{box-shadow:0 0 0 0 rgba(0,0,0,0);}}",
     // ── NODES 2.0 title-less float (like the Label node). Scoped to .pix-rt-root,
     //    which only exists in Nodes 2.0 (classic has no DOM widget → no-op there).
@@ -1448,7 +1506,13 @@ function paintLegacyClock(node, ctx) {
   // status dot
   const dm = node._rtDotState || "idle";
   ctx.fillStyle = dm === "run" ? "#3ec371" : dm === "done" ? accentOf(node) : "#6b6b72";
+  // the once-a-second tick. MULTIPLY, never set: drawNode has already applied the
+  // node's mode alpha (0.2 bypassed, 0.4 muted), and an absolute 0.35 made the
+  // "dim" second the BRIGHT one on a faded timer (review finding, 2026-09-26).
+  const a0 = ctx.globalAlpha;
+  if (dm === "run" && dotDim(node)) ctx.globalAlpha = a0 * 0.35;
   ctx.beginPath(); ctx.arc(M.dotAt * s, M.dotAt * s, M.dotR * s, 0, Math.PI * 2); ctx.fill();
+  ctx.globalAlpha = a0;
   // time
   const col = readState(node).color || BRAND;
   ctx.textAlign = "left";
@@ -1472,6 +1536,7 @@ function paintLegacyClock(node, ctx) {
     ctx.globalAlpha = 1; x += M.unitDx * s + sg.unitW;
   });
   ctx.restore();
+  noteShown(node, L.parts);
 }
 
 // Classic only: LiteGraph paints the node's own body (bgcolor fill + a drop
@@ -1651,7 +1716,7 @@ const HELP = {
     { heading: "A clean floating clock", body: "The node is just the clock - no title bar, no frame - so it takes very little room on the canvas. Drag it from anywhere on the clock to move it, and right-click it for the settings. It works the same in both the classic and the new node interface." },
     { heading: "Make it bigger", body: "Drag the corner of the clock and the whole thing scales up with it: digits, the little m and s, and the status dot. Handy on a second monitor, or just to see the time from across the room.\n\nDrag in any direction you like - out, down, or diagonally - and the clock keeps its shape, so it always fills the node with no empty black around it. It will not go smaller than its original size, and each timer remembers how big you made it, saved with the workflow." },
     { heading: "Pick a font for it", body: "Right-click and choose 'Clock font' to draw the time in any of the bundled fonts: condensed ones like Oswald, Bebas Neue and Anton look particularly good as a big clock, and JetBrains Mono keeps the classic digital look.\n\nIt is the same font list the Text Overlay and Watermark nodes use, so any .ttf or .otf you drop into ComfyUI/models/fonts shows up here too (press the ↻ button in the picker to pick up new ones without restarting). Handwriting fonts are left out on purpose: they are hard to read as a clock. Choose 'Clock (default)' to go back to the built-in face." },
-    { heading: "Reading the clock", body: "The time shows as minutes : seconds (for example 02:47). If a run goes past an hour the clock switches to hours : minutes : seconds. A small dot in the corner is green while running and orange the moment it finishes." },
+    { heading: "Reading the clock", body: "The time shows as minutes : seconds (for example 02:47). If a run goes past an hour the clock switches to hours : minutes : seconds. A small dot in the corner is green while running (it blinks once a second) and orange the moment it finishes." },
     { heading: "Comparing workflows across tabs", body: "Each workflow remembers its own last time, so you can run several workflows in different tabs and switch between them to compare how long each one took.", bullets: [
       "The time is saved with the workflow, so it is still there after you switch tabs, reload the page, or restart ComfyUI.",
       "Because it is saved with the workflow, a small 'unsaved changes' dot shows on the tab after a run. Switching tabs never asks you to save; only closing a tab asks, as always.",
@@ -1663,7 +1728,7 @@ const HELP = {
       ["Mute all Run Timers", "The master mute: no Run Timer plays its finish chime, in any workflow. It is the same switch wherever you reach it, so flipping it in one place flips it everywhere. While it is on, the rows below it are dimmed to show they are being ignored."],
       ["Chime on finish (this timer)", "Turns the finish sound on or off for this one timer only. It starts off, so a new Run Timer is silent until you switch it on here. The speaker button on the Volume row is the same switch, whichever is easier to reach."],
       ["Sound and Volume", "Pick the chime from the sound library and set how loud it is. The Preview button plays it right now, even while muted, so you can still try sounds out. When nothing is going to play, the Sound and Volume rows are dimmed and the speaker shows as muted, so a volume of 70% never looks like a sound that is about to happen."],
-      ["Decimals", "Show hundredths (2), milliseconds (3), or just minutes and seconds (Off). Off is the default and by far the lightest: the clock only redraws when the second changes, so it costs almost nothing while a run is going. Hundredths and milliseconds change on every frame, so the clock has to redraw about 60 times a second for the whole run, which keeps your processor busy on a big workflow and can make the run itself a little slower. Leave it Off unless you really want the finer number."],
+      ["Decimals", "Show hundredths (2), milliseconds (3), or just minutes and seconds (Off). Off is the default. While a run is going, the digits after the point update a few times a second instead of on every frame, so the clock never slows your render down; the moment the run finishes it shows the exact time, to the millisecond."],
       ["Clock font", "The typeface for the digits: any bundled font, or your own from ComfyUI/models/fonts."],
       ["Clock color", "Pick the digit color right in the panel: tap a swatch, drag the color square, or type a hex code. Reset returns it to Pixaroma orange."],
     ]},

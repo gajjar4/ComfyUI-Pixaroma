@@ -140,7 +140,10 @@ function installClassicComputeSize(node) {
 
 // ── repaint ─────────────────────────────────────────────────────────────────
 
-function repaint(node) {
+// `fromSampler` is true ONLY for a new reading (poll.mjs calls node._pmRepaint).
+// Every other caller - the settings panel, a renderer switch, a load, the accent
+// - is a change the user expects to see at once, so it repaints immediately.
+function repaint(node, fromSampler) {
   const st = readState(node);
   const sample = lastSample();
   const peak = peakFor(st, sample);
@@ -154,12 +157,39 @@ function repaint(node) {
     // FOREGROUND ONLY. paintFace runs in onDrawForeground and the body hook
     // wraps drawNode, so the face is entirely foreground work - the background
     // canvas only carries the GRID and the GROUPS, which a changing reading
-    // cannot affect. This fires on EVERY sample (about 3 a second during a run,
-    // see #12), and asking for the background made each one cost 15.4 ms on an
-    // 80-node graph instead of 3.7 (measured for the same fix on Run Timer).
+    // cannot affect. A new reading arrives about 3 times a second during a run
+    // (see #12); asking for the background made each repaint cost 15.4 ms on an
+    // 80-node graph instead of 3.7 (measured for the same fix on Run Timer), and
+    // a new reading now asks only if nothing else repainted (requestFaceRepaint).
     // The hover repaint below has always passed false; this matches it.
-    node.setDirtyCanvas?.(true, false);
+    if (fromSampler) requestFaceRepaint(node);
+    else node.setDirtyCanvas?.(true, false);
   }
+}
+
+// CLASSIC ONLY: ask for a canvas repaint for a new sample only when nothing
+// else repaints the canvas first (2026-09-26). The face is drawn in
+// onDrawForeground on EVERY canvas repaint, and ComfyUI repaints the whole
+// canvas itself on every sampler step, so during a run a new reading usually
+// reaches the screen for free within a few frames. Forcing our own repaint 3
+// times a second on top of that measured about +1% on whole generations
+// (classic, 92-node graph, RTX 2060 driving a 4K screen): one repaint of a big
+// graph is ~20 ms of main thread plus a full frame for the GPU that is busy
+// generating. After PAINT_GRACE_MS with no repaint we ask, so an idle canvas
+// still updates. Off screen or collapsed we never ask: a pan or zoom repaints
+// the face with the latest sample anyway.
+const PAINT_GRACE_MS = 200;
+function requestFaceRepaint(node) {
+  node._pmAskedAt = performance.now();
+  if (node._pmAskT) return;
+  node._pmAskT = setTimeout(() => {
+    node._pmAskT = null;
+    if ((node._pmPaintedAt || 0) >= node._pmAskedAt) return;   // already on screen
+    if (node.flags?.collapsed) return;
+    const vn = app.canvas && app.canvas.visible_nodes;
+    if (Array.isArray(vn) && !vn.includes(node)) return;       // not on screen
+    node.setDirtyCanvas?.(true, false);
+  }, PAINT_GRACE_MS);
 }
 
 /**
@@ -432,7 +462,7 @@ function setupNode(node) {
   // alignment line up on a title-less node. Idempotent, so no dirty-on-load.
   if (!node.flags.no_title) node.flags.no_title = true;
   node._pmScale = stateScale(node);
-  node._pmRepaint = () => repaint(node);
+  node._pmRepaint = () => repaint(node, true);   // the sampler's call: a new reading
   node._pmVue = null;
 
   applyRenderer(node, isVueNodes());
@@ -511,6 +541,8 @@ app.registerExtension({
       removeNode(this);
       closeSettingsPanelFor(this);
       clearTimeout(this._pmFlashT);
+      clearTimeout(this._pmAskT);
+      this._pmAskT = null;
       try {
         this._pmRendererOff?.();
       } catch (_e) {}
@@ -594,6 +626,7 @@ app.registerExtension({
       } catch (_e) {
         /* a broken frame must not take the canvas down */
       }
+      this._pmPaintedAt = performance.now();   // see requestFaceRepaint
       return r;
     };
 
