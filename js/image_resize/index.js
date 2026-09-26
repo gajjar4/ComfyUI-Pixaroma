@@ -6,6 +6,7 @@ import { hideJsonWidget, BRAND,
 import { isVueNodes, applyAdaptiveCanvasOnly, canvasBackingScale } from "../shared/nodes2.mjs";
 import { onRendererChange } from "../shared/renderer_switch.mjs";
 import { isLiveNode } from "../shared/live_node.mjs";
+import { attachCanvasSnapshot } from "../shared/canvas_snapshot.mjs";
 import { buildModePanel, previewResize, injectResizePanelCSS } from "../shared/resize_panel.mjs";
 import {
   injectCSS, buildModeChips, buildFooter, buildResampleAndUpscale,
@@ -502,7 +503,7 @@ function renderUI(node) {
   // just wiped). Force a redraw next frame, once it has laid out. Legacy has no
   // cards canvas - it paints the cards in the slot dead-space (onDrawForeground).
   if (isVueNodes() && node._pixIrCardsCanvas) {
-    root.appendChild(node._pixIrCardsCanvas);
+    root.appendChild(node._pixIrCardsWrap || node._pixIrCardsCanvas);
     requestAnimationFrame(() => node._pixIrRenderCards?.(true));
   }
 
@@ -741,10 +742,23 @@ function paintReadout(ctx, node, W, midY, info) {
 // upstream-value changes (Vue Compat #1). Change-gated so the poll is cheap.
 const CARDS_CANVAS_H = 100;
 function setupVueCards(node) {
+  // A canvas on screen costs the GPU work on every frame the page draws, which
+  // slows every render; while static the cards show a picture of themselves
+  // instead (js/shared/canvas_snapshot.mjs). That picture has to sit ON the
+  // canvas, so the canvas lives in a positioned WRAPPER that carries the row's
+  // 100px height: renderUI wipes the root (innerHTML) on every render and
+  // re-adds the wrapper whole, picture included, and measureContentHeight sees
+  // one 100px child exactly as it saw the bare canvas.
+  const wrap = document.createElement("div");
+  wrap.className = "pix-ir-cards-wrap";
+  wrap.style.cssText = `position:relative; width:100%; height:${CARDS_CANVAS_H}px; display:block;`;
   const cv = document.createElement("canvas");
   cv.className = "pix-ir-cards-canvas";
-  cv.style.cssText = `width:100%; height:${CARDS_CANVAS_H}px; display:block;`;
+  cv.style.cssText = "position:absolute; inset:0; width:100%; height:100%; display:block;";
+  wrap.appendChild(cv);
+  node._pixIrCardsWrap = wrap;
   node._pixIrCardsCanvas = cv;
+  node._pixIrCardsSnap = attachCanvasSnapshot(cv);
 
   const render = (force) => {
     const canvas = node._pixIrCardsCanvas;
@@ -771,6 +785,7 @@ function setupVueCards(node) {
     ctx.setTransform(s, 0, 0, s, 0, 0);
     ctx.clearRect(0, 0, cssW, cssH);
     paintReadout(ctx, node, cssW, cssH / 2, info);
+    node._pixIrCardsSnap?.changed();
   };
   node._pixIrRenderCards = render;
 
@@ -783,7 +798,10 @@ function setupVueCards(node) {
 function teardownVueCards(node) {
   if (node._pixIrPoll) { clearInterval(node._pixIrPoll); node._pixIrPoll = null; }
   if (node._pixIrCardsRO) { node._pixIrCardsRO.disconnect(); node._pixIrCardsRO = null; }
-  try { node._pixIrCardsCanvas?.remove(); } catch {}
+  try { node._pixIrCardsSnap?.dispose(); } catch {}
+  node._pixIrCardsSnap = null;
+  try { (node._pixIrCardsWrap || node._pixIrCardsCanvas)?.remove(); } catch {}
+  node._pixIrCardsWrap = null;
   node._pixIrCardsCanvas = null;
   node._pixIrRenderCards = null;
   node._pixIrLastSig = null;
@@ -922,6 +940,9 @@ app.registerExtension({
       // node doesn't keep re-reading wires / leak the ResizeObserver.
       if (this._pixIrPoll) { clearInterval(this._pixIrPoll); this._pixIrPoll = null; }
       if (this._pixIrCardsRO) { this._pixIrCardsRO.disconnect(); this._pixIrCardsRO = null; }
+      try { this._pixIrCardsSnap?.dispose(); } catch {}
+      this._pixIrCardsSnap = null;
+      this._pixIrCardsWrap = null;
       this._pixIrCardsCanvas = null;
       this._pixIrRenderCards = null;
       closeResamplePopup(); // tear down popup + its document listeners if open

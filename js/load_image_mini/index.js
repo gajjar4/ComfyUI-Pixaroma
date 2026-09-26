@@ -18,6 +18,7 @@ import { pixApiUrl } from "../shared/api_url.mjs";
 import { hideJsonWidget, installResizeFloor, installCanvasZoomPassthrough } from "../shared/index.mjs";
 import { isGraphLoading } from "../shared/graph_loading.mjs";
 import { registerNodeSettings } from "../shared/node_settings.mjs";
+import { attachCanvasSnapshot } from "../shared/canvas_snapshot.mjs";
 import { applyAdaptiveCanvasOnly, isVueNodes, canvasBackingScale, installZoomRepaint } from "../shared/nodes2.mjs";
 import { onRendererChange } from "../shared/renderer_switch.mjs";
 import { isLiveNode } from "../shared/live_node.mjs";
@@ -284,8 +285,10 @@ function renderCardsCanvas(node) {
   // than flooring the width and painting opaque cards OVER the labels. Mirrors
   // the Classic dead-space paint's pairW>=120 blank-gate.
   const pairW = cssW - CARDS_VUE_RIGHT_RESERVE - 4;
-  if (pairW < 120) return;
-  paintCardsInto(ctx, node, 4, cssH / 2, pairW);
+  if (pairW >= 120) paintCardsInto(ctx, node, 4, cssH / 2, pairW);
+  // After BOTH paths: the blank one cleared the canvas too, and a picture of the
+  // old cards left showing would sit over the labels (canvas_snapshot.mjs).
+  node._pixLmCardsSnap?.changed();
 }
 
 // ── Nodes 2.0 nudge: lift the body beside the output dots ────────────────────
@@ -465,6 +468,7 @@ function renderPreviewCanvas(node) {
     ctx.strokeStyle = "#3a3a3a"; ctx.setLineDash([4, 4]); ctx.lineWidth = 1;
     ctx.strokeRect(4.5, 4.5, cssW - 9, cssH - 9); ctx.setLineDash([]);
   }
+  node._pixLmImageSnap?.changed();
 }
 
 // Ensure an image is loaded for the preview (fetch /view on restore), then draw.
@@ -497,6 +501,9 @@ function createPreviewCanvas(node) {
   cv.className = "pix-lm-preview-canvas";
   inner.appendChild(cv);
   node._pixLmImageCanvas = cv;
+  // Picture laid over the canvas while static, hosted by `inner`: measureH skips
+  // absolute children and nothing ever clears inner (canvas_snapshot.mjs).
+  node._pixLmImageSnap = attachCanvasSnapshot(cv, { host: inner });
 
   // Both canvases are full-width, so a node resize changes both - repaint the
   // cards row alongside the preview.
@@ -564,6 +571,12 @@ function setupNode(node) {
   node._pixLmRoot = root;
   node._pixLmInner = inner;
   node._pixLmCards = cards;
+  // A canvas on screen costs the GPU work on every frame the page draws, which
+  // slows every render in Nodes 2.0; while static the cards show a picture of
+  // themselves instead (canvas_snapshot.mjs), transparent where the labels show
+  // through, hosted by `inner` like the preview's. Classic hides the cards canvas
+  // (display:none) and the picture follows it.
+  node._pixLmCardsSnap = attachCanvasSnapshot(cards, { host: inner });
   applyAccent(node);
 
   // Content-height measure (Load Image pattern): sum inner.children, counting
@@ -862,6 +875,9 @@ app.registerExtension({
       this._pixLmZoomOff = null;
       try { cancelAnimationFrame(this._pixLmZoomRaf); } catch {}
       this._pixLmZoomRaf = null;
+      try { this._pixLmCardsSnap?.dispose(); } catch {}
+      try { this._pixLmImageSnap?.dispose(); } catch {}
+      this._pixLmCardsSnap = this._pixLmImageSnap = null;
       try { this._pixLmFloorOff?.(); } catch {}
       this._pixLmFloorOff = null;
       try { this._pixLmRendererOff?.(); } catch {}
