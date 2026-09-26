@@ -9,6 +9,7 @@
 
 import { pixApiUrl, pixAsset } from "../shared/api_url.mjs";
 import { buildVolumeControl, applyVideoVolume } from "../shared/video_volume.mjs";
+import { attachVideoSnapshot } from "../shared/video_snapshot.mjs";
 
 const UI_ICON = "icons/ui/";
 export const PLACEHOLDER_DEFAULT = "Run the workflow to save and play the video here";
@@ -155,6 +156,12 @@ export function buildPlayer(node) {
   const vph = el("div", "pix-sv-vph", PLACEHOLDER_DEFAULT);
   media.appendChild(video);
   media.appendChild(vph);
+  // While the clip is paused a still picture of its frame is shown and the
+  // video is hidden: a video on screen, even paused, costs the GPU process work
+  // on every frame the page draws, and that is taken out of a run (CLAUDE.md
+  // #41). `fills` because .pix-sv-video places it through a CLASS, which cannot
+  // be read before the player is in the page.
+  const snap = attachVideoSnapshot(video, { fills: true });
 
   const bar = el("div", "pix-sv-bar is-disabled");
   const playBtn = el("button", "pix-sv-btn");
@@ -188,7 +195,7 @@ export function buildPlayer(node) {
   bar.appendChild(volume.group);
   bar.appendChild(fsBtn);
 
-  const ui = { media, video, vph, bar, playBtn, playIco, time, scrub, fill, handle, fsBtn, volume };
+  const ui = { media, video, vph, bar, playBtn, playIco, time, scrub, fill, handle, fsBtn, volume, snap };
   node._pixSvUI = Object.assign(node._pixSvUI || {}, ui);
 
   const togglePlay = () => {
@@ -206,6 +213,7 @@ export function buildPlayer(node) {
   });
   fsBtn.addEventListener("click", (e) => {
     e.stopPropagation();
+    snap.wake(); // the video must be visible BEFORE it goes fullscreen
     video.requestFullscreen?.().catch(() => {});
   });
 

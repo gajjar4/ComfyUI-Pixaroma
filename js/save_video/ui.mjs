@@ -83,6 +83,9 @@ export function injectCSS() {
     ".pix-sv-stage{position:relative;flex:1 1 0;min-height:120px;background:#151515;border:1px solid #3c3c3c;border-radius:4px;overflow:hidden;display:flex;flex-direction:column;}",
     ".pix-sv-media{position:relative;flex:1 1 0;min-height:0;overflow:hidden;}",
     ".pix-sv-video{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;display:none;background:#000;cursor:pointer;}",
+    // While a paused clip is shown as a still picture the video is hidden, so
+    // the media box has to carry the video's pointer cursor (video_snapshot.mjs).
+    ".pix-sv-media.pix-video-still{cursor:pointer;}",
     ".pix-sv-vph{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#777;font-size:11px;padding:10px;text-align:center;line-height:1.5;}",
     ".pix-sv-bar{flex:0 0 auto;display:flex;align-items:center;gap:8px;padding:5px 8px;box-sizing:border-box;background:rgba(0,0,0,.30);}",
     ".pix-sv-bar.is-disabled{opacity:.40;pointer-events:none;}",

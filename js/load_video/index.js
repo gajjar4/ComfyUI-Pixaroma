@@ -1,5 +1,6 @@
 import { app } from "/scripts/app.js";
 import { pixApiUrl, pixAsset } from "../shared/api_url.mjs";
+import { attachVideoSnapshot } from "../shared/video_snapshot.mjs";
 import { applyAdaptiveCanvasOnly,
   installCanvasZoomPassthrough, installNodeAccent, registerNodeAccent,
   onRendererChange, createSlotBand, settleSlotBand, watchSlotBand,
@@ -320,6 +321,12 @@ app.registerExtension({
       video.style.cssText =
         "position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#000;display:none;";
       media.appendChild(video);
+      // While the clip is paused a still picture of its frame is shown and the
+      // video is hidden: a video on screen, even paused, costs the GPU process
+      // work on every frame the page draws, and that is taken out of a run
+      // (CLAUDE.md #41). The picture sits between the video and the
+      // placeholder, and the media box below still takes every click.
+      this._pixLvSnap = attachVideoSnapshot(video);
 
       const placeholder = document.createElement("div");
       placeholder.className = "pix-lv-placeholder";
@@ -401,6 +408,7 @@ app.registerExtension({
       fsBtn.addEventListener("click", (e) => {
         e.stopPropagation();
         if (!video.src) return;
+        node._pixLvSnap?.wake(); // the video must be visible BEFORE it goes fullscreen
         (video.requestFullscreen || video.webkitRequestFullscreen)?.call(video);
       });
       dlBtn.addEventListener("click", (e) => {
@@ -456,6 +464,8 @@ app.registerExtension({
         if (this._pixLvScrubMove) window.removeEventListener("mousemove", this._pixLvScrubMove);
         if (this._pixLvScrubUp) window.removeEventListener("mouseup", this._pixLvScrubUp);
         this._pixLvScrubMove = this._pixLvScrubUp = null;
+        this._pixLvSnap?.dispose();
+        this._pixLvSnap = null;
         this._pixLvRendererOff?.();
         this._pixLvRendererOff = null;
         this._pixLvBandRO?.();

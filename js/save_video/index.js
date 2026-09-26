@@ -857,6 +857,7 @@ app.registerExtension({
         closeSettingsPanelFor(this);
         this._pixSvFloorOff?.();
         this._pixSvEndDrag?.(); // release any window listeners the scrub added
+        this._pixSvUI?.snap?.dispose(); // the paused clip's still picture
         clearTimeout(this._pixSvCntTimer);
         clearTimeout(this._pixSvFlashTimer);
         // so the `!node._pixSvUI` bails elsewhere can actually fire for a

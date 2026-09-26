@@ -7,6 +7,7 @@ import { applyAdaptiveCanvasOnly,
 } from "../shared/index.mjs";
 import { installFilenameTokenResolver } from "../shared/filename_tokens.mjs";
 import { buildVolumeControl, applyVideoVolume } from "../shared/video_volume.mjs";
+import { attachVideoSnapshot } from "../shared/video_snapshot.mjs";
 
 // Nodes 2.0 renders its own native .image-preview panel because this node
 // emits ui.images (for the Media Assets refresh, Preview Image Pattern #14).
@@ -381,6 +382,12 @@ app.registerExtension({
       video.style.cssText =
         "position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#000;display:none;";
       media.appendChild(video);
+      // While the clip is paused a still picture of its frame is shown and the
+      // video is hidden: a video on screen, even paused, costs the GPU process
+      // work on every frame the page draws, and that is taken out of a run
+      // (CLAUDE.md #41). The picture sits between the video and the
+      // placeholder; the media box still takes every click.
+      this._pixMp4Snap = attachVideoSnapshot(video);
 
       // Appended AFTER the video so, as equal position:absolute siblings, it
       // stacks on top. Safe because exactly one of the two is display:block at
@@ -480,6 +487,7 @@ app.registerExtension({
       fsBtn.addEventListener("click", (e) => {
         e.stopPropagation();
         if (!video.src) return;
+        node._pixMp4Snap?.wake(); // the video must be visible BEFORE it goes fullscreen
         (video.requestFullscreen || video.webkitRequestFullscreen)?.call(video);
       });
       // Download the current clip to the user's computer. The /view URL is
@@ -564,6 +572,8 @@ app.registerExtension({
         if (this._pixMp4ScrubMove) window.removeEventListener("mousemove", this._pixMp4ScrubMove);
         if (this._pixMp4ScrubUp) window.removeEventListener("mouseup", this._pixMp4ScrubUp);
         this._pixMp4ScrubMove = this._pixMp4ScrubUp = null;
+        this._pixMp4Snap?.dispose();
+        this._pixMp4Snap = null;
         this._pixMp4RendererOff?.();
         this._pixMp4RendererOff = null;
         this._pixMp4BandRO?.();

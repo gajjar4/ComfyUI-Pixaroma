@@ -1,5 +1,6 @@
 import { app } from "/scripts/app.js";
 import { pixApiUrl } from "../shared/api_url.mjs";
+import { attachVideoSnapshot } from "../shared/video_snapshot.mjs";
 import { applyAdaptiveCanvasOnly,
   installCanvasZoomPassthrough, installNodeAccent, registerNodeAccent,
 } from "../shared/index.mjs";
@@ -345,6 +346,11 @@ app.registerExtension({
       video.style.cssText =
         "position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#000;display:none;";
       media.appendChild(video);
+      // Between seeks the picked frame is shown as a still picture and the video
+      // is hidden: a video on screen, even paused, costs the GPU process work on
+      // every frame the page draws, and that is taken out of a run (CLAUDE.md
+      // #41). Every seek brings the live video back until it settles.
+      this._pixLvfSnap = attachVideoSnapshot(video);
 
       const placeholder = document.createElement("div");
       placeholder.className = "pix-lvf-placeholder";
@@ -443,6 +449,8 @@ app.registerExtension({
         if (this._pixLvfScrubMove) window.removeEventListener("mousemove", this._pixLvfScrubMove);
         if (this._pixLvfScrubUp) window.removeEventListener("mouseup", this._pixLvfScrubUp);
         this._pixLvfScrubMove = this._pixLvfScrubUp = null;
+        this._pixLvfSnap?.dispose();
+        this._pixLvfSnap = null;
         return protoRemoved?.apply(this, arguments);
       };
 
