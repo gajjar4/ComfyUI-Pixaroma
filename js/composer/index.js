@@ -25,6 +25,7 @@ import "./interaction.mjs";
 import "./placeholder.mjs";
 import { getUpstreamImageUrlForNode } from "./placeholder.mjs";
 import { isGraphLoading } from "../shared/graph_loading.mjs";
+import { isLiveNode } from "../shared/live_node.mjs";
 
 // Re-export so other modules can import from index
 export { PixaromaEditor };
@@ -519,6 +520,10 @@ app.registerExtension({
     // project_id so multiple composer nodes in the same workflow
     // don't clobber each other.
     const _onComposerPreview = (event) => {
+      // A Ctrl+C copy carries the same project_id and never gets onRemoved, so it
+      // used to take this event too and reload the preview nobody sees. Real
+      // nodes, inside subgraphs too, always pass (js/shared/live_node.mjs).
+      if (!isLiveNode(node)) return;
       const data = event?.detail;
       if (!data || !data.filename) return;
       // Match the event to this node. If project_id is missing (shouldn't
@@ -619,7 +624,13 @@ app.registerExtension({
       // `api` already imported at top of file — no need for dynamic import.
 
       let executionRunning = false;
+      // Copies (Ctrl+C / Clone / Convert to Subgraph) and Composers left inside a
+      // subgraph by a workflow switch never get onRemoved, so these listeners
+      // stayed registered for them. With a placeholder layer each one re-composited
+      // an invisible preview after EVERY run (measured: 3 copies = 3 extra image
+      // draws per run). Skip anything not on an open canvas.
       const _onExecStart = () => {
+        if (!isLiveNode(node)) return;
         executionRunning = true;
         // Reset the WS-preview flag so if this run doesn't hit the
         // dynamic re-compose path (no placeholders / auto-rembg /
@@ -630,6 +641,7 @@ app.registerExtension({
 
       // "executing" with null detail means execution finished
       const _onExecuting = (event) => {
+        if (!isLiveNode(node)) return;
         const detail = event?.detail;
         if (detail === null || detail?.node === null) {
           if (executionRunning && !isEditorOpen(node)) {
