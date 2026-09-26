@@ -5,6 +5,7 @@ import { isVueNodes, applyAdaptiveCanvasOnly } from "../shared/nodes2.mjs";
 import { installResizeFloor } from "../shared/resize_floor.mjs";
 import { isGraphLoading } from "../shared/graph_loading.mjs";
 import { onRendererChange } from "../shared/renderer_switch.mjs";
+import { isLiveNode } from "../shared/live_node.mjs";
 import {
   registerNodeSettings, createAccentSection, accentOf, applyAccent, installNodeAccent,
 } from "../shared/node_settings.mjs";
@@ -796,45 +797,12 @@ function onScreen(node) {
   const vn = app.canvas && app.canvas.visible_nodes;
   return Array.isArray(vn) ? vn.includes(node) : true;
 }
-/**
- * Is this timer on a canvas the user actually has open?
- *
- * ComfyUI builds Run Timers that are never put on a canvas, and leaves others
- * behind when a workflow is replaced, and NEITHER kind ever gets onRemoved. Both
- * stayed in _timers and CHIMED and wrote a history line at the end of every later
- * run. MEASURED 2026-09-26: one timer plus three Ctrl+C copies chimed 4 times;
- * with that timer deleted, a canvas with no timer on it still chimed 4 times and
- * recorded the run; a few copies later, one timer chimed 8 times.
- *   - A throwaway COPY. Ctrl+C, Alt-drag and right-click Clone all serialize a
- *     clone(), and Convert to Subgraph a multiClone(): createNode + configure,
- *     never added, so node.graph is null.
- *   - The inner nodes of a subgraph once the workflow is REPLACED (a tab switch,
- *     opening a file, Ctrl+Z). LGraph.clear() fires onRemoved for ROOT nodes
- *     only and empties the subgraph map, so they keep a graph nothing can reach.
- * app.graph is always the ROOT (also while you look inside a subgraph), and
- * rootGraph.subgraphs holds every subgraph, nested ones included. The identity
- * test is defensive: app.graph is the SAME object in every tab, so a root node
- * left behind would still point at it while its id now belongs to a new node.
- *
- * Only ever used to SKIP a node at run start / finish / adopt - nothing is
- * dropped from _timers, because ComfyUI's asset browser creates a node, waits a
- * tick and only then adds it, so "no graph yet" is not proof of a copy. And
- * anything unexpected answers "live": never silence a real timer.
- */
-function isLiveNode(node) {
-  const g = node && node.graph;
-  if (!g) return false;
-  try {
-    const root = app.graph;
-    if (!root) return true;
-    if (g !== root) {
-      let known = false;
-      for (const sg of root.subgraphs.values()) if (sg === g) { known = true; break; }
-      if (!known) return false;
-    }
-    return g.getNodeById(node.id) === node;
-  } catch (_e) { return true; }
-}
+// isLiveNode (js/shared/live_node.mjs): Ctrl+C / Clone / Convert to Subgraph
+// copies and subgraph timers left behind by a workflow switch never get
+// onRemoved, so they stay in _timers. They used to start with every run and
+// CHIME and write a history line at its end (measured: one timer plus three
+// copies chimed 4 times; a canvas with NO timer still chimed and recorded the
+// run). The run events below skip them; nothing is dropped from _timers.
 // ONE broken timer must never stop the others, or the loop itself. Every
 // per-node block below runs inside its own try: a throw that escaped loop()
 // skipped the `_rafId = ...` line, left _rafId set for good, and ensureLoop()
