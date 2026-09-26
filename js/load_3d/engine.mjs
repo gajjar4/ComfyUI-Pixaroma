@@ -12,6 +12,7 @@
 
 import { pixApiUrl } from "../shared/api_url.mjs";
 import { canvasBackingScale } from "../shared/nodes2.mjs";
+import { attachCanvasSnapshot } from "../shared/canvas_snapshot.mjs";
 import { NONE, splitModelName, fmtBytes, fmtInt } from "./core.mjs";
 // The size the picture is drawn at can come from a wire, so the frame, the drag
 // maths and the capture all read the EFFECTIVE state, never the stored one.
@@ -57,6 +58,7 @@ function recOf(node) {
     rec = {
       node, canvas: null, onStatus: null, status: "empty", info: null, error: "",
       value: "", seq: 0, loading: null, model: null, view: null, anim: null, opts: null, stageBox: null,
+      snap: null,
     };
     _recs.set(node, rec);
   }
@@ -69,7 +71,18 @@ function recOf(node) {
  */
 export function attachCanvas(node, canvas, onStatus, opts = null) {
   const rec = recOf(node);
+  if (rec.snap && rec.canvas !== canvas) {
+    rec.snap.dispose();
+    rec.snap = null;
+  }
   rec.canvas = canvas;
+  // While nothing is being drawn the view shows a PICTURE of itself and the
+  // canvas is hidden: a canvas on screen costs the GPU process work on every
+  // frame the page draws, and that is taken out of a run (CLAUDE.md #41). One
+  // view measured 24.5% of a core against 21.7% with none. It needs the face to
+  // give the canvas an INLINE position:absolute; without one it is a no-op and
+  // the canvas simply stays up. Every real draw calls changed() (flush below).
+  if (!rec.snap) rec.snap = attachCanvasSnapshot(canvas);
   rec.onStatus = onStatus || null;
   rec.opts = opts || null;
   requestDraw(node);
@@ -79,6 +92,8 @@ export function detach(node) {
   const rec = _recs.get(node);
   if (!rec) return;
   rec.seq++;
+  rec.snap?.dispose();
+  rec.snap = null;
   disposeModel(rec);
   _recs.delete(node);
   _dirty.delete(node);
@@ -964,9 +979,14 @@ function flush() {
   _dirty.clear();
   for (const n of nodes) {
     try {
-      drawNow(n);
+      // Only a REAL draw brings the live canvas back; a skipped one (the view
+      // is parked at display:none) leaves the picture as it is.
+      if (drawNow(n)) _recs.get(n)?.snap?.changed();
     } catch (e) {
       const rec = _recs.get(n);
+      // A draw that threw may have left half a frame: show the canvas as it is,
+      // exactly as before the picture existed.
+      rec?.snap?.changed();
       if (!rec || !_blocked.has(n)) console.warn("[Pixaroma.Load3D] draw failed", e);
       if (rec?.status === "ready" && rec.model) markBlocked(rec);
     }
@@ -1060,20 +1080,21 @@ function drawFrame(ctx, fr, bw, bh, sc, st) {
   ctx.restore();
 }
 
+/** Draws the node's view. True when the canvas was painted, false when skipped. */
 function drawNow(node) {
   const rec = _recs.get(node);
   const cv = rec?.canvas;
-  if (!cv) return;
+  if (!cv) return false;
   const cssW = cv.clientWidth;
   const cssH = cv.clientHeight;
-  if (cssW < 8 || cssH < 8) return; // hidden: ComfyUI parks off-screen widgets at display:none
+  if (cssW < 8 || cssH < 8) return false; // hidden: ComfyUI parks off-screen widgets at display:none
   const sc = canvasBackingScale(cssW, cssH);
   const bw = Math.max(1, Math.round(cssW * sc));
   const bh = Math.max(1, Math.round(cssH * sc));
   if (cv.width !== bw) cv.width = bw;
   if (cv.height !== bh) cv.height = bh;
   const ctx = cv.getContext("2d");
-  if (!ctx) return;
+  if (!ctx) return true; // the backing store may have been resized (cleared) above
   const st = stateOf(rec);
   const stage = !!rec.opts?.stage;
   const f = frameRect(cssW, cssH, st);
@@ -1087,7 +1108,7 @@ function drawNow(node) {
     ctx.fillRect(0, 0, bw, bh);
     if (!stage) drawFrame(ctx, fr, bw, bh, sc, st);
     if (wantsModel) markBlocked(rec);
-    return;
+    return true;
   }
   if (stage) {
     // Save 3D: the model where its file (and the Fix preview) puts it, over a
@@ -1100,7 +1121,7 @@ function drawNow(node) {
     ctx.drawImage(r.domElement, 0, 0, bw, bh, 0, 0, bw, bh);
     if (st.marker !== false) drawMarker(ctx, scam, bw, bh, sc);
     markDrawn(rec);
-    return;
+    return true;
   }
   applyOrientation(THREE, rec, st);
   const ang = displayedAngles(rec, st);
@@ -1110,6 +1131,7 @@ function drawNow(node) {
   ctx.drawImage(r.domElement, 0, 0, bw, bh, 0, 0, bw, bh);
   drawFrame(ctx, fr, bw, bh, sc, st);
   markDrawn(rec);
+  return true;
 }
 
 function toBlob(canvas) {

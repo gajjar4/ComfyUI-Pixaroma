@@ -223,6 +223,10 @@ export function buildFace(node, handlers) {
 
   const vp = el("div", "pix-s3d-vp");
   const canvas = document.createElement("canvas");
+  // INLINE as well as in the stylesheet: while nothing is drawn the shared
+  // engine lays a still picture exactly over the canvas, copying this inline
+  // style (canvas_snapshot.mjs FILL mode). Without it the picture is never used.
+  canvas.style.cssText = "position:absolute;inset:0;width:100%;height:100%;display:block;";
   const msg = el("div", "pix-s3d-msg");
   const chip = el("div", "pix-s3d-chip");
   vp.append(canvas, msg, chip);

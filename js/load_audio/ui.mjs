@@ -9,6 +9,7 @@ import { ACC, accentOf } from "../shared/node_settings.mjs";
 import { canvasBackingScale } from "../shared/nodes2.mjs";
 import { pixAsset } from "../shared/api_url.mjs";
 import { placeZoomedPopup } from "../shared/popup_zoom.mjs";
+import { attachCanvasSnapshot } from "../shared/canvas_snapshot.mjs";
 import { DEFAULT_STATE, WAVE_H, fmtTime, readState, writeState } from "./core.mjs";
 import { audioFileUrl, listAudioFiles, uploadAudio } from "./api.mjs";
 import { drawWave, forgetPeaks, loadPeaks, makePlayer } from "./waveform.mjs";
@@ -65,9 +66,12 @@ export function injectCSS() {
      next paint writes an even bigger square. MEASURED in Nodes 2.0: the body
      went 190 -> 443px on a fresh insert, and widening the node from 380 to 600
      pushed node.size[1] to 685. flex-basis:0 makes the base size 0 so only the
-     flex line (and min-height) decide the height; verified back to 188px. */
-  .${ROOT} .wave{
-    width:100%; flex:1 1 0; min-height:${WAVE_H}px; display:block;
+     flex line (and min-height) decide the height; verified back to 188px.
+     Since 2026-09-26 the flex item is a plain WRAPPER and the canvas lies
+     absolutely inside it (its box is set inline in buildFace), so the canvas
+     cannot size its own box at all; the wrapper keeps flex-basis 0 anyway. */
+  .${ROOT} .wavewrap{
+    position:relative; flex:1 1 0; min-height:${WAVE_H}px;
     cursor:ew-resize; touch-action:none;
   }
   .${ROOT} .times{ display:flex; justify-content:space-between; font-size:10px; color:#777; }
@@ -347,10 +351,21 @@ export function buildFace(node, openPanel) {
 
   const wavebox = document.createElement("div");
   wavebox.className = "wavebox";
+  // The canvas lies absolutely inside a plain wrapper, and the WRAPPER takes
+  // the clicks, the drags, the cursor and the tooltip. While nothing is being
+  // drawn a still picture of the canvas is shown and the canvas is hidden
+  // (canvas_snapshot.mjs): a canvas on screen costs the GPU process work on
+  // every frame the page draws, and that is taken out of a run (CLAUDE.md #41).
+  // A hidden canvas cannot be clicked, hence the wrapper. Its box IS the
+  // canvas's box (inset 0, no padding or border), so every x maps the same.
+  const waveWrap = document.createElement("div");
+  waveWrap.className = "wavewrap";
+  waveWrap.title = "Click anywhere to put the play cursor there. Drag either orange "
+    + "edge to trim, or drag the middle to slide the selection.";
   const wave = document.createElement("canvas");
   wave.className = "wave";
-  wave.title = "Click anywhere to put the play cursor there. Drag either orange "
-    + "edge to trim, or drag the middle to slide the selection.";
+  wave.style.cssText = "position:absolute;inset:0;width:100%;height:100%;display:block;";
+  waveWrap.appendChild(wave);
   const times = document.createElement("div");
   times.className = "times";
   const tA = document.createElement("span");
@@ -358,7 +373,7 @@ export function buildFace(node, openPanel) {
   tSel.className = "sel";
   const tB = document.createElement("span");
   times.append(tA, tSel, tB);
-  wavebox.append(wave, times);
+  wavebox.append(waveWrap, times);
 
   const num = document.createElement("div");
   num.className = "num";
@@ -414,7 +429,11 @@ export function buildFace(node, openPanel) {
 
   node._pixLaEls = { root, nm, wave, tA, tSel, tB, inp, tx, play, playBtn };
   node._pixLaDur = 0;
-  attachDrag(node, wave);
+  // FILL mode: the picture is the canvas's sibling inside the wrapper and copies
+  // its inline box. paint() calls changed() after every draw.
+  node._pixLaSnap = attachCanvasSnapshot(wave);
+  // The WRAPPER, not the canvas: a hidden canvas receives no pointer events.
+  attachDrag(node, waveWrap);
   attachSettings(node, file, openPanel);
 
   // The canvas has to be repainted at whatever size it ACTUALLY ends up, and
@@ -433,7 +452,9 @@ export function buildFace(node, openPanel) {
       // a workflow tab switch - and without this it silently shows "click
       // Upload" for a file that is loaded perfectly well.
       // Safe from recursion: renderFace changes the canvas BACKING size, never
-      // its CSS box, so it cannot re-trigger this observer.
+      // its CSS box, so it cannot re-trigger this observer. (Only TRUE since the
+      // canvas became absolutely positioned inside its wrapper; while it was a
+      // flex item its backing store fed its height, see the .wavewrap CSS.)
       if (st.file && (!c || c.file !== st.file)) renderFace(node);
       else repaintWave(node);
     });
@@ -483,6 +504,10 @@ function zoneAt(node, wave, clientX) {
  * The END edge only moves when the duration input is UNWIRED - with a wire the
  * length belongs to whatever is upstream, and letting the mouse fight it would
  * silently disagree with the number actually used at run time.
+ *
+ * `wave` is the WRAPPER the canvas fills, not the canvas (see buildFace): the
+ * canvas is hidden whenever its still picture is up, and a hidden element gets
+ * no pointer events. The two boxes are identical, so every x maps the same.
  */
 function attachDrag(node, wave) {
   // Cursor feedback, so the handles are discoverable without a tooltip.
@@ -760,6 +785,7 @@ function paint(node, peaks, dur, error) {
   drawWave(els.wave, peaks, sel, accentOf(node),
     canvasBackingScale(els.wave.clientWidth, els.wave.clientHeight),
     { play: frac(node._pixLaPlayAt), cue: frac(cue) });
+  node._pixLaSnap?.changed();
   els.tA.textContent = dur > 0 ? "0:00" : "";
   els.tB.textContent = dur > 0 ? fmtTime(dur) : "";
   els.tSel.textContent = dur > 0 && len > 0
@@ -839,8 +865,10 @@ export function destroyFace(node) {
   stopPlay(node);
   closePopup();
   try { node?._pixLaRO?.disconnect(); } catch (_e) { /* already gone */ }
+  try { node?._pixLaSnap?.dispose(); } catch (_e) { /* already gone */ }
   if (node) {
     node._pixLaRO = null;
+    node._pixLaSnap = null;
     node._pixLaEls = null;
     node._pixLaPeaks = null;
     node._pixLaCue = null;
