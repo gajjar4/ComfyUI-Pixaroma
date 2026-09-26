@@ -6,6 +6,7 @@ import { BRAND, registerNodeHelp,
 import { applyAdaptiveCanvasOnly, isVueNodes } from "../shared/nodes2.mjs";
 import { onRendererChange } from "../shared/renderer_switch.mjs";
 import { isLiveNode } from "../shared/live_node.mjs";
+import { attachCanvasSnapshot } from "../shared/canvas_snapshot.mjs";
 
 // The accent of the node currently being painted. A canvas cannot read a CSS
 // variable, and the small paint helpers below take no node argument, so
@@ -971,6 +972,11 @@ function createCompareDOMWidget(node) {
   const canvas = document.createElement("canvas");
   canvas.style.cssText = "position:absolute;inset:0;width:100%;height:100%;display:block;";
   root.appendChild(canvas);
+  // A canvas on screen costs the GPU work on every frame the page draws, which
+  // made renders slower (three Compares: +3-4%); while nothing is being drawn
+  // it shows a picture of itself instead (js/shared/canvas_snapshot.mjs).
+  const snap = attachCanvasSnapshot(canvas);
+  node._cmpSnap = snap;
 
   installCanvasZoomPassthrough(root);
   const widget = node.addDOMWidget("pixaroma_compare", "pixaroma_compare", root, {
@@ -1030,6 +1036,7 @@ function createCompareDOMWidget(node) {
     node._cmpDomW = cssW;
     node._cmpDomH = cssH;
     paintCompare(ctx, node, cssW, cssH + TOP_TRIM, node._cmpDomMouse || null);
+    snap.changed();
   };
   node._cmpDomRender = render;
 
@@ -1119,6 +1126,8 @@ function teardownCompareDOMWidget(node) {
   node._cmpDomRO = null;
   try { cancelAnimationFrame(node._cmpZoomRaf); } catch {}
   node._cmpZoomRaf = null;
+  try { node._cmpSnap?.dispose(); } catch {}
+  node._cmpSnap = null;
   const w = node._cmpDomWidget || (node.widgets || []).find((x) => x && x.name === "pixaroma_compare");
   // The widget's OWN onRemove first (monitor.md #8): ComfyUI also keeps DOM
   // widgets in a store of its own and re-mounts everything in it, so splicing
@@ -1356,6 +1365,8 @@ app.registerExtension({
       this._cmpRendererOff = null;
       try { this._cmpDomRO?.disconnect(); } catch {}
       try { cancelAnimationFrame(this._cmpZoomRaf); } catch {}
+      try { this._cmpSnap?.dispose(); } catch {}
+      this._cmpSnap = null;
       cmpHideTooltip();
       this._cmpDomRO = null;
       this._cmpDomRender = null;

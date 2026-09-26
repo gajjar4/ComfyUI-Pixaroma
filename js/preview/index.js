@@ -8,6 +8,7 @@ import { applyAdaptiveCanvasOnly, isVueNodes, canvasBackingScale, installZoomRep
 import { applyFilenameTokenRefs, installFilenameTokenResolver } from "../shared/filename_tokens.mjs";
 import { onRendererChange } from "../shared/renderer_switch.mjs";
 import { isLiveNode } from "../shared/live_node.mjs";
+import { attachCanvasSnapshot } from "../shared/canvas_snapshot.mjs";
 
 // ---- Nodes 2.0 helpers ----
 // The Vue "WidgetLegacy" bridge repaints a custom widget's canvas only via
@@ -1326,6 +1327,11 @@ function createStripDOMWidget(node) {
   const canvas = document.createElement("canvas");
   canvas.style.cssText = "position:absolute;inset:0;width:100%;height:100%;display:block;";
   root.appendChild(canvas);
+  // A canvas on screen costs the GPU work on every frame the page draws, which
+  // made renders slower; while nothing is being drawn the strip shows a picture
+  // of itself instead (js/shared/canvas_snapshot.mjs).
+  const snap = attachCanvasSnapshot(canvas);
+  node._pixStripSnap = snap;
 
   installCanvasZoomPassthrough(root);
   const widget = node.addDOMWidget("pixaroma_strip", "pixaroma_preview_strip", root, {
@@ -1368,6 +1374,7 @@ function createStripDOMWidget(node) {
     ctx.clearRect(0, 0, cssW, cssH);
     // y=0 origin (the canvas IS the strip area); height = the element's box.
     logic.draw(ctx, node, cssW, 0, cssH);
+    snap.changed();
   };
   node._pixStripRender = render;
 
@@ -1429,6 +1436,8 @@ function applyPreviewRenderer(node, vue) {
   node._pixStripRO = null;
   try { cancelAnimationFrame(node._pixStripZoomRaf); } catch {}
   node._pixStripZoomRaf = null;
+  try { node._pixStripSnap?.dispose(); } catch {}
+  node._pixStripSnap = null;
   node._pixStripRender = null;
   node._pixUpdateBtns = null;
   node._pixBtnToastEl = null;
@@ -1665,6 +1674,8 @@ app.registerExtension({
       this._pixStripRO = null;
       try { cancelAnimationFrame(this._pixStripZoomRaf); } catch {}
       this._pixStripZoomRaf = null;
+      try { this._pixStripSnap?.dispose(); } catch {}
+      this._pixStripSnap = null;
       this._pixStripRender = null;
       clearTimeout(this._pixToastTimer);
       return origRemoved ? origRemoved.apply(this, arguments) : undefined;
