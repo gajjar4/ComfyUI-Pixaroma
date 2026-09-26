@@ -5,6 +5,7 @@ import { app } from "/scripts/app.js";
 import { pixApiUrl } from "../shared/api_url.mjs";
 import { api } from "/scripts/api.js";
 import { isGraphLoading } from "../shared/graph_loading.mjs";
+import { isLiveNode } from "../shared/live_node.mjs";
 import { CropEditor } from "./core.mjs";
 import "./interaction.mjs"; // mixin: mouse/keyboard events
 import "./render.mjs"; // mixin: canvas rendering, ratio, save
@@ -731,8 +732,13 @@ app.registerExtension({
     // Refresh after every workflow execution so post-exec preview images
     // (e.g. an Img Generation upstream) flow into our mini preview.
     let executionRunning = false;
-    const onStart = () => { executionRunning = true; };
+    // A Crop left inside a subgraph by a workflow switch never gets onRemoved, so
+    // these stayed registered and it re-downloaded its upstream picture after
+    // every later run for a preview nobody sees (measured: 4 loads per run, 0
+    // without it). Skip anything not on an open canvas (js/shared/live_node.mjs).
+    const onStart = () => { if (isLiveNode(node)) executionRunning = true; };
     const onExecuting = (event) => {
+      if (!isLiveNode(node)) return;
       const detail = event?.detail;
       if (detail === null || detail?.node === null) {
         if (executionRunning) {
