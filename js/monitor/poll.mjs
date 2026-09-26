@@ -16,6 +16,7 @@
 import { api } from "/scripts/api.js";
 import { pixApiUrl } from "../shared/api_url.mjs";
 import { readState, pickDevice } from "./core.mjs";
+import { isLiveNode } from "../shared/live_node.mjs";
 
 
 const _nodes = new Set();
@@ -84,8 +85,23 @@ export function removeNode(node) {
   }
 }
 
+// The registered Monitors that sit on a canvas the user has open. A Ctrl+C /
+// Clone / Convert to Subgraph copy, and a Monitor left inside a subgraph by a
+// workflow switch, never get onRemoved, so they stay in _nodes (see
+// shared/live_node.mjs). Counting them kept this sampler polling after the last
+// real Monitor was gone, and a copy set to a fast interval made every real one
+// poll at ITS rate. MEASURED 2026-09-26: 19 stats requests in 5 s after a
+// workflow switch with no Monitor anywhere, and 11 per 3 s instead of 3 for a
+// real 1-second Monitor beside a 250 ms copy. Recomputed on every use (a few
+// nodes, once a sample), never cached: a node can join a graph after it registers.
+function liveNodes() {
+  const out = [];
+  for (const node of _nodes) if (isLiveNode(node)) out.push(node);
+  return out;
+}
+
 function repaintAll() {
-  for (const node of _nodes) {
+  for (const node of liveNodes()) {
     try {
       node._pmRepaint?.();
     } catch (_e) {
@@ -96,14 +112,15 @@ function repaintAll() {
 
 /** The gap until the next sample: the fastest node wins, faster while running. */
 function nextDelay() {
+  const live = liveNodes();
   let ms = 5000;
   let fast = false;
-  for (const node of _nodes) {
+  for (const node of live) {
     const st = readState(node);
     ms = Math.min(ms, Math.max(250, Number(st.interval) || 1000));
     if (st.fastWhileRunning) fast = true;
   }
-  if (!_nodes.size) return 2000;
+  if (!live.length) return 2000;
   // A run is when the numbers actually move, so it is worth watching more
   // closely - and the peak mark is only as good as the sampling behind it.
   if (_running && fast) ms = Math.max(300, Math.round(ms / 3));
@@ -113,14 +130,19 @@ function nextDelay() {
 /** Every node wants to pause while hidden - one that does not keeps us awake. */
 function shouldPause() {
   if (typeof document === "undefined" || !document.hidden) return false;
-  if (!_nodes.size) return true;
-  for (const node of _nodes) if (!readState(node).pauseHidden) return false;
+  const live = liveNodes();
+  if (!live.length) return true;
+  for (const node of live) if (!readState(node).pauseHidden) return false;
   return true;
 }
 
 async function tick() {
   _timer = null;
-  if (!_nodes.size) return;
+  // Nothing on an open canvas to show a reading: stop the chain. It starts again
+  // on the next kick(), and every Monitor that appears on a canvas makes one
+  // (addNode + its setup microtask); so do a run starting or ending, the browser
+  // tab coming back and a Free VRAM press.
+  if (!liveNodes().length) return;
   if (_inflight) {
     schedule();
     return;
