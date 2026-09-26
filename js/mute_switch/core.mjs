@@ -123,6 +123,26 @@ function addInputSlot(node, idx1) {
   return slot;
 }
 
+// The Classic dot positions, for the renderer-switch handler (index.js). SAME
+// formula as normalizeSlots - keep the two in step. A live switch from Nodes 2.0
+// leaves each input with the position core gave it for its Nodes 2.0 row widget
+// (MEASURED: y=88 on a 60px-tall node, so the dot was drawn BELOW the node and
+// could hardly be wired), and nothing else re-applies ours. Diff-gated like
+// normalizeSlots, though this only ever runs on a user action.
+export function applyLegacySlotPositions(node) {
+  for (let i = 0; i < (node.inputs || []).length; i++) {
+    const y = MODE_BAR_H + TOP_PAD + i * ROW_H + ROW_H / 2;
+    const cur = node.inputs[i].pos;
+    if (!cur || cur[0] !== 10 || cur[1] !== y) node.inputs[i].pos = [10, y];
+  }
+  if (node.outputs?.[0]) {
+    const ox = node.size[0] - OUTPUT_X_INSET;
+    const oy = MODE_BAR_H + TOP_PAD + ROW_H / 2;
+    const cur = node.outputs[0].pos;
+    if (!cur || cur[0] !== ox || cur[1] !== oy) node.outputs[0].pos = [ox, oy];
+  }
+}
+
 export function computeNodeHeight(slotCount) {
   return MODE_BAR_H + TOP_PAD + slotCount * ROW_H + BOT_PAD;
 }

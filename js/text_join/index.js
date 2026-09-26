@@ -5,9 +5,11 @@ import { HIDDEN_INPUT, promptState, widgetOf } from "./core.mjs";
 import {
   injectCSS, installFields, uninstallFields, reseedFields, paintRows,
   bindInputDots, alignInputsLegacy, bodyComputeSize, defaultNodeHeight,
-  MIN_W, DEFAULT_W, ZW,
+  applyFieldsRenderer, MIN_W, DEFAULT_W, ZW,
 } from "./fields.mjs";
 import { openTextJoinPanel, closeTextJoinPanelFor } from "./settings.mjs";
+import { onRendererChange, refreshVueNodeSlots } from "../shared/renderer_switch.mjs";
+import { isLiveNode } from "../shared/live_node.mjs";
 
 // Text Join Two / Three / Four Pixaroma - two to four multi-line text boxes, EACH
 // with a real input dot on its row (type OR wire), joined into one `text` output.
@@ -58,6 +60,32 @@ function scheduleAlignLegacy(node) {
   setTimeout(go, 150);
 }
 
+// Everything installFields / applyLegacyLayout / bindInputDots set up for ONE
+// renderer, re-applied for the other on a live switch of "Nodes 2.0". Without
+// it, after Nodes 2.0 -> Classic the field dots were NOT DRAWN (the Nodes 2.0
+// widget marker hides a Classic dot), so no text could be wired in until the
+// workflow was reopened; the other way they sat in the top column instead of on
+// their fields (measured 2026-09-26, flip_audit_lib.js). A user action, never a load.
+function applyTextJoinRenderer(node, vue, fieldNames) {
+  applyFieldsRenderer(node, vue);
+  if (vue) {
+    // A node built in Classic carries Classic's own layout on the instance, and
+    // its field dots carry a Classic position; a node built in Nodes 2.0 has none.
+    if (Object.prototype.hasOwnProperty.call(node, "computeSize")) delete node.computeSize;
+    if (node.widgets_start_y != null) node.widgets_start_y = undefined;
+    for (const inp of node.inputs || []) if (fieldNames.includes(inp?.name) && inp.pos) delete inp.pos;
+  } else {
+    applyLegacyLayout(node);
+  }
+  bindInputDots(node);
+  paintRows(node);
+  // Nodes 2.0 has already mounted this node and never notices the new markers
+  // or the rows' new sizing hooks - make it re-read them. No-op in Classic.
+  refreshVueNodeSlots(node);
+  scheduleAlignLegacy(node);
+  node.setDirtyCanvas?.(true, true);
+}
+
 app.registerExtension({
   name: "Pixaroma.TextJoin",
 
@@ -83,6 +111,12 @@ app.registerExtension({
       queueMicrotask(() => {
         bindInputDots(this); paintRows(this); scheduleAlignLegacy(this);
         this.setDirtyCanvas?.(true, true);
+      });
+      // Re-apply on a live renderer switch. A copy that is never added to a
+      // graph, or a node left inside a subgraph of a closed workflow, is skipped.
+      const names = FIELDS.map((f) => f.name);
+      this._pixTjRendererOff = onRendererChange((vue) => {
+        if (isLiveNode(this)) applyTextJoinRenderer(this, vue, names);
       });
     };
 
@@ -148,6 +182,8 @@ app.registerExtension({
 
     const _removed = nodeType.prototype.onRemoved;
     nodeType.prototype.onRemoved = function () {
+      try { this._pixTjRendererOff?.(); } catch { /* ignore */ }
+      this._pixTjRendererOff = null;
       closeTextJoinPanelFor(this);
       uninstallFields(this);
       return _removed?.apply(this, arguments);

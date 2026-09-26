@@ -7,6 +7,7 @@ import {
   togglePillRow, setSelectMode, setMuteMode,
   setAllRowsEnabled, restoreAllOnRemove,
   computeNodeHeight, refreshRendererLabels, legacyBodyHeight,
+  applyLegacySlotPositions,
 } from "./core.mjs";
 import {
   drawMuteSwitch, hideTooltip,
@@ -15,7 +16,7 @@ import {
 import { openLabelEditor, cancelEditorForNode } from "./editor.mjs";
 import { buildMuteSwitchVueList, teardownMuteSwitchVueList } from "./vue_list.mjs";
 import { registerNodeAccent } from "../shared/node_settings.mjs";
-import { onRendererChange } from "../shared/renderer_switch.mjs";
+import { onRendererChange, refreshVueNodeSlots } from "../shared/renderer_switch.mjs";
 
 // Rebuild one node's UI for the renderer it is NOW in, after the user flipped
 // the Nodes 2.0 setting with the page still open. Same shape (and same
@@ -37,8 +38,19 @@ function applyRenderer(node, vue) {
       // the layout was last committed under the other renderer.
       if (node.setSize) node.setSize([node.size[0], h]);
       else node.size[1] = h;
+      // Core parked each input at its Nodes 2.0 row widget's position, which
+      // is below this node in Classic - put the dots back on our painted rows.
+      applyLegacySlotPositions(node);
     }
     refreshRendererLabels(node);
+    // The markers are fields INSIDE the slots of a node Nodes 2.0 has already
+    // mounted, which it never notices (see refreshVueNodeSlots): without this the
+    // rebuilt node kept its input dot in the top column until the workflow was
+    // reopened (measured 2026-09-26, flip_audit_lib.js). It does NOT bring back
+    // the output's "out" caption: Nodes 2.0 redraws a slot only when the slot
+    // OBJECT changes, so that caption appears after the next reopen (accepted,
+    // mute-switch.md).
+    if (vue) refreshVueNodeSlots(node);
     node.setDirtyCanvas?.(true, true);
   } catch (err) {
     console.warn("[Pixaroma] Mute Switch renderer rebuild failed", err);

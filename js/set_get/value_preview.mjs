@@ -200,6 +200,50 @@ export function ensureValueWidget(node) {
   }
 }
 
+// Remove the Nodes 2.0 row again: Classic paints the line itself.
+function removeValueWidget(node) {
+  const w = node._pixSgValWidget;
+  // The widget's OWN onRemove first (monitor.md #8): ComfyUI keeps DOM widgets in
+  // a store of its own and re-mounts everything in it, so splicing the widget out
+  // and removing the element is not enough - the row comes back.
+  try {
+    w?.onRemove?.();
+  } catch {
+    /* ignore */
+  }
+  if (w && Array.isArray(node.widgets)) {
+    const i = node.widgets.indexOf(w);
+    if (i >= 0) node.widgets.splice(i, 1);
+  }
+  try {
+    node._pixSgValEl?.closest?.(".dom-widget")?.remove();
+    node._pixSgValEl?.remove();
+  } catch {
+    /* ignore */
+  }
+  node._pixSgValEl = null;
+  node._pixSgValWidget = null;
+}
+
+// The row onAdded builds (or skips) is chosen ONCE, but "Nodes 2.0" can be
+// switched with the page open. Without this a node added in Classic had no value
+// line in Nodes 2.0, and one added in Nodes 2.0 kept its row in Classic next to
+// the painted line (measured 2026-09-26, flip_audit_lib.js). Run from the poll,
+// which only visits nodes of the graph on screen, so a copy never gets here.
+function matchRenderer(node) {
+  if (isVue()) {
+    if (node._pixSgValEl || !ensureValueWidget(node)) return;
+  } else if (node._pixSgValEl) {
+    removeValueWidget(node);
+  } else {
+    return;
+  }
+  // Forget what was shown: refreshValue writes the text only when it CHANGES, so
+  // a fresh row would otherwise stay blank for a value that was already showing.
+  node._pixSgValShown = false;
+  node._pixSgValText = "";
+}
+
 // Classic only: paint "= value" right under the NAME FIELD. We anchor to the
 // name widget's actual drawn position (widget.last_y), NOT the node bottom,
 // because the node's minimum height leaves slack below the last widget and
@@ -332,6 +376,7 @@ export function startValuePoll() {
         }
       }
       if ((n.type === SET_TYPE || n.type === GET_TYPE) && !n.flags?.collapsed) {
+        matchRenderer(n);
         refreshValue(n);
       }
     }

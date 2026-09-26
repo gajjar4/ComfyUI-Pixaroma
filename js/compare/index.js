@@ -4,6 +4,8 @@ import { BRAND, registerNodeHelp,
   installCanvasZoomPassthrough, registerNodeAccent, accentOf,
 } from "../shared/index.mjs";
 import { applyAdaptiveCanvasOnly, isVueNodes } from "../shared/nodes2.mjs";
+import { onRendererChange } from "../shared/renderer_switch.mjs";
+import { isLiveNode } from "../shared/live_node.mjs";
 
 // The accent of the node currently being painted. A canvas cannot read a CSS
 // variable, and the small paint helpers below take no node argument, so
@@ -986,6 +988,8 @@ function createCompareDOMWidget(node) {
   // floor is safe. This matches the proven Preview Image strip widget.
   widget.computeLayoutSize = () => ({ minHeight: MIN_H, minWidth: 1 });
   applyAdaptiveCanvasOnly(widget);
+  node._cmpDomWidget = widget;
+  node._cmpDomRoot = root;
 
   // Effective backing-store scale: device pixels per LAYOUT pixel. The Nodes 2.0
   // node is CSS-transform-scaled by the graph zoom (app.canvas.ds.scale), so a
@@ -1109,6 +1113,49 @@ function createCompareDOMWidget(node) {
   return widget;
 }
 
+// Remove the Nodes 2.0 body again (a live switch back to the classic look).
+function teardownCompareDOMWidget(node) {
+  try { node._cmpDomRO?.disconnect(); } catch {}
+  node._cmpDomRO = null;
+  try { cancelAnimationFrame(node._cmpZoomRaf); } catch {}
+  node._cmpZoomRaf = null;
+  const w = node._cmpDomWidget || (node.widgets || []).find((x) => x && x.name === "pixaroma_compare");
+  // The widget's OWN onRemove first (monitor.md #8): ComfyUI also keeps DOM
+  // widgets in a store of its own and re-mounts everything in it, so splicing
+  // the widget out and removing the element is not enough - the face comes back.
+  try { w?.onRemove?.(); } catch {}
+  if (w && Array.isArray(node.widgets)) {
+    const i = node.widgets.indexOf(w);
+    if (i >= 0) node.widgets.splice(i, 1);
+  }
+  try {
+    node._cmpDomRoot?.closest?.(".dom-widget")?.remove();
+    node._cmpDomRoot?.remove();
+  } catch {}
+  node._cmpDomWidget = null;
+  node._cmpDomRoot = null;
+  node._cmpDomRender = null;
+  node._cmpDomW = null;
+  node._cmpDomH = null;
+  node._cmpDomMouse = null;
+  cmpHideTooltip();
+}
+
+// The body the CURRENT renderer needs. The choice in onNodeCreated is made once,
+// but "Nodes 2.0" can be flipped with the page open: without this a Compare made
+// in the classic look had NO body at all in Nodes 2.0, and one made in Nodes 2.0
+// kept its Nodes 2.0 face on screen on top of the classic painting (measured
+// 2026-09-26, flip_audit_lib.js). The classic body needs nothing built - it is
+// painted by onDrawForeground, which only runs in the classic renderer.
+function applyCompareRenderer(node, vue) {
+  if (vue) {
+    if (!node._cmpDomRender) createCompareDOMWidget(node);
+  } else {
+    teardownCompareDOMWidget(node);
+  }
+  node.setDirtyCanvas?.(true, true);
+}
+
 app.registerExtension({
   name: "Pixaroma.Compare",
   // No Settings-panel rows: this node's options live on the node itself (the
@@ -1154,12 +1201,18 @@ app.registerExtension({
       // gated on node.imgs (which onExecuted/onDrawBackground null out).
       this.hideOutputImages = true;
 
-      // Per-renderer split (fixed per page load): Nodes 2.0 gets a DOM-widget
-      // canvas that reuses paintCompare/cmp*; legacy keeps the onDrawForeground
-      // + mouse-hook canvas painting below. Only one path is live per instance.
+      // Per-renderer split: Nodes 2.0 gets a DOM-widget canvas that reuses
+      // paintCompare/cmp*; legacy keeps the onDrawForeground + mouse-hook canvas
+      // painting below. Only one path is live per instance, and a live switch of
+      // the renderer rebuilds it (applyCompareRenderer). A copy that is never
+      // added to a graph, or a node left inside a subgraph of a closed workflow,
+      // is skipped (js/shared/live_node.mjs).
       if (isVueNodes()) {
         createCompareDOMWidget(this);
       }
+      this._cmpRendererOff = onRendererChange((vue) => {
+        if (isLiveNode(this)) applyCompareRenderer(this, vue);
+      });
 
       // Restore view state + image refs from properties AFTER configure()
       // runs (Vue Compat #8 — nodeCreated fires before configure, so defer
@@ -1299,6 +1352,8 @@ app.registerExtension({
     // Release the DOM-widget ResizeObserver on node removal (Nodes 2.0).
     const _origRemoved = nodeType.prototype.onRemoved;
     nodeType.prototype.onRemoved = function () {
+      try { this._cmpRendererOff?.(); } catch {}
+      this._cmpRendererOff = null;
       try { this._cmpDomRO?.disconnect(); } catch {}
       try { cancelAnimationFrame(this._cmpZoomRaf); } catch {}
       cmpHideTooltip();

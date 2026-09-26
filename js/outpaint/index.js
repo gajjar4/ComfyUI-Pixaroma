@@ -18,6 +18,8 @@ import { applyAdaptiveCanvasOnly, canvasBackingScale, installZoomRepaint, isVueN
 import { isGraphLoading } from "../shared/graph_loading.mjs";
 import { registerNodeSettings, globalAccent } from "../shared/node_settings.mjs";
 import { installCanvasZoomPassthrough } from "../shared/canvas_zoom.mjs";
+import { onRendererChange } from "../shared/renderer_switch.mjs";
+import { isLiveNode } from "../shared/live_node.mjs";
 import {
   ACCENT_SETTING, BRAND, DEFAULT_STATE, MAX_PAD, STATE_PROP,
   anchorAxis, finalSize, limitsOf, padsForState, ratiosOf, readState, remapAnchor,
@@ -1265,6 +1267,21 @@ function snapFresh(node, tries = 0) {
   });
 }
 
+// The size cards are the one part of the face that depends on the renderer
+// (Classic paints them into the slot band instead). setupNode chooses once, but
+// "Nodes 2.0" can be switched with the page open: without this a node made in
+// Classic had no cards in Nodes 2.0, and one made in Nodes 2.0 showed them twice
+// in Classic (measured 2026-09-26, flip_audit_lib.js). measureFloor skips a
+// display:none child, and the preview is the flex grower, so the height follows.
+function applyOutpaintRenderer(node, vue) {
+  const ui = node._pixOpUI;
+  if (!ui?.cards) return;
+  ui.cards.style.display = vue ? "block" : "none";
+  renderCardsCanvas(node);
+  requestAnimationFrame(() => renderCardsCanvas(node));   // once it has laid out
+  node.setDirtyCanvas?.(true, true);
+}
+
 // ── setup ──────────────────────────────────────────────────────────────────
 function setupNode(node) {
   const root = document.createElement("div");
@@ -1322,6 +1339,11 @@ function setupNode(node) {
   // Wheel over the preview must still zoom the canvas (Classic; no-ops in Nodes
   // 2.0). Independent of the green-edge drag, which is pointer-driven.
   installCanvasZoomPassthrough(root);
+  // A copy that is never added to a graph, or a node left inside a subgraph of
+  // a closed workflow, is skipped (js/shared/live_node.mjs).
+  node._pixOpRendererOff = onRendererChange((vue) => {
+    if (isLiveNode(node)) applyOutpaintRenderer(node, vue);
+  });
 
   // Fresh nodes only, and SYNCHRONOUS: configure() runs after onNodeCreated and
   // restores a loaded node's saved size over this. A microtask would run after
@@ -1401,6 +1423,8 @@ app.registerExtension({
       // lot - exactly the leak Save Image shipped with in v1.4.41.
       clearInterval(this._pixOpPoll);
       this._pixOpPoll = null;
+      try { this._pixOpRendererOff?.(); } catch (_e) { /* already gone */ }
+      this._pixOpRendererOff = null;
       try { this._pixOpRO?.disconnect(); } catch (_e) { /* already gone */ }
       this._pixOpRO = null;
       this._pixOpZoomOff?.();

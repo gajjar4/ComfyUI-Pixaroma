@@ -4,6 +4,8 @@ import { allow_debug, hideJsonWidget,
 } from "../shared/index.mjs";
 import { isVueNodes, applyAdaptiveCanvasOnly } from "../shared/nodes2.mjs";
 import { isGraphLoading } from "../shared/graph_loading.mjs";
+import { onRendererChange } from "../shared/renderer_switch.mjs";
+import { isLiveNode } from "../shared/live_node.mjs";
 import { DEFAULTS, fontStr, measureLabel, applyLabelToDom, injectVueLabelCSS } from "./render.mjs";
 import { parseCfg, LabelEditor, LABEL_HELP } from "./core.mjs";
 import { registerNodeHelp } from "../shared/help.mjs";
@@ -140,6 +142,45 @@ function setupVueLabel(node) {
   // Label" menu (reliable in both renderers - see openLabelEditor below).
 }
 
+function teardownVueLabel(node) {
+  const w = (node.widgets || []).find((x) => x && x.name === "label_dom");
+  // The widget's OWN onRemove first (monitor.md #8): ComfyUI keeps DOM widgets in
+  // a store of its own and re-mounts everything in it, so splicing the widget out
+  // and removing the element is not enough - the label comes back.
+  try { w?.onRemove?.(); } catch (_e) {}
+  if (w && Array.isArray(node.widgets)) {
+    const i = node.widgets.indexOf(w);
+    if (i >= 0) node.widgets.splice(i, 1);
+  }
+  try {
+    node._pixLblVueEl?.closest?.(".dom-widget")?.remove();
+    node._pixLblVueEl?.remove();
+  } catch (_e) {}
+  node._pixLblVueEl = null;
+  node._pixLblRender = null;
+  node._pixLblFit = null;
+}
+
+// The body the CURRENT renderer needs. onNodeCreated chooses once, but "Nodes
+// 2.0" can be switched with the page open: without this a Label made in Classic
+// was EMPTY in Nodes 2.0, and one made in Nodes 2.0 kept its HTML text on screen
+// in Classic on top of the painted text (measured 2026-09-26, flip_audit_lib.js).
+function applyLabelRenderer(node, vue) {
+  if (vue) {
+    // setupVueLabel re-hugs the node to the rendered text (_pixLblFit).
+    if (!node._pixLblVueEl) setupVueLabel(node);
+  } else {
+    teardownVueLabel(node);
+    // Classic sizes a label from the canvas measure, exactly as the editor's
+    // Save does (core.mjs saveCfg). A switch is a user action, never a load.
+    const m = measureLabel(node._labelCfg || DEFAULTS);
+    const nw = Number.isFinite(m.w) ? Math.max(m.w, 60) : 60;
+    const nh = Number.isFinite(m.h) ? Math.max(m.h, 30) : 30;
+    if (typeof node.setSize === "function") node.setSize([nw, nh]);
+  }
+  node.setDirtyCanvas?.(true, true);
+}
+
 // Open the editor for a Label node, guarded so a second trigger doesn't stack
 // two overlays. Shared by onDblClick (legacy) and the right-click menu (Vue).
 function openLabelEditor(node) {
@@ -263,6 +304,11 @@ app.registerExtension({
       const r = _origCreated?.apply(this, arguments);
       setupLabel(this, true); // fresh node: size it to the default text
       if (isVueNodes()) setupVueLabel(this); // Nodes 2.0: crisp-HTML body widget
+      // Rebuild on a live renderer switch. A copy that is never added to a graph,
+      // or a node left inside a subgraph of a closed workflow, is skipped.
+      this._pixLblRendererOff = onRendererChange((vue) => {
+        if (isLiveNode(this)) applyLabelRenderer(this, vue);
+      });
       this.badges = [];
       if (allow_debug) console.log("PixaromaLabel", this);
       return r;
@@ -357,6 +403,8 @@ app.registerExtension({
     //    leak — the editor has no other teardown path for node removal.
     const _origRemoved = nodeType.prototype.onRemoved;
     nodeType.prototype.onRemoved = function () {
+      try { this._pixLblRendererOff?.(); } catch (_e) {}
+      this._pixLblRendererOff = null;
       try { this._pixLblEditor?.close?.(); } catch (_e) {}
       return _origRemoved?.apply(this, arguments);
     };

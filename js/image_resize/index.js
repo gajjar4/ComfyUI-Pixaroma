@@ -4,6 +4,8 @@ import { hideJsonWidget, BRAND,
   installCanvasZoomPassthrough, installNodeAccent, registerNodeAccent, accentOf, accentRgba,
 } from "../shared/index.mjs";
 import { isVueNodes, applyAdaptiveCanvasOnly, canvasBackingScale } from "../shared/nodes2.mjs";
+import { onRendererChange } from "../shared/renderer_switch.mjs";
+import { isLiveNode } from "../shared/live_node.mjs";
 import { buildModePanel, previewResize, injectResizePanelCSS } from "../shared/resize_panel.mjs";
 import {
   injectCSS, buildModeChips, buildFooter, buildResampleAndUpscale,
@@ -778,6 +780,42 @@ function setupVueCards(node) {
   node._pixIrPoll = setInterval(() => render(), 250);
 }
 
+function teardownVueCards(node) {
+  if (node._pixIrPoll) { clearInterval(node._pixIrPoll); node._pixIrPoll = null; }
+  if (node._pixIrCardsRO) { node._pixIrCardsRO.disconnect(); node._pixIrCardsRO = null; }
+  try { node._pixIrCardsCanvas?.remove(); } catch {}
+  node._pixIrCardsCanvas = null;
+  node._pixIrRenderCards = null;
+  node._pixIrLastSig = null;
+  node._pixIrLastSize = null;
+}
+
+// The cards the CURRENT renderer needs. onNodeCreated chooses once, but "Nodes
+// 2.0" can be switched with the page open: without this a node made in Classic
+// had no size cards in Nodes 2.0, and one made in Nodes 2.0 showed them TWICE in
+// Classic (the leftover canvas plus the painted pair), 126px taller than a fresh
+// one (measured 2026-09-26, flip_audit_lib.js). A switch is a user action, never
+// the load path, so re-fitting Classic's height to the content here is the same
+// refit every other user action already does.
+function applyImageResizeRenderer(node, vue) {
+  if (!node._pixIrRoot) return;
+  if (vue) {
+    if (!node._pixIrCardsCanvas) setupVueCards(node);
+    renderUI(node);
+    return;
+  }
+  teardownVueCards(node);
+  renderUI(node);
+  requestAnimationFrame(() => {
+    if (!node._pixIrRoot || isVueNodes()) return;
+    const h = node.computeSize()[1];
+    // setSize, not size[1] = h: a raw index write is reverted when the size was
+    // last committed under the other renderer, which is exactly this moment.
+    if (Math.abs(node.size[1] - h) > 1) node.setSize?.([node.size[0], h]);
+    node.setDirtyCanvas(true, true);
+  });
+}
+
 app.registerExtension({
   name: "Pixaroma.ImageResize",
   beforeRegisterNodeDef(nodeType, nodeData) {
@@ -801,6 +839,12 @@ app.registerExtension({
       // it into the panel). Legacy paints the cards in the slot dead-space via
       // onDrawForeground instead.
       if (isVueNodes()) setupVueCards(this);
+      // ...and again whenever the renderer is switched live. A copy that is never
+      // added to a graph, or a node left inside a subgraph of a closed workflow,
+      // is skipped (js/shared/live_node.mjs).
+      this._pixIrRendererOff = onRendererChange((vue) => {
+        if (isLiveNode(this)) applyImageResizeRenderer(this, vue);
+      });
       // Fresh-node default size (saved workflows restore their own via configure).
       if (!this.size || this.size[0] < MIN_W) this.size = [360, 340];
       // Deferred initial render so configure() can land the saved state first
@@ -868,6 +912,8 @@ app.registerExtension({
 
     const _origRemoved = nodeType.prototype.onRemoved;
     nodeType.prototype.onRemoved = function () {
+      try { this._pixIrRendererOff?.(); } catch {}
+      this._pixIrRendererOff = null;
       this._pixIrRoot = null;
       this._pixIrWireCells = null;
       this._pixIrLockedInputs = null;

@@ -6,6 +6,8 @@ import { BRAND } from "../shared/utils.mjs";
 import { registerNodeAccent, accentOf, accentHover, ACC_HOVER, installNodeAccent, nodeSetting } from "../shared/node_settings.mjs";
 import { applyAdaptiveCanvasOnly, isVueNodes, canvasBackingScale, installZoomRepaint } from "../shared/nodes2.mjs";
 import { applyFilenameTokenRefs, installFilenameTokenResolver } from "../shared/filename_tokens.mjs";
+import { onRendererChange } from "../shared/renderer_switch.mjs";
+import { isLiveNode } from "../shared/live_node.mjs";
 
 // ---- Nodes 2.0 helpers ----
 // The Vue "WidgetLegacy" bridge repaints a custom widget's canvas only via
@@ -1401,6 +1403,47 @@ function createStripDOMWidget(node) {
   return widget;
 }
 
+// The buttons + strip pair the CURRENT renderer needs. onNodeCreated chooses
+// once, but "Nodes 2.0" can be switched with the page open, and the two pairs are
+// different widgets (DOM in Nodes 2.0, canvas-drawn in Classic): without this a
+// switched node kept the other renderer's pair (measured 2026-09-26,
+// flip_audit_lib.js). Both pairs are APPENDED after the node's own widgets, so
+// removing one and adding the other can never shift a saved widget value
+// (CLAUDE.md convention #23). Frames, selection and state all live on the node,
+// so the new pair shows exactly what the old one did.
+function applyPreviewRenderer(node, vue) {
+  for (const name of ["pixaroma_buttons", "pixaroma_strip"]) {
+    const w = (node.widgets || []).find((x) => x && x.name === name);
+    if (!w) continue;
+    // A DOM widget's OWN onRemove first (monitor.md #8): ComfyUI keeps DOM
+    // widgets in a store of its own and re-mounts everything in it.
+    try { w.onRemove?.(); } catch {}
+    const i = node.widgets.indexOf(w);
+    if (i >= 0) node.widgets.splice(i, 1);
+    try {
+      w.element?.closest?.(".dom-widget")?.remove();
+      w.element?.remove();
+    } catch {}
+  }
+  try { node._pixStripRO?.disconnect(); } catch {}
+  node._pixStripRO = null;
+  try { cancelAnimationFrame(node._pixStripZoomRaf); } catch {}
+  node._pixStripZoomRaf = null;
+  node._pixStripRender = null;
+  node._pixUpdateBtns = null;
+  node._pixBtnToastEl = null;
+  node._pixaromaButtonRects = null;
+  node._pixaromaHoverId = null;
+  if (vue) {
+    createButtonsDOMWidget(node);
+    createStripDOMWidget(node);
+  } else {
+    applyAdaptiveCanvasOnly(node.addCustomWidget(createButtonsWidget()));
+    applyAdaptiveCanvasOnly(node.addCustomWidget(createStripWidget()));
+  }
+  repaint(node);
+}
+
 // ---- extension ----
 app.registerExtension({
   name: "Pixaroma.Preview",
@@ -1452,7 +1495,8 @@ app.registerExtension({
       // Nodes 2.0 gets DOM widgets (buttons = flex row, strip = flex canvas) so
       // they fit the real node width and don't fight the canvas bridge; legacy
       // keeps the canvas custom widgets (which fill via draw()'s node.size[1]-y).
-      // The renderer is fixed per page load, so only one path is active per node.
+      // Only one path is active per node, and a live switch of the renderer
+      // swaps the pair (applyPreviewRenderer).
       if (isVueNodes()) {
         createButtonsDOMWidget(this);
         createStripDOMWidget(this);
@@ -1460,6 +1504,11 @@ app.registerExtension({
         applyAdaptiveCanvasOnly(this.addCustomWidget(createButtonsWidget()));
         applyAdaptiveCanvasOnly(this.addCustomWidget(createStripWidget()));
       }
+      // A copy that is never added to a graph, or a node left inside a subgraph
+      // of a closed workflow, is skipped (js/shared/live_node.mjs).
+      this._pixPvRendererOff = onRendererChange((vue) => {
+        if (isLiveNode(this)) applyPreviewRenderer(this, vue);
+      });
 
       // Suppress ComfyUI's native canvas-image-preview widget. Since
       // node_preview.py now emits `ui.images` in save_mode=save (so the
@@ -1607,6 +1656,8 @@ app.registerExtension({
     // keydown listener doesn't hold a dangling reference to a deleted node.
     const origRemoved = nodeType.prototype.onRemoved;
     nodeType.prototype.onRemoved = function () {
+      try { this._pixPvRendererOff?.(); } catch {}
+      this._pixPvRendererOff = null;
       if (_activePreviewNode === this) _activePreviewNode = null;
       // Release the DOM-widget strip's ResizeObserver + zoom-watch rAF
       // (Nodes 2.0 only).

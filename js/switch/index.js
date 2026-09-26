@@ -10,7 +10,7 @@ import { drawSwitchRows, hitToggle, hitLabel, labelScreenRect } from "./render.m
 import { openLabelEditor, cancelEditorForNode } from "./editor.mjs";
 import { buildSwitchVueList, teardownSwitchVueList } from "./vue_list.mjs";
 import { isVueNodes } from "../shared/nodes2.mjs";
-import { onRendererChange } from "../shared/renderer_switch.mjs";
+import { onRendererChange, refreshVueNodeSlots } from "../shared/renderer_switch.mjs";
 import { registerNodeAccent } from "../shared/node_settings.mjs";
 
 // Switch Pixaroma - dynamic N-to-1 switch with per-row toggles.
@@ -81,10 +81,20 @@ function applyRenderer(node, vue) {
       // which is precisely the situation here.
       if (node.setSize) node.setSize([node.size[0], h]);
       else node.size[1] = h;
+      // Core parked each input at its Nodes 2.0 row widget's position (MEASURED:
+      // y=36 against the row at ~14, so the dot sat off its row). A Classic
+      // Switch stores NO position - LiteGraph stacks the dots on our painted
+      // rows by itself - so drop it rather than compute one.
+      for (const slot of node.inputs || []) if (slot && slot.pos) delete slot.pos;
     }
     // Dot labels belong to the renderer: "​" in legacy (we paint our own), a
     // stable "input N" in 2.0. Diff-gated inside refreshSlotLabels.
     refreshSlotLabels(node);
+    // The markers and labels are fields INSIDE the slots of a node Nodes 2.0 has
+    // already mounted, which it never notices (see refreshVueNodeSlots): without
+    // this the rebuilt node kept its dot in the top column with a stale label
+    // until the workflow was reopened (measured 2026-09-26, flip_audit_lib.js).
+    if (vue) refreshVueNodeSlots(node);
     node.setDirtyCanvas?.(true, true);
   } catch (err) {
     console.warn("[Pixaroma] Switch renderer rebuild failed", err);

@@ -367,6 +367,33 @@ export function installFields(node) {
   paintRows(node);
 }
 
+// Re-apply the per-renderer row sizing that installFields chose ONCE, for a live
+// switch of "Nodes 2.0" (the caller then re-binds the dots and repaints). Each
+// row ends up exactly as a row built in the new renderer: Classic owns
+// computeSize and pins the wrap height; Nodes 2.0 owns computeLayoutSize and
+// flex-fills. An own property left from the other renderer would override the
+// DOM widget's own method (a Classic computeSize makes a Vue row fixed-height).
+export function applyFieldsRenderer(node, vue) {
+  for (const wrap of node._pixTjWraps || []) {
+    const w = node._pixTjRowWidgets?.[wrap._cfg?.name];
+    if (!w) continue;
+    if (vue) {
+      if (Object.prototype.hasOwnProperty.call(w, "computeSize")) delete w.computeSize;
+      wrap.style.height = "";
+      wrap.classList.add("pix-tj-vue");
+      w.computeLayoutSize = () => ({ minHeight: MIN_FIELD_H, minWidth: 1 });
+    } else {
+      if (Object.prototype.hasOwnProperty.call(w, "computeLayoutSize")) delete w.computeLayoutSize;
+      wrap.classList.remove("pix-tj-vue");
+      w.computeSize = () => {
+        const h = fieldSlotH(node);
+        if (wrap.style.height !== h + "px") wrap.style.height = h + "px";
+        return [node.size?.[0] || MIN_W, h];
+      };
+    }
+  }
+}
+
 export function uninstallFields(node) {
   try { (node._pixTjFloorOffs || []).forEach((off) => off?.()); } catch { /* ignore */ }
   node._pixTjFloorOffs = [];

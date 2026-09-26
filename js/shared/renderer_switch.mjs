@@ -58,6 +58,33 @@ function tick() {
 }
 
 /**
+ * Ask Nodes 2.0 to re-read ONE node's slots and widgets. Needed after changing
+ * fields INSIDE existing slots (the `widget` marker that puts a dot on its row,
+ * a label) or a widget's own sizing hook, on a node Nodes 2.0 has ALREADY
+ * mounted - which is exactly what a live renderer switch leaves us with.
+ *
+ * Nodes 2.0 wraps the node's arrays in shallowReactive proxies, so a field
+ * written inside a slot is invisible to it - and so is re-assigning the same
+ * slots (`node.inputs = node.inputs.slice()`): the setter splices identical
+ * items back in at identical indices, which Vue treats as no change. MEASURED
+ * 2026-09-26: after a switch the markers were right within 250 ms, yet the
+ * dots stayed in the top column, and a manual re-assign changed nothing.
+ *
+ * This fires the SAME event core's own widget rename uses (widgetUtil.ts:
+ * `graph.trigger('node:slot-label:changed', { nodeId })`), whose handler in
+ * useGraphNodeManager.ts re-extracts that node's Vue data. A no-op in Classic,
+ * and on a frontend without the event (LGraph.trigger ignores unknown actions).
+ */
+export function refreshVueNodeSlots(node) {
+  if (!currentMode() || !node) return;
+  try {
+    node.graph?.trigger?.("node:slot-label:changed", { nodeId: node.id });
+  } catch (err) {
+    console.warn("[Pixaroma] could not refresh a node for Nodes 2.0", err);
+  }
+}
+
+/**
  * Register a callback fired with `true` (Nodes 2.0) or `false` (legacy) each
  * time the renderer changes. NOT called on registration - only on a change.
  * Returns an unsubscribe function; call it from the node's onRemoved.

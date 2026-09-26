@@ -3,6 +3,8 @@ import { isVueNodes } from "../shared/nodes2.mjs";
 import { isGraphLoading } from "../shared/graph_loading.mjs";
 import { isQueueLoopActive } from "../shared/queue_drivers.mjs";
 import { registerNodeSettings } from "../shared/node_settings.mjs";
+import { onRendererChange, refreshVueNodeSlots } from "../shared/renderer_switch.mjs";
+import { isLiveNode } from "../shared/live_node.mjs";
 import { CLASS, BRAND, ACCENT_PROP, widgetOf } from "./core.mjs";
 import {
   injectCSS, installSliders, uninstallSliders, paintRows, bindInputDots,
@@ -45,6 +47,32 @@ function scheduleAlignLegacy(node) {
   setTimeout(go, 150);
 }
 
+// The dots + layout the CURRENT renderer needs. bindInputDots and paintRows read
+// the renderer live, but nothing re-ran them when "Nodes 2.0" is switched with
+// the page open: after Nodes 2.0 -> Classic the two slider dots were NOT DRAWN
+// (the Nodes 2.0 widget marker hides a Classic dot), so Feather / Color Match
+// could not be wired until the workflow was reopened; the other way they sat in
+// the top column instead of on their rows (measured 2026-09-26,
+// flip_audit_lib.js). A switch is a user action, never the load path.
+function applyStitchRenderer(node, vue) {
+  if (vue) {
+    // A node built in Classic carries Classic's own layout on the instance, and
+    // its slider dots carry a Classic position; a node built in Nodes 2.0 has none.
+    if (Object.prototype.hasOwnProperty.call(node, "computeSize")) delete node.computeSize;
+    if (node.widgets_start_y != null) node.widgets_start_y = undefined;
+    for (const inp of node.inputs || []) if (isSliderInput(inp?.name) && inp.pos) delete inp.pos;
+  } else {
+    applyLegacyLayout(node);
+  }
+  bindInputDots(node);
+  paintRows(node);
+  // Nodes 2.0 has already mounted this node and never notices the new markers
+  // (fields inside its slots) - make it re-read them. No-op in Classic.
+  refreshVueNodeSlots(node);
+  scheduleAlignLegacy(node);
+  node.setDirtyCanvas?.(true, true);
+}
+
 app.registerExtension({
   name: "Pixaroma.OutpaintStitch",
   // No Settings-panel row: this node's colour lives in its OWN panel (the
@@ -68,6 +96,11 @@ app.registerExtension({
       applyLegacyLayout(this);
       if (!this.size || this.size[0] < MIN_W) this.size[0] = DEFAULT_W;
       queueMicrotask(() => { bindInputDots(this); paintRows(this); scheduleAlignLegacy(this); this.setDirtyCanvas?.(true, true); });
+      // Re-bind on a live renderer switch. A copy that is never added to a graph,
+      // or a node left inside a subgraph of a closed workflow, is skipped.
+      this._pixOpsRendererOff = onRendererChange((vue) => {
+        if (isLiveNode(this)) applyStitchRenderer(this, vue);
+      });
     };
 
     const _configure = nodeType.prototype.onConfigure;
@@ -121,6 +154,8 @@ app.registerExtension({
 
     const _removed = nodeType.prototype.onRemoved;
     nodeType.prototype.onRemoved = function () {
+      try { this._pixOpsRendererOff?.(); } catch {}
+      this._pixOpsRendererOff = null;
       closeOpsPanelFor(this);
       uninstallSliders(this);
       return _removed?.apply(this, arguments);

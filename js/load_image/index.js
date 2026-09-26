@@ -5,6 +5,8 @@ import { hideJsonWidget, BRAND, installResizeFloor,
 } from "../shared/index.mjs";
 import { isGraphLoading } from "../shared/graph_loading.mjs";
 import { applyAdaptiveCanvasOnly, isVueNodes, canvasBackingScale, installZoomRepaint } from "../shared/nodes2.mjs";
+import { onRendererChange, refreshVueNodeSlots } from "../shared/renderer_switch.mjs";
+import { isLiveNode } from "../shared/live_node.mjs";
 import {
   injectCSS, buildRoot, hideNativeImageCombo, openImageDropdown,
   renderChips, renderGlobalControls,
@@ -594,6 +596,59 @@ function createLoadImagePreviewCanvas(node) {
   requestAnimationFrame(() => updateLoadPreview(node));
 }
 
+// The preview the CURRENT renderer needs. setupLoadImageNode chooses once, but
+// "Nodes 2.0" can be switched with the page open: without this a node made in
+// Classic had no size cards and no picture in Nodes 2.0, and one made in Nodes
+// 2.0 kept both canvases on screen in Classic next to the painted cards and the
+// native preview (measured 2026-09-26, flip_audit_lib.js). Same recipe as Load
+// Image Mini's applyMiniRenderer: the canvases are HIDDEN in Classic (measureH
+// skips display:none children) rather than destroyed, and their per-frame zoom
+// watch is stopped there, since a fresh Classic node has none.
+function applyLoadImageRenderer(node, vue) {
+  const widget = node._pixLiWidget;
+  if (!widget || !node._pixLiRoot) return;
+  if (vue) {
+    if (!node._pixLiCardsCanvas) {
+      createLoadImagePreviewCanvas(node);
+    } else {
+      node._pixLiCardsCanvas.style.display = "block";
+      if (node._pixLiImageCanvas) node._pixLiImageCanvas.style.display = "block";
+      if (node._pixLiZoomRaf == null) {
+        installZoomRepaint(node, () => [0, 0], () => renderLoadPreviewCanvas(node), "_pixLiZoomRaf");
+      }
+    }
+    const measure = node._pixLiMeasureHeight;
+    if (measure) widget.computeLayoutSize = () => ({ minHeight: measure(), minWidth: 1 });
+    injectLoadImageNodes2CSS();
+    refreshVueNodeSlots(node);
+    updateLoadPreview(node);
+    // Nodes 2.0 takes a node's height from its content only when the node is
+    // CREATED, so one made in Classic keeps its Classic height - too short for the
+    // two canvases, which spilled 167px out of the bottom (measured 2026-09-26).
+    // Grow it by exactly the shortfall between what the panel needs and the room
+    // it has, once the canvases have laid out; never shrink. NOT computeSize: it
+    // also reserves Classic's native picture area once an image is loaded, which
+    // overshot to 1008 against the 809 a node made in Nodes 2.0 gets. A switch is
+    // a user action, never the load path.
+    const fit = () => {
+      if (!isVueNodes() || !node._pixLiRoot) return;
+      const short = (node._pixLiMeasureHeight?.() ?? 0) - node._pixLiRoot.offsetHeight;
+      if (node._pixLiRoot.offsetHeight > 0 && short > 1) {
+        node.setSize?.([node.size[0], Math.ceil(node.size[1] + short)]);
+      }
+    };
+    requestAnimationFrame(fit);
+    setTimeout(fit, 300);
+  } else {
+    if (node._pixLiCardsCanvas) node._pixLiCardsCanvas.style.display = "none";
+    if (node._pixLiImageCanvas) node._pixLiImageCanvas.style.display = "none";
+    try { cancelAnimationFrame(node._pixLiZoomRaf); } catch {}
+    node._pixLiZoomRaf = null;
+    delete widget.computeLayoutSize;   // back to DOMWidget's own, as a Classic-built node has it
+  }
+  updateInfoBar(node);
+}
+
 function setupLoadImageNode(node) {
   injectCSS();
   hideJsonWidget(node.widgets, HIDDEN_INPUT_NAME);
@@ -654,6 +709,12 @@ function setupLoadImageNode(node) {
       const style = window.getComputedStyle(child);
       if (style.position === "absolute" || style.position === "fixed") continue;
       if (style.display === "none") continue;
+      // The two Nodes 2.0 canvases are never part of a Classic body - read the
+      // renderer LIVE: right after a switch to Classic, core lays the node out
+      // before applyLoadImageRenderer has hidden them, and counting them grew a
+      // Nodes 2.0 node 809 -> 992 for good (measured 2026-09-26; the same trap
+      // Load Image Mini hit, load-image-mini.md).
+      if (!isVueNodes() && (child === node._pixLiCardsCanvas || child === node._pixLiImageCanvas)) continue;
       if (child === node._pixLiImageCanvas) { totalH += previewMin; visible += 1; continue; }
       totalH += child.offsetHeight;
       visible += 1;
@@ -729,6 +790,12 @@ function setupLoadImageNode(node) {
     createLoadImagePreviewCanvas(node);
     injectLoadImageNodes2CSS();
   }
+  // ...and again whenever the renderer is switched live. A copy that is never
+  // added to a graph, or a node left inside a subgraph of a closed workflow, is
+  // skipped (js/shared/live_node.mjs).
+  node._pixLiRendererOff = onRendererChange((vue) => {
+    if (isLiveNode(node)) applyLoadImageRenderer(node, vue);
+  });
 
   // Default node width for fresh-on-canvas placements. Wider than the
   // LiteGraph default so the [Input → Output] info bar and the 3-column
@@ -1115,6 +1182,8 @@ app.registerExtension({
       // fires onRemoved per node) leaves a floating popup + leaked listeners
       // (mirrors Prompt Reader Pixaroma Pattern #4).
       document.querySelector(".pix-li-popup")?._pixClose?.();
+      try { this._pixLiRendererOff?.(); } catch {}
+      this._pixLiRendererOff = null;
       if (this._pixLiImgPoll) clearInterval(this._pixLiImgPoll);
       this._pixLiImgPoll = null;
       try { this._pixLiPreviewRO?.disconnect(); } catch {}
