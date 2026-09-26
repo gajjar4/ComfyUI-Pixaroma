@@ -392,12 +392,12 @@ Master the Pixaroma suite with our video guides and workflow deep-dives:
 
 ## 🛠 Changelog
 
-### **September 26, 2026 · v1.4.163–v1.4.166**
+### **September 26, 2026 · v1.4.163–v1.4.167**
 - **Fixed: Run Timer Pixaroma slowed renders 6-9% with 2 or 3 decimals.** The decimals now update a few times a second while running; the final time stays exact.
 - **Run Timer, Run Log and Monitor Pixaroma no longer keep the browser busy during a run**: no endless pulsing dots, and fewer redraws.
 - **Fixed: copied Run Timers, Monitors and Image Composers kept working unseen.** Copies chimed, logged runs, kept polling or redrew hidden previews, even after the node was deleted.
-- **Run Timer, Load Image Mini and Pause Text now follow switching Nodes 2.0 on or off** without a reload, instead of showing empty, doubled or missing parts.
-- **Fixed (Nodes 2.0): nodes left inside a subgraph could disturb another workflow's nodes** after a tab switch.
+- **17 nodes now follow switching Nodes 2.0 on or off** without a reload, among them Load Image, Preview Image, Switch, Compare and Text Join, instead of showing empty, doubled or missing parts, or dots that would not take a wire.
+- **Fixed: nodes left inside a subgraph kept acting after a tab switch.** In Nodes 2.0 they could disturb another workflow's nodes, and an Image Crop Pixaroma downloaded its picture again after every run.
 
 ### **September 24, 2026 · v1.4.162**
 - **New: four Qwen Image 2.1 presets for AI Prompt Pixaroma**: a prompt from an idea, a transparent picture, a prompt from an image, and an edit instruction.
