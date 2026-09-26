@@ -796,6 +796,45 @@ function onScreen(node) {
   const vn = app.canvas && app.canvas.visible_nodes;
   return Array.isArray(vn) ? vn.includes(node) : true;
 }
+/**
+ * Is this timer on a canvas the user actually has open?
+ *
+ * ComfyUI builds Run Timers that are never put on a canvas, and leaves others
+ * behind when a workflow is replaced, and NEITHER kind ever gets onRemoved. Both
+ * stayed in _timers and CHIMED and wrote a history line at the end of every later
+ * run. MEASURED 2026-09-26: one timer plus three Ctrl+C copies chimed 4 times;
+ * with that timer deleted, a canvas with no timer on it still chimed 4 times and
+ * recorded the run; a few copies later, one timer chimed 8 times.
+ *   - A throwaway COPY. Ctrl+C, Alt-drag and right-click Clone all serialize a
+ *     clone(), and Convert to Subgraph a multiClone(): createNode + configure,
+ *     never added, so node.graph is null.
+ *   - The inner nodes of a subgraph once the workflow is REPLACED (a tab switch,
+ *     opening a file, Ctrl+Z). LGraph.clear() fires onRemoved for ROOT nodes
+ *     only and empties the subgraph map, so they keep a graph nothing can reach.
+ * app.graph is always the ROOT (also while you look inside a subgraph), and
+ * rootGraph.subgraphs holds every subgraph, nested ones included. The identity
+ * test is defensive: app.graph is the SAME object in every tab, so a root node
+ * left behind would still point at it while its id now belongs to a new node.
+ *
+ * Only ever used to SKIP a node at run start / finish / adopt - nothing is
+ * dropped from _timers, because ComfyUI's asset browser creates a node, waits a
+ * tick and only then adds it, so "no graph yet" is not proof of a copy. And
+ * anything unexpected answers "live": never silence a real timer.
+ */
+function isLiveNode(node) {
+  const g = node && node.graph;
+  if (!g) return false;
+  try {
+    const root = app.graph;
+    if (!root) return true;
+    if (g !== root) {
+      let known = false;
+      for (const sg of root.subgraphs.values()) if (sg === g) { known = true; break; }
+      if (!known) return false;
+    }
+    return g.getNodeById(node.id) === node;
+  } catch (_e) { return true; }
+}
 // ONE broken timer must never stop the others, or the loop itself. Every
 // per-node block below runs inside its own try: a throw that escaped loop()
 // skipped the `_rafId = ...` line, left _rafId set for good, and ensureLoop()
@@ -849,7 +888,9 @@ function ensureLoop() { if (_rafId == null) _rafId = requestAnimationFrame(loop)
  * `isGraphLoading()`.
  */
 function adoptLiveRun(node) {
-  if (!_runLive || _runStart == null || node._rtRunning) return;
+  // isLiveNode: a Ctrl+C taken MID-RUN builds its copy right here, and a copy
+  // that adopted the run chimed at the end of it.
+  if (!_runLive || _runStart == null || node._rtRunning || !isLiveNode(node)) return;
   clearTimeout(node._rtDotT);
   node._rtRunning = true;
   node._rtStart = _runStart;
@@ -866,6 +907,7 @@ function startAll() {
   _runName = activeWorkflowName(); // capture the workflow NOW (at start), not at
                                    // finish — the active tab may change mid-run
   for (const node of _timers) {
+    if (!isLiveNode(node)) continue;   // a copy / left-behind timer never starts, so never chimes
     try {
       clearTimeout(node._rtDotT);
       node._rtRunning = true;
@@ -908,6 +950,10 @@ function finishAll(success) {
   let anyFinished = false;
   for (const node of _timers) {
     if (!node._rtRunning) continue;   // idempotent: first finish wins
+    // Left every canvas WHILE it counted (its workflow was replaced mid-run,
+    // e.g. a timer inside a subgraph): stop it so the live loop can end, but no
+    // chime, no saved total and no history line - nobody can see it.
+    if (!isLiveNode(node)) { node._rtRunning = false; continue; }
     anyFinished = true;
     try {
       node._rtRunning = false;
@@ -1795,7 +1841,8 @@ function setupNode(node) {
   // stays registered - the node.graph check just makes it do nothing. (A timer
   // left inside a subgraph of a workflow you switched away from keeps a dead
   // graph and gets a harmless build/teardown per flip; it is never shown, and
-  // it is the same leak _timers already has - Vue Compat #8's open task.)
+  // it is the same leak _timers already has - Vue Compat #8's open task. Both
+  // kinds stay in _timers, but the run events skip them: see isLiveNode.)
   node._pixRtVue = null;
   applyRenderer(node, isVueNodes(), false);
   node._pixRtRendererOff = onRendererChange((vue) => { if (node.graph) applyRenderer(node, vue, true); });
