@@ -37,6 +37,14 @@
 
 const NOOP = { changed() {}, dispose() {}, get showing() { return "canvas"; } };
 
+// A snapshot is a PNG encode, and past a few megapixels its synchronous part
+// stalls the page. MEASURED (2026-09-26, a photo + text, RTX 2060): 1.6 Mpx
+// 11 ms on the main thread, 5 Mpx 29 ms, 10 Mpx 78 ms, 24 Mpx (the backing cap
+// of a big node zoomed far in) 186 ms plus a 19 MB image held in memory. Above
+// this the live canvas simply stays, which is exactly the behavior before this
+// helper existed; normal node sizes are far below it.
+const MAX_SNAPSHOT_PX = 6e6;
+
 // TWO WAYS TO LAY THE PICTURE OVER THE CANVAS:
 //  - FILL (no opts.host): the canvas fills its box by itself with an INLINE
 //    position:absolute (Compare, Preview Image). The picture is its sibling and
@@ -131,6 +139,7 @@ export function attachCanvasSnapshot(canvas, opts = {}) {
   const snapshot = () => {
     timer = 0;
     if (disposed || !canvas.isConnected || !canvas.width || !canvas.height) return;
+    if (canvas.width * canvas.height > MAX_SNAPSHOT_PX) return;
     const my = gen;
     try {
       canvas.toBlob((blob) => {
