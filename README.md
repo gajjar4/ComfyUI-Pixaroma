@@ -392,9 +392,11 @@ Master the Pixaroma suite with our video guides and workflow deep-dives:
 
 ## 🛠 Changelog
 
-### **September 26, 2026 · v1.4.163**
+### **September 26, 2026 · v1.4.163–v1.4.164**
 - **Fixed: Run Timer Pixaroma slowed renders 6-9% with 2 or 3 decimals.** The decimals now update a few times a second while running; the final time stays exact.
 - **Run Timer, Run Log and Monitor Pixaroma no longer keep the browser busy during a run**: no endless pulsing dots, and fewer redraws.
+- **Fixed: copied Run Timers and Monitors kept working unseen.** Copies chimed and logged every run, or kept polling, even after the node was deleted.
+- **Run Timer now redraws right away when you switch Nodes 2.0 on or off**, instead of showing empty or doubled until a reload.
 
 ### **September 24, 2026 · v1.4.162**
 - **New: four Qwen Image 2.1 presets for AI Prompt Pixaroma**: a prompt from an idea, a transparent picture, a prompt from an image, and an edit instruction.
