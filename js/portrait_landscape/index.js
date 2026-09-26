@@ -237,6 +237,14 @@ function parkBandInSlots(node) {
     const band = node._pixPlTopRow;
     if (!band) return;
     const el = document.querySelector(`.lg-node[data-node-id="${node.id}"]`);
+    // PROVE the element is this node's own before parking anything in it (Longest
+    // Side's rule): `data-node-id` is NOT page-unique. A node left inside a subgraph
+    // by a workflow switch keeps its id AND this poll, and the next workflow can
+    // reuse the id - measured 2026-09-26, the band was parked inside an unrelated
+    // Empty Latent Image. Our pills root lives in our own .lg-node, nobody else's;
+    // not mounted yet just means the poll comes back.
+    const root = node._pixPlRoot;
+    if (!el || !root || !el.contains(root)) return;
     const block = vueSlotBlock(el);
     if (!block) return;
     if (band.parentElement === block) return;   // steady state, no work

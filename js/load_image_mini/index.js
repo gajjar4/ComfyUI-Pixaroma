@@ -314,7 +314,12 @@ function nudgeCardsIntoSlots(node) {
   if (!isVueNodes()) return;
   try {
     const el = document.querySelector(`.lg-node[data-node-id="${node.id}"]`);
-    if (!el) return;
+    // PROVE the element is this node's own (Longest Side's rule): `data-node-id` is
+    // NOT page-unique. A Mini left inside a subgraph by a workflow switch keeps its
+    // id and this poll, and the next workflow can reuse the id - measured
+    // 2026-09-26, it pulled an unrelated Empty Latent Image's body up over its
+    // outputs and made its dots unclickable. Our root lives in our own .lg-node.
+    if (!el || !node._pixLmRoot || !el.contains(node._pixLmRoot)) return;
     if (isNudged(el)) return; // steady state: one property read, no reflow
     const block = miniSlotBlock(el);
     const col = el.querySelector(".lg-slot--output")?.parentElement;

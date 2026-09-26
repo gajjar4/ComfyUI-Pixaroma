@@ -78,7 +78,12 @@ function positionBand(node) {
       band.style.display = "";
       box.style.marginTop = "";               // the nudge already tucks the box up
       const el = document.querySelector(`.lg-node[data-node-id="${node.id}"]`);
-      if (!el) return;
+      // PROVE the element is this node's own (Longest Side's rule): `data-node-id`
+      // is NOT page-unique. A Pause Text left inside a subgraph by a workflow switch
+      // keeps its id and its poll, and the next workflow can reuse the id -
+      // measured 2026-09-26, it nudged an unrelated node's slot band and made its
+      // dots unclickable. Our root lives in our own .lg-node and nobody else's.
+      if (!el || !el.contains(root)) return;
       const block = slotBlock(el);
       // The input and output dots live in SEPARATE slot columns under the same
       // block - restore BOTH to pointer-events:auto. Restoring only the output
