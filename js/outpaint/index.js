@@ -20,6 +20,7 @@ import { registerNodeSettings, globalAccent } from "../shared/node_settings.mjs"
 import { installCanvasZoomPassthrough } from "../shared/canvas_zoom.mjs";
 import { onRendererChange } from "../shared/renderer_switch.mjs";
 import { isLiveNode } from "../shared/live_node.mjs";
+import { attachCanvasSnapshot } from "../shared/canvas_snapshot.mjs";
 import {
   ACCENT_SETTING, BRAND, DEFAULT_STATE, MAX_PAD, STATE_PROP,
   anchorAxis, finalSize, limitsOf, padsForState, ratiosOf, readState, remapAnchor,
@@ -848,7 +849,7 @@ function renderPreview(node) {
   ctx.clearRect(0, 0, cssW, cssH);
 
   const img = sourceImage(node);
-  if (!img) { drawEmptyPreview(ctx, cssW, cssH, hasWire(node)); return; }
+  if (!img) { drawEmptyPreview(ctx, cssW, cssH, hasWire(node)); node._pixOpPrevSnap?.changed(); return; }
 
   const st = readState(node);
   const src = { w: img.naturalWidth, h: img.naturalHeight };
@@ -868,6 +869,7 @@ function renderPreview(node) {
 
   drawBandNumbers(ctx, pads, scale, ox, oy, dw, dh, bandInk(st.color));
   drawSizeBadge(ctx, cssW, cssH, finalSize(src.w, src.h, pads, st.limit, st.snap));
+  node._pixOpPrevSnap?.changed();
 }
 
 // ── size cards ─────────────────────────────────────────────────────────────
@@ -967,6 +969,7 @@ function renderCardsCanvas(node) {
   ctx.setTransform(s, 0, 0, s, 0, 0);
   ctx.clearRect(0, 0, cssW, cssH);
   paintCardsInto(ctx, node, 0, cssH / 2, cssW);
+  node._pixOpCardsSnap?.changed();
 }
 
 // A full canvas redraw per pointermove would be a synchronous repaint at
@@ -1309,6 +1312,15 @@ function setupNode(node) {
 
   node._pixOpUI = { root, inner, cards, prev, canvas, _floorCache: floorFallback() };
 
+  // A canvas on screen costs the GPU work on every frame the page draws, which
+  // slows every render; while static, each shows a picture of itself instead
+  // (js/shared/canvas_snapshot.mjs). The pictures live where nothing measures or
+  // clears them: renderFace removes every child of `inner` except these two and
+  // measureFloor counts inner's children, so the cards' picture goes in `root`,
+  // and the preview's in `prev`, which also keeps the drag listeners working.
+  node._pixOpCardsSnap = attachCanvasSnapshot(cards, { host: root });
+  node._pixOpPrevSnap = attachCanvasSnapshot(canvas, { host: prev });
+
   const repaintCanvases = () => { renderPreview(node); renderCardsCanvas(node); };
 
   // node.onResize does not fire reliably for a DOM widget (Vue Compat #13), so
@@ -1429,6 +1441,9 @@ app.registerExtension({
       this._pixOpRO = null;
       this._pixOpZoomOff?.();
       this._pixOpZoomOff = null;
+      try { this._pixOpCardsSnap?.dispose(); } catch {}
+      try { this._pixOpPrevSnap?.dispose(); } catch {}
+      this._pixOpCardsSnap = this._pixOpPrevSnap = null;
       if (this._pixOpRaf) cancelAnimationFrame(this._pixOpRaf);
       this._pixOpRaf = null;
       this._pixOpDrag = null;
