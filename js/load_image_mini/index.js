@@ -19,6 +19,8 @@ import { hideJsonWidget, installResizeFloor, installCanvasZoomPassthrough } from
 import { isGraphLoading } from "../shared/graph_loading.mjs";
 import { registerNodeSettings } from "../shared/node_settings.mjs";
 import { applyAdaptiveCanvasOnly, isVueNodes, canvasBackingScale, installZoomRepaint } from "../shared/nodes2.mjs";
+import { onRendererChange } from "../shared/renderer_switch.mjs";
+import { isLiveNode } from "../shared/live_node.mjs";
 import {
   setSelectedImage, updateNativePreview, previewMatches, pickAndUploadFile,
   pasteFromClipboard, uploadImageToInput, splitFilenameSubfolder,
@@ -354,6 +356,35 @@ function unwatchCardsNudge(node) {
   node._pixLmNudgePoll = null;
 }
 
+// Nodes 2.0 can be switched on or off WITHOUT a reload, and this node is set up
+// differently per renderer: Nodes 2.0 gets the cards row, its own preview canvas,
+// the layout hook and the nudge; Classic paints the cards in the slot dead-space
+// and lets ComfyUI draw the preview. Measured before this: a node built in
+// Classic and switched live lost its size cards in Nodes 2.0, and one built in
+// Nodes 2.0 showed a stray 44 px cards strip in Classic, both until a reload.
+// This puts each renderer's setup in place exactly as a node BUILT in it has it.
+// Called only for a live switch - setupNode still picks the face on a normal open.
+function applyMiniRenderer(node, vue) {
+  const widget = node._pixLmWidget, cards = node._pixLmCards;
+  if (!widget || !cards) return;
+  cards.style.display = vue ? "block" : "none";
+  if (vue) {
+    if (!node._pixLmImageCanvas) createPreviewCanvas(node);
+    else node._pixLmImageCanvas.style.display = "";
+    const measure = node._pixLmMeasureHeight;
+    if (measure) widget.computeLayoutSize = () => ({ minHeight: measure(), minWidth: 1 });
+    injectNodes2CSS();
+    watchCardsNudge(node);
+    updatePreview(node);
+    refreshFace(node);
+  } else {
+    if (node._pixLmImageCanvas) node._pixLmImageCanvas.style.display = "none";
+    delete widget.computeLayoutSize;   // back to DOMWidget's own, as a Classic-built node has it
+    unwatchCardsNudge(node);
+    node.setDirtyCanvas?.(true, true);
+  }
+}
+
 // Refresh the cards on whichever surface applies.
 function renderCards(node) {
   if (isVueNodes()) { renderCardsCanvas(node); nudgeCardsIntoSlots(node); }
@@ -545,6 +576,12 @@ function setupNode(node) {
       const st = window.getComputedStyle(child);
       if (st.position === "absolute" || st.position === "fixed") continue;
       if (st.display === "none") continue;
+      // The cards row and the preview canvas are Nodes 2.0 parts. Skipping them
+      // whenever Classic is on (read LIVE) is what stops a LIVE switch to Classic
+      // growing the node: core arranges it before applyMiniRenderer hides them
+      // (the Run Timer trap, CLAUDE.md's renderer-switch note). A node BUILT in
+      // Classic never shows either, so this changes nothing on a normal open.
+      if (!isVueNodes() && (child === node._pixLmCards || child === node._pixLmImageCanvas)) continue;
       if (child === node._pixLmImageCanvas) { totalH += previewMin; visible += 1; continue; }
       totalH += child.offsetHeight;
       visible += 1;
@@ -582,6 +619,9 @@ function setupNode(node) {
     injectNodes2CSS();
     watchCardsNudge(node); // lift the cards beside the output dots (Sliders nudge)
   }
+  // A LIVE Nodes 2.0 switch re-applies the renderer's setup (applyMiniRenderer);
+  // copies and left-behind nodes do nothing.
+  node._pixLmRendererOff = onRendererChange((vue) => { if (isLiveNode(node)) applyMiniRenderer(node, vue); });
 
   // Fresh-node default size. SYNCHRONOUS so configure() overrides for saved
   // workflows (Vue Compat #8 / node UI convention #9).
@@ -824,6 +864,8 @@ app.registerExtension({
       this._pixLmZoomRaf = null;
       try { this._pixLmFloorOff?.(); } catch {}
       this._pixLmFloorOff = null;
+      try { this._pixLmRendererOff?.(); } catch {}
+      this._pixLmRendererOff = null;
       unwatchCardsNudge(this);
       if (_activeMiniNode === this) _activeMiniNode = null;
       return _origRemoved?.apply(this, arguments);

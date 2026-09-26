@@ -7,6 +7,8 @@ import { installNativeTextMenu } from "../shared/native_text_menu.mjs";
 import { installNodeAccent, registerNodeAccent } from "../shared/node_settings.mjs";
 import { rollNodeSeed } from "../shared/seed_roll.mjs";
 import { isLightTheme } from "../shared/light_theme.mjs";
+import { onRendererChange } from "../shared/renderer_switch.mjs";
+import { isLiveNode } from "../shared/live_node.mjs";
 import {
   getState, setGate, setText, setModelText, revertText, STATE_PROP,
 } from "./state.mjs";
@@ -298,6 +300,12 @@ function setupNode(node) {
   else { node.size[0] = 480; node.size[1] = 520; }
 
   watchBand(node);  // float (Classic) / nudge (Vue) the status band into the slot row
+  // Nodes 2.0 can be switched on or off WITHOUT a reload, and the band is placed
+  // per renderer. Measured before this: a node built in Classic and switched live
+  // lost its status line in Nodes 2.0 (band still hidden, box still pulled up
+  // 18 px) until a reload. watchBand re-places it and starts the Vue poll when
+  // needed; copies and left-behind nodes do nothing (isLiveNode).
+  node._pixPtRendererOff = onRendererChange(() => { if (isLiveNode(node)) watchBand(node); });
 
   // Defer the first render until node.properties is restored (Vue Compat #8).
   queueMicrotask(() => restore(node));
@@ -359,6 +367,8 @@ app.registerExtension({
     nodeType.prototype.onRemoved = function () {
       clearTimeout(this._pixPtFlashTimer);
       if (this._pixPtBandPoll) { clearInterval(this._pixPtBandPoll); this._pixPtBandPoll = null; }
+      try { this._pixPtRendererOff?.(); } catch { /* ignore */ }
+      this._pixPtRendererOff = null;
       try { this._pixPtFloorOff?.(); } catch { /* ignore */ }
       this._pixPtFloorOff = null;
       this._pixPtEls = null;
