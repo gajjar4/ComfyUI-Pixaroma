@@ -6,7 +6,9 @@
 // to skip them where the set is USED, or they keep acting on every later run:
 //   - A throwaway COPY. Ctrl+C, Alt-drag and right-click Clone all serialize a
 //     clone(), and Convert to Subgraph a multiClone(): createNode + configure,
-//     never added, so node.graph is null.
+//     never added, so node.graph is null. (Copying a SUBGRAPH node puts its
+//     inner nodes in a clone of the subgraph that is never registered, which the
+//     registry test below catches.)
 //   - The inner nodes of a subgraph once the workflow is REPLACED (a tab switch,
 //     opening a file, Ctrl+Z). LGraph.clear() fires onRemoved for ROOT nodes
 //     only and empties the subgraph map, so they keep a graph nothing can reach.
@@ -16,9 +18,17 @@
 // with no Monitor left anywhere). CLAUDE.md Vue Compat #8 has the rule.
 //
 // app.graph is always the ROOT (also while you look inside a subgraph), and
-// rootGraph.subgraphs holds every subgraph, nested ones included. The identity
-// test is defensive: app.graph is the SAME object in every tab, so a root node
-// left behind would still point at it while its id now belongs to a new node.
+// rootGraph.subgraphs holds every subgraph, nested ones included.
+//
+// The last test is "is it in its graph's node LIST", deliberately NOT an id
+// lookup. A workflow can hold two nodes with the SAME id (hand-edited, or
+// written by an old bug): LGraph.add renumbers the second, then configure writes
+// its old id back, so getNodeById answers with the OTHER node. The first version
+// used the id and judged a real, visible Run Timer "not on a canvas" - review
+// finding, reproduced: it never started and never chimed. The list test still
+// excludes a node removed from its graph, and the old root nodes after a
+// workflow switch (app.graph is the SAME object in every tab, but its list is
+// rebuilt).
 //
 // SKIP on this answer, never drop the node from your set: ComfyUI's asset
 // browser creates a node, waits a tick and only then adds it, so "no graph yet"
@@ -37,6 +47,7 @@ export function isLiveNode(node) {
       for (const sg of root.subgraphs.values()) if (sg === g) { known = true; break; }
       if (!known) return false;
     }
-    return g.getNodeById(node.id) === node;
+    const list = g._nodes;
+    return Array.isArray(list) ? list.includes(node) : true;
   } catch (_e) { return true; }
 }
