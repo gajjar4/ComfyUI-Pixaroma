@@ -392,10 +392,9 @@ Master the Pixaroma suite with our video guides and workflow deep-dives:
 
 ## 🛠 Changelog
 
-### **September 26, 2026 · v1.4.163–v1.4.168**
-- **Fixed: Run Timer Pixaroma slowed renders 6-9% with 2 or 3 decimals.** The decimals now update a few times a second while running; the final time stays exact.
-- **Faster renders in Nodes 2.0 with Compare, Preview Image or Outpaint Pixaroma on screen.** They show a still image of their preview while it isn't changing, so the browser no longer redraws it during a run.
-- **Run Timer, Run Log and Monitor Pixaroma no longer keep the browser busy during a run.**
+### **September 26, 2026 · v1.4.163–v1.4.169**
+- **Run Timer, Run Log and Monitor Pixaroma no longer slow your renders.** Run Timer with 2 or 3 decimals had cost 6-9%; its final time stays exact.
+- **Faster renders in Nodes 2.0 with Compare, Preview Image, Outpaint, Load 3D, Save 3D or a video node (Load Video, Load Video Frame, Save Mp4, Save Video) on screen.** Their previews show a still picture while nothing moves. Load Audio, Image Resize and Load Image Mini do the same.
 - **Fixed: copied Run Timers, Monitors and Image Composers kept working unseen**, even after the node was deleted.
 - **17 nodes now follow switching Nodes 2.0 on or off** without a reload, instead of showing empty, doubled or missing parts, or dots that would not take a wire.
 - **Fixed: nodes left inside a subgraph kept acting after a tab switch**, disturbing another workflow's nodes or downloading a picture again after every run.
