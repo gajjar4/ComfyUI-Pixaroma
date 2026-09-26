@@ -392,6 +392,10 @@ Master the Pixaroma suite with our video guides and workflow deep-dives:
 
 ## 🛠 Changelog
 
+### **September 26, 2026 · v1.4.163**
+- **Fixed: Run Timer Pixaroma slowed renders 6-9% with 2 or 3 decimals.** The decimals now update a few times a second while running; the final time stays exact.
+- **Run Timer, Run Log and Monitor Pixaroma no longer keep the browser busy during a run**: no endless pulsing dots, and fewer redraws.
+
 ### **September 24, 2026 · v1.4.162**
 - **New: four Qwen Image 2.1 presets for AI Prompt Pixaroma**: a prompt from an idea, a transparent picture, a prompt from an image, and an edit instruction.
 - **Fixed: Inpaint Stitch Pixaroma pasted a grey patch** when the model returned a picture with transparency, as Qwen Image 2.1 does. It pastes clean colours now.
