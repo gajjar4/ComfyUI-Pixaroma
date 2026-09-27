@@ -513,6 +513,55 @@ def find_pixaroma_loras(prompt, from_id):
 _TEXT_KEYS = ("text", "text_g", "text_l", "prompt", "string", "value",
               "positive", "text_positive")
 
+# Sketch Pixaroma BUILDS its `prompt` output (slot 1 of image / prompt / mask) in
+# Python at run time from the marks and notes in its hidden SketchState, so the
+# API prompt holds no text for it. When a text input is wired STRAIGHT from that
+# output, the rebuilt prompt IS that input's text - rebuilt with Sketch's own
+# functions, never a copy of the wording (same rule as prompt-reader.md #19).
+_SKETCH_CLASS = "PixaromaSketch"
+_SKETCH_PROMPT_SLOT = 1
+
+# A node that ZEROES its conditioning passes no text on to the sampler. Flux-style
+# workflows build the negative as ConditioningZeroOut(the positive's encode), and
+# walking through it recorded the POSITIVE prompt as the negative.
+_ZERO_OUT_CLASSES = frozenset({"ConditioningZeroOut"})
+
+_sketch_mod = None
+
+
+def _sketch_prompt(prompt, link):
+    """The prompt Sketch sent down `link`, or None when `link` does not come from
+    a PixaromaSketch's prompt output or that prompt is empty.
+
+    Sketch's helpers are imported on first use and never at module load, so this
+    module still imports with no numpy / PIL for its unit tests. Relative inside
+    ComfyUI; flat when a test puts nodes/ on sys.path.
+    """
+    global _sketch_mod
+    if not is_link(link) or int(link[1]) != _SKETCH_PROMPT_SLOT:
+        return None
+    node = (prompt or {}).get(str(link[0]))
+    if not isinstance(node, dict) or node.get("class_type") != _SKETCH_CLASS:
+        return None
+    raw = (node.get("inputs") or {}).get("SketchState")
+    if not isinstance(raw, str) or not raw:
+        return None
+    if _sketch_mod is None:
+        try:
+            from . import _sketch_helpers as mod
+        except Exception:
+            try:
+                import _sketch_helpers as mod
+            except Exception:
+                return None
+        _sketch_mod = mod
+    try:
+        state = _sketch_mod.parse_state(raw)
+        text = _sketch_mod.build_prompt(state["marks"], state["remove_marks"])
+    except Exception:
+        return None
+    return text.strip() if isinstance(text, str) and text.strip() else None
+
 
 def read_text(prompt, cond_id, avoid=(), max_depth=_MAX_DEPTH):
     """First prompt string found upstream of a conditioning input, or None.
@@ -527,6 +576,12 @@ def read_text(prompt, cond_id, avoid=(), max_depth=_MAX_DEPTH):
     prompt recorded as the positive, which nobody looking at it can detect.
     Reproduced before this guard existed. Refusing the opposite branch is purely
     subtractive: the worst case becomes an omitted prompt, never a swapped one.
+
+    Two more stops, both subtractive in the same way: a ConditioningZeroOut (its
+    output carries no text), and a Sketch node reached any other way than a text
+    input wired straight from its prompt - through a join its text is only PART
+    of the prompt, and walking on into its picture chain returned unrelated text
+    there (a watermark's words, measured) as the prompt.
     """
     if not prompt or cond_id is None:
         return None
@@ -541,6 +596,9 @@ def read_text(prompt, cond_id, avoid=(), max_depth=_MAX_DEPTH):
             node = prompt.get(node_id)
             if not isinstance(node, dict):
                 continue
+            ct = node.get("class_type")
+            if ct in _ZERO_OUT_CLASSES or ct == _SKETCH_CLASS:
+                continue
             inputs = node.get("inputs")
             if not isinstance(inputs, dict):
                 continue
@@ -548,6 +606,9 @@ def read_text(prompt, cond_id, avoid=(), max_depth=_MAX_DEPTH):
                 v = inputs.get(key)
                 if isinstance(v, str) and v.strip():
                     return v
+                sketched = _sketch_prompt(prompt, v)
+                if sketched:
+                    return sketched
             for name, value in inputs.items():
                 if name in avoid:
                     continue
