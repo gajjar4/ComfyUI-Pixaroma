@@ -572,12 +572,21 @@ function applyNodePos(node, x, y, snapActive) {
     node.pos[1] = y;
   }
 }
-function applyNodeRect(node, x, y, w, h, snapActive) {
+function applyNodeRect(node, x, y, w, h, snapActive, keep) {
   if (isVueNodes()) {
     if (snapActive) requestAnimationFrame(() => { node.pos = [x, y]; node.size = [w, h]; });
   } else {
     node.pos[0] = x; node.pos[1] = y;
-    node.size[0] = w; node.size[1] = h;
+    // Through setSize, exactly as LiteGraph's own resize does, so the node's OWN
+    // onResize minimum applies. A raw write skipped it (Align's floor is only
+    // computeSize), and the node's draw-time clamp then widened it without
+    // moving it: the edge the user held slid away. When the node refused part
+    // of a MOVING side, put the OPPOSITE edge back where the user holds it
+    // (keep.left / keep.top: that side is the one being dragged).
+    if (typeof node.setSize === "function") node.setSize([w, h]);
+    else { node.size[0] = w; node.size[1] = h; }
+    if (keep?.left && Math.abs(node.size[0] - w) > 0.01) node.pos[0] = x + w - node.size[0];
+    if (keep?.top && Math.abs(node.size[1] - h) > 0.01) node.pos[1] = y + h - node.size[1];
   }
 }
 
@@ -1198,6 +1207,13 @@ function onWindowPointerMove(e) {
       // we never move a node mid-resize. (Vue resize uses a separate mechanism
       // Align doesn't snap; move is the supported case.)
       if (!sizeChanged) state.dragInfo.lockType = "move";
+    } else if (c.resizing_node === draggedNode) {
+      // LiteGraph SAYS it is resizing this node, so believe it. Inferring from
+      // what changed misread a left-edge drag on a node already at its OWN
+      // minimum: LiteGraph moved the left edge, the node's onResize widened it
+      // straight back, the size came out unchanged, and the gesture was taken
+      // for a MOVE (the node slid with the cursor).
+      state.dragInfo.lockType = "resize";
     } else {
       const posChanged = draggedNode.pos[0] !== state.dragInfo.posX || draggedNode.pos[1] !== state.dragInfo.posY;
       if (sizeChanged)         state.dragInfo.lockType = "resize";
@@ -1224,10 +1240,24 @@ function onWindowPointerMove(e) {
     const curTop = draggedNode.pos[1] - titleH;            // visual top
     const curBot = draggedNode.pos[1] + draggedNode.size[1];
     const EPS = 0.01;
-    if (Math.abs(curLeft - initLeft) > EPS) state.dragInfo.leftMoves = true;
-    if (Math.abs(curRight - initRight) > EPS) state.dragInfo.rightMoves = true;
-    if (Math.abs(curTop - initTop) > EPS) state.dragInfo.topMoves = true;
-    if (Math.abs(curBot - initBot) > EPS) state.dragInfo.botMoves = true;
+    // Which edges move: LiteGraph KNOWS (pointer.resizeDirection, e.g. "SW"), so
+    // ask it. Inferring it from the edges was fooled by a node's OWN minimum:
+    // shrinking from the left past it, LiteGraph moves the left edge and the
+    // node's onResize widens itself back, so the RIGHT edge moved too, both sides
+    // were flagged, and the node slid sideways (measured 600 -> 1050). The
+    // inference below stays as the fallback for a build without the field.
+    const dir = c.resizing_node === draggedNode ? c.pointer?.resizeDirection : null;
+    if (typeof dir === "string" && dir) {
+      state.dragInfo.leftMoves = dir.includes("W");
+      state.dragInfo.rightMoves = dir.includes("E");
+      state.dragInfo.topMoves = dir.includes("N");
+      state.dragInfo.botMoves = dir.includes("S");
+    } else {
+      if (Math.abs(curLeft - initLeft) > EPS) state.dragInfo.leftMoves = true;
+      if (Math.abs(curRight - initRight) > EPS) state.dragInfo.rightMoves = true;
+      if (Math.abs(curTop - initTop) > EPS) state.dragInfo.topMoves = true;
+      if (Math.abs(curBot - initBot) > EPS) state.dragInfo.botMoves = true;
+    }
     const { leftMoves, rightMoves, topMoves, botMoves } = state.dragInfo;
 
     let minW = 50, minH = 20;
@@ -1316,6 +1346,7 @@ function onWindowPointerMove(e) {
       draggedNode,
       fLeft, fTop + titleH, fRight - fLeft, fBot - (fTop + titleH),
       !!(snapLeft || snapRight || snapTop || snapBot),
+      { left: leftMoves && !rightMoves, top: topMoves && !botMoves },
     );
 
     // Push one guide per engaged edge. fLeft/fRight/fTop/fBot are visual
