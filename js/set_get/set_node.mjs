@@ -8,7 +8,7 @@
 // frontend (isVirtualNode), so it never reaches the backend; both the Get nodes
 // and the passthrough output resolve straight to the real upstream source.
 
-import { app } from "/scripts/app.js";
+import { app } from "../../../scripts/app.js";
 import { isGraphLoading } from "../shared/graph_loading.mjs";
 import {
   SET_TYPE,

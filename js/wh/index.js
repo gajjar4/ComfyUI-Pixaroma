@@ -1,4 +1,4 @@
-import { app } from "/scripts/app.js";
+import { app } from "../../../scripts/app.js";
 
 // WH Pixaroma - keep the node tight on creation. ComfyUI's auto-computed
 // minimum size has a built-in vertical buffer that leaves visible empty

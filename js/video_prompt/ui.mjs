@@ -11,7 +11,7 @@
 // LAST thing and sits bottom right, because that is where the cursor already is
 // after reading the output.
 
-import { app } from "/scripts/app.js";
+import { app } from "../../../scripts/app.js";
 import { pixAsset } from "../shared/api_url.mjs";
 import { ACC, installNodeAccent } from "../shared/node_settings.mjs";
 import { applyAdaptiveCanvasOnly } from "../shared/nodes2.mjs";

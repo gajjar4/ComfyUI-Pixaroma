@@ -9,8 +9,8 @@
 // the configure-replay gating the Switch family carries (Vue Compat #17/#19):
 // there is nothing for a replayed connection event to corrupt.
 
-import { app } from "/scripts/app.js";
-import { api } from "/scripts/api.js";
+import { app } from "../../../scripts/app.js";
+import { api } from "../../../scripts/api.js";
 import { isGraphLoading } from "../shared/graph_loading.mjs";
 import { registerNodeHelp } from "../shared/help.mjs";
 import { registerNodeSettings, repaintAccent } from "../shared/node_settings.mjs";

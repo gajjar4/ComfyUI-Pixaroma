@@ -1,5 +1,5 @@
 // js/audio_studio/index.js
-import { app } from "../../../../scripts/app.js";
+import { app } from "../../../scripts/app.js";
 
 import { AudioStudioEditor } from "./core.mjs";
 // Mixin imports — must be side-effect imports BEFORE the first

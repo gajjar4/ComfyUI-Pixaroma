@@ -6,8 +6,8 @@
 // canvas zoom, #31 a drag or an async commit calls notifyGraphChanged, #35
 // every fixed row declares flex-shrink 0, #37 the canvas never sizes its own box.
 
-import { api } from "/scripts/api.js";
-import { app } from "/scripts/app.js";
+import { api } from "../../../scripts/api.js";
+import { app } from "../../../scripts/app.js";
 import { ACC, applyAccent } from "../shared/node_settings.mjs";
 import { placeZoomedPopup } from "../shared/popup_zoom.mjs";
 import { notifyGraphChanged } from "../shared/graph_changed.mjs";

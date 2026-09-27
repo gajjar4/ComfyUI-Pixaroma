@@ -5,8 +5,8 @@
 // input at graphToPrompt time (Pattern #9). Design approved via mockup
 // 2026-07-03 (docs/superpowers/specs/2026-07-03-save-image-node-design.md).
 
-import { app } from "/scripts/app.js";
-import { api } from "/scripts/api.js";
+import { app } from "../../../scripts/app.js";
+import { api } from "../../../scripts/api.js";
 import { pixApiUrl } from "../shared/api_url.mjs";
 import {
   applyAdaptiveCanvasOnly,

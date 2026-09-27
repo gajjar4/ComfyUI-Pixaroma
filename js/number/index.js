@@ -1,4 +1,4 @@
-import { app } from "/scripts/app.js";
+import { app } from "../../../scripts/app.js";
 
 // Number Pixaroma - keep the node tight on creation (same approach as WH
 // Pixaroma). Override computeSize so ComfyUI's auto-layout doesn't leave

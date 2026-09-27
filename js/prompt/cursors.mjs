@@ -14,7 +14,7 @@
 // what "this list is in order" means. Editing the list to a different length starts
 // its deck over.
 
-import { app } from "/scripts/app.js";
+import { app } from "../../../scripts/app.js";
 
 const CURSOR_SETTING = "Pixaroma.Prompt.Cursors";
 // Shuffle leads because it is what people mean by "random": a surprise every time

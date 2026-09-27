@@ -12,6 +12,7 @@
 
 import { ACC } from "../shared/node_settings.mjs";
 import { isVueNodes } from "../shared/nodes2.mjs";
+import { pixAsset } from "../shared/api_url.mjs";
 
 const CSS_ID = "pix-prompt-each-css";
 
@@ -299,8 +300,8 @@ const CSS = `
   width: 14px;
   height: 14px;
   background: #bbb;
-  -webkit-mask: url("/pixaroma/assets/icons/note/gear.svg") center/contain no-repeat;
-  mask: url("/pixaroma/assets/icons/note/gear.svg") center/contain no-repeat;
+  -webkit-mask: url("${pixAsset("icons/note/gear.svg")}") center/contain no-repeat;
+  mask: url("${pixAsset("icons/note/gear.svg")}") center/contain no-repeat;
 }
 .pix-each-gear:hover::before { background: #fff; }
 `;

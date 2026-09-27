@@ -3,7 +3,7 @@
 // or Esc). Picks the separator (custom dark dropdown, never a native <select>)
 // and whether to skip empty fields. The node face stays just the text boxes.
 
-import { app } from "/scripts/app.js";
+import { app } from "../../../scripts/app.js";
 import { isVueNodes } from "../shared/index.mjs";
 import { createAccentSection } from "../shared/node_settings.mjs";
 import { BRAND, SEP_OPTIONS, readState, writeState, saveGlobalDefault } from "./core.mjs";

@@ -6,8 +6,8 @@
 //
 // Save Mp4 is untouched and stays the quick one; this is the full one.
 
-import { app } from "/scripts/app.js";
-import { api } from "/scripts/api.js";
+import { app } from "../../../scripts/app.js";
+import { api } from "../../../scripts/api.js";
 import { pixApiUrl } from "../shared/api_url.mjs";
 import {
   applyAdaptiveCanvasOnly,

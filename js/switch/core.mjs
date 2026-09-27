@@ -9,7 +9,7 @@
 //   labels       - map of { [slotIdx1]: labelString }
 //   visibleCount - number of input slots currently shown
 
-import { app } from "/scripts/app.js";
+import { app } from "../../../scripts/app.js";
 import { notifyRouterChanged } from "../shared/router_changed.mjs";
 import { ROW_H, TOP_PAD } from "./render.mjs";
 import { isVueNodes } from "../shared/nodes2.mjs";

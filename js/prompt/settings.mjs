@@ -5,7 +5,7 @@
 // Reads/writes node.properties.promptState.accent DIRECTLY (not through index.js)
 // so there is no circular import back into the node module.
 
-import { app } from "/scripts/app.js";
+import { app } from "../../../scripts/app.js";
 import { isVueNodes } from "../shared/nodes2.mjs";
 import { BRAND } from "../shared/utils.mjs";
 import { openPixaromaColorPickerPopup, BUTTON_PALETTE } from "../shared/color_picker.mjs";

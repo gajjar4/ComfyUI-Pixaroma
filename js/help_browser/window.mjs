@@ -19,7 +19,7 @@
 // Position and size live in UNREGISTERED settings (Vue Compat #20: unregistered
 // ids persist fine and add no rows to the Settings panel).
 
-import { app } from "/scripts/app.js";
+import { app } from "../../../scripts/app.js";
 import { globalAccent, BRAND } from "../shared/index.mjs";
 import { el, makeRect, startDrag } from "../shared/floating_window.mjs";
 import { injectHelpBrowserCSS } from "./css.mjs";

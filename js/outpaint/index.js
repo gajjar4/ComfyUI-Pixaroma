@@ -11,8 +11,8 @@
 // OutpaintState input by the graphToPrompt hook at the bottom (Vue Compat #9),
 // so nothing here needs a visible widget or an input dot.
 
-import { app } from "/scripts/app.js";
-import { api } from "/scripts/api.js";
+import { app } from "../../../scripts/app.js";
+import { api } from "../../../scripts/api.js";
 import { pixApiUrl, pixAsset } from "../shared/api_url.mjs";
 import { applyAdaptiveCanvasOnly, canvasBackingScale, installZoomRepaint, isVueNodes } from "../shared/nodes2.mjs";
 import { isGraphLoading } from "../shared/graph_loading.mjs";

@@ -6,7 +6,7 @@
 // same-name clashes. It edits a WORKING copy of the library and pushes changes
 // through commitLibrary (debounced persist + live notify to every node).
 
-import { app } from "/scripts/app.js";
+import { app } from "../../../scripts/app.js";
 import { installGraphUndoGuard } from "../shared/graph_undo_guard.mjs";
 import { pixAsset } from "../shared/api_url.mjs";
 import { BRAND } from "../shared/utils.mjs";

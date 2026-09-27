@@ -13,7 +13,7 @@
 // The buttons are hit-tested against the SAME rects this file paints, cached on
 // a runtime field, which is the Compare / Preview pattern for canvas controls.
 
-import { app } from "/scripts/app.js";
+import { app } from "../../../scripts/app.js";
 import { accentOf } from "../shared/node_settings.mjs";
 import { pixAsset } from "../shared/api_url.mjs";
 import { M, faceBlocks, barColor, barRows, scalarItems, labelUnitWidth } from "./core.mjs";

@@ -1,4 +1,4 @@
-import { app } from "/scripts/app.js";
+import { app } from "../../../scripts/app.js";
 import { isVueNodes, registerNodeHelp } from "../shared/index.mjs";
 import { registerNodeSettings } from "../shared/node_settings.mjs";
 import { HIDDEN_INPUT, promptState, widgetOf } from "./core.mjs";

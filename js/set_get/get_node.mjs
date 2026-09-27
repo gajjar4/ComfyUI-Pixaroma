@@ -11,7 +11,7 @@
 // Both are implemented so it works on every prompt-build path and inside
 // subgraphs without any monkey-patch.
 
-import { app } from "/scripts/app.js";
+import { app } from "../../../scripts/app.js";
 import { isGraphLoading } from "../shared/graph_loading.mjs";
 import {
   SET_TYPE,

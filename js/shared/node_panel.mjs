@@ -20,7 +20,7 @@
 //
 // Both of those cost a review round each. Do not re-roll them per node.
 
-import { app } from "/scripts/app.js";
+import { app } from "../../../scripts/app.js";
 import { isVueNodes } from "./nodes2.mjs";
 
 // Screen-pixel rect of the node (DOM in Nodes 2.0, geometry math in legacy) so

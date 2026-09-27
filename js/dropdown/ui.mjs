@@ -18,7 +18,7 @@
 // Both are lifted from Control Panel (js/sliders/ui.mjs), which is the only
 // other node in the pack doing this. Every trap it documents applies here.
 
-import { app } from "/scripts/app.js";
+import { app } from "../../../scripts/app.js";
 import { pixAsset } from "../shared/api_url.mjs";
 import { isVueNodes, applyAdaptiveCanvasOnly } from "../shared/nodes2.mjs";
 import { installCanvasZoomPassthrough } from "../shared/canvas_zoom.mjs";

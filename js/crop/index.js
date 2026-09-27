@@ -1,9 +1,9 @@
 // ============================================================
 // Pixaroma Image Crop Editor — Entry Point
 // ============================================================
-import { app } from "/scripts/app.js";
+import { app } from "../../../scripts/app.js";
 import { pixApiUrl } from "../shared/api_url.mjs";
-import { api } from "/scripts/api.js";
+import { api } from "../../../scripts/api.js";
 import { isGraphLoading } from "../shared/graph_loading.mjs";
 import { isLiveNode } from "../shared/live_node.mjs";
 import { CropEditor } from "./core.mjs";
@@ -563,7 +563,7 @@ app.registerExtension({
         // Python node loads the source on every run and applies the panel's
         // current crop_w/h/x/y. This lets the user tweak crop dims after
         // pasting without re-opening the editor.
-        const r1 = await api.fetchApi(pixApiUrl("/pixaroma/api/crop/upload_src"), {
+        const r1 = await api.fetchApi("/pixaroma/api/crop/upload_src", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ project_id: projectId, image: dataURL }),

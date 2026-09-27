@@ -15,7 +15,7 @@
 // A picture of the CANVAS is deliberately not attempted - it cannot be captured
 // without a screen-share permission prompt, so it is not on the table.
 
-import { api } from "/scripts/api.js";
+import { api } from "../../../scripts/api.js";
 import { pixApiUrl } from "../shared/api_url.mjs";
 import * as A from "./api.mjs";
 

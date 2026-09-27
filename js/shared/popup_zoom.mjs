@@ -22,7 +22,7 @@
 // panels). Those are workbenches beside the canvas, not part of a node, and
 // deliberately keep a constant size.
 
-import { app } from "/scripts/app.js";
+import { app } from "../../../scripts/app.js";
 
 // 12px matches Show Text's readout and the native node widgets - the size a
 // Pixaroma row is at 100% zoom.

@@ -350,6 +350,74 @@ def check_css_prefix_collisions():
             )
 
 
+def check_prefix_safe_urls():
+    """Every URL our JS builds must survive ComfyUI being served under a PATH PREFIX.
+
+    Reported on Discord 2026-09-27: behind a reverse proxy at
+    http://host:8080/comfyui/, Resolution and Seed rendered as empty boxes and
+    the run failed with "get_resolution() missing 1 required positional
+    argument: 'ResolutionState'". Every module imported ComfyUI core as
+    "/scripts/app.js", which resolves to http://host:8080/scripts/app.js -
+    outside the prefix, not ComfyUI - so the import failed, the module never
+    ran, NO Pixaroma extension registered (measured: 0 of 84), and the
+    graphToPrompt hook that injects the hidden state never existed. At the
+    root the same line works perfectly, which is why it shipped for months.
+
+    Three rules, each one a thing that broke under the prefix:
+    1. A core import is RELATIVE, at the depth of its file. A file D folders
+       below js/ is served at /extensions/<pack>/<D folders>/file and reaches
+       the ComfyUI root with "../" * (D + 2). One level too many still works
+       at the root (a URL cannot climb above it) and fails under a prefix.
+    2. Never hand pixApiUrl(...) to api.fetchApi: fetchApi prefixes the route
+       itself, and a second pass under a sub-path produces
+       /comfyui/api/comfyui/api/... (measured on the live apiURL).
+    3. No bare root-relative fetch("/..."), url("/...") or import("/...").
+       Core routes go through pixApiUrl, our assets through pixAsset
+       (.claude/patterns/hosted-urls.md).
+    """
+    core = re.compile(
+        r"""(\bfrom\s*|\bimport\s*\(\s*|\bimport\s+)(["'])((?:\.\./)+|/)scripts/([A-Za-z0-9_./-]+?\.js)\2""")
+    double = re.compile(r"fetchApi\(\s*pix(?:ApiUrl|Asset)\(")
+    # a core import("/scripts/...") is rule 1's, so rule 3 does not report it twice
+    bare = re.compile(r"""(?:\bfetch\(|\burl\(|\bimport\((?!\s*["']/scripts/))\s*["'`]?/(?!/)""")
+
+    def in_comment(line, pos):
+        s = line.lstrip()
+        return s.startswith("//") or s.startswith("*") or s.startswith("/*") or "//" in line[:pos]
+
+    for rel in tracked_files():
+        norm = rel.replace("\\", "/")
+        if not norm.startswith("js/") or not norm.endswith((".js", ".mjs")):
+            continue
+        depth = norm[len("js/"):].count("/")
+        want = "../" * (depth + 2)
+        try:
+            with io.open(os.path.join(REPO, rel), encoding="utf-8") as fh:
+                lines = fh.read().split("\n")
+        except (OSError, UnicodeDecodeError):
+            continue  # check_files() already reports unreadable files
+        for i, line in enumerate(lines, 1):
+            for m in core.finditer(line):
+                if m.group(3) != want and not in_comment(line, m.start()):
+                    failures.append(
+                        '%s:%d imports ComfyUI core as "%sscripts/%s". From this file it\n'
+                        '        must be "%sscripts/%s" - anything else fails when ComfyUI is served\n'
+                        "        under a path prefix, and then EVERY Pixaroma node renders empty."
+                        % (norm, i, m.group(3), m.group(4), want, m.group(4)))
+            for m in double.finditer(line):
+                if not in_comment(line, m.start()):
+                    failures.append(
+                        "%s:%d passes pixApiUrl/pixAsset into api.fetchApi. fetchApi prefixes\n"
+                        "        the route itself; the second pass breaks it under a path prefix.\n"
+                        "        Hand fetchApi the BARE route." % (norm, i))
+            for m in bare.finditer(line):
+                if not in_comment(line, m.start()):
+                    failures.append(
+                        "%s:%d builds a root-relative URL (%s). Under a path prefix it points\n"
+                        "        outside ComfyUI. Use pixApiUrl(route) or pixAsset(tail)."
+                        % (norm, i, line[m.start():m.end() + 24].strip()))
+
+
 def _module_int(tree, want):
     """Module-level `want = <int literal>` in an already-parsed tree, else None."""
     for stmt in tree.body:
@@ -482,6 +550,7 @@ def main():
     check_at_mentions()
     check_output_arity()
     check_css_prefix_collisions()
+    check_prefix_safe_urls()
 
     if failures:
         print("RELEASE PREFLIGHT FAILED (%d problem%s)\n"

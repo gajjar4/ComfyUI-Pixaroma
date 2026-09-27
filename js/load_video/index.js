@@ -1,4 +1,4 @@
-import { app } from "/scripts/app.js";
+import { app } from "../../../scripts/app.js";
 import { pixApiUrl, pixAsset } from "../shared/api_url.mjs";
 import { attachVideoSnapshot } from "../shared/video_snapshot.mjs";
 import { applyAdaptiveCanvasOnly,

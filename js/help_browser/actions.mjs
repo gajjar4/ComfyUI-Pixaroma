@@ -13,7 +13,7 @@
 // always an explicit user action, so the resulting "workflow changed" state is
 // correct. Nothing else in the browser writes anything that gets serialized.
 
-import { app } from "/scripts/app.js";
+import { app } from "../../../scripts/app.js";
 import { el } from "./window.mjs";
 import { versionLine } from "../shared/version.mjs";
 

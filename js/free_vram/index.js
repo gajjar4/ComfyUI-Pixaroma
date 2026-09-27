@@ -4,7 +4,7 @@
 // core.mjs holds the state and the geometry, ui.mjs the face, settings.mjs the
 // gear panel, help.mjs the written help.
 
-import { app } from "/scripts/app.js";
+import { app } from "../../../scripts/app.js";
 import { isVueNodes } from "../shared/nodes2.mjs";
 import { isGraphLoading } from "../shared/graph_loading.mjs";
 import { registerNodeHelp } from "../shared/help.mjs";

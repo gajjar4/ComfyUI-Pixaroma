@@ -2,7 +2,7 @@
 // themed panel beside the node, draggable by its header, closes on outside click or
 // Esc). Per-node preferences; "Set as default" stores them for new nodes.
 
-import { app } from "/scripts/app.js";
+import { app } from "../../../scripts/app.js";
 import { openPixaromaColorPickerPopup, BUTTON_PALETTE } from "../shared/color_picker.mjs";
 import { GLOBAL_ACCENT_SETTING, repaintAllAccents } from "../shared/node_settings.mjs";
 import {

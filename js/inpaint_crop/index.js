@@ -1,8 +1,8 @@
 // ============================================================
 // Inpaint Crop Pixaroma — node entry (open button, preview, source, persist)
 // ============================================================
-import { app } from "/scripts/app.js";
-import { api } from "/scripts/api.js";
+import { app } from "../../../scripts/app.js";
+import { api } from "../../../scripts/api.js";
 import { pixApiUrl } from "../shared/api_url.mjs";
 import { isGraphLoading } from "../shared/graph_loading.mjs";
 import { InpaintCropEditor, INPAINT_PREVIEW_COLORS } from "./core.mjs";
@@ -478,7 +478,7 @@ app.registerExtension({
     installPasteHandler();
     node._pixInpaintPaste = async (dataURL) => {
       try {
-        const r = await api.fetchApi(pixApiUrl("/pixaroma/api/inpaint/upload_src"), {
+        const r = await api.fetchApi("/pixaroma/api/inpaint/upload_src", {
           method: "POST", headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ project_id: "inpaint_paste_" + Date.now() + "_" + Math.random().toString(36).slice(2, 9), image: dataURL }),
         });

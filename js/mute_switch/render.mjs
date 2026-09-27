@@ -9,7 +9,7 @@
 // to push the dots below the mode bar (Vue Compat #16: slot.pos IS read by
 // calculateInputSlotPosFromSlot in this LG fork).
 
-import { app } from "/scripts/app.js";
+import { app } from "../../../scripts/app.js";
 
 export const BRAND = "#f66744";
 import { accentOf } from "../shared/node_settings.mjs";

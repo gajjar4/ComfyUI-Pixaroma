@@ -4,7 +4,7 @@
 // core.mjs holds the state, compute.mjs the browser mirror of the maths,
 // ui.mjs the face, settings.mjs the gear panel, recipes.mjs the model presets.
 
-import { app } from "/scripts/app.js";
+import { app } from "../../../scripts/app.js";
 import { isVueNodes } from "../shared/nodes2.mjs";
 import { isGraphLoading } from "../shared/graph_loading.mjs";
 import { registerNodeHelp } from "../shared/help.mjs";

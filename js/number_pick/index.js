@@ -4,7 +4,7 @@
 // wants. core.mjs holds the state, ui.mjs the face, settings.mjs the gear panel,
 // adopt.mjs the type-from-the-wire logic.
 
-import { app } from "/scripts/app.js";
+import { app } from "../../../scripts/app.js";
 import { isVueNodes } from "../shared/nodes2.mjs";
 import { isGraphLoading } from "../shared/graph_loading.mjs";
 import { registerNodeHelp } from "../shared/help.mjs";

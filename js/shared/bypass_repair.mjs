@@ -44,7 +44,7 @@
 // Harness: `D:\Claude Tests\_bypass_repair_harness.js` (records values, mutation-
 // validated). Baseline before this module: 3 DROPPED, 1 MISROUTED, 3 OK.
 
-import { app } from "/scripts/app.js";
+import { app } from "../../../scripts/app.js";
 import { slotAccepts, isWildcardType } from "./slot_types.mjs";
 
 const MODE_MUTED = 2;

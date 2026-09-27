@@ -5,7 +5,7 @@
 // right-click entry both open it). core.mjs turns those rows into the blob
 // Python reads.
 
-import { app } from "/scripts/app.js";
+import { app } from "../../../scripts/app.js";
 import { isVueNodes, applyAdaptiveCanvasOnly } from "../shared/nodes2.mjs";
 import { isGraphLoading } from "../shared/graph_loading.mjs";
 import { installCanvasZoomPassthrough } from "../shared/canvas_zoom.mjs";

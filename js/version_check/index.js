@@ -13,7 +13,7 @@
 // a DOM widget with a UNIQUE type name + applyAdaptiveCanvasOnly, so the panel
 // renders correctly in BOTH renderers.
 
-import { app } from "/scripts/app.js";
+import { app } from "../../../scripts/app.js";
 import { BRAND, applyAdaptiveCanvasOnly,
   installCanvasZoomPassthrough, installNodeAccent, registerNodeAccent,
 } from "../shared/index.mjs";

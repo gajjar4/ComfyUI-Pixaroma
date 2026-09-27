@@ -4,7 +4,7 @@
 // durations are allowed, and how seconds become frames. Both are stored ON the
 // node, so two Duration nodes on one canvas can be set up for two models.
 
-import { app } from "/scripts/app.js";
+import { app } from "../../../scripts/app.js";
 import { createAccentSection, accentOf } from "../shared/node_settings.mjs";
 import {
   PICK_CHIPS, PICK_SLIDER, PICK_NUMBER, readState, writeState, clampToPick,

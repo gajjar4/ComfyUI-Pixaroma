@@ -12,7 +12,7 @@
 // The value always flows through the native hidden widget + a graphToPrompt inject
 // (index.js), so the dot gymnastics never touch the number that reaches Python.
 
-import { app } from "/scripts/app.js";
+import { app } from "../../../scripts/app.js";
 import { widgetOf, accentOf } from "./core.mjs";
 import { applyAdaptiveCanvasOnly, isVueNodes } from "../shared/nodes2.mjs";
 import { installResizeFloor } from "../shared/resize_floor.mjs";

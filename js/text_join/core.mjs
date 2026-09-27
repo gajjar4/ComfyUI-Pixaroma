@@ -7,7 +7,7 @@
 // live on the node's own hidden STRING widgets (text_1..) and are injected the
 // same way, exactly like Outpaint Stitch Pixaroma's sliders.
 
-import { app } from "/scripts/app.js";
+import { app } from "../../../scripts/app.js";
 
 export const BRAND = "#f66744";
 export const STATE_PROP = "textJoinState";

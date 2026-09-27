@@ -14,7 +14,7 @@
 // value flows through the node's own hidden STRING widget + a graphToPrompt inject
 // (index.js), so the dot gymnastics never touch the text reaching Python.
 
-import { app } from "/scripts/app.js";
+import { app } from "../../../scripts/app.js";
 import { widgetOf, BRAND, readState, labelFor } from "./core.mjs";
 import { applyAdaptiveCanvasOnly, isVueNodes, installResizeFloor, installCanvasZoomPassthrough } from "../shared/index.mjs";
 import { ACC, installNodeAccent } from "../shared/node_settings.mjs";

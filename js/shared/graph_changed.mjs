@@ -1,4 +1,4 @@
-import { app } from "/scripts/app.js";
+import { app } from "../../../scripts/app.js";
 import { isGraphLoading } from "./graph_loading.mjs";
 
 // Tell ComfyUI that the user just changed something that gets SERIALIZED.

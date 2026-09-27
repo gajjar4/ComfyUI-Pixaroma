@@ -8,7 +8,7 @@
 // tags each name with that Set's colour. Turn the setting off to leave Gets on
 // their own colour.
 
-import { app } from "/scripts/app.js";
+import { app } from "../../../scripts/app.js";
 import { isGraphLoading } from "../shared/graph_loading.mjs";
 import { GET_TYPE, allLiveGraphs, findSetterByName } from "./scope.mjs";
 

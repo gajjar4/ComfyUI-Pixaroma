@@ -11,7 +11,7 @@
 //   ctx = { getHistory() -> {ms,name,at}[], clearHistory(),
 //           copyToClipboard(text, flash) }
 
-import { app } from "/scripts/app.js";
+import { app } from "../../../scripts/app.js";
 import { BRAND } from "../shared/index.mjs";
 
 function el(tag, cls, text) {

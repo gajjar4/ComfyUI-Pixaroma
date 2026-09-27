@@ -1,4 +1,4 @@
-import { app } from "/scripts/app.js";
+import { app } from "../../../scripts/app.js";
 
 // ── Pixaroma workflow-compat: keep the pack-metadata properties schema-legal ──
 //

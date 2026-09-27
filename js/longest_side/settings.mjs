@@ -6,7 +6,7 @@
 // registerNodeAccent: those rows write a shared setting every node of the type
 // would then follow.
 
-import { app } from "/scripts/app.js";
+import { app } from "../../../scripts/app.js";
 import { createAccentSection, accentOf } from "../shared/node_settings.mjs";
 import {
   readState, writeState, snapToMultiple, MAX_ROW_ITEMS, LOCKED_RATIO, STEPS,

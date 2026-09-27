@@ -12,7 +12,7 @@
 // prefixes again:  /comfy/api/comfy/api/pixaroma/api/3d/save  -> 404.
 // pixApiUrl is for URLs we hand to fetch/import/img.src OURSELVES, not for
 // routes passed to fetchApi.
-import { api } from "/scripts/api.js";
+import { api } from "../../../scripts/api.js";
 
 export class ThreeDAPI {
   static async saveRender(projectId, dataURL) {

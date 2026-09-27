@@ -29,7 +29,7 @@
 // replaced the single "Uncategorized" bucket); like it, they are reserved names and
 // can never be real categories.
 
-import { app } from "/scripts/app.js";
+import { app } from "../../../scripts/app.js";
 import { cleanMode, DEFAULT_MODE, resetCursor, listKey } from "./cursors.mjs";
 
 const LIBRARY_SETTING = "Pixaroma.Prompt.Library";

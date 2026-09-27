@@ -31,7 +31,7 @@
 // locales/en/commands.json, keyed by the command id with dots lowercased to
 // underscores (Pixaroma.ShowHelp -> Pixaroma_ShowHelp).
 
-import { app } from "/scripts/app.js";
+import { app } from "../../../scripts/app.js";
 import { openHelpPopup, openHelpFor, getNodeHelp } from "../shared/index.mjs";
 import { pixAsset } from "../shared/api_url.mjs";
 import {

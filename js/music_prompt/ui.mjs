@@ -19,7 +19,7 @@
 // sliver holding 74px of content (ai-prompt.md #21). Caption and lyrics share
 // one box and the segment picks which - both are generated either way.
 
-import { app } from "/scripts/app.js";
+import { app } from "../../../scripts/app.js";
 import { pixAsset } from "../shared/api_url.mjs";
 import { ACC, accentOf, installNodeAccent } from "../shared/node_settings.mjs";
 // The @tag / *category / #list layer, shared with Prompt Pixaroma and AI Prompt so

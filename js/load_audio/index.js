@@ -3,7 +3,7 @@
 // core.mjs holds the state, api.mjs talks to the server, waveform.mjs turns the
 // file into a picture, ui.mjs is the face, settings.mjs the gear panel.
 
-import { app } from "/scripts/app.js";
+import { app } from "../../../scripts/app.js";
 import { isVueNodes, applyAdaptiveCanvasOnly, installZoomRepaint } from "../shared/nodes2.mjs";
 import { isGraphLoading } from "../shared/graph_loading.mjs";
 import { installCanvasZoomPassthrough } from "../shared/canvas_zoom.mjs";

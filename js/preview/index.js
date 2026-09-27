@@ -1,7 +1,7 @@
-import { app } from "/scripts/app.js";
+import { app } from "../../../scripts/app.js";
 import { pixApiUrl } from "../shared/api_url.mjs";
 import { installCanvasZoomPassthrough } from "../shared/canvas_zoom.mjs";
-import { api } from "/scripts/api.js";
+import { api } from "../../../scripts/api.js";
 import { BRAND } from "../shared/utils.mjs";
 import { registerNodeAccent, accentOf, accentHover, ACC_HOVER, installNodeAccent, nodeSetting } from "../shared/node_settings.mjs";
 import { applyAdaptiveCanvasOnly, isVueNodes, canvasBackingScale, installZoomRepaint } from "../shared/nodes2.mjs";

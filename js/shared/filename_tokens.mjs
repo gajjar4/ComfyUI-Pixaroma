@@ -10,7 +10,7 @@
 // value; it deliberately does NOT write the resolved text back into the saved
 // workflow, so the on-canvas field keeps the raw token (no dirty-on-load),
 // exactly like the native Save Image node.
-import { app } from "/scripts/app.js";
+import { app } from "../../../scripts/app.js";
 import { resolveFilenameTokens } from "./filename_tokens_core.mjs";
 
 // Flatten every node in the graph (incl. subgraphs), starting from the ROOT so a

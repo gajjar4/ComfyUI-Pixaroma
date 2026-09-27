@@ -1,4 +1,4 @@
-import { api } from "/scripts/api.js";
+import { api } from "../../../scripts/api.js";
 
 // NOTE: pass fetchApi the BARE route - do NOT wrap it in pixApiUrl().
 // fetchApi already ends with `this.apiURL(route)`, so wrapping applies the

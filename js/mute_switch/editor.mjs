@@ -9,7 +9,7 @@
 //   Esc          -> cancel: no change.
 //   Opening another editor auto-commits the previous one.
 
-import { app } from "/scripts/app.js";
+import { app } from "../../../scripts/app.js";
 import { installGraphUndoGuard } from "../shared/graph_undo_guard.mjs";
 
 const STATE_PROP = "muteSwitchState";

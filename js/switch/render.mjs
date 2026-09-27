@@ -10,7 +10,7 @@
 // Our row paintings use the same formula so labels/toggles sit on the
 // same horizontal band as the slot dot.
 
-import { app } from "/scripts/app.js";
+import { app } from "../../../scripts/app.js";
 // Cyclic with core.mjs (which imports ROW_H/TOP_PAD from here). Safe in ESM
 // because both sides only consume the binding inside functions, never at
 // module top level - if you ever move usage to top level, this will silently

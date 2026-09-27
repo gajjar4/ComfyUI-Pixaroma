@@ -10,7 +10,7 @@
 // node.properties.muteSwitchOriginalModes = { "<nodeId>": <originalMode> }
 //   captured at first mute; deleted on restore.
 
-import { app } from "/scripts/app.js";
+import { app } from "../../../scripts/app.js";
 import { ROW_H, TOP_PAD, MODE_BAR_H, OUTPUT_X_INSET } from "./render.mjs";
 import { resolveAllMutes, getUpstreamNode } from "./upstream.mjs";
 import { isVueNodes } from "../shared/nodes2.mjs";

@@ -1,6 +1,6 @@
-import { app } from "/scripts/app.js";
+import { app } from "../../../scripts/app.js";
 import { pixApiUrl } from "../shared/api_url.mjs";
-import { api } from "/scripts/api.js";
+import { api } from "../../../scripts/api.js";
 import {
   readState, restoreFromProperties, resetState, resetAxis as resetAxisCore,
   resolveAxisValues, axisReady, computeCounts, axisDisplayName, targetNodeOf,

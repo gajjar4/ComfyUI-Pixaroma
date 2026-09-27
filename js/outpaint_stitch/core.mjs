@@ -12,7 +12,7 @@
 // `entry.inputs` when the input is unwired (and defers to a queue-driver sweep).
 // This file only adds the accent-colour plumbing.
 
-import { app } from "/scripts/app.js";
+import { app } from "../../../scripts/app.js";
 import { globalAccent } from "../shared/node_settings.mjs";
 
 export const CLASS = "PixaromaOutpaintStitch";

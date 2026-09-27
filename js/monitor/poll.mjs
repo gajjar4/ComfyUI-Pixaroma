@@ -13,7 +13,7 @@
 // Nothing in here writes node.properties. The readings, the peak and the run
 // state are all runtime - see the note at the top of core.mjs.
 
-import { api } from "/scripts/api.js";
+import { api } from "../../../scripts/api.js";
 import { pixApiUrl } from "../shared/api_url.mjs";
 import { readState, pickDevice } from "./core.mjs";
 import { isLiveNode } from "../shared/live_node.mjs";

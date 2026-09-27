@@ -33,7 +33,7 @@
 // decorator routes, so every one of them has an alias. Verified by fetching each
 // route family both ways and diffing the status codes.
 
-import { api } from "/scripts/api.js";
+import { api } from "../../../scripts/api.js";
 
 /**
  * Absolute-safe URL for a ComfyUI or Pixaroma route.

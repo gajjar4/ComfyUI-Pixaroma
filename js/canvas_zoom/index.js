@@ -11,7 +11,7 @@
 // This extension registers the setting that decides. It adds no node and patches
 // nothing - the actual behaviour lives in the helper.
 
-import { app } from "/scripts/app.js";
+import { app } from "../../../scripts/app.js";
 import {
   WHEEL_SETTING_ID,
   WHEEL_SCROLL,

@@ -5,7 +5,7 @@
 // row - imported verbatim so the two loaders can never drift. Plus a per-node
 // accent-colour picker. The node face stays minimal; everything lives here.
 
-import { app } from "/scripts/app.js";
+import { app } from "../../../scripts/app.js";
 import { isVueNodes } from "../shared/nodes2.mjs";
 import { openPixaromaColorPickerPopup, BUTTON_PALETTE } from "../shared/color_picker.mjs";
 import { injectCSS as injectLiCSS, renderGlobalControls } from "../load_image/ui.mjs";

@@ -1,4 +1,4 @@
-import { app } from "/scripts/app.js";
+import { app } from "../../../scripts/app.js";
 import { pixApiUrl } from "../shared/api_url.mjs";
 import { BRAND, registerNodeHelp,
   installCanvasZoomPassthrough, registerNodeAccent, accentOf,

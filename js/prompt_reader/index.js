@@ -9,7 +9,7 @@
 // node.properties.promptReaderState so the readout survives workflow save /
 // reload and Vue tab switching (CLAUDE.md Vue Compat #9, Preview Pattern #4).
 
-import { app } from "/scripts/app.js";
+import { app } from "../../../scripts/app.js";
 import { pixApiUrl, pixAsset } from "../shared/api_url.mjs";
 import { BRAND, applyAdaptiveCanvasOnly,
   installCanvasZoomPassthrough, installNodeAccent, registerNodeAccent,

@@ -6,8 +6,8 @@
 // field node._pixXyRun (set by the driver in index.js) so it never dirties the
 // saved workflow (Vue Compat #18).
 
-import { app } from "/scripts/app.js";
-import { api } from "/scripts/api.js";
+import { app } from "../../../scripts/app.js";
+import { api } from "../../../scripts/api.js";
 import { getSweepProvider, sweepProviderFor } from "../shared/sweep_targets.mjs";
 
 export const STATE_PROP = "xyPlotState";

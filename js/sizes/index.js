@@ -6,7 +6,7 @@
 // injected into the hidden SizesState input by the graphToPrompt hook below
 // (Vue Compat #9). The settings panel (gear / right-click) lives in settings.mjs.
 
-import { app } from "/scripts/app.js";
+import { app } from "../../../scripts/app.js";
 import { hideJsonWidget, applyAdaptiveCanvasOnly, installCanvasZoomPassthrough } from "../shared/index.mjs";
 import { isVueNodes } from "../shared/nodes2.mjs";
 import { isGraphLoading } from "../shared/graph_loading.mjs";

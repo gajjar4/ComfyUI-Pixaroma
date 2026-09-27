@@ -1,4 +1,4 @@
-import { app } from "/scripts/app.js";
+import { app } from "../../../scripts/app.js";
 import { pixApiUrl } from "../shared/api_url.mjs";
 import { hideJsonWidget, BRAND, installResizeFloor,
   installCanvasZoomPassthrough, installNodeAccent, registerNodeAccent, accentOf, accentRgba,

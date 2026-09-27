@@ -34,7 +34,7 @@
 //      silently throw away unsaved edits.
 //   2. NEVER call save()/saveAs() except from an explicit user action.
 
-import { app } from "/scripts/app.js";
+import { app } from "../../../scripts/app.js";
 import { pixApiUrl } from "../shared/api_url.mjs";
 
 // Left BARE on purpose: this prefix is concatenated onto, and a hosted ComfyUI

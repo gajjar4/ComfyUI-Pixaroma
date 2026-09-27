@@ -1,7 +1,7 @@
 // ============================================================
 // Pixaroma Paint Studio — Entry point (ComfyUI widget registration)
 // ============================================================
-import { app } from "../../../../scripts/app.js";
+import { app } from "../../../scripts/app.js";
 
 // Import core class first, then all mixin files (side-effect imports that add to prototype)
 import { PaintStudio } from "./core.mjs";

@@ -6,7 +6,7 @@
 // rather than a `rows` entry on registerNodeAccent: those rows write a shared
 // ComfyUI setting, which every node of the type would then follow.
 
-import { app } from "/scripts/app.js";
+import { app } from "../../../scripts/app.js";
 import { createAccentSection, accentOf } from "../shared/node_settings.mjs";
 import { MULTIPLES, readState, writeState } from "./state.mjs";
 

@@ -1,4 +1,4 @@
-import { app } from "/scripts/app.js";
+import { app } from "../../../scripts/app.js";
 import { BRAND } from "../shared/index.mjs";
 import { isVueNodes } from "../shared/nodes2.mjs";
 import { pixAsset } from "../shared/api_url.mjs";

@@ -5,7 +5,7 @@
 // rebuild (handlers.rerender), but typing into value fields only updates state
 // + refreshes the counter/preview in place (no rebuild) so input focus is kept.
 
-import { app } from "/scripts/app.js";
+import { app } from "../../../scripts/app.js";
 import { pixApiUrl } from "../shared/api_url.mjs";
 import {
   readState, writeState,

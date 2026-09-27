@@ -8,7 +8,7 @@
 //   ctx = { readState, writeState, applyResize(node), settingId,
 //           MIN_DIGITS, MAX_DIGITS, clampDigits }
 
-import { app } from "/scripts/app.js";
+import { app } from "../../../scripts/app.js";
 import { BRAND } from "../shared/index.mjs";
 import { createAccentSection } from "../shared/node_settings.mjs";
 

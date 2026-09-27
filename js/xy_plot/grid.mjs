@@ -5,7 +5,7 @@
 // An <img> is resolution-independent, so it stays crisp at any zoom in both
 // renderers (the Nodes 2.0 canvas-blur rule doesn't apply to <img>).
 
-import { app } from "/scripts/app.js";
+import { app } from "../../../scripts/app.js";
 import { pixApiUrl } from "../shared/api_url.mjs";
 import { readState } from "./core.mjs";
 

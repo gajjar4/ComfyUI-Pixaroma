@@ -1,5 +1,5 @@
-import { app } from "/scripts/app.js";
-import { api } from "/scripts/api.js";
+import { app } from "../../../scripts/app.js";
+import { api } from "../../../scripts/api.js";
 import { isVueNodes } from "../shared/index.mjs";
 import { openHelpPopup, openHelpFor } from "../shared/help.mjs";
 

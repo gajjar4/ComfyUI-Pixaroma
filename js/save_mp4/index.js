@@ -1,6 +1,6 @@
-import { app } from "/scripts/app.js";
+import { app } from "../../../scripts/app.js";
 import { pixApiUrl, pixAsset } from "../shared/api_url.mjs";
-import { api } from "/scripts/api.js";
+import { api } from "../../../scripts/api.js";
 import { applyAdaptiveCanvasOnly,
   installCanvasZoomPassthrough, installNodeAccent, registerNodeAccent,
   onRendererChange, createSlotBand, placeSlotBand, settleSlotBand, watchSlotBand,

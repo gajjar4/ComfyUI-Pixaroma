@@ -1,4 +1,4 @@
-import { app } from "/scripts/app.js";
+import { app } from "../../../scripts/app.js";
 import { createPixaromaColorPicker, PIXAROMA_PALETTE } from "../shared/color_picker.mjs";
 import { openHelpPopup, openHelpFor, closeHelpPopup } from "../shared/help.mjs";
 import { pixAsset } from "../shared/api_url.mjs";

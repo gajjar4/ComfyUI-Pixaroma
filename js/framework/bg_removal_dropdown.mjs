@@ -9,7 +9,7 @@
 // The variants are still selectable; trying to run on a missing variant
 // produces a clear error from the server route.
 
-import { api } from "/scripts/api.js";
+import { api } from "../../../scripts/api.js";
 
 const BIREFNET_PRIORITY = ["birefnet", "birefnet-hr", "birefnet-matting"];
 

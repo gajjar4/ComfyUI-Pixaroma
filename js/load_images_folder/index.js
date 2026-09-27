@@ -2,7 +2,7 @@
 // Mirrors Load Image Pixaroma's both-renderer DOM-widget + Pattern #9 state
 // injection, adapted for a folder + multi-select gallery + list output.
 
-import { app } from "/scripts/app.js";
+import { app } from "../../../scripts/app.js";
 import {
   applyAdaptiveCanvasOnly,
   isVueNodes,

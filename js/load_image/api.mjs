@@ -1,4 +1,4 @@
-import { app } from "/scripts/app.js";
+import { app } from "../../../scripts/app.js";
 import { pixApiUrl } from "../shared/api_url.mjs";
 import { notifyGraphChanged } from "../shared/graph_changed.mjs";
 import { isGraphLoading } from "../shared/graph_loading.mjs";
@@ -288,7 +288,7 @@ export async function uploadImageToInput(node, file, filenameHint = null) {
     form.append("image", file);
   }
 
-  const resp = await fetch("/upload/image", { method: "POST", body: form });
+  const resp = await fetch(pixApiUrl("/upload/image"), { method: "POST", body: form });
   if (!resp.ok) {
     const text = await resp.text().catch(() => "");
     throw new Error(`Upload failed (${resp.status}): ${text || resp.statusText}`);

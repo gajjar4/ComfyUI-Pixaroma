@@ -26,16 +26,16 @@ export const INPAINT_PREVIEW_COLORS = {
 
 export const InpaintAPI = {
   async uploadSrc(projectId, dataURL) {
-    const { api } = await import("/scripts/api.js");
-    const res = await api.fetchApi(pixApiUrl("/pixaroma/api/inpaint/upload_src"), {
+    const { api } = await import("../../../scripts/api.js");
+    const res = await api.fetchApi("/pixaroma/api/inpaint/upload_src", {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ project_id: projectId, image: dataURL }),
     });
     return await res.json();
   },
   async saveMask(projectId, dataURL) {
-    const { api } = await import("/scripts/api.js");
-    const res = await api.fetchApi(pixApiUrl("/pixaroma/api/inpaint/save_mask"), {
+    const { api } = await import("../../../scripts/api.js");
+    const res = await api.fetchApi("/pixaroma/api/inpaint/save_mask", {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ project_id: projectId, mask: dataURL }),
     });

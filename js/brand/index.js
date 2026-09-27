@@ -1,4 +1,4 @@
-import { app } from "/scripts/app.js";
+import { app } from "../../../scripts/app.js";
 import { installPixaromaChangeNet } from "../shared/graph_changed.mjs";
 import { installBypassRepair } from "../shared/bypass_repair.mjs";
 import { installTextNodesLightTheme, setThemeMode } from "../shared/light_theme.mjs";

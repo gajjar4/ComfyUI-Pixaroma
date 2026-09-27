@@ -6,7 +6,7 @@
 // injected into the hidden LoraLoaderState input by the graphToPrompt hook below
 // (Vue Compat #9). Info panel, gear panel, dropdown, and row menu live in siblings.
 
-import { app } from "/scripts/app.js";
+import { app } from "../../../scripts/app.js";
 import { hideJsonWidget, applyAdaptiveCanvasOnly, installCanvasZoomPassthrough, onNodeDefsRefresh, installRefreshHook } from "../shared/index.mjs";
 import { listLoras, invalidateList, invalidateAllInfo } from "./api.mjs";
 import { isVueNodes } from "../shared/nodes2.mjs";

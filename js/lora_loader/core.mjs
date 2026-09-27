@@ -5,7 +5,7 @@
 // in index.js (Vue Compat #9). Python reads the loras + separator back and applies
 // each switched-on LoRA, and joins the picked trigger words into the triggers output.
 
-import { app } from "/scripts/app.js";
+import { app } from "../../../scripts/app.js";
 import { globalAccent } from "../shared/node_settings.mjs";
 
 export const BRAND = "#f66744";

@@ -15,7 +15,7 @@
 //   Esc          -> cancel: no change.
 //   Opening another editor auto-commits the previous one.
 
-import { app } from "/scripts/app.js";
+import { app } from "../../../scripts/app.js";
 
 const STATE_PROP = "switchState";
 const BRAND = "#f66744";

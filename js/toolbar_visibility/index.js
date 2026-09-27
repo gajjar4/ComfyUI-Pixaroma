@@ -20,7 +20,7 @@
 // keep them alive, and nothing here should ever try to.
 // =============================================================================
 
-import { app } from "/scripts/app.js";
+import { app } from "../../../scripts/app.js";
 
 // Each entry targets the button's GROUP wrapper, not the button itself: the
 // group is the .comfyui-button-group that carries the toolbar's spacing, so

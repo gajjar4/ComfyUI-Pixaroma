@@ -5,7 +5,7 @@
 // ║  Renderer + colors are reused from Text Overlay.              ║
 // ╚═══════════════════════════════════════════════════════════════╝
 
-import { app } from "/scripts/app.js";
+import { app } from "../../../scripts/app.js";
 import { isGraphLoading } from "../shared/graph_loading.mjs";
 import { applyAdaptiveCanvasOnly,
   installCanvasZoomPassthrough,

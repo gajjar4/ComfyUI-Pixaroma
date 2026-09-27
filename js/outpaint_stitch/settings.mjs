@@ -4,7 +4,7 @@
 // here is the accent colour (per node, with a global default), so nobody is
 // forced into the Pixaroma orange.
 
-import { app } from "/scripts/app.js";
+import { app } from "../../../scripts/app.js";
 import { isVueNodes } from "../shared/nodes2.mjs";
 import { openPixaromaColorPickerPopup, BUTTON_PALETTE } from "../shared/color_picker.mjs";
 import { accentOf, setAccent, BRAND, ACCENT_SETTING } from "./core.mjs";

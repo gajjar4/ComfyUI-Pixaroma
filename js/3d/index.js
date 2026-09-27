@@ -1,7 +1,7 @@
 // ============================================================
 // Pixaroma 3D Editor — Entry point (ComfyUI widget registration)
 // ============================================================
-import { app } from "../../../../scripts/app.js";
+import { app } from "../../../scripts/app.js";
 
 // Import core class first, then mixin files (side-effect imports add methods to prototype)
 import { Pixaroma3DEditor } from "./core.mjs";

@@ -15,7 +15,7 @@
 // saved workflow, and both are wrapped so a future frontend degrades to a row
 // rather than breaking the node.
 
-import { app } from "/scripts/app.js";
+import { app } from "../../../scripts/app.js";
 import { pixAsset } from "../shared/api_url.mjs";
 import { ACC, accentOf, installNodeAccent } from "../shared/node_settings.mjs";
 import { applyAdaptiveCanvasOnly, isVueNodes } from "../shared/nodes2.mjs";

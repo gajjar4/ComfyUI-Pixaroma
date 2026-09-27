@@ -3,7 +3,7 @@
 // Commit writes state.labels[rowIdx] + the output slot label; an empty value
 // reverts the row to its auto label (type / "out r").
 
-import { app } from "/scripts/app.js";
+import { app } from "../../../scripts/app.js";
 import { readState, writeState, updateOutputLabels } from "./core.mjs";
 
 let activeEditor = null; // module singleton

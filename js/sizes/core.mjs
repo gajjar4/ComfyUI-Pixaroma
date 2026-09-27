@@ -5,7 +5,7 @@
 // index.js (Vue Compat #9). JS computes the final oriented + snapped width and
 // height and stores them as state.w / state.h so Python just reads them back.
 
-import { app } from "/scripts/app.js";
+import { app } from "../../../scripts/app.js";
 import { globalAccent } from "../shared/node_settings.mjs";
 
 export const BRAND = "#f66744";

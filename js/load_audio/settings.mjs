@@ -6,7 +6,7 @@
 // panel, because two of these nodes on one canvas can want different answers
 // (patterns/node-settings-accent.md).
 
-import { app } from "/scripts/app.js";
+import { app } from "../../../scripts/app.js";
 import { accentOf, createAccentSection } from "../shared/node_settings.mjs";
 import { readState, writeState } from "./core.mjs";
 

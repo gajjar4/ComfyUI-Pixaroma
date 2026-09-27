@@ -11,7 +11,7 @@
 // Built with the Nodes 2.0 recipe (unique DOM-widget type + applyAdaptiveCanvasOnly)
 // so it renders in BOTH renderers.
 
-import { app } from "/scripts/app.js";
+import { app } from "../../../scripts/app.js";
 import {
   BRAND,
   applyAdaptiveCanvasOnly,

@@ -3,7 +3,7 @@
 // outside click or Esc). Add / remove / reorder sizes, load common sizes, pick
 // the snap step and the highlight colour. The node face stays minimal.
 
-import { app } from "/scripts/app.js";
+import { app } from "../../../scripts/app.js";
 import { isVueNodes } from "../shared/nodes2.mjs";
 import { openPixaromaColorPickerPopup, BUTTON_PALETTE } from "../shared/color_picker.mjs";
 import { GLOBAL_ACCENT_SETTING, repaintAllAccents } from "../shared/node_settings.mjs";

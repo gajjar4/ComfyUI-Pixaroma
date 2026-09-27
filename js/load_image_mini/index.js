@@ -13,7 +13,7 @@
 // key) and is injected into the hidden LoadImageMiniState input by the
 // graphToPrompt hook at the bottom (Vue Compat #9).
 
-import { app } from "/scripts/app.js";
+import { app } from "../../../scripts/app.js";
 import { pixApiUrl } from "../shared/api_url.mjs";
 import { hideJsonWidget, installResizeFloor, installCanvasZoomPassthrough } from "../shared/index.mjs";
 import { isGraphLoading } from "../shared/graph_loading.mjs";

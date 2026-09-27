@@ -1,4 +1,4 @@
-import { app } from "/scripts/app.js";
+import { app } from "../../../scripts/app.js";
 import { allow_debug,
   installCanvasZoomPassthrough,
 } from "../shared/index.mjs";

@@ -9,7 +9,7 @@
 // same object under `accent`; Python's _parse_state filters it out, so it never
 // reaches the backend - it is a pure frontend concern.
 
-import { app } from "/scripts/app.js";
+import { app } from "../../../scripts/app.js";
 import { globalAccent } from "../shared/node_settings.mjs";
 
 export const BRAND = "#f66744";

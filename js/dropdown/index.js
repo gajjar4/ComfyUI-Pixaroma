@@ -4,8 +4,8 @@
 // than to whatever it is plugged into. See core.mjs for the state, ui.mjs for
 // the face and the output-dot alignment, settings.mjs for the panel.
 
-import { app } from "/scripts/app.js";
-import { api } from "/scripts/api.js";
+import { app } from "../../../scripts/app.js";
+import { api } from "../../../scripts/api.js";
 import { isVueNodes } from "../shared/nodes2.mjs";
 import { isGraphLoading } from "../shared/graph_loading.mjs";
 import { isQueueLoopActive } from "../shared/queue_drivers.mjs";

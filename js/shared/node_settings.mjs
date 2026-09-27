@@ -58,7 +58,7 @@
 //     master, which also gets a visible row in the Settings panel). ComfyUI
 //     persists unregistered setting ids fine (Vue Compat #20).
 
-import { app } from "/scripts/app.js";
+import { app } from "../../../scripts/app.js";
 import { isVueNodes } from "./nodes2.mjs";
 import { openPixaromaColorPickerPopup, BUTTON_PALETTE } from "./color_picker.mjs";
 

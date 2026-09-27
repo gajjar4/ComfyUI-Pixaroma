@@ -10,7 +10,7 @@
 //   { version, active:"A"|"B", rows:N, missing:"connected"|"strict",
 //     labels:{ [rowIndex1]: "name" } }
 
-import { app } from "/scripts/app.js";
+import { app } from "../../../scripts/app.js";
 import { isGraphLoading } from "../shared/graph_loading.mjs";
 
 export const STATE_PROP = "switchSourceState";

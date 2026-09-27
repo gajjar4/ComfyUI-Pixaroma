@@ -13,7 +13,7 @@
 // in both Classic and Nodes 2.0, and inside subgraphs (native path verified on
 // frontend 1.45.15).
 
-import { app } from "/scripts/app.js";
+import { app } from "../../../scripts/app.js";
 import { registerPixaromaSetNode } from "./set_node.mjs";
 import { registerPixaromaGetNode } from "./get_node.mjs";
 import { startValuePoll } from "./value_preview.mjs";

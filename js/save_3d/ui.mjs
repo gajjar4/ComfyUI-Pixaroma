@@ -7,7 +7,7 @@
 // declares flex-shrink 0, #37 the canvas never sizes its own box, #38 a prefix no
 // other node uses (pix-s3d-).
 
-import { app } from "/scripts/app.js";
+import { app } from "../../../scripts/app.js";
 import { pixAsset } from "../shared/api_url.mjs";
 import { ACC, applyAccent } from "../shared/node_settings.mjs";
 import { placeZoomedPopup } from "../shared/popup_zoom.mjs";

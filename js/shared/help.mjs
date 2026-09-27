@@ -38,7 +38,7 @@
 // also auto-closes the panel on any workflow load/switch/undo (it wraps
 // app.loadGraphData once, the first time a panel is opened).
 
-import { app } from "/scripts/app.js";
+import { app } from "../../../scripts/app.js";
 import { pixAsset } from "./api_url.mjs";
 
 const CSS_ID = "pix-help-css";

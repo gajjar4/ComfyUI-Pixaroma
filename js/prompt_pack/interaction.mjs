@@ -7,7 +7,7 @@
 // generically from their data-mode (see below) - they are ordinary DOM
 // buttons, not canvas paint, so index.js has no hit-testing to do.
 
-import { app } from "/scripts/app.js";
+import { app } from "../../../scripts/app.js";
 import { setText, setMode, readState } from "./core.mjs";
 import { applyState, updateCounter, updateClearButton } from "./render.mjs";
 import { isComfyTextShortcut } from "../shared/text_shortcuts.mjs";

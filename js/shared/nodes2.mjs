@@ -6,7 +6,7 @@
 // See the "ComfyUI Nodes 2.0 Migration" section in CLAUDE.md for the
 // full background and the survive/break matrix.
 
-import { app } from "/scripts/app.js";
+import { app } from "../../../scripts/app.js";
 
 /**
  * Effective backing-store scale (device pixels per LAYOUT pixel) for a DOM

@@ -19,7 +19,7 @@
 // (reported 2026-09-13 on Save Image and Pause Image; measured on every node with
 // a DOM body). installCanvasZoomPassthrough forwards that too, see below.
 
-import { app } from "/scripts/app.js";
+import { app } from "../../../scripts/app.js";
 import { isVueNodes } from "./nodes2.mjs";
 
 // User setting: what the wheel does when the cursor is over a SCROLLABLE field

@@ -14,7 +14,7 @@
 // Extracted from js/longest_side/input_size.mjs 2026-08-05, where every rule
 // here was earned by a measured wrong number.
 
-import { app } from "/scripts/app.js";
+import { app } from "../../../scripts/app.js";
 
 /**
  * Nodes whose `imgs` preview is NOT what they output, so their preview must

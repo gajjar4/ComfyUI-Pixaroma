@@ -14,7 +14,7 @@
 // registered late and the open graph changes underneath us (the window stays
 // open across workflow switches - see window.mjs).
 
-import { app } from "/scripts/app.js";
+import { app } from "../../../scripts/app.js";
 import { allNodeHelp } from "../shared/index.mjs";
 import { el } from "./window.mjs";
 import { GUIDES } from "./guides.mjs";

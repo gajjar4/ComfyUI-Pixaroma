@@ -4,7 +4,7 @@
 // draggable by its header, closes on outside click or Esc. This is where the
 // list actually lives - the node face is deliberately one row.
 
-import { app } from "/scripts/app.js";
+import { app } from "../../../scripts/app.js";
 import { isVueNodes } from "../shared/nodes2.mjs";
 import { createAccentSection, BRAND } from "../shared/node_settings.mjs";
 import {

@@ -3,7 +3,7 @@
 // the triggers output, and offers the OPTIONAL Civitai lookup with its four states
 // (searching / found / not found / offline). Selections persist on the row.
 
-import { app } from "/scripts/app.js";
+import { app } from "../../../scripts/app.js";
 import { readState, patchLora, accentOf, BRAND } from "./core.mjs";
 import { loraInfo, thumbUrl, civitaiLookup, invalidateInfo, deleteCivitai, saveCustomTriggers,
          saveLoraPreview, deleteLoraPreview } from "./api.mjs";

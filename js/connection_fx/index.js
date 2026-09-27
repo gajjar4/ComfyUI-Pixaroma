@@ -1,4 +1,4 @@
-import { app } from "/scripts/app.js";
+import { app } from "../../../scripts/app.js";
 import { slotAccepts } from "../shared/slot_types.mjs";
 
 const SETTING_ID = "Pixaroma.Connection.FX";

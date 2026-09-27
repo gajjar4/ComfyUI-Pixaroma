@@ -1,5 +1,5 @@
 // js/audio_studio/core.mjs
-import { app } from "../../../../scripts/app.js";
+import { app } from "../../../scripts/app.js";
 import { pixApiUrl, pixAsset } from "../shared/api_url.mjs";
 import { decodeAudio, computeAll, encodeWav, getAudioContext } from "./audio_analysis.mjs";
 import { getUpstreamImageUrl, getInlineSourceUrl, uploadSource, getSysInfo } from "./api.mjs";

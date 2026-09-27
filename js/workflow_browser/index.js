@@ -10,7 +10,7 @@
 // and it could not help somebody staring at an empty canvas. This belongs to
 // the app, exactly like Help.
 
-import { app } from "/scripts/app.js";
+import { app } from "../../../scripts/app.js";
 import { createWorkflowWindow, el, copyText, markRendering } from "./window.mjs";
 import { injectWorkflowCSS } from "./css.mjs";
 import {

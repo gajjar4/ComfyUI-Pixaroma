@@ -6,7 +6,7 @@
 // into the hidden LongestSideState input at submission time (Resolution
 // pattern, Vue Compat #9), so no extra input dot appears.
 
-import { app } from "/scripts/app.js";
+import { app } from "../../../scripts/app.js";
 import {
   applyAdaptiveCanvasOnly, isVueNodes, installResizeFloor,
   installCanvasZoomPassthrough,

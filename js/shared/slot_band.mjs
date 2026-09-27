@@ -29,7 +29,7 @@
  * Everything here writes ONLY the band's own inline style, so it can never
  * touch serialized state and is safe to call on the load path (Vue Compat #18).
  */
-import { app } from "/scripts/app.js";
+import { app } from "../../../scripts/app.js";
 
 // Keep in step with the stylesheet below: the centring maths cannot measure it,
 // because the band is :empty -> display:none for most of its life and a hidden

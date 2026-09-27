@@ -1,4 +1,4 @@
-import { app } from "/scripts/app.js";
+import { app } from "../../../scripts/app.js";
 import {
   readState, writeState, restoreFromProperties, DEFAULT_CAP,
 } from "./core.mjs";

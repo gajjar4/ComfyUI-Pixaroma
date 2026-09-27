@@ -12,7 +12,7 @@
 //          for a toggle.
 //   accent null = follow the global default setting; a hex string overrides it.
 
-import { app } from "/scripts/app.js";
+import { app } from "../../../scripts/app.js";
 import { globalAccent } from "../shared/node_settings.mjs";
 import { narrowSlotType } from "../shared/slot_types.mjs";
 

@@ -7,8 +7,8 @@
 // Because there is no hidden state input there is deliberately NO
 // app.graphToPrompt hook here - nothing of ours needs to reach Python.
 
-import { app } from "/scripts/app.js";
-import { api } from "/scripts/api.js";
+import { app } from "../../../scripts/app.js";
+import { api } from "../../../scripts/api.js";
 import { pixApiUrl } from "../shared/api_url.mjs";
 import {
   applyAdaptiveCanvasOnly,

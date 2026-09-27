@@ -4,8 +4,8 @@
 // single DOM widget (ui.mjs), the state lives on node.properties and is injected
 // at graphToPrompt time (core.mjs), and the gear panel is settings.mjs.
 
-import { app } from "/scripts/app.js";
-import { api } from "/scripts/api.js";
+import { app } from "../../../scripts/app.js";
+import { api } from "../../../scripts/api.js";
 import { isGraphLoading } from "../shared/graph_loading.mjs";
 import { isVueNodes } from "../shared/nodes2.mjs";
 

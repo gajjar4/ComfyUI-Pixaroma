@@ -4,9 +4,9 @@
 // ║  Same panel re-mounted in editor right sidebar on open.      ║
 // ╚═══════════════════════════════════════════════════════════════╝
 
-import { app } from "/scripts/app.js";
+import { app } from "../../../scripts/app.js";
 import { pixApiUrl } from "../shared/api_url.mjs";
-import { api } from "/scripts/api.js";
+import { api } from "../../../scripts/api.js";
 import { isGraphLoading } from "../shared/graph_loading.mjs";
 import { applyAdaptiveCanvasOnly,
   installCanvasZoomPassthrough,

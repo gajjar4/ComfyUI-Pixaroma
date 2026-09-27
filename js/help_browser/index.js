@@ -19,7 +19,7 @@
 // app.menu.settingsGroup.element.before(group), with the same retry loop for
 // when the menu is not up yet, and the same silent give-up.
 
-import { app } from "/scripts/app.js";
+import { app } from "../../../scripts/app.js";
 import { nodeSetting, setNodeSetting } from "../shared/index.mjs";
 import { createHelpWindow, el } from "./window.mjs";
 import { versionParts } from "../shared/version.mjs";

@@ -34,7 +34,7 @@
 // node.properties every second would mark the workflow modified forever and bury
 // the undo history (Vue Compat #18).
 
-import { app } from "/scripts/app.js";
+import { app } from "../../../scripts/app.js";
 import { isVueNodes, applyAdaptiveCanvasOnly } from "../shared/nodes2.mjs";
 import { isGraphLoading } from "../shared/graph_loading.mjs";
 import { installResizeFloor } from "../shared/resize_floor.mjs";

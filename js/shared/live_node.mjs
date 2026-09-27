@@ -34,7 +34,7 @@
 // browser creates a node, waits a tick and only then adds it, so "no graph yet"
 // is not proof of a copy. Anything unexpected (an older frontend with no
 // subgraphs) answers "live", so a real node is never silenced.
-import { app } from "/scripts/app.js";
+import { app } from "../../../scripts/app.js";
 
 export function isLiveNode(node) {
   const g = node && node.graph;

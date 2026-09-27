@@ -1,9 +1,9 @@
-import { app } from "../../../../scripts/app.js";
+import { app } from "../../../scripts/app.js";
 import { pixApiUrl } from "../shared/api_url.mjs";
 // api is used at the top level (pixaroma-composer-preview WebSocket
 // listener) AND inside the execution-events try block further down.
 // Importing it once here keeps both call sites using the same module.
-import { api } from "../../../../scripts/api.js";
+import { api } from "../../../scripts/api.js";
 import { applyFx, isNeutral, fxSeed } from "./fx_engine.mjs";
 import {
   allow_debug,

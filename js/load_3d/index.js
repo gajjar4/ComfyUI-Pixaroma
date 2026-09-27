@@ -3,8 +3,8 @@
 // core.mjs holds the state, engine.mjs is the one shared three.js renderer,
 // ui.mjs is the face, settings.mjs the gear panel, help.mjs the help page.
 
-import { app } from "/scripts/app.js";
-import { api } from "/scripts/api.js";
+import { app } from "../../../scripts/app.js";
+import { api } from "../../../scripts/api.js";
 import { isVueNodes, applyAdaptiveCanvasOnly, installZoomRepaint } from "../shared/nodes2.mjs";
 import { isGraphLoading } from "../shared/graph_loading.mjs";
 import { installCanvasZoomPassthrough } from "../shared/canvas_zoom.mjs";

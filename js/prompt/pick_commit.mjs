@@ -20,8 +20,8 @@
 // Import it for side effect from anything that rolls picks. Idempotent, so importing
 // it from several places costs nothing.
 
-import { app } from "/scripts/app.js";
-import { api } from "/scripts/api.js";
+import { app } from "../../../scripts/app.js";
+import { api } from "../../../scripts/api.js";
 import { commitPicks } from "./cursors.mjs";
 
 // The flag keeps the name the old in-index.js wrap used, so a stale cached copy of
