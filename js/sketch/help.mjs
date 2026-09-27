@@ -8,7 +8,7 @@ export const SKETCH_HELP = {
     {
       heading: "How to use it",
       bullets: [
-        "Wire a picture into `image`. From a Load Image it shows on the node right away; from anything else it shows after the first run.",
+        "Wire a picture into `image`. From a Load Image it shows on the node right away, also through a Switch. After a run the node shows exactly the picture that came in.",
         "Pick a tool and drag on the picture. The Box is the default and starts in red.",
         "Every mark gets a number, and the cursor jumps to its note: type what to change there, like `make the hat a red baseball cap`, and press Enter.",
         "Wire `image` into your edit model as the picture it edits, and `prompt` into the text encode. Run.",
@@ -55,6 +55,7 @@ export const SKETCH_HELP = {
         "On a big photo or a small detail, pick a thicker line (L or XL) so the model cannot miss the mark.",
         "Sketching something to add? Draw its rough outline with Freehand in XL and write what it is, like `turn this into a real hat`.",
         "If a model ignores drawn marks, wire `mask` into an inpaint workflow (Inpaint Crop) instead.",
+        "Something between the Load Image and Sketch crops or turns the picture? Run once before marking, so you mark the picture that really arrives. The node warns you when the picture changed shape under your marks.",
       ],
     },
   ],

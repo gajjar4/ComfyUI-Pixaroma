@@ -209,7 +209,7 @@ function where(m, [before, after]) {
     case "ellipse": return `Inside the ${before}${c} circle${after}`;
     case "pen": return m.closed ? `Inside the ${before}${c} outline${after}` : `The ${before}${c} sketch${after}`;
     case "arrow": return `Where the ${before}${c} arrow${after} points`;
-    default: return `Where the ${c} text says "${m.text}"`;
+    default: return `Where the ${before}${c} text${after} says "${m.text}"`;
   }
 }
 

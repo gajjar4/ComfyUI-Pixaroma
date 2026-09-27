@@ -90,7 +90,9 @@ def _point(p):
 # let the prompt Python writes differ from the preview the node shows.
 # Written as escapes: this file stays pure ASCII (convention #25).
 _JS_WS = (
-    "\u0009\u000a\u000b\u000c\u000d                  　﻿"
+    "\u0009\u000a\u000b\u000c\u000d\u0020\u00a0\u1680"
+    "\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200a"
+    "\u2028\u2029\u202f\u205f\u3000\ufeff"
 )
 _WS_RUN = re.compile("[" + re.escape(_JS_WS) + "]+")
 
@@ -242,7 +244,7 @@ def _where(m, pos):
         return f"The {before}{c} sketch{after}"
     if t == "arrow":
         return f"Where the {before}{c} arrow{after} points"
-    return f'Where the {c} text says "{m["text"]}"'
+    return f'Where the {before}{c} text{after} says "{m["text"]}"'
 
 
 def build_prompt(marks, remove_marks=True):
@@ -332,13 +334,15 @@ def text_outline_px(size):
 # ── drawing ─────────────────────────────────────────────────────────────────
 @lru_cache(maxsize=32)
 def _font(path, size):
-    """Inter at weight 700 and optical size 32 - what the browser draws.
+    """Inter at weight 700, the optical size following the font size - what the
+    browser draws.
 
     Axes are set by NAME: Inter's optical-size axis comes BEFORE its weight
     axis, so a bare set_variation_by_axes([700]) set the optical size and left
     the weight Regular - the run drew thin words beside a bold node preview.
-    Optical size 32 is MEASURED, not assumed: Chrome's canvas matched it at
-    every size tried (20, 53, 100 px), so it is not the font size ("auto").
+    The optical size is the font size in px, clamped to the axis: MEASURED in
+    Chrome's canvas with the font genuinely loaded (10 and 12 px -> 14, 16 -> 16,
+    20 -> 20, 28 -> 28, 40 -> 32). Same rule as _text_render_helpers._set_axes.
     """
     f = ImageFont.truetype(path, size=int(size))
     try:
@@ -349,7 +353,7 @@ def _font(path, size):
             if name.startswith("weight"):
                 want = 700
             elif name.startswith("optical"):
-                want = 32
+                want = int(size)
             else:
                 want = axis.get("default", axis["minimum"])
             values.append(max(axis["minimum"], min(axis["maximum"], want)))

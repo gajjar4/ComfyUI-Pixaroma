@@ -105,8 +105,10 @@ class PixaromaSketch:
                 "image": ("IMAGE", {
                     "tooltip": (
                         "The picture to mark. Wire a Load Image (or any node that makes a "
-                        "picture). From a Load Image it shows on the node right away; from "
-                        "anything else it shows after the first run."
+                        "picture). From a Load Image it shows on the node right away, also "
+                        "through a Switch; after a run the node shows exactly the picture "
+                        "that came in. If a node in between crops or turns the picture, run "
+                        "once before marking."
                     ),
                 }),
             },

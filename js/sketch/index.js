@@ -108,7 +108,8 @@ app.registerExtension({
         renderFace(node, structural, true);
         node._pixSkBig?.refresh?.(structural);
       };
-      node._pixSkRepaint = () => { renderFace(node, false, false); };
+      // `structural` rebuilds the note rows too. Never a resize: userAction false.
+      node._pixSkRepaint = (structural = false) => { renderFace(node, structural, false); };
 
       // Fresh size, SYNCHRONOUSLY: configure() runs next and restores a saved
       // size, so a deferred write would clobber it on every reload (convention #9).

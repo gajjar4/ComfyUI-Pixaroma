@@ -112,7 +112,12 @@ export function openBig(node, title = "Sketch Pixaroma") {
     try { undoGuardOff?.(); } catch {}
     ov.remove();
     if (node._pixSkBig === big) node._pixSkBig = null;
-    try { node._pixSkRepaint?.(); } catch {}
+    // REBUILD the node's rows, not just repaint: a note typed here updates the
+    // saved marks without rebuilding the face's list (a rebuild mid-typing would
+    // steal the caret), so its note boxes still held the OLD text, and the next
+    // keystroke in one of them wrote that old text back over the new note
+    // (measured: "golden crown" typed here became "make the hat red!").
+    try { node._pixSkRepaint?.(true); } catch {}
   };
   big.close = close;
 
