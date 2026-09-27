@@ -354,4 +354,10 @@ export function registerPixaromaSetNode() {
   }
 
   LiteGraph.registerNodeType(SET_TYPE, PixaromaSetNode);
+  // registerNodeType resets category to the part of the type name before a "/"
+  // (none here, so ""), which left Set Pixaroma out of the right-click Add Node
+  // menu. ComfyUI assigns its own classes' category AFTER registering for the
+  // same reason (litegraphService.registerNodeDef).
+  PixaromaSetNode.category = CATEGORY;
+  return PixaromaSetNode; // index.js keeps it registered through a node-def refresh
 }

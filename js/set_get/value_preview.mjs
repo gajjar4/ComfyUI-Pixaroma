@@ -21,7 +21,7 @@ import { applyAdaptiveCanvasOnly,
   installCanvasZoomPassthrough,
 } from "../shared/index.mjs";
 import { isGraphLoading } from "../shared/graph_loading.mjs";
-import { SET_TYPE, GET_TYPE, getLink, findSetterByName } from "./scope.mjs";
+import { SET_TYPE, GET_TYPE, getLink, firstWiredInput, findSetterByName } from "./scope.mjs";
 import { inheritSetColor } from "./colors.mjs";
 
 const SIMPLE_TYPES = new Set(["INT", "FLOAT", "NUMBER", "STRING", "BOOLEAN", "BOOL"]);
@@ -337,6 +337,29 @@ export function refreshValue(node) {
   if (show !== prevShown || val !== prevText) node.setDirtyCanvas?.(true, true);
 }
 
+// A Set that is WIRED but typed "*" never happens in normal use: a connection
+// adopts the wired type at once. It is what a workflow saved while the node-def
+// refresh bug was active holds (the Set was ComfyUI's bare def class then, which
+// never adopts; fixed in index.js). Adopt the wired type the way a fresh
+// connection would, which also pushes it to the Set's Gets. Never during a load,
+// and it writes only for such a Set, so a healthy workflow is never touched.
+function healWiredStarSet(n) {
+  const inp = firstWiredInput(n);
+  if (!inp || inp.link == null || (inp.type && inp.type !== "*") || isGraphLoading()) return;
+  const g = n.graph;
+  const link = getLink(g, inp.link);
+  if (!link) return;
+  let type;
+  if (typeof link.resolve === "function") {
+    const r = link.resolve(g);
+    type = (r?.subgraphInput ?? r?.output)?.type;
+  }
+  if (!type) type = g.getNodeById?.(link.origin_id)?.outputs?.[link.origin_slot]?.type;
+  if (!type || type === "*") return;
+  n.setAdoptedType?.(type);
+  n.update?.();
+}
+
 // Single shared poll: keeps readouts live when the user edits an upstream
 // number. Only touches expanded Set/Get nodes in the currently-viewed graph,
 // and only repaints on a real change.
@@ -348,6 +371,13 @@ export function startValuePoll() {
     const g = app.canvas?.graph || app.graph;
     if (!g?._nodes) return;
     for (const n of g._nodes) {
+      if (n.type === SET_TYPE) {
+        try {
+          healWiredStarSet(n);
+        } catch {
+          /* ignore */
+        }
+      }
       // A Get mirrors its Set's colour - keep it synced even when collapsed.
       if (n.type === GET_TYPE) {
         // Self-heal: if a transient race cleared the combo selection, restore it

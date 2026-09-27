@@ -301,4 +301,8 @@ export function registerPixaromaGetNode() {
   }
 
   LiteGraph.registerNodeType(GET_TYPE, PixaromaGetNode);
+  // Category after registering, as in set_node.mjs: registerNodeType blanks it,
+  // which kept Get Pixaroma out of the right-click Add Node menu.
+  PixaromaGetNode.category = CATEGORY;
+  return PixaromaGetNode; // index.js keeps it registered through a node-def refresh
 }
