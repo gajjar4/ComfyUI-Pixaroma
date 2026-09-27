@@ -395,12 +395,12 @@ Master the Pixaroma suite with our video guides and workflow deep-dives:
 
 ## 🛠 Changelog
 
-### **September 27, 2026 · v1.4.170–v1.4.173**
+### **September 27, 2026 · v1.4.170–v1.4.174**
 - **New: Sketch Pixaroma.** Mark a picture with a box, circle, loop, arrow or word and note what to change; Flux 2 Klein, Qwen Image Edit or Kontext get the marked picture and a ready prompt, which Prompt Reader and the Civitai info read back.
 - **Fixed: every Pixaroma node showed up empty when ComfyUI runs from a folder of a web address** (a reverse proxy like `yoursite.com/comfyui/`), and runs stopped with "missing ResolutionState".
 - **Fixed: Inter Bold came out regular** in Text Overlay and Text Watermark results while the preview showed it bold.
 - **Fixed: with Align on, a node could be resized smaller than its content** in the classic node style, pushing its buttons outside.
-- **Fixed: XY Plot, Load Images from Folder, Image Resize and Notify could open at another size** when a workflow loaded slowly, marking it as changed.
+- **Fixed: nodes resizing themselves:** XY Plot, Load Images from Folder, Image Resize and Notify on a slow workflow open, and a copied or duplicated Image Resize.
 - **Fixed: the Civitai info wrote the positive prompt as the negative** in Flux-style workflows. It leaves the negative out now.
 
 ### **September 26, 2026 · v1.4.163–v1.4.169**
