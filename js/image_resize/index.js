@@ -65,16 +65,30 @@ function writeState(node, state) {
   node.properties[STATE_PROP] = JSON.stringify(state);
 }
 
+// Below this root width the node is not laid out yet, and a height read then is
+// GARBAGE in the dangerous direction: the rows wrap and it inflates. MEASURED
+// 2026-09-27 during a workflow open (Classic): root 16 px wide, children
+// 95/19/91, so getMinHeight answered 237 and core grew the node 289 -> 343. Same
+// guard as XY Plot and Load Images from Folder (CLAUDE.md #39 C2): hand back the
+// last good value, and getMinHeight (only a FLOOR) keeps the saved size.
+const LAYOUT_READY_W = 100;
+const _lastGoodHeight = new WeakMap();
+
 // Sum children intrinsic heights (NOT scrollHeight — LiteGraph stretches the
 // root, so scrollHeight feeds back; see Load Image Pattern #4). Root is a flex
 // column with 8px gap + 8px padding top/bottom.
 function measureContentHeight(root) {
   if (!root) return 120;
+  if (!root.isConnected || root.offsetWidth < LAYOUT_READY_W) {
+    return _lastGoodHeight.get(root) ?? 120;
+  }
   let h = 0;
   for (const c of root.children) h += c.offsetHeight;
   h += Math.max(0, root.children.length - 1) * 8; // row gaps
   h += 16; // root padding (top + bottom)
-  return Math.max(120, h);
+  const out = Math.max(120, h);
+  _lastGoodHeight.set(root, out);
+  return out;
 }
 
 // Refit node height to content. ONLY call on genuine user actions — never on
@@ -842,6 +856,8 @@ app.registerExtension({
     const _origCreated = nodeType.prototype.onNodeCreated;
     nodeType.prototype.onNodeCreated = function () {
       const r = _origCreated?.apply(this, arguments);
+      // Is a workflow open building this node? Decided NOW (see the refit below).
+      const bornInLoad = _irLoadingGraph;
       hideJsonWidget(this.widgets, HIDDEN_INPUT);
       const root = document.createElement("div");
       root.className = "pix-ir-root";
@@ -869,10 +885,15 @@ app.registerExtension({
       // (Vue Compat #8). By microtask time, configure() has already run for a
       // loaded node, so node.properties[STATE_PROP] is set — we use that to
       // refit ONLY on a genuine fresh drop, never on load (Vue Compat #18).
+      // ⚠️ The state test ALONE is not enough: a node that was dropped and never
+      // edited is SAVED with no state, so every open treated it as a fresh drop
+      // and refit it - and the refit's frame lands after the load window when
+      // frames are slow. MEASURED 2026-09-27 in Nodes 2.0, frames delayed 600 ms:
+      // 416 -> 398 while the drawn node stayed 416. bornInLoad closes that.
       queueMicrotask(() => {
         const wasConfigured = this.properties?.[STATE_PROP] !== undefined;
         renderUI(this);
-        if (!wasConfigured) refit(this);
+        if (!wasConfigured && !bornInLoad) refit(this);
       });
       return r;
     };
@@ -920,7 +941,13 @@ app.registerExtension({
       }
       if (!this._pixIrConfiguring && !this._pixIrAutoSwapping && this._pixIrRoot) {
         renderUI(this); // re-render for the new wire count (no state mutation)
-        refit(this);
+        // Refit only for a REAL wire change. While a workflow opens, ComfyUI
+        // replays this handler once per input (Vue Compat #17), and
+        // _pixIrConfiguring is not up yet at that point. Read the load flag NOW:
+        // refit's own frame can land after the 300 ms window when frames are slow,
+        // and it then rewrote node.size on open. MEASURED 2026-09-27 in Nodes 2.0
+        // with frames delayed 600 ms: 416 -> 398 while the drawn node stayed 416.
+        if (!_irLoadingGraph) refit(this);
         // Upstream loader may populate its image a tick after the wire lands;
         // re-read the size shortly after so the readout updates without a run.
         setTimeout(() => this.setDirtyCanvas(true, true), 200);

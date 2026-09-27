@@ -594,7 +594,17 @@ app.registerExtension({
       // Canvas readout - LiteGraph reserves its row, so it renders inside the
       // node body and never eats a click.
       try {
-        applyAdaptiveCanvasOnly(this.addCustomWidget(createReadoutWidget()));
+        const ro = this.addCustomWidget(createReadoutWidget());
+        applyAdaptiveCanvasOnly(ro);
+        // Nodes 2.0 draws this row through core's WidgetLegacy bridge, which sizes
+        // it from widget.computedHeight when LiteGraph's layout has set it
+        // (computeSize + 4 = 22) and from computeSize (18) when it has not yet.
+        // Whichever redraw lands LAST wins, so the row came out 22 or 18 by
+        // timing, and the node 232 or 228: MEASURED 2026-09-27, 6 of 12 opens
+        // with frames delayed 600 ms were 228, normal timing always 232. Start
+        // with the value the layout will write, so every draw agrees. Classic is
+        // untouched (its layout sets the same value on every arrange anyway).
+        if (isVueNodes()) ro.computedHeight = READOUT_H + 4;
       } catch (e) {
         console.warn("[Notify Pixaroma] readout widget failed:", e?.message || e);
       }
