@@ -395,13 +395,11 @@ Master the Pixaroma suite with our video guides and workflow deep-dives:
 
 ## 🛠 Changelog
 
-### **September 27, 2026 · v1.4.170–v1.4.174**
-- **New: Sketch Pixaroma.** Mark a picture with a box, circle, loop, arrow or word and note what to change; Flux 2 Klein, Qwen Image Edit or Kontext get the marked picture and a ready prompt, which Prompt Reader and the Civitai info read back.
-- **Fixed: every Pixaroma node showed up empty when ComfyUI runs from a folder of a web address** (a reverse proxy like `yoursite.com/comfyui/`), and runs stopped with "missing ResolutionState".
-- **Fixed: Inter Bold came out regular** in Text Overlay and Text Watermark results while the preview showed it bold.
-- **Fixed: with Align on, a node could be resized smaller than its content** in the classic node style, pushing its buttons outside.
-- **Fixed: nodes resizing themselves:** XY Plot, Load Images from Folder, Image Resize and Notify on a slow workflow open, and a copied or duplicated Image Resize.
-- **Fixed: the Civitai info wrote the positive prompt as the negative** in Flux-style workflows. It leaves the negative out now.
+### **September 27, 2026 · v1.4.170–v1.4.175**
+- **New: Sketch Pixaroma.** Mark a picture with boxes, circles, arrows or words and a note each; edit models like Flux 2 Klein get the marked picture and a ready prompt.
+- **Fixed: Set and Get Pixaroma broke after refreshing nodes (R)** until a page reload. Affected workflows repair themselves, and both are back in the Add Node menu.
+- **Fixed: all Pixaroma nodes showed up empty** when ComfyUI runs under a web address folder (a reverse proxy like `yoursite.com/comfyui/`).
+- **Plus fixes:** Inter Bold now comes out bold in Text Overlay and Watermark; Align no longer shrinks a node below its content; XY Plot, Load Images from Folder, Image Resize and Notify keep their size; Civitai info no longer writes the positive prompt as the negative.
 
 ### **September 26, 2026 · v1.4.163–v1.4.169**
 - **Run Timer, Run Log and Monitor Pixaroma no longer slow your renders.** Run Timer with 2 or 3 decimals had cost 6-9%; its final time stays exact.
