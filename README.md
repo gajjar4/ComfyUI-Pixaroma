@@ -549,16 +549,11 @@ Master the Pixaroma suite with our video guides and workflow deep-dives:
 - **Plus fixes:** no grey edge down the right of the clock; Load Video Frame handles 16-bit clips.
 
 ### **August 14, 2026 · v1.4.107–v1.4.108**
-- **Your written prompt stays put.** On AI Prompt and Video Prompt it used to vanish the moment you switched workflow tab and came back. It is kept with the workflow now, along with the seed that wrote it, so the number beside the text is the one that made it.
-- **The Krea 2 idea recipe keeps the look you asked for.** Say cartoon, illustration or 3D animation and it says so in the prompt instead of quietly writing a photograph, and a colourful idea comes out colourful rather than moody. On a node you already have, load the preset again to pick it up.
-- **AI Prompt's banner says what it is sending.** With a model on the wire and your idea typed in it used to read "nothing wired", which looked like a warning on a node that was about to work perfectly well.
-- **The formula box in the settings panel scrolls.** It was showing about an eighth of a long recipe with no way to reach or copy the rest.
-- **The prompt box looks like a preview**, not somewhere to type, since it never was.
-- **NEW: AI Prompt Pixaroma.** Give it a model and an instruction you save on the node, wire in whatever you have, and it writes text. Runs on your own machine, no account and no key. It comes with six ready-made recipes for Krea 2, Z-Image and audio and video work, each naming the model it was written for.
-- **It reads pictures, audio and video, not just text.** Point it at a photo to get the prompt that would make a similar one, at a recording to get the words or the mood, or at a clip to get a video prompt describing what happens.
-- **Chain them.** The output is plain text and the text input takes plain text, so one node describes a photo, the next restyles it, and nothing goes in between.
-- **Share a recipe** as one readable .txt file, or straight to the clipboard for a message. Anything you import joins your own list.
-- Settings panels no longer open with their bottom off the screen, and a dropdown closes when you zoom instead of hanging in mid-air.
+- **NEW: AI Prompt Pixaroma.** Give it a model and a saved instruction, wire in text, pictures, audio or video, and it writes text on your own machine, no account or key. Six ready recipes included.
+- **Chain them and share recipes:** the output is plain text, so one node can describe a photo and the next restyle it. A recipe shares as one .txt file.
+- **Your written prompt stays put** in AI Prompt and Video Prompt when you switch workflow tabs, with the seed that wrote it.
+- **The Krea 2 idea recipe keeps the look you ask for:** cartoon, illustration or 3D no longer turns into a photograph. Load the preset again to pick it up.
+- **Plus fixes:** a clearer AI Prompt banner, a formula box that scrolls, settings panels that open fully on screen, and dropdowns that close when you zoom.
 
 ### **August 13, 2026 · v1.4.105–v1.4.106**
 - **Video Prompt: the idea box can be made bigger.** Drag the node, drag the bar under the box, or press Expand for a full-screen one.
@@ -569,27 +564,16 @@ Master the Pixaroma suite with our video guides and workflow deep-dives:
 - Thank you to everyone who reported these.
 
 ### **August 12, 2026 · v1.4.104**
-- **NEW: Video Prompt Pixaroma.** Type your idea in plain words and get a finished MiniMax H3 prompt back, replacing three workflows of about ten nodes each. Runs entirely on your own machine, no account or key, using one vision model you download once.
-- **It picks the mode from what you wire in**: nothing for text to video, one picture to animate that picture, two for the journey between them. The banner says which.
-- **The frames output is snapped to the length H3 accepts**, so the video is exactly as long as the prompt was written for. Wan, Hunyuan and LTX too.
-- **Talking prompts now work at 5 seconds**, where the spoken line used to be dropped every time.
-- Also: the wording is yours to edit and survives updates; a Free VRAM switch hands the model back to your video model; Prompt Reader can pull your idea back out.
+- **NEW: Video Prompt Pixaroma.** Type an idea in plain words and get a finished MiniMax H3 prompt, replacing three workflows of about ten nodes each. Runs on your own machine with one vision model.
+- **It picks the mode from what you wire in** (nothing, one picture or two), and its frames output snaps to a length H3 accepts. Wan, Hunyuan and LTX too.
+- **Also:** talking prompts work at 5 seconds, the wording is yours to edit, a Free VRAM switch frees the model for your video, and Prompt Reader pulls your idea back out.
 
-### **August 10, 2026 · v1.4.103**
-- **NEW: Save Video Pixaroma.** Everything Save Image does with folders and filenames, but for video: save an mp4 anywhere on your computer, build the name from tokens with a live line showing the exact file, and watch it play on the node.
-- **Two quality settings.** MP4 plays on everything; MP4 HQ is H.265 at 10-bit, keeping skies and fades smooth at roughly half the size. Quality is a normal 1 to 100 slider.
-- **Three new filename pieces**: frame rate, length and frame count, giving `Video_24fps_81f_3-4s_001.mp4` with no typing.
-- **Fixed: Save Image showed the old picture after you deleted a saved file.** Only the node's picture was stale; the file on disk was always right.
-- Save Mp4 is unchanged and still there for the quick drop-in case.
-
-### **August 10, 2026 · v1.4.100–v1.4.102**
-- **NEW: Save Image can save WebP**, roughly a fifth the size of a PNG with transparency kept, and unlike JPG you can still drag it back in to reload the workflow. A lossless switch is in the settings.
-- **New in Save Image:** a settings gear beside the fold triangle, a row to hide the buttons you never use, keeping your folder structure from a wired name, and a + Input folder chip. Help gained a table of worked examples.
-- **Fixed: the Save Mp4 preview could show a black screen with a dead play button.** It remembered the file name without checking the file was still there, which happens whenever ComfyUI clears its temp folder or a file is moved. It now says what happened and greys the controls.
-- **Fixed: the video timeline could stick to your cursor** if the mouse release was lost part way through a drag.
-- **Fixed: Save Mp4 no longer stops the run over a wrong sound connection or transparent frames.** Both used to leave a broken or empty file behind with no explanation.
-- **Fixed: Load Image Mini showed the wrong picture after switching workflow tabs**, which also made the INPUT size and the Mask Editor wrong. Load Image too.
-- Also: a saved picture no longer carries the previous run's preview, and the Will save as line always matches the file that is written.
+### **August 10, 2026 · v1.4.100–v1.4.103**
+- **NEW: Save Video Pixaroma.** Save an mp4 anywhere with Save Image's folder and filename tools, a live preview of the name, and playback on the node. MP4 HQ keeps fades smooth at about half the size.
+- **Three new filename pieces:** frame rate, length and frame count, like `Video_24fps_81f_3-4s_001.mp4`.
+- **Save Image can save WebP:** about a fifth of a PNG, keeps transparency, and still reloads the workflow when dragged in. Plus a settings gear, a row to hide unused buttons, and a + Input folder chip.
+- **Fixed: Load Image Mini and Load Image showed the wrong picture** after switching workflow tabs.
+- **Plus fixes:** the Save Mp4 preview no longer goes black, a wrong sound wire or transparent frames no longer stop Save Mp4, the video timeline no longer sticks to your cursor, and Save Image no longer shows a picture you deleted.
 
 ### **August 7, 2026 · v1.4.99**
 - **Fixed: a change you made by clicking a Pixaroma control was not always noticed**, so a workflow could look saved when it was not, and with Auto Save on the change could be lost entirely. Every control now reports it the instant you make it, and Ctrl+Z undoes it properly. Worth knowing either way: a workflow opened from the built-in templates always reopens as it came, so save it under your own name once it is set up.
