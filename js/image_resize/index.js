@@ -106,6 +106,33 @@ function refit(node) {
   });
 }
 
+// Grow the node when its content no longer fits; never shrink it. For a COPY
+// (paste / Ctrl+D / Alt-drag), which keeps the copied height instead of being
+// refit (see the configure wrapper): its own content can be TALLER than the
+// original's, when a wire that forced a shorter panel did not come along.
+// MEASURED 2026-09-27 (Classic): saved mode Pad (424 of content) showing the
+// forced Longest side panel (349); a copy pasted without the longest_side wire
+// kept 349 and 59 px of its content hung below the frame. Classic only: Nodes
+// 2.0 lays the body out in normal flow, so its node grows with the content.
+// Retries while the copy is not laid out yet, because a measure taken then is
+// only a fallback (see LAYOUT_READY_W) and would miss the growth.
+function growToFit(node, tries = 10) {
+  if (!node._pixIrRoot || isVueNodes()) return;
+  requestAnimationFrame(() => {
+    const root = node._pixIrRoot;
+    if (!root || isVueNodes()) return;
+    if (!root.isConnected || root.offsetWidth < LAYOUT_READY_W) {
+      if (tries > 1) growToFit(node, tries - 1);
+      return;
+    }
+    const h = node.computeSize()[1];
+    if (h > node.size[1] + 1) {
+      node.size[1] = h;
+      node.setDirtyCanvas(true, true);
+    }
+  });
+}
+
 // The INPUT half of the Input -> Output card.
 //
 // ⚠️ DELIBERATELY NOT using js/shared/upstream_image_size.mjs, though it exists
@@ -890,24 +917,70 @@ app.registerExtension({
       // and refit it - and the refit's frame lands after the load window when
       // frames are slow. MEASURED 2026-09-27 in Nodes 2.0, frames delayed 600 ms:
       // 416 -> 398 while the drawn node stayed 416. bornInLoad closes that.
+      // A copy / paste / duplicate is not a load, so bornInLoad cannot see it:
+      // _pixIrConfigured (set by the configure wrapper) does. Without it a copy
+      // of a never-edited node was refit to its content height (390 -> 290).
+      // This microtask runs after a paste has reconnected the copied wires, so a
+      // copy's content is final here: keep the copied height, but never less
+      // than that content (growToFit). A copy left inside no graph (Ctrl+C builds
+      // one to serialize) is skipped.
       queueMicrotask(() => {
         const wasConfigured = this.properties?.[STATE_PROP] !== undefined;
         renderUI(this);
-        if (!wasConfigured && !bornInLoad) refit(this);
+        if (!wasConfigured && !bornInLoad && !this._pixIrConfigured) refit(this);
+        else if (this._pixIrConfigured && !bornInLoad && this.graph) growToFit(this);
       });
       return r;
     };
 
-    const _origConfigure = nodeType.prototype.onConfigure;
-    nodeType.prototype.onConfigure = function (info) {
+    // ── Configure gate: wrap `configure`, NOT the `onConfigure` hook ──
+    // LiteGraph calls the onConfigure hook as the LAST statement of configure(),
+    // after it has replayed onConnectionsChange once per input (isConnected is
+    // true for every one of them, wired or not). A flag raised in the hook never
+    // covered that replay, and on a copy / paste / duplicate - not a workflow
+    // load, so _irLoadingGraph is down as well - the replay ran refit() and the
+    // copy came out at its content height instead of the copied one. MEASURED
+    // 2026-09-27: 475 -> 375 in Classic, 600 -> 500 in Nodes 2.0. Same fix as
+    // Switch (CLAUDE.md Vue Compat #17).
+    const _origConfigureFn = nodeType.prototype.configure;
+    nodeType.prototype.configure = function () {
       this._pixIrConfiguring = true;
+      // Runtime only, never saved: "this node was restored, not dropped fresh".
+      // The creation microtask reads it (see onNodeCreated).
+      this._pixIrConfigured = true;
       try {
-        const res = _origConfigure?.apply(this, arguments);
-        if (this._pixIrRoot) renderUI(this); // render only — no refit (Vue Compat #18)
-        return res;
+        // Not `?.apply`: a silent no-op would restore no saved state at all.
+        if (typeof _origConfigureFn !== "function") {
+          console.error("[Image Resize Pixaroma] node configure() is missing - saved state was not restored");
+          return undefined;
+        }
+        return _origConfigureFn.apply(this, arguments);
       } finally {
         this._pixIrConfiguring = false;
+        // Paste, Ctrl+D and Alt-drag reconnect the copied wires right AFTER
+        // configure returns, in the same tick (LGraphCanvas._deserializeItems).
+        // Those are the copy's own wires coming back, not the user wiring
+        // something new, so they must not refit a copy that already carries the
+        // copied size (MEASURED: a pasted copy with its wires 475 -> 375). A 0 ms
+        // timer drops the flag as the tick ends, so a real wire right after
+        // still refits. Same window as Switch's _pixSwRestoring (switch-family.md).
+        this._pixIrRestoring = true;
+        clearTimeout(this._pixIrRestoreTimer);
+        this._pixIrRestoreTimer = setTimeout(() => {
+          this._pixIrRestoring = false;
+          this._pixIrRestoreTimer = null;
+        }, 0);
       }
+    };
+
+    // Runs INSIDE configure, so the gate above is still up. Do not set or clear
+    // the flag here: this hook runs partway through, and dropping it early would
+    // reopen the window the wrapper closes.
+    const _origConfigure = nodeType.prototype.onConfigure;
+    nodeType.prototype.onConfigure = function (info) {
+      const res = _origConfigure?.apply(this, arguments);
+      if (this._pixIrRoot) renderUI(this); // render only — no refit (Vue Compat #18)
+      return res;
     };
 
     const INPUT_TYPE = (typeof LiteGraph !== "undefined" && LiteGraph.INPUT != null) ? LiteGraph.INPUT : 1;
@@ -947,7 +1020,8 @@ app.registerExtension({
         // refit's own frame can land after the 300 ms window when frames are slow,
         // and it then rewrote node.size on open. MEASURED 2026-09-27 in Nodes 2.0
         // with frames delayed 600 ms: 416 -> 398 while the drawn node stayed 416.
-        if (!_irLoadingGraph) refit(this);
+        // _pixIrRestoring: a paste putting the copied wires back (see configure).
+        if (!_irLoadingGraph && !this._pixIrRestoring) refit(this);
         // Upstream loader may populate its image a tick after the wire lands;
         // re-read the size shortly after so the readout updates without a run.
         setTimeout(() => this.setDirtyCanvas(true, true), 200);
@@ -959,6 +1033,11 @@ app.registerExtension({
     nodeType.prototype.onRemoved = function () {
       try { this._pixIrRendererOff?.(); } catch {}
       this._pixIrRendererOff = null;
+      if (this._pixIrRestoreTimer) {
+        clearTimeout(this._pixIrRestoreTimer);
+        this._pixIrRestoreTimer = null;
+        this._pixIrRestoring = false;
+      }
       this._pixIrRoot = null;
       this._pixIrWireCells = null;
       this._pixIrLockedInputs = null;

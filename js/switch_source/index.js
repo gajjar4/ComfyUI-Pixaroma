@@ -252,30 +252,50 @@ app.registerExtension({
       queueMicrotask(() => { restoreFromProperties(node); refresh(); });
     };
 
-    const _origConfigure = nodeType.prototype.onConfigure;
-    nodeType.prototype.onConfigure = function (info) {
+    // ── Configure gate: wrap `configure`, NOT the `onConfigure` hook ──
+    // LiteGraph calls the onConfigure hook as the LAST statement of configure(),
+    // after it has replayed onConnectionsChange once per input. A flag raised in
+    // the hook never covered that replay, so on a copy / paste / duplicate (not a
+    // workflow load, so _ssLoadingGraph is down too) every input's replay ran
+    // updateOutputLabels mid-configure. Harmless today - the hook below redoes
+    // it - but unguarded. Same fix as Switch (CLAUDE.md Vue Compat #17).
+    const _origConfigureFn = nodeType.prototype.configure;
+    nodeType.prototype.configure = function () {
       this._pixSsConfiguring = true;
       try {
-        // Do NOT wipe slots here. onConfigure fires at the END of
-        // LGraphNode.configure(), i.e. AFTER the saved slots and their links
-        // have already been restored. The old clearAllSlots(this) was therefore
-        // destroying every restored wire on every workflow load / tab switch /
-        // undo (confirmed: the node came back with zero inputs/outputs and the
-        // whole graph lost its links). The saved two-bank order is preserved
-        // because setupNode leaves the node empty during a load, so configure
-        // re-adds the saved slots in their saved order.
-        const r = _origConfigure?.apply(this, arguments);
-        // Set the safety-net flag AFTER _origConfigure SUCCEEDS. If it threw,
-        // the flag stays false and setupNode's microtask falls through to its
-        // slot-count check + buildBareRows fallback (recovering an empty node
-        // from saved state.rows), instead of being permanently disabled.
-        this._pixSsConfigureRan = true;
-        restoreFromProperties(this);
-        this._pixSsRefresh?.();
-        return r;
+        // Not `?.apply`: a silent no-op would restore no saved state at all.
+        if (typeof _origConfigureFn !== "function") {
+          console.error("[Switch Source Pixaroma] node configure() is missing - saved state was not restored");
+          return undefined;
+        }
+        return _origConfigureFn.apply(this, arguments);
       } finally {
         this._pixSsConfiguring = false;
       }
+    };
+
+    // Runs INSIDE configure, so the gate above is still up. Do not set or clear
+    // the flag here: this hook runs partway through, and dropping it early would
+    // reopen the window the wrapper closes.
+    const _origConfigure = nodeType.prototype.onConfigure;
+    nodeType.prototype.onConfigure = function (info) {
+      // Do NOT wipe slots here. onConfigure fires at the END of
+      // LGraphNode.configure(), i.e. AFTER the saved slots and their links
+      // have already been restored. The old clearAllSlots(this) was therefore
+      // destroying every restored wire on every workflow load / tab switch /
+      // undo (confirmed: the node came back with zero inputs/outputs and the
+      // whole graph lost its links). The saved two-bank order is preserved
+      // because setupNode leaves the node empty during a load, so configure
+      // re-adds the saved slots in their saved order.
+      const r = _origConfigure?.apply(this, arguments);
+      // Set the safety-net flag AFTER _origConfigure SUCCEEDS. If it threw,
+      // the flag stays false and setupNode's microtask falls through to its
+      // slot-count check + buildBareRows fallback (recovering an empty node
+      // from saved state.rows), instead of being permanently disabled.
+      this._pixSsConfigureRan = true;
+      restoreFromProperties(this);
+      this._pixSsRefresh?.();
+      return r;
     };
 
     // Wire connect/disconnect never changes the slot count (the Rows field

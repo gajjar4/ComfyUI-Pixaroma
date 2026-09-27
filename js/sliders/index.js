@@ -157,24 +157,44 @@ app.registerExtension({
       });
     };
 
-    // ── Configure (workflow load / undo) ─────────────────────────────────
-    const _configure = nodeType.prototype.onConfigure;
-    nodeType.prototype.onConfigure = function (info) {
+    // ── Configure gate: wrap `configure`, NOT the `onConfigure` hook ──
+    // LiteGraph calls the onConfigure hook as the LAST statement of configure(),
+    // after it has replayed onConnectionsChange for the restored slots, so a
+    // flag raised in the hook never covered that replay. Nothing reaches our
+    // handler through it today (a copy or paste carries no output links, and a
+    // load is caught by isGraphLoading()), but the gate belongs where the replay
+    // is. Same fix as Switch (CLAUDE.md Vue Compat #17).
+    const _configureFn = nodeType.prototype.configure;
+    nodeType.prototype.configure = function () {
       this._pixSldConfiguring = true;
       try {
-        const r = _configure?.apply(this, arguments);
-        this.widgets_start_y = 2;   // see onNodeCreated: breaks the slot/widget loop
-        normalizeSliders(this);
-        syncOutputs(this);
-        refresh(this);          // rebuild the rows for the restored sliders
-        queueMicrotask(() => {
-          watchAlign(this);
-          scheduleAlign(this);
-        });
-        return r;
+        // Not `?.apply`: a silent no-op would restore no saved state at all.
+        if (typeof _configureFn !== "function") {
+          console.error("[Control Panel Pixaroma] node configure() is missing - saved state was not restored");
+          return undefined;
+        }
+        return _configureFn.apply(this, arguments);
       } finally {
         this._pixSldConfiguring = false;
       }
+    };
+
+    // ── Configure hook (workflow load / undo / paste) ────────────────────
+    // Runs INSIDE configure, so the gate above is still up. Do not set or clear
+    // the flag here: this hook runs partway through, and dropping it early would
+    // reopen the window the wrapper closes.
+    const _configure = nodeType.prototype.onConfigure;
+    nodeType.prototype.onConfigure = function (info) {
+      const r = _configure?.apply(this, arguments);
+      this.widgets_start_y = 2;   // see onNodeCreated: breaks the slot/widget loop
+      normalizeSliders(this);
+      syncOutputs(this);
+      refresh(this);          // rebuild the rows for the restored sliders
+      queueMicrotask(() => {
+        watchAlign(this);
+        scheduleAlign(this);
+      });
+      return r;
     };
 
     // ── Connections: Auto -> Int / Float on the first wire ───────────────
