@@ -24,6 +24,7 @@ export const KEYWORDS = {
   PixaromaLongestSide: "longest side long edge longest edge biggest side largest side resize simple small resize quick resize downscale shrink smaller bigger make it 864 1024 1216 1536 2048 832 scale to size crop to square crop to ratio centre crop center crop crop to 16:9 9:16 2:3 phone shape aspect shape chips tall wide sdxl size multiple of 8 16 32 64 round size one number resize without width height",
   PixaromaResizeCrop: "exact size cover fill stretch squash aspect force size",
   PixaromaCrop: "trim cut region area chop",
+  PixaromaSketch: "sketch draw drawing doodle scribble mark marker markup annotate annotation red box rectangle square circle oval ellipse lasso loop outline arrow point pointer text label highlight circle it edit instruct instructions flux klein kontext qwen edit nano banana edit model tell what to change change this here visual prompt draw on image draw on picture pen tablet",
   PixaromaUncrop: "paste back restore put back region",
   PixaromaInpaintCrop: "inpaint mask repair fix retouch face hands blemish",
   PixaromaInpaintStitch: "seam blend feather merge join invisible edge",
