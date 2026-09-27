@@ -195,6 +195,15 @@ app.registerExtension({
       if (origCreated) origCreated.apply(this, arguments);
       const node = this;
 
+      // Decide NOW whether a workflow open is building this node, and carry the
+      // answer into the deferred fit below. isGraphLoading() is a 300 ms window,
+      // so asked again inside a requestAnimationFrame it can already be over
+      // when frames are slow (the in-app browser pane, a background tab, a busy
+      // machine) - and the fit then resized the node on open anyway. MEASURED
+      // 2026-09-27 on the July catalog: 566 -> 360 with frames delayed 600 ms,
+      // 566 kept with normal timing (xy-plot.md #1c).
+      const bornInLoad = isGraphLoading();
+
       // Default == compact; synchronous so configure() (Vue Compat #8) can
       // override with the saved size on reload / duplicate.
       if (!node.size || node.size[0] < MIN_W) node.size[0] = DEFAULT_W;
@@ -279,7 +288,7 @@ app.registerExtension({
         // which is the correct trade. Do not "restore" this by removing the
         // gate; fix the measurement instead (see measureContentHeight).
         requestAnimationFrame(() => {
-          if (isGraphLoading()) return;
+          if (bornInLoad || isGraphLoading()) return;
           if (isVueNodes() || node._pixXyLastGrid || !node._pixXyRoot) return;
           const want = Math.max(MIN_H, measureContentHeight(node._pixXyRoot) + CHROME);
           if (node.size[1] > want + 120) {

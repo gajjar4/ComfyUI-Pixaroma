@@ -196,7 +196,14 @@ async function setFolder(node, folder) {
 }
 
 // ── resize control (mode dropdown + the shared per-mode panel) ────────────────
-function renderResize(node) {
+// `fit` = also refit the node height. The two load-path callers (node creation
+// and onConfigure) pass `!isGraphLoading()` read SYNCHRONOUSLY, because refit's
+// own isGraphLoading() check runs inside a requestAnimationFrame: when frames are
+// slow (the in-app browser pane, a background tab, a busy machine) that frame
+// lands after the 300 ms load window and the node was resized on open anyway.
+// MEASURED 2026-09-27 on the July catalog: 274 -> 270 with frames delayed 600 ms,
+// 274 kept with normal timing (load-images-folder.md #6c).
+function renderResize(node, fit = true) {
   const ui = node._pixLifUI;
   if (!ui) return;
   injectResizePanelCSS();
@@ -239,7 +246,7 @@ function renderResize(node) {
     if (panel) slot.appendChild(panel);
   }
   node.setDirtyCanvas?.(true, true);
-  refit(node); // grow/shrink the node to fit the (possibly changed) panel
+  if (fit) refit(node); // grow/shrink the node to fit the (possibly changed) panel
 }
 
 // ── per-node setup ───────────────────────────────────────────────────────────
@@ -351,8 +358,9 @@ function setupNode(node) {
     node._pixLifFloorOff = installResizeFloor(ui.root, measureContentHeight);
   } catch {}
 
-  // resize control (reads current state; fresh node = "Off")
-  renderResize(node);
+  // resize control (reads current state; fresh node = "Off"). Refit only for a
+  // node built OUTSIDE a workflow open (a fresh drop, paste) - see renderResize.
+  renderResize(node, !isGraphLoading());
 
   // default width on a FRESH drop only; on workflow load, leave the width for
   // configure() to restore (so a user-resized node keeps its saved width and we
@@ -432,8 +440,9 @@ app.registerExtension({
     nodeType.prototype.onConfigure = function () {
       const r = origConfigure?.apply(this, arguments);
       stripInputs(this);
+      const fit = !isGraphLoading();   // decided NOW, not in a late frame (renderResize)
       queueMicrotask(() => {
-        renderResize(this);
+        renderResize(this, fit);
         refreshListing(this);
       });
       return r;
