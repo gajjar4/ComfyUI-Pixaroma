@@ -213,6 +213,15 @@ _PROMPT_CLASS = "PixaromaPrompt"
 _VIDEO_PROMPT_CLASS = "PixaromaVideoPrompt"
 _PAUSE_TEXT_CLASS = "PixaromaPauseText"
 
+# Sketch Pixaroma: its `prompt` output (slot 1 of image / prompt / mask) is BUILT
+# in Python at run time from the marks and notes in the hidden SketchState, so a
+# saved image stores no text for it - only that state. The walker rebuilds it
+# with Sketch's OWN parse_state + build_prompt, never a copy that could drift.
+# Limit, accepted: an old image is rebuilt with today's wording, exactly like the
+# Prompt Stack rebuild above.
+_SKETCH_CLASS = "PixaromaSketch"
+_SKETCH_PROMPT_SLOT = 1
+
 # NODES WHOSE TEXT OUTPUT IS WRITTEN BY A MODEL AT RUN TIME. Walking INTO one
 # can never find the prompt and can only ever find the INSTRUCTION, so they are
 # a dead end for this walker.
@@ -670,6 +679,47 @@ def _pix_prompt_join(mine, other, order: str, sep: str) -> Optional[str]:
     return combined.strip() or None
 
 
+_sketch_mod = None
+
+
+def _load_sketch_helpers():
+    """Sketch's own helpers, imported on first use and never at module load, so
+    Prompt Reader keeps working even if that module ever fails to import.
+    Relative inside ComfyUI; flat when a test puts nodes/ on sys.path."""
+    global _sketch_mod
+    if _sketch_mod is None:
+        try:
+            from . import _sketch_helpers as mod
+        except Exception:
+            try:
+                import _sketch_helpers as mod
+            except Exception:
+                return None
+        _sketch_mod = mod
+    return _sketch_mod
+
+
+def _pix_sketch_prompt(inputs: dict) -> Optional[str]:
+    """The prompt a PixaromaSketch sent, rebuilt from its hidden SketchState
+    exactly as nodes/node_sketch.py run() builds it. None when there is no
+    state, no mark has a note, or anything fails.
+    """
+    raw = inputs.get("SketchState")
+    if not isinstance(raw, str) or not raw:
+        return None
+    sk = _load_sketch_helpers()
+    if sk is None:
+        return None
+    try:
+        state = sk.parse_state(raw)
+        text = sk.build_prompt(state["marks"], state["remove_marks"])
+    except Exception:
+        return None
+    if not isinstance(text, str):
+        return None
+    return text.strip() or None
+
+
 def _rgthree_any_switch_active_link(inputs: dict):
     """Return the active-input link tuple [upstream_id, upstream_output_slot]
     of rgthree's Any Switch.
@@ -938,6 +988,16 @@ def _walk_for_text(
                 idea = ""
         if idea:
             captured.append(idea)
+        return
+
+    # Sketch Pixaroma: rebuild the prompt from the saved marks and notes - see
+    # _SKETCH_CLASS. Only its prompt output carries text; arriving on the image
+    # or mask output contributes nothing.
+    if cls == _SKETCH_CLASS:
+        if origin_slot is None or origin_slot == _SKETCH_PROMPT_SLOT:
+            text = _pix_sketch_prompt(inputs)
+            if text:
+                captured.append(text)
         return
 
     # Single pass over inputs. For each one, classify as text-carrying
