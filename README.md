@@ -102,6 +102,9 @@ The easy way to set up an inpaint. Open the fullscreen editor and **paint** over
 ### 🪡 Inpaint Stitch Pixaroma
 The other half: paste your inpainted crop **back** onto the original, blended so the seam disappears. Wire in the **crop_info** from Inpaint Crop and your processed crop, and by default only the area you painted changes - everything else stays pixel-perfect. Fine-tune the **softness**, **blend mode**, and an optional **color match** right on this node; because it runs after the sampler, changing them re-runs only this node (instant, no re-generating the image). It also hands back the untouched **original**, so you can drop both into Image Compare for an instant before / after.
 
+### 🖍️ Sketch Pixaroma
+Tell an edit model exactly what to change by marking it on the picture. Wire a picture in, pick a tool and draw: a **Box** or **Circle** around something, a **Freehand** loop (or the rough shape of something to add), an **Arrow**, or a **word** typed right onto the picture. Every mark gets its own number and color, and the cursor jumps to its note, so you type the change (`make the hat red`) and press Enter. The node writes the instruction for you, one sentence per mark ("Inside the red box: make the hat red."), plus a line asking the model to remove the marks. Wire **image** into Flux 2 Klein, Qwen Image Edit or Kontext and **prompt** into the text encode. There is also a **mask** output for inpaint workflows, undo and redo, four line widths, and a big view for careful marking. Works in both the classic and the new node interface.
+
 ### 🌓 Image Compare
 The best way to see the difference between two images. Easily compare them side-by-side with a slider, overlap them, or highlight exactly what changed between the two versions.
 
@@ -392,9 +395,11 @@ Master the Pixaroma suite with our video guides and workflow deep-dives:
 
 ## 🛠 Changelog
 
-### **September 27, 2026 · v1.4.170**
-- **Fixed: every Pixaroma node showed up empty when ComfyUI runs from a folder of a web address** (a reverse proxy like `yoursite.com/comfyui/`), and runs stopped with "missing ResolutionState".
-- **Also fixed for that setup:** saving in Image Crop and Inpaint Crop, uploading in Load Image, and the settings button on Prompt Each.
+### **September 27, 2026 · v1.4.170–v1.4.171**
+- **New: Sketch Pixaroma.** Draw a box, circle, loop, arrow or word on a picture and note what to change; it gives Flux 2 Klein, Qwen Image Edit or Kontext the marked picture and a ready prompt.
+- **Fixed: every Pixaroma node showed up empty when ComfyUI runs from a folder of a web address** (a reverse proxy like `yoursite.com/comfyui/`), and runs stopped with "missing ResolutionState". Saving and uploading work there too.
+- **Fixed: Inter Bold came out regular** in Text Overlay and Text Watermark results while the preview showed it bold. They match now.
+- **Fixed: with Align on, a node could be resized smaller than its content** in the classic node style, pushing its buttons outside.
 
 ### **September 26, 2026 · v1.4.163–v1.4.169**
 - **Run Timer, Run Log and Monitor Pixaroma no longer slow your renders.** Run Timer with 2 or 3 decimals had cost 6-9%; its final time stays exact.
