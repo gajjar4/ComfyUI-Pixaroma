@@ -53,11 +53,43 @@ def resolve_font_variant(font_id: str, weight: int, italic: bool):
     return _mk(v, bool(italic) and not v["italic"])
 
 
+def _set_axes(font, wght, opsz):
+    """Set a variable font's axes BY NAME, the way the browser draws it.
+
+    Pillow's set_variation_by_axes is POSITIONAL (one value per axis, in the
+    font's own order), and Inter lists Optical size BEFORE Weight: the old
+    set_variation_by_axes([wght]) set Inter's optical size and left it Regular,
+    so "Inter Bold" rendered Regular while the preview showed Bold. The optical
+    size follows the browser's canvas: the font size in px, clamped to the axis
+    (docs/text-overlay-render.md 1b). A font with no axis NAMED weight keeps the
+    old positional behaviour, which is what every other bundled font relies on.
+    """
+    axes = font.get_variation_axes()
+    names = []
+    for axis in axes:
+        n = axis.get("name", b"")
+        names.append((n.decode("utf-8", "ignore") if isinstance(n, bytes) else str(n)).strip().lower())
+    if not any(n.startswith("weight") for n in names):
+        font.set_variation_by_axes([wght])
+        return
+    values = []
+    for axis, name in zip(axes, names):
+        if name.startswith("weight"):
+            want = wght
+        elif name.startswith("optical"):
+            want = opsz
+        else:
+            want = axis.get("default", axis["minimum"])
+        values.append(max(axis["minimum"], min(axis["maximum"], want)))
+    font.set_variation_by_axes(values)
+
+
 @lru_cache(maxsize=128)
-def _cached_pil_font(file: str, size: int, wght: int, source: str):
-    """Cache PIL ImageFont per (file, size, wght, source) for the process lifetime.
+def _cached_pil_font(file: str, size: int, wght: int, source: str, opsz: int = 0):
+    """Cache PIL ImageFont per (file, size, wght, source, opsz) for the process lifetime.
     Builtin fonts load from assets/fonts/; custom fonts resolve across the
-    registered fonts dirs. For variable fonts (wght != 0), activate the wght axis."""
+    registered fonts dirs. For variable fonts (wght != 0), activate the axes
+    by name (_set_axes). `opsz` is the LOGICAL font size (0 = use `size`)."""
     if source == "custom":
         path = resolve_custom_file(file)
         if not path:
@@ -69,19 +101,26 @@ def _cached_pil_font(file: str, size: int, wght: int, source: str):
     f = ImageFont.truetype(path, size=int(size))
     if wght:
         try:
-            f.set_variation_by_axes([wght])
+            _set_axes(f, wght, opsz or int(size))
         except Exception:
             # Static font without variation axes — silently fall through; getlength still works
             pass
     return f
 
 
-def load_pil_font(font_id: str, weight: int, italic: bool, size: int):
-    """Returns (PIL.ImageFont.FreeTypeFont, synthesized_italic_bool)."""
+def load_pil_font(font_id: str, weight: int, italic: bool, size: int, opsz=None):
+    """Returns (PIL.ImageFont.FreeTypeFont, synthesized_italic_bool).
+
+    `opsz` is the LOGICAL font size for the optical-size axis; pass it whenever
+    `size` is supersampled (render_text_layer draws rotated text at 3x), or the
+    optical size would follow the bigger size and not what the browser shows.
+    """
     variant = resolve_font_variant(font_id, weight, italic)
     wght = variant.get("wght") or 0
     src = variant.get("source", "builtin")
-    return _cached_pil_font(variant["file"], int(round(size)), wght, src), variant["synthesized_italic"]
+    size_i = int(round(size))
+    opsz_i = int(round(opsz)) if opsz is not None else size_i
+    return _cached_pil_font(variant["file"], size_i, wght, src, opsz_i), variant["synthesized_italic"]
 
 
 # ────────────────────────────────────────────────────────────────────────────
@@ -278,7 +317,8 @@ def render_text_layer(base_img, layer):
     font_size_eff = font_size * ss
     letter_spacing_eff = letter_spacing * ss
 
-    pil_font, synthesized_italic = load_pil_font(font_id, weight, italic, font_size_eff)
+    # opsz from the LOGICAL size: the 3x supersample is ours, the browser draws at font_size
+    pil_font, synthesized_italic = load_pil_font(font_id, weight, italic, font_size_eff, opsz=font_size)
 
     lines = text.split("\n")
     line_widths = [_measure_line(pil_font, ln, letter_spacing_eff) for ln in lines]

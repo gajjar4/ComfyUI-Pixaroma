@@ -28,7 +28,14 @@ draws the pill un-skewed then the text under a skew transform.
 
 ## 1b. Variable Font Handling
 
-Most bundled fonts are variable. Catalog entry has a `wght` field activated at draw time. Browser: FontFace loaded with `weight: "100 900"`, canvas font string picks weight. Python PIL: `font.set_variation_by_axes([wght])` after truetype load. Static fonts (Bebas Neue, Anton) skip the axis step.
+Most bundled fonts are variable. Catalog entry has a `wght` field activated at draw time. Browser: FontFace loaded with `weight: "100 900"`, canvas font string picks weight. Static fonts (Bebas Neue, Anton) skip the axis step.
+
+Python PIL sets the axes BY NAME, never by position (`set_variation_by_axes` takes one value per axis in the FONT's own order):
+- the Weight axis -> `wght`;
+- the Optical size axis -> the LOGICAL font size in px (`fontSize`, never the 3x supersampled size of §13), clamped to the axis range. This is what the browser's canvas does: measured in Chrome with the font genuinely loaded, 10 and 12 px use 14, 16 -> 16, 20 -> 20, 28 -> 28, 40 -> 32 (Inter's range is 14..32);
+- every other axis -> its default.
+
+Why: Inter lists Optical size BEFORE Weight, so the old `set_variation_by_axes([wght])` set Inter's optical size to the weight (clamped to 32) and left it Regular - "Inter Bold" rendered Regular in the output while the preview showed Bold (measured: 638 px wide against the browser's 685 at 40 px). A font whose axes carry no recognisable "weight" name falls back to the old positional behaviour (first axis = weight), which is what every other bundled font already gets right.
 
 ## 2. Text Measurement
 
