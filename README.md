@@ -392,6 +392,10 @@ Master the Pixaroma suite with our video guides and workflow deep-dives:
 
 ## 🛠 Changelog
 
+### **September 27, 2026 · v1.4.170**
+- **Fixed: every Pixaroma node showed up empty when ComfyUI runs from a folder of a web address** (a reverse proxy like `yoursite.com/comfyui/`), and runs stopped with "missing ResolutionState".
+- **Also fixed for that setup:** saving in Image Crop and Inpaint Crop, uploading in Load Image, and the settings button on Prompt Each.
+
 ### **September 26, 2026 · v1.4.163–v1.4.169**
 - **Run Timer, Run Log and Monitor Pixaroma no longer slow your renders.** Run Timer with 2 or 3 decimals had cost 6-9%; its final time stays exact.
 - **Faster renders in Nodes 2.0 with Compare, Preview Image, Outpaint, Load 3D, Save 3D or a video node (Load Video, Load Video Frame, Save Mp4, Save Video) on screen.** Their previews show a still picture while nothing moves. Load Audio, Image Resize and Load Image Mini do the same.
