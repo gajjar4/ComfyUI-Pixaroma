@@ -395,6 +395,9 @@ Master the Pixaroma suite with our video guides and workflow deep-dives:
 
 ## 🛠 Changelog
 
+### **September 28, 2026 · v1.4.176**
+- **AI Prompt's "Qwen Image 2.1 - prompt from an idea" preset now writes real selfies**, not photos of someone holding up a phone. Load the preset again to get it.
+
 ### **September 27, 2026 · v1.4.170–v1.4.175**
 - **New: Sketch Pixaroma.** Mark a picture with boxes, circles, arrows or words and a note each; edit models like Flux 2 Klein get the marked picture and a ready prompt.
 - **Fixed: Set and Get Pixaroma broke after refreshing nodes (R)** until a page reload. Affected workflows repair themselves, and both are back in the Add Node menu.
