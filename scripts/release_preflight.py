@@ -543,7 +543,7 @@ def check_output_arity():
 
 
 def check_registry_lint():
-    """No `a; b` statement lines and no exec()/eval() calls in any tracked .py file.
+    """No `a; b` statement lines and no calls to exec or eval in any tracked .py file.
 
     The Comfy Registry lints every upload. Since September 2026 its publish log
     prints "E702 Multiple statements on one line (semicolon)" for each `a; b`,
