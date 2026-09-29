@@ -71,7 +71,10 @@ def copy_dir_name(parent_real: str) -> str:
 
 def _split_value(image):
     """(copy_dir, file_name) for a folder-copy value, else None."""
-    if not isinstance(image, str):
+    # A real value is a few hundred characters at most. Refuse anything longer
+    # BEFORE the pattern below, which is slow on a long run of spaces - and this
+    # runs on every /prompt, where the value is attacker-supplied (review round 1).
+    if not isinstance(image, str) or len(image) > 1024:
         return None
     v = image.replace("\\", "/").strip()
     m = _ANNOTATION.match(v)

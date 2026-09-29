@@ -110,7 +110,10 @@ export async function addFolderViaDialog() {
 // Pictures directly in the folder first, then each subfolder in turn - the
 // picker groups them that way, and the arrows must step in the same order.
 const dirOf = (f) => { const i = f.file.lastIndexOf("/"); return i >= 0 ? f.file.slice(0, i) : ""; };
-const cmp = (x, y) => x.localeCompare(y, undefined, { numeric: true, sensitivity: "base" });
+// ONE collator, made once: calling localeCompare with options inside a sort
+// comparator rebuilds it on every call - measured 2.25 s to sort 50,000
+// pictures against 0.15 s this way, identical order (review round 1).
+const cmp = new Intl.Collator(undefined, { numeric: true, sensitivity: "base" }).compare;
 const byPath = (a, b) => {
   const da = dirOf(a), db = dirOf(b);
   if (da !== db) return da === "" ? -1 : db === "" ? 1 : cmp(da, db);
@@ -251,11 +254,11 @@ function injectFoldersCSS() {
     .pix-lifold-path { font-size:10px; color:#777; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
     .pix-lifold-x { flex:none; width:22px; height:22px; border:1px solid #444; border-radius:4px;
       background:transparent; color:#999; cursor:pointer; font-size:12px; line-height:1; padding:0; }
-    .pix-lifold-x:hover { border-color:var(--pix-acc,#f66744); color:#fff; }
+    .pix-lifold-x:hover { border-color:var(--pix-acc, var(--acc, #f66744)); color:#fff; }
     .pix-lifold-empty { font-size:11px; color:#777; }
     .pix-lifold-add { align-self:flex-start; border:1px solid #444; background:rgba(255,255,255,0.04);
       color:#d8d8d8; border-radius:5px; padding:5px 12px; font-size:12px; cursor:pointer; font-family:inherit; }
-    .pix-lifold-add:hover { border-color:var(--pix-acc,#f66744); background:var(--pix-acc,#f66744); color:#fff; }
+    .pix-lifold-add:hover { border-color:var(--pix-acc, var(--acc, #f66744)); background:var(--pix-acc, var(--acc, #f66744)); color:#fff; }
     .pix-lifold-add[disabled] { opacity:.5; cursor:default; }
     .pix-lifold-msg { font-size:11px; color:#e0a060; line-height:1.4; }
     .pix-lifold-msg:empty { display:none; }

@@ -178,12 +178,13 @@ class PixaromaLoadImageMini:
     def IS_CHANGED(cls, image, LoadImageMiniState=""):
         image_path = folder_paths.get_annotated_filepath(image)
         m = hashlib.sha256()
-        # A folder copy: the original decides too (see Load Image's IS_CHANGED).
-        # "" for every other file, so their hash is unchanged.
+        # A folder copy: the original alone decides (see Load Image's IS_CHANGED
+        # for why not the copy too). "" for every other file, so their hash is
+        # unchanged.
         stamp = source_stamp(image)
         if stamp:
             m.update(stamp.encode("utf-8"))
-        if not stamp or os.path.isfile(image_path):
+        else:
             with open(image_path, "rb") as f:
                 m.update(f.read())
         # Hash only the RESIZE-relevant state (canonical) + the original-name

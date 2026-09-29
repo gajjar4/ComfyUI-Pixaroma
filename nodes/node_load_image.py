@@ -253,14 +253,16 @@ class PixaromaLoadImage:
     def IS_CHANGED(cls, image, LoadImagePixState=""):
         image_path = folder_paths.get_annotated_filepath(image)
         m = hashlib.sha256()
-        # A folder copy: the ORIGINAL's size + time decide too, so editing it in
-        # another program re-runs the node (the copy is refreshed at Run, and may
-        # not even exist yet). "" for every other file, which keeps their hash
-        # byte-identical to before.
+        # A folder copy: the ORIGINAL's size + time decide, so editing it in
+        # another program re-runs the node. ONLY the original: the copy is
+        # refreshed later, inside the Run, so hashing its bytes here would change
+        # the key a second time at the NEXT Run and re-run everything downstream
+        # once more for nothing (review round 1). "" for every other file, whose
+        # hash stays byte-identical to before.
         stamp = source_stamp(image)
         if stamp:
             m.update(stamp.encode("utf-8"))
-        if not stamp or os.path.isfile(image_path):
+        else:
             with open(image_path, "rb") as f:
                 m.update(f.read())
         m.update((LoadImagePixState or "").encode("utf-8"))
