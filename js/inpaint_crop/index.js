@@ -158,6 +158,14 @@ const PASSTHROUGH_INPUT = {
   PixaromaImageInfo: "image_info",
 };
 
+// Nodes that BUILD a new picture from what is wired in, so the picture on their
+// input is not the one on their output. The one-wire rule below would otherwise
+// walk straight through them: an Image Composer with a single placeholder slot
+// wired opened the raw picture going INTO it, and the mask was painted on the
+// wrong image (measured 2026-09-28, inpaint.md #18). Stopping here falls back to
+// the picture the last run saved, which is the real composition.
+const NOT_A_PASSTHROUGH = new Set(["PixaromaImageComposition"]);
+
 function inputByName(node, name) {
   return (node.inputs || []).find((i) => i.name === name) || null;
 }
@@ -178,6 +186,7 @@ function linkById(graph, id) {
  */
 function routedInput(node, fromSlot) {
   const cls = node.comfyClass || node.type || "";
+  if (NOT_A_PASSTHROUGH.has(cls)) return null;
 
   // Our own routers record which branch is live, so ASK them. Guessing here
   // would silently pick another wire's picture.

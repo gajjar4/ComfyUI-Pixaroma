@@ -374,7 +374,7 @@ const HELP = {
     sections: [
       {
         heading: "What it does",
-        body: "Opens a fullscreen painting canvas with multiple layers, Photoshop-style controls (drag to reorder, opacity, blend modes, merge, flatten), and a full brush engine. Tools include pencil, brush, eraser, smudge, fill, shape, and color picker. The smudge tool gives smooth color blending; brush hardness and opacity are fully adjustable.\n\nDrag an image file onto the closed node body to load it as a new top layer and open the editor automatically. The `AI Remove Background` button on image layers extracts subjects with one click. A `Transparent BG` checkbox in the toolbar lets you save a PNG with a transparent background directly to disk.",
+        body: "Opens a fullscreen painting canvas with multiple layers, Photoshop-style controls (drag to reorder, opacity, blend modes, merge, flatten), and a full brush engine. Tools include pencil, brush, eraser, smudge, fill, shape, and color picker. The smudge tool gives smooth color blending; brush hardness and opacity are fully adjustable.\n\nDrag an image file onto the closed node body to load it as a new top layer and open the editor automatically. The `AI Remove Background` button on image layers extracts subjects with one click. A `Transparent BG` checkbox in the toolbar lets you save a PNG with a transparent background directly to disk.\n\nTurn on `Canvas size from added image` (under `Add Image`) and every picture you add sets the canvas to that picture's size, up to 4096, so a photo you want to paint over fills the canvas exactly. Like changing W and H by hand, it clears undo. The switch is remembered for next time.",
       },
       {
         heading: "How to use",

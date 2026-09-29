@@ -10,6 +10,7 @@ import {
   rgbToHsl,
   hslToRgb,
 } from "./engine.mjs";
+import { app } from "../../../scripts/app.js";
 import { installGraphUndoGuard } from "../shared/graph_undo_guard.mjs";
 import { pixAsset } from "../shared/api_url.mjs";
 import { PaintAPI } from "./api.mjs";
@@ -733,6 +734,9 @@ export class PaintStudio {
       reader.onload = (ev) => {
         const img = new Image();
         img.onload = () => {
+          // "Canvas size from added image" switch: the canvas takes the
+          // picture's size first, so the picture below lands 1:1 and fills it.
+          if (this._canvasFromImage) this._fitCanvasToImage(img.width, img.height);
           const ly = this._makeLayer(file.name.replace(/\.[^.]+$/, ""));
           const scale = Math.min(
             this.docW / img.width,
@@ -760,6 +764,32 @@ export class PaintStudio {
         img.src = ev.target.result;
       };
       reader.readAsDataURL(file);
+    };
+
+    // Set the canvas to a picture's size (asked for on Discord 2026-09-29).
+    // Goes through _resizeDoc, the same path as typing W and H by hand, so it
+    // keeps existing layers anchored top-left and clears undo exactly as a
+    // manual resize does. Capped at the 4096 _resizeDoc allows, aspect kept.
+    // Returns true when the size changed. (No status line of its own: the
+    // Move tool, selected right after, replaces the status at once; the frame
+    // label and the W/H fields show the new size.)
+    this._fitCanvasToImage = (iw, ih) => {
+      if (!(iw > 0 && ih > 0)) return false;
+      const cap = Math.min(1, 4096 / iw, 4096 / ih);
+      const nw = Math.max(64, Math.round(iw * cap));
+      const nh = Math.max(64, Math.round(ih * cap));
+      if (nw === this.docW && nh === this.docH) return false;
+      this.el.docW.value = nw;
+      this.el.docH.value = nh;
+      this._resizeDoc();
+      if (this._canvasSettings) {
+        this._canvasSettings.setSize(nw, nh);
+        // A ratio button left lit (say 1:1) would no longer be true, and would
+        // force that ratio on the next W/H edit. Free matches what happened.
+        // (setRatio(0) re-fires onChange with the same size: a no-op resize.)
+        this._canvasSettings.setRatio(0);
+      }
+      return true;
     };
 
     // Canvas Toolbar (BG color + Load Image + Clear All)
@@ -812,6 +842,38 @@ export class PaintStudio {
         this._setStatus("Reset to default");
       },
     });
+    // "Canvas size from added image" switch, under the Transparent BG one and
+    // beside Add Image, where the picture comes in. Built here rather than in
+    // the shared createCanvasToolbar so no other editor changes. Remembered per
+    // PERSON in an unregistered setting (never node.properties, so flipping it
+    // can never mark a workflow modified). Off unless explicitly turned on.
+    const SETTING_FIT = "Pixaroma.Paint.CanvasFromImage";
+    try {
+      this._canvasFromImage = app.ui?.settings?.getSettingValue?.(SETTING_FIT) === true;
+    } catch (e) {
+      this._canvasFromImage = false;
+    }
+    const fitRow = document.createElement("label");
+    fitRow.className = "pxf-check-row";
+    fitRow.title =
+      "When on, every picture you add (Add Image, drag and drop, or paste) sets the " +
+      "canvas to that picture's size, up to 4096. Like changing W and H by hand, " +
+      "this clears undo.";
+    fitRow.style.cssText = "margin:4px 0 0 2px;font-size:11px;opacity:0.85;";
+    const fitCb = document.createElement("input");
+    fitCb.type = "checkbox";
+    fitCb.checked = this._canvasFromImage;
+    fitCb.addEventListener("change", () => {
+      this._canvasFromImage = fitCb.checked;
+      try {
+        app.ui?.settings?.setSettingValueAsync?.(SETTING_FIT, fitCb.checked)?.catch?.(() => {});
+      } catch (e) {}
+    });
+    fitRow.append(fitCb, "Canvas size from added image");
+    const transpRow = this._canvasToolbar.el.querySelector(".pxf-check-row");
+    if (transpRow) transpRow.after(fitRow);
+    else this._canvasToolbar.el.appendChild(fitRow);
+
     // ── Transform Panel (unified, applies to selected layer) ──
     this._transformPanel = createTransformPanel({
       onFitWidth: () => {

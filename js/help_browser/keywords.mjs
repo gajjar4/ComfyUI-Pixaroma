@@ -117,7 +117,7 @@ export const KEYWORDS = {
     + "own picture custom image replace cover photo change thumbnail drag drop paste "
     + "upload set preview no picture blank empty box",
   Pixaroma3D: "mesh glb obj camera light render scene 3d",
-  PixaromaPaint: "brush draw sketch layers erase paint",
+  PixaromaPaint: "brush draw sketch layers erase paint canvas size from image resolution photo match",
   PixaromaImageComposition: "collage blend layers grade montage composite text layer font ttf otf custom font",
   PixaromaAudioStudio: "music sound video beat visualizer audio reactive",
 };
