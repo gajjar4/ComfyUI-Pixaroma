@@ -395,8 +395,10 @@ Master the Pixaroma suite with our video guides and workflow deep-dives:
 
 ## 🛠 Changelog
 
-### **September 29, 2026 · v1.4.177–v1.4.179**
+### **September 29, 2026 · v1.4.177–v1.4.180**
 - **AI Prompt: several pictures at once.** Wiring a picture adds a slot for another, up to 8, each seen at its own size.
+- **Paint: "Canvas size from added image".** Turn it on under Add Image and every picture you add sets the canvas to its size.
+- **Fixed: Inpaint Crop behind an Image Composer showed the picture going into the Composer**, so the mask was painted on the wrong image.
 - **Fixed: Ctrl+V pasted nothing while a Load Image or Load Image Mini was selected**, not even copied nodes. Pasting a picture no longer asks Firefox for permission each time.
 - **Save Image: a JPG keeps the prompt** when the workflow is too big to fit inside it.
 - **Save Image and Save Video: "Will save as" shows ‹wired name›** when the name is only made during the run, instead of a wrong name.

@@ -858,7 +858,8 @@ export class PaintStudio {
     fitRow.title =
       "When on, every picture you add (Add Image, drag and drop, or paste) sets the " +
       "canvas to that picture's size, up to 4096. Like changing W and H by hand, " +
-      "this clears undo.";
+      "a smaller picture crops what does not fit, and undo is cleared. Turn it " +
+      "off before adding a small picture to a finished painting.";
     fitRow.style.cssText = "margin:4px 0 0 2px;font-size:11px;opacity:0.85;";
     const fitCb = document.createElement("input");
     fitCb.type = "checkbox";
