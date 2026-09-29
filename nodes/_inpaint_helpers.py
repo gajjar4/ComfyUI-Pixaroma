@@ -284,7 +284,8 @@ def compute_region(bbox, W, H, p):
     the node's width/height outputs). If bbox is None the whole image is used.
     """
     p = merge_params(p)
-    W = int(W); H = int(H)
+    W = int(W)
+    H = int(H)
     if bbox is None:
         x0, y0, x1, y1 = 0, 0, W, H
     else:
@@ -347,7 +348,8 @@ def compute_region(bbox, W, H, p):
         big = max(ow, oh)
         if big > p["max_size"]:
             k = p["max_size"] / big
-            ow *= k; oh *= k
+            ow *= k
+            oh *= k
         out_w = _round_mult(ow, mult)
         out_h = _round_mult(oh, mult)
     else:  # keep shape: scale the CROPPED rect's long side to target, keep aspect
@@ -364,11 +366,13 @@ def compute_region(bbox, W, H, p):
         small = min(ow, oh)
         if small < p["min_size"]:
             k = p["min_size"] / small
-            ow *= k; oh *= k
+            ow *= k
+            oh *= k
         big = max(ow, oh)
         if big > p["max_size"]:
             k = p["max_size"] / big
-            ow *= k; oh *= k
+            ow *= k
+            oh *= k
         out_w = _round_mult(ow, mult)
         out_h = _round_mult(oh, mult)
 

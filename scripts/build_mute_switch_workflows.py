@@ -842,15 +842,33 @@ def build_workflow_4_chaining():
         pp["widgets_values"] = ["img", "preview"]
         nodes.append(pp)
 
-        l = new_link(102, 0, base_id, 0, "CLIP"); clip["outputs"][0]["links"].append(l); cte["inputs"][0]["link"] = l
-        l = new_link(base_id, 0, base_id + 1, 0, "CONDITIONING"); cte["outputs"][0]["links"].append(l); czo["inputs"][0]["link"] = l
-        l = new_link(base_id, 0, base_id + 2, 1, "CONDITIONING"); cte["outputs"][0]["links"].append(l); ks["inputs"][1]["link"] = l
-        l = new_link(104, 0, base_id + 2, 0, "MODEL"); msaf["outputs"][0]["links"].append(l); ks["inputs"][0]["link"] = l
-        l = new_link(base_id + 1, 0, base_id + 2, 2, "CONDITIONING"); czo["outputs"][0]["links"].append(l); ks["inputs"][2]["link"] = l
-        l = new_link(105, 0, base_id + 2, 3, "LATENT"); latent["outputs"][0]["links"].append(l); ks["inputs"][3]["link"] = l
-        l = new_link(base_id + 2, 0, base_id + 3, 0, "LATENT"); ks["outputs"][0]["links"].append(l); vd["inputs"][0]["link"] = l
-        l = new_link(103, 0, base_id + 3, 1, "VAE"); vae["outputs"][0]["links"].append(l); vd["inputs"][1]["link"] = l
-        l = new_link(base_id + 3, 0, base_id + 4, 0, "IMAGE"); vd["outputs"][0]["links"].append(l); pp["inputs"][0]["link"] = l
+        l = new_link(102, 0, base_id, 0, "CLIP")
+        clip["outputs"][0]["links"].append(l)
+        cte["inputs"][0]["link"] = l
+        l = new_link(base_id, 0, base_id + 1, 0, "CONDITIONING")
+        cte["outputs"][0]["links"].append(l)
+        czo["inputs"][0]["link"] = l
+        l = new_link(base_id, 0, base_id + 2, 1, "CONDITIONING")
+        cte["outputs"][0]["links"].append(l)
+        ks["inputs"][1]["link"] = l
+        l = new_link(104, 0, base_id + 2, 0, "MODEL")
+        msaf["outputs"][0]["links"].append(l)
+        ks["inputs"][0]["link"] = l
+        l = new_link(base_id + 1, 0, base_id + 2, 2, "CONDITIONING")
+        czo["outputs"][0]["links"].append(l)
+        ks["inputs"][2]["link"] = l
+        l = new_link(105, 0, base_id + 2, 3, "LATENT")
+        latent["outputs"][0]["links"].append(l)
+        ks["inputs"][3]["link"] = l
+        l = new_link(base_id + 2, 0, base_id + 3, 0, "LATENT")
+        ks["outputs"][0]["links"].append(l)
+        vd["inputs"][0]["link"] = l
+        l = new_link(103, 0, base_id + 3, 1, "VAE")
+        vae["outputs"][0]["links"].append(l)
+        vd["inputs"][1]["link"] = l
+        l = new_link(base_id + 3, 0, base_id + 4, 0, "IMAGE")
+        vd["outputs"][0]["links"].append(l)
+        pp["inputs"][0]["link"] = l
 
         return base_id + 2  # KSampler id
 
@@ -1084,15 +1102,33 @@ def build_workflow_4_v2():
         pp["widgets_values"] = ["img", "preview"]
         nodes.append(pp)
 
-        l = new_link(102, 0, base_id, 0, "CLIP"); clip["outputs"][0]["links"].append(l); cte["inputs"][0]["link"] = l
-        l = new_link(base_id, 0, base_id + 1, 0, "CONDITIONING"); cte["outputs"][0]["links"].append(l); czo["inputs"][0]["link"] = l
-        l = new_link(base_id, 0, base_id + 2, 1, "CONDITIONING"); cte["outputs"][0]["links"].append(l); ks["inputs"][1]["link"] = l
-        l = new_link(104, 0, base_id + 2, 0, "MODEL"); msaf["outputs"][0]["links"].append(l); ks["inputs"][0]["link"] = l
-        l = new_link(base_id + 1, 0, base_id + 2, 2, "CONDITIONING"); czo["outputs"][0]["links"].append(l); ks["inputs"][2]["link"] = l
-        l = new_link(105, 0, base_id + 2, 3, "LATENT"); latent["outputs"][0]["links"].append(l); ks["inputs"][3]["link"] = l
-        l = new_link(base_id + 2, 0, base_id + 3, 0, "LATENT"); ks["outputs"][0]["links"].append(l); vd["inputs"][0]["link"] = l
-        l = new_link(103, 0, base_id + 3, 1, "VAE"); vae["outputs"][0]["links"].append(l); vd["inputs"][1]["link"] = l
-        l = new_link(base_id + 3, 0, base_id + 4, 0, "IMAGE"); vd["outputs"][0]["links"].append(l); pp["inputs"][0]["link"] = l
+        l = new_link(102, 0, base_id, 0, "CLIP")
+        clip["outputs"][0]["links"].append(l)
+        cte["inputs"][0]["link"] = l
+        l = new_link(base_id, 0, base_id + 1, 0, "CONDITIONING")
+        cte["outputs"][0]["links"].append(l)
+        czo["inputs"][0]["link"] = l
+        l = new_link(base_id, 0, base_id + 2, 1, "CONDITIONING")
+        cte["outputs"][0]["links"].append(l)
+        ks["inputs"][1]["link"] = l
+        l = new_link(104, 0, base_id + 2, 0, "MODEL")
+        msaf["outputs"][0]["links"].append(l)
+        ks["inputs"][0]["link"] = l
+        l = new_link(base_id + 1, 0, base_id + 2, 2, "CONDITIONING")
+        czo["outputs"][0]["links"].append(l)
+        ks["inputs"][2]["link"] = l
+        l = new_link(105, 0, base_id + 2, 3, "LATENT")
+        latent["outputs"][0]["links"].append(l)
+        ks["inputs"][3]["link"] = l
+        l = new_link(base_id + 2, 0, base_id + 3, 0, "LATENT")
+        ks["outputs"][0]["links"].append(l)
+        vd["inputs"][0]["link"] = l
+        l = new_link(103, 0, base_id + 3, 1, "VAE")
+        vae["outputs"][0]["links"].append(l)
+        vd["inputs"][1]["link"] = l
+        l = new_link(base_id + 3, 0, base_id + 4, 0, "IMAGE")
+        vd["outputs"][0]["links"].append(l)
+        pp["inputs"][0]["link"] = l
         return base_id + 2
 
     ksA1 = add_scene(200, 350,  "a cute orange cat sitting in sunlight", 1111)

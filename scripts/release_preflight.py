@@ -542,6 +542,48 @@ def check_output_arity():
                        ", ".join("%s=%d" % kv for kv in sorted(lens.items()))))
 
 
+def check_registry_lint():
+    """No `a; b` statement lines and no exec()/eval() calls in any tracked .py file.
+
+    The Comfy Registry lints every upload. Since September 2026 its publish log
+    prints "E702 Multiple statements on one line (semicolon)" for each `a; b`,
+    followed by "We will soon disable exec and eval, and multiple statements in a
+    single line, so this will be an error soon." Once that becomes an error the
+    publish fails, so catch it here while it is still only a warning. The 45 lines
+    it reported were split on 2026-09-29; this keeps them from coming back.
+
+    Tokenized, not grepped, so a ';' inside a string or a comment is never counted.
+    """
+    import tokenize
+    for rel in tracked_files():
+        if not rel.endswith(".py"):
+            continue
+        path = os.path.join(REPO, rel)
+        try:
+            with io.open(path, encoding="utf-8") as fh:
+                src = fh.read()
+            toks = list(tokenize.generate_tokens(io.StringIO(src).readline))
+            tree = ast.parse(src)
+        except (SyntaxError, ValueError, UnicodeDecodeError, OSError,
+                tokenize.TokenError) as exc:
+            failures.append("%s could not be read for the registry lint (%s): %s"
+                            % (rel, type(exc).__name__, exc))
+            continue
+        lines = sorted({t.start[0] for t in toks
+                        if t.type == tokenize.OP and t.string == ";"})
+        if lines:
+            failures.append(
+                "%s: more than one statement on a line (';') at line %s. The registry "
+                "warns (E702) and says this will soon fail the publish: put each "
+                "statement on its own line." % (rel, ", ".join(str(n) for n in lines[:8])
+                                                + (" ..." if len(lines) > 8 else "")))
+        for node in ast.walk(tree):
+            if (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+                    and node.func.id in ("exec", "eval")):
+                failures.append("%s:%d: calls %s(). The registry says it will soon refuse "
+                                "exec and eval." % (rel, node.lineno, node.func.id))
+
+
 def main():
     check_files()
     data = check_pyproject()
@@ -551,6 +593,7 @@ def main():
     check_output_arity()
     check_css_prefix_collisions()
     check_prefix_safe_urls()
+    check_registry_lint()
 
     if failures:
         print("RELEASE PREFLIGHT FAILED (%d problem%s)\n"

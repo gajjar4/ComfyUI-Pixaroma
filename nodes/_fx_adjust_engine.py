@@ -113,17 +113,22 @@ def apply_fx(arr, adj, amount01, seed=0):
         c[:, :, 2] -= a["temperature"] / 100.0 * 0.10
     if a["tint"]:       c[:, :, 1] += a["tint"] / 100.0 * 0.10
     if a["saturation"]:
-        L = _luma(c); c = L + (c - L) * (1 + a["saturation"] / 100.0)
+        L = _luma(c)
+        c = L + (c - L) * (1 + a["saturation"] / 100.0)
     if a["vibrance"]:
-        mx = c.max(axis=2, keepdims=True); mn = c.min(axis=2, keepdims=True)
+        mx = c.max(axis=2, keepdims=True)
+        mn = c.min(axis=2, keepdims=True)
         sat = np.where(mx <= 0, 0.0, (mx - mn) / np.maximum(mx, 1e-6))
         amt = (a["vibrance"] / 100.0) * (1 - sat)
-        L = _luma(c); c = L + (c - L) * (1 + amt)
+        L = _luma(c)
+        c = L + (c - L) * (1 + amt)
     if a["hue"]:
-        M = _hue_matrix(a["hue"]); c = c @ M.T
+        M = _hue_matrix(a["hue"])
+        c = c @ M.T
     if a["clarity"]:
         # midtone contrast, also ratio-preserving (luma gain) so it can't speckle
-        L = _luma(c); m = 1 - np.abs(2 * L - 1)
+        L = _luma(c)
+        m = 1 - np.abs(2 * L - 1)
         Lt = (L - 0.5) * (1 + (a["clarity"] / 100.0) * 0.5 * m) + 0.5
         c = c * np.clip(Lt / np.maximum(L, 1e-4), 0.0, 4.0)
 
