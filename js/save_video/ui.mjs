@@ -72,6 +72,9 @@ export function injectCSS() {
     ".pix-sv-prev{background:#1d1d1d;border:1px solid #444;border-radius:4px;padding:6px 8px;margin-top:8px;}",
     ".pix-sv-prevlab{font-size:10px;color:#8f8f8f;margin-bottom:2px;}",
     ".pix-sv-prevpath{font-family:Consolas,ui-monospace,monospace;font-size:11px;color:#ffb59e;word-break:break-all;line-height:1.45;}",
+    // a wired name that is only known once the workflow runs - marked so it
+    // cannot be mistaken for part of the real filename
+    ".pix-sv-wired{font-style:italic;color:#bbb;border-bottom:1px dotted currentColor;cursor:help;}",
     ".pix-sv-hint{font-size:10px;color:#8f8f8f;margin-top:4px;line-height:1.5;}",
     ".pix-sv-seg{display:inline-flex;border:1px solid #444;border-radius:999px;overflow:hidden;flex:0 0 auto;}",
     ".pix-sv-seg button{background:#1d1d1d;color:#aaa;border:none;padding:4px 11px;font-size:12px;cursor:pointer;font-family:inherit;}",

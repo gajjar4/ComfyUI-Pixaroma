@@ -18,6 +18,7 @@ import {
 import { isGraphLoading } from "../shared/graph_loading.mjs";
 import { registerNodeSettings, installNodeAccent } from "../shared/node_settings.mjs";
 import { applyFilenameTokenRefs } from "../shared/filename_tokens.mjs";
+import { resolveWiredName, setPreviewPath, WIRED_TIP } from "../shared/wired_name.mjs";
 import {
   COMFY_CLASS,
   HIDDEN_INPUT_NAME,
@@ -27,7 +28,6 @@ import {
   normalizePath,
   resolveDateTokens,
   expandNativeTokens,
-  cleanInputName,
   sanitizePrefixMirror,
   FORMATS,
   formatDef,
@@ -545,71 +545,9 @@ function openImageMenu(node, x, y) {
 }
 
 // ── live "Will save as" preview ───────────────────────────────────────────────
-// Stands in for a wired name that is only known once the workflow runs (a
-// Concatenate Text, a Text Join, anything that builds its text during the run).
-// This used to be the literal word "name", which the preview printed as if it
-// were the real filename - `...\name_2026-09-28_001.png` while the file really
-// went to the wired folder (Discord 2026-09-28). Letters only, so it passes
-// through the date, token and sanitizer steps untouched; setPreviewPath draws
-// it as a marked placeholder. Display only - Python never sees it.
-const WIRED_UNKNOWN = "PIXWIREDNAMEUNKNOWN";
-const WIRED_LABEL = "‹wired name›";
-const WIRED_TIP =
-  "The part in ‹ › comes from the node wired into name. That node makes its " +
-  "text while the workflow runs, so it cannot be shown here - the file still " +
-  "gets the real text.";
-
-function resolveWiredName(node) {
-  try {
-    // mirror the run-time cleanup, including whether folders survive
-    const keepFolders = !!readState(node).inputSubfolders;
-    const inp = node.inputs && node.inputs.find((i) => i && i.name === "name");
-    if (!inp || inp.link == null) return "";
-    const graph = node.graph || app.graph;
-    let link = graph.links?.[inp.link];
-    if (!link && typeof graph.links?.get === "function") link = graph.links.get(inp.link);
-    if (!link) return WIRED_UNKNOWN;
-    const origin = graph.getNodeById ? graph.getNodeById(link.origin_id) : null;
-    if (!origin) return WIRED_UNKNOWN;
-    if (origin.comfyClass === "PixaromaLoadImage") {
-      const w = origin.widgets?.find((x) => x && x.name === "image");
-      let v = typeof w?.value === "string" ? w.value : "";
-      v = v.replace(/\s*\[(input|output|temp)\]\s*$/i, "");
-      v = v.split("/").pop().split("\\").pop();
-      return cleanInputName(v, keepFolders) || WIRED_UNKNOWN;
-    }
-    // a plain text-ish widget on the origin (Text Pixaroma etc.) — best effort
-    const tw = origin.widgets?.find(
-      (x) => x && typeof x.value === "string" && x.value &&
-        (x.name === "text" || x.name === "value" || x.name === "string")
-    );
-    if (tw) return cleanInputName(String(tw.value).slice(0, 60), keepFolders) || WIRED_UNKNOWN;
-    return WIRED_UNKNOWN; // wired, value only known at run time
-  } catch {
-    return WIRED_UNKNOWN;
-  }
-}
-
-// Write the preview path, drawing any WIRED_UNKNOWN as a marked placeholder.
-// DOM text nodes only, never innerHTML: the path carries user-typed text.
-function setPreviewPath(el, text) {
-  const parts = String(text).split(WIRED_UNKNOWN);
-  if (parts.length === 1) {
-    el.textContent = text;
-    return false;
-  }
-  el.textContent = "";
-  parts.forEach((part, i) => {
-    if (i > 0) {
-      const tag = document.createElement("span");
-      tag.className = "pix-si-wired";
-      tag.textContent = WIRED_LABEL;
-      el.appendChild(tag);
-    }
-    if (part) el.appendChild(document.createTextNode(part));
-  });
-  return true;
-}
+// The wired name is resolved by ../shared/wired_name.mjs, ONE copy shared with
+// Save Video: a name only known at run time is drawn as a marked placeholder
+// instead of the literal word "name" (Discord 2026-09-28).
 
 function cntKey(folderRaw, nameWithExt, digits) {
   return folderRaw + "\x00" + nameWithExt + "\x00" + digits;
@@ -652,7 +590,8 @@ function updatePreview(node) {
   let s = String(st.pattern || DEFAULT_STATE.pattern);
   // function replacement so a wired name containing "$" patterns ($&, $$)
   // is inserted literally (JS string replacements interpret those)
-  const wired = resolveWiredName(node);
+  // mirror the run-time cleanup, including whether folders survive
+  const wired = resolveWiredName(node, !!st.inputSubfolders);
   s = s.replace(/%input%/g, () => wired);
   s = resolveDateTokens(s);
   s = expandNativeTokens(s); // %year% %month% %day% %hour% %minute% %second%
@@ -697,7 +636,7 @@ function updatePreview(node) {
       "Pixaroma only writes to ComfyUI's own folders and to folders you picked " +
       "with Browse. Picking this folder in the system dialog approves it for good.";
   } else {
-    const wiredUnknown = setPreviewPath(ui.prevPath, display);
+    const wiredUnknown = setPreviewPath(ui.prevPath, display, "pix-si-wired");
     ui.prevPath.style.color = "";
     ui.prevPath.title = wiredUnknown ? WIRED_TIP : "";
   }

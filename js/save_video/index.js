@@ -18,6 +18,7 @@ import {
 import { isGraphLoading } from "../shared/graph_loading.mjs";
 import { registerNodeSettings, installNodeAccent } from "../shared/node_settings.mjs";
 import { applyFilenameTokenRefs } from "../shared/filename_tokens.mjs";
+import { resolveWiredName, setPreviewPath, WIRED_TIP } from "../shared/wired_name.mjs";
 import {
   COMFY_CLASS,
   HIDDEN_INPUT_NAME,
@@ -33,7 +34,6 @@ import {
   normalizePath,
   resolveDateTokens,
   expandNativeTokens,
-  cleanInputName,
   sanitizePrefixMirror,
 } from "./state.mjs";
 import { injectCSS, buildRoot, el } from "./ui.mjs";
@@ -118,26 +118,12 @@ function fpsOf(node) {
   return isFinite(v) && v > 0 ? Math.max(1, Math.round(v)) : 24;
 }
 
-// The wired `name` input, resolved best-effort for the DISPLAY only - Python
-// recomputes everything at save time, so a stale preview can never misname a
-// file. `node.graph || app.graph` because app.graph holds only TOP-LEVEL nodes
-// and this node may live inside a subgraph.
-function resolveWiredName(node) {
-  try {
-    const slot = node.inputs?.find((i) => i.name === "name");
-    if (!slot || slot.link == null) return "";
-    const graph = node.graph || app.graph;
-    let link = graph?.links?.[slot.link];
-    if (!link && typeof graph?.links?.get === "function") link = graph.links.get(slot.link);
-    if (!link) return "";
-    const src = graph.getNodeById?.(link.origin_id);
-    if (!src) return "";
-    const w = src.widgets?.find((x) => typeof x.value === "string" && x.value);
-    return cleanInputName(w?.value || "");
-  } catch {
-    return "";
-  }
-}
+// The wired `name` input is resolved by ../shared/wired_name.mjs, ONE copy
+// shared with Save Image. It used to live here and took the FIRST text widget of
+// any name on the source (Concatenate Text's first box, so `clips_001.mp4` for a
+// file really named `clips_-take_001.mp4`) and returned "" when it could not
+// tell, so the name vanished from the line. Save Video always flattens folders
+// in the wired name, hence no keepFolders argument.
 
 function cntKey(folder, name, digits) {
   // \x00 as a JS ESCAPE, never a raw control byte: a raw NUL makes ripgrep treat
@@ -228,9 +214,9 @@ function updatePreview(node) {
       "Pixaroma only writes to ComfyUI's own folders and to folders you picked with " +
       "the Browse button. Pick this one once and it stays approved.";
   } else {
-    ui.prevPath.textContent = display;
+    const wiredUnknown = setPreviewPath(ui.prevPath, display, "pix-sv-wired");
     ui.prevPath.style.color = "";
-    ui.prevPath.title = display;
+    ui.prevPath.title = wiredUnknown ? WIRED_TIP : display;
   }
 }
 
