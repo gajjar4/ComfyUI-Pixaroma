@@ -42,6 +42,7 @@ import {
   SEED_FIXED,
   SEED_RANDOM,
   displaySeed,
+  extraImageInputs,
   readLast,
   readState,
   rollSeed,
@@ -62,6 +63,7 @@ const WIDGET_MIN_H = 250;
 // output dot) and the second row two slots below it, leaving one empty row
 // between them so the seed and the join segment never read as one block.
 const CLASSIC_BAND_TOP = -92;
+const SLOT_ROW_H = 20;   // LiteGraph.NODE_SLOT_HEIGHT, one input row
 const CLASSIC_RSV_L = 78;      // clear the clip / image / video / audio labels
 // The band spreads over the FOUR free slot rows rather than bunching at the top:
 // gear + seed beside slot 2, Tags halfway down, and the join segment beside the
@@ -451,8 +453,15 @@ export function placeBand(node) {
   try {
     const classic = !isVueNodes();
     els.band.classList.toggle("floated", classic);
+    // Each image_N socket sits BELOW `text`, and in Classic every slot row
+    // pushes the widget one row further down - so the band rises by the same
+    // amount to stay beside slots 2-5, which is what the constants above were
+    // measured against. DOM style only, so it is safe on the load path.
+    const extra = classic ? extraImageInputs(node).length : 0;
+    els.band.style.top = extra ? `${CLASSIC_BAND_TOP - SLOT_ROW_H * extra}px` : "";
   } catch (e) {
     els.band.classList.remove("floated");
+    els.band.style.top = "";
   }
 }
 

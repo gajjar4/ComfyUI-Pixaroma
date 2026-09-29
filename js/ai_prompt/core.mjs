@@ -175,6 +175,69 @@ export function slotConnected(node, name) {
   return false;
 }
 
+// ---------------------------------------------------------------------------
+// image_2 ... image_8 (2026-09-29)
+// ---------------------------------------------------------------------------
+// Extra picture sockets, added one at a time as pictures are wired, because a
+// BATCH crops every picture to the first one's size. Python accepts them WITHOUT
+// listing them in the schema (nodes/_ai_prompt_helpers.py AIPromptInputs), so a
+// node saved before they existed never gains one on load - only a user's own
+// wiring adds or removes them (syncImageSlots, called from index.js).
+export const MAX_IMAGES = 8;   // `image` + image_2 ... image_8, same cap as Python
+const EXTRA_IMAGE = /^image_(\d+)$/;
+
+function extraNumber(inp) {
+  const m = EXTRA_IMAGE.exec(inp?.name || "");
+  const n = m ? Number(m[1]) : 0;
+  return n >= 2 ? n : 0;
+}
+
+/** The image_N inputs, in the order they sit on the node. */
+export function extraImageInputs(node) {
+  return (node?.inputs || []).filter((inp) => extraNumber(inp) > 0);
+}
+
+/** How many pictures are wired, `image` included. */
+export function connectedImageCount(node) {
+  let n = slotConnected(node, "image") ? 1 : 0;
+  for (const inp of extraImageInputs(node)) if (inp.link != null) n += 1;
+  return n;
+}
+
+/**
+ * Keep exactly one EMPTY picture socket after the last wired one: `image` wired
+ * shows image_2, image_2 wired shows image_3, up to MAX_IMAGES. Only unwired
+ * sockets at the END are ever removed, so a wire is never renumbered.
+ * Returns how many sockets were added (positive) or removed (negative).
+ * Callers must NOT run this during a load or a configure replay.
+ */
+export function syncImageSlots(node) {
+  const inputs = node?.inputs;
+  if (!inputs || !inputs.some((inp) => inp?.name === "image")) return 0;
+  let last = slotConnected(node, "image") ? 1 : 0;
+  let highest = 1;
+  for (const inp of extraImageInputs(node)) {
+    const n = extraNumber(inp);
+    highest = Math.max(highest, n);
+    if (inp.link != null) last = Math.max(last, n);
+  }
+  const want = last ? Math.min(MAX_IMAGES, last + 1) - 1 : 0;   // extra sockets wanted
+  let delta = 0;
+  while (extraImageInputs(node).length < want && highest < MAX_IMAGES) {
+    highest += 1;
+    node.addInput(`image_${highest}`, "IMAGE");
+    delta += 1;
+  }
+  while (extraImageInputs(node).length > want) {
+    const extras = extraImageInputs(node);
+    const tail = extras[extras.length - 1];
+    if (!tail || tail.link != null) break;
+    node.removeInput(node.inputs.indexOf(tail));
+    delta -= 1;
+  }
+  return delta;
+}
+
 /**
  * What the model is being GIVEN, as a short phrase for the banner.
  *
@@ -195,7 +258,8 @@ export function slotConnected(node, name) {
 export function wiredSummary(node) {
   const bits = [];
   if (readState(node).idea.trim()) bits.push("your idea");
-  if (slotConnected(node, "image")) bits.push("image");
+  const pics = connectedImageCount(node);
+  if (pics) bits.push(pics > 1 ? `${pics} images` : "image");
   if (slotConnected(node, "video")) bits.push("video");
   if (slotConnected(node, "audio")) bits.push("audio");
   if (slotConnected(node, "text")) bits.push("text");

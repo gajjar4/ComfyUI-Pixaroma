@@ -3,11 +3,12 @@
 // core.mjs holds the state, ui.mjs the face, settings.mjs the gear panel and
 // the full-screen editor, api.mjs the model list, help.mjs the help text.
 //
-// Nothing about this node is derived from a stored mode, and the connection
-// handler below writes NO serialized state - it only asks the face to redraw
-// and lets an open panel re-read the clip wire. That is why it needs none of
-// the configure-replay gating the Switch family carries (Vue Compat #17/#19):
-// there is nothing for a replayed connection event to corrupt.
+// Nothing about this node is derived from a stored mode. The connection
+// handler below repaints the face and, since 2026-09-29, adds or removes the
+// image_2 ... image_8 sockets - which IS serialized state, so that one part is
+// gated exactly like the Switch family (Vue Compat #17/#19): never inside
+// configure (its replay walks the LIVE inputs list, and a handler that appends
+// an input there runs away), and never while a workflow is loading.
 
 import { app } from "../../../scripts/app.js";
 import { api } from "../../../scripts/api.js";
@@ -17,8 +18,9 @@ import { registerNodeSettings, repaintAccent } from "../shared/node_settings.mjs
 import { isVueNodes } from "../shared/nodes2.mjs";
 import {
   CLASS, DEFAULT_H, DEFAULT_W, HIDDEN_INPUT, MIN_H, MIN_W,
-  injectedState, readState, rollSeed, writeState,
+  injectedState, readState, rollSeed, syncImageSlots, writeState,
 } from "./core.mjs";
+import { notifyGraphChanged } from "../shared/graph_changed.mjs";
 import { registerSeedRoller } from "../shared/seed_roll.mjs";
 // The @tag layer, shared with Prompt Pixaroma. beginPickBuild + makeRunResolvers are
 // what let a *category / #list in the idea roll a fresh pick per run and still be
@@ -94,6 +96,40 @@ registerNodeSettings(CLASS, {
   onChange: (node) => renderFace(node),
 });
 
+// Deferred one tick so a wire DRAGGED ONTO an occupied socket (disconnect, then
+// connect) is judged once, on the settled state, and so no socket is removed
+// while LiteGraph is still inside its own disconnect.
+function scheduleImageSync(node) {
+  if (node._pixApSyncT) return;
+  node._pixApSyncT = setTimeout(() => {
+    node._pixApSyncT = null;
+    if (!node.graph || node._pixApConfiguring || isGraphLoading()) return;
+    const h0 = node.size?.[1] || 0;
+    let delta = 0;
+    try { delta = syncImageSlots(node); } catch (e) {
+      console.error("[Pixaroma.AIPrompt] image slots", e);
+      return;
+    }
+    if (!delta) return;
+    // Each socket row takes 20px from the body unless the node grows by it -
+    // in BOTH renderers. addInput only grows a node up to its bare minimum,
+    // and in Nodes 2.0 the stored height is a floor the body does not push
+    // against (its column is absolute), so without this the button row was
+    // measured hanging below the node frame there. setSize, never a raw
+    // node.size write, so it sticks in Nodes 2.0 too.
+    const target = delta > 0
+      ? Math.max(node.size[1], h0 + 20 * delta)
+      : Math.max(MIN_H, h0 + 20 * delta);
+    node.setSize?.([node.size[0], target]);
+    renderFace(node);
+    node.setDirtyCanvas?.(true, true);
+    // The socket appears a tick AFTER core recorded the mouseup that made the
+    // wire, so record the change ourselves (convention #31) - or Ctrl+Z and
+    // the unsaved-changes dot would miss it.
+    notifyGraphChanged();
+  }, 0);
+}
+
 app.registerExtension({
   name: "Pixaroma.AIPrompt",
 
@@ -135,14 +171,30 @@ app.registerExtension({
       return r;
     };
 
+    // Raise a flag for the WHOLE of configure, not in the onConfigure hook:
+    // LiteGraph replays onConnectionsChange for every input INSIDE configure,
+    // before onConfigure runs, and a flag raised there gates nothing (Vue Compat
+    // #17's correction). This wraps ComfyNode's own configure.
+    const _configureFn = nodeType.prototype.configure;
+    nodeType.prototype.configure = function () {
+      this._pixApConfiguring = true;
+      try { return _configureFn.apply(this, arguments); }
+      finally { this._pixApConfiguring = false; }
+    };
+
     // Wiring the clip input changes which model runs, and wiring text makes
-    // the join segment appear. Both are pure repaints - nothing serialized is
-    // written - so this needs no load gate.
+    // the join segment appear - pure repaints. Wiring a PICTURE may also add or
+    // remove an image_N socket, which is serialized state, so that part runs
+    // only for the user's own wiring: never in a configure replay, never during
+    // a load, undo or tab switch (isGraphLoading covers all three).
     const _conn = nodeType.prototype.onConnectionsChange;
-    nodeType.prototype.onConnectionsChange = function () {
+    nodeType.prototype.onConnectionsChange = function (type) {
       const r = _conn?.apply(this, arguments);
       renderFace(this);
       refreshAIPromptPanel(this);
+      if (type === (globalThis.LiteGraph?.INPUT ?? 1) && !this._pixApConfiguring && !isGraphLoading()) {
+        scheduleImageSync(this);
+      }
       return r;
     };
 
@@ -173,6 +225,8 @@ app.registerExtension({
 
     const _removed = nodeType.prototype.onRemoved;
     nodeType.prototype.onRemoved = function () {
+      clearTimeout(this._pixApSyncT);
+      this._pixApSyncT = null;
       closeAIPromptPanelFor(this);
       try { this._pixApRendererOff?.(); } catch (e) { /* already gone */ }
       this._pixApRendererOff = null;

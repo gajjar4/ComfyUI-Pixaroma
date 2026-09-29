@@ -322,6 +322,34 @@ def word_count(text):
     return len([w for w in str(text or "").split() if w.strip()])
 
 
+# ---------------------------------------------------------------------------
+# Extra pictures: image_2 ... image_8
+# ---------------------------------------------------------------------------
+# The browser adds these sockets one at a time as pictures are wired (2026-09-29,
+# asked for on Discord: a batch crops every picture to the first one's size). They
+# are NOT declared in the node's schema, so ComfyUI never adds them to a node that
+# was saved before they existed - an old workflow opens exactly as it was saved.
+MAX_IMAGES = 8  # `image` plus image_2 ... image_8
+_EXTRA_IMAGE = re.compile(r"image_(\d+)")
+
+
+def is_extra_image_key(name):
+    """True for image_2 ... image_<MAX_IMAGES>, and for nothing else."""
+    if not isinstance(name, str):
+        return False
+    m = _EXTRA_IMAGE.fullmatch(name)
+    return bool(m) and 2 <= int(m.group(1)) <= MAX_IMAGES
+
+
+def extra_image_keys(values):
+    """The image_N keys present in `values`, in picture order (image_2 first)."""
+    try:
+        keys = [k for k in values if is_extra_image_key(k)]
+    except TypeError:
+        return []
+    return sorted(keys, key=lambda k: int(k.split("_")[1]))
+
+
 def bytes_or_none(value):
     """A recorded model size from an untrusted payload, or None.
 
@@ -341,3 +369,28 @@ def bytes_or_none(value):
     except (TypeError, ValueError):
         return None
     return n if 0 < n <= (1 << 40) else None
+
+
+class AIPromptInputs(dict):
+    """The node's optional inputs: the five declared ones, exactly as before,
+    PLUS image_2 ... image_8, which the browser adds one at a time as pictures
+    are wired.
+
+    Iterating this dict yields ONLY the five, so they are all the schema lists -
+    ComfyUI therefore never adds image_2 to a node saved before it existed, and
+    an old workflow opens exactly as it was. `in` and `[]` still answer for the
+    extra names, so a prompt carrying them validates, links its upstream and
+    hands the picture to run(). Deliberately NARROW (only image_N) rather than
+    the "contains everything" FlexibleOptionalInputType: that one would also
+    claim the HIDDEN AIPromptState input as optional."""
+
+    def __contains__(self, key):
+        return dict.__contains__(self, key) or is_extra_image_key(key)
+
+    def __getitem__(self, key):
+        if dict.__contains__(self, key):
+            return dict.__getitem__(self, key)
+        if is_extra_image_key(key):
+            return ("IMAGE", {"tooltip": "Another picture for the model to look at, "
+                              "at its own size. Wiring one adds the next slot."})
+        raise KeyError(key)

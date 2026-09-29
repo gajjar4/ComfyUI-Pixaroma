@@ -27,6 +27,8 @@ from ._ai_prompt_helpers import (
     as_text,
     build_prompt,
     content_text,
+    AIPromptInputs,
+    extra_image_keys,
     parse_state,
     reasoning_only,
     status_line,
@@ -263,11 +265,31 @@ def _audio(x):
     return None
 
 
+def _batch_like_core(pics):
+    """Several pictures as ONE batch, the way core's Batch Images makes it:
+    every picture resized to the first one's size with a centre crop
+    (comfy_extras/nodes_post_processing.py batch_images). Only for a model that
+    reads a single `image` batch (Gemma 4); the Qwen vision models get the
+    pictures one by one through `images` instead, at their own sizes."""
+    import torch
+    import comfy.utils
+    first = pics[0]
+    out = []
+    for p in pics:
+        if p.shape[1:3] != first.shape[1:3]:
+            p = comfy.utils.common_upscale(
+                p.movedim(-1, 1), first.shape[2], first.shape[1], "bilinear", "center"
+            ).movedim(1, -1)
+        out.append(p)
+    return torch.cat(out, dim=0)
+
+
 class PixaromaAIPrompt:
     DESCRIPTION = (
         "Runs a language model you already have, on your own machine, using an "
         "instruction you save on the node. Wire in a picture, a video, some audio or "
-        "text, type an idea, and it hands back text.\n\n"
+        "text, type an idea, and it hands back text. Wiring a picture adds a slot "
+        "for another one, up to 8, each seen at its own size.\n\n"
         "The instruction is called the formula and it lives on this node, so every "
         "copy carries its own. That is what makes these chainable: put one after "
         "another and each does a different job, like describe this photo, then rewrite "
@@ -291,9 +313,12 @@ class PixaromaAIPrompt:
         # Everything the face shows rides in the hidden state blob, injected by
         # the browser at graphToPrompt time (Vue Compat #9). A required STRING
         # would render as a widget AND a convertible input dot.
+        # AIPromptInputs keeps these five EXACTLY (same names, same order: the
+        # order is load-bearing for bypass, ai-prompt.md #24) and also answers
+        # for image_2 ... image_8 without listing them in the schema.
         return {
             "required": {},
-            "optional": {
+            "optional": AIPromptInputs({
                 "clip": (
                     "CLIP",
                     {
@@ -308,7 +333,9 @@ class PixaromaAIPrompt:
                     {
                         "tooltip": "Optional. A picture for the model to look at. Needs "
                         "a vision model (a Qwen3-VL build); a text-only one accepts the "
-                        "picture and silently ignores it."
+                        "picture and silently ignores it. Wiring it adds an image_2 slot "
+                        "for a second picture, and so on up to 8, each seen at its own "
+                        "size."
                     },
                 ),
                 "video": (
@@ -335,7 +362,7 @@ class PixaromaAIPrompt:
                         "band, and its default is in the settings.",
                     },
                 ),
-            },
+            }),
             "hidden": {"AIPromptState": ("STRING", {"default": "{}"})},
         }
 
@@ -355,7 +382,7 @@ class PixaromaAIPrompt:
     CATEGORY = "👑 Pixaroma/💬 Prompt & Text"
 
     def run(self, clip=None, image=None, video=None, audio=None, text=None,
-            AIPromptState="{}"):
+            AIPromptState="{}", **extra):
         started = time.time()
         st = parse_state(AIPromptState)
 
@@ -418,22 +445,48 @@ class PixaromaAIPrompt:
         img = _img(image)
         vid = _img(video)
         aud = _audio(audio)
+        more = [p for p in (_img(extra[k]) for k in extra_image_keys(extra)) if p is not None]
 
-        # Byte-identical to core's TextGenerate. Do NOT wrap this in a
-        # try/except TypeError "for safety": every tokenizer in the chain ends
-        # in **kwargs, so nothing here CAN raise TypeError, and a fallback that
-        # quietly dropped skip_template would change what the model is asked
-        # without saying so. `image` is singular on purpose - that is what core
-        # passes and what Qwen3VLTokenizer reads out of kwargs.
-        tokens = clip.tokenize(
-            prompt,
-            image=img,
-            skip_template=not st["use_default_template"],
-            min_length=1,
-            thinking=st["thinking"],
-            video=vid,
-            audio=aud,
-        )
+        if not more:
+            # Byte-identical to core's TextGenerate. Do NOT wrap this in a
+            # try/except TypeError "for safety": every tokenizer in the chain
+            # ends in **kwargs, so nothing here CAN raise TypeError, and a
+            # fallback that quietly dropped skip_template would change what the
+            # model is asked without saying so. `image` is singular on purpose -
+            # that is what core passes and what Qwen3VLTokenizer reads out of
+            # kwargs.
+            tokens = clip.tokenize(
+                prompt,
+                image=img,
+                skip_template=not st["use_default_template"],
+                min_length=1,
+                thinking=st["thinking"],
+                video=vid,
+                audio=aud,
+            )
+        else:
+            # image_2 ... image_8 are wired. ONLY this branch is new, so a node
+            # without them asks exactly what it always asked (the harness pins
+            # that byte for byte).
+            #
+            # Qwen3-VL / Qwen3.5 take `images`, a LIST of single pictures, and
+            # give each its own vision block at its OWN size - which is the
+            # point: a batch crops every picture to the first one's shape.
+            # Gemma 4 reads only `image` (a batch), so it also gets them all,
+            # resized to the first like core's Batch Images; a text-only model
+            # ignores both, exactly as it ignores one picture today.
+            pics = ([img] if img is not None else []) + more
+            singles = [p[i:i + 1] for p in pics for i in range(p.shape[0])]
+            tokens = clip.tokenize(
+                prompt,
+                image=_batch_like_core(pics),
+                images=singles,
+                skip_template=not st["use_default_template"],
+                min_length=1,
+                thinking=st["thinking"],
+                video=vid,
+                audio=aud,
+            )
 
         try:
             generated_ids = clip.generate(

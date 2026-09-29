@@ -120,6 +120,21 @@ export const AI_PROMPT_HELP = {
         + "sentence. Double-click the title to rename it.",
     },
     {
+      heading: "More than one picture",
+      body:
+        "Wire a picture into image and an image_2 slot appears below the others; "
+        + "wire that and image_3 appears, up to 8 pictures. The model sees each one "
+        + "separately and at its own size, so a wide picture and a tall one both "
+        + "arrive whole. Unplug the last one and its empty slot goes away again.\n\n"
+        + "A batch in the image input also works, but a batch makes every picture "
+        + "the size of the first one, cutting the edges off the others. The extra "
+        + "slots avoid that.\n\n"
+        + "Qwen3-VL and Qwen3.5 get the pictures one by one. Gemma 4 takes them as "
+        + "one batch, the first picture's size. On a node from before this update "
+        + "that already has a picture wired, unplug and re-plug that wire once and "
+        + "the image_2 slot appears.",
+    },
+    {
       heading: "What happens when you duplicate one",
       body:
         "A duplicate carries everything: the model, all the sampling settings, the "
@@ -231,7 +246,7 @@ export const AI_PROMPT_HELP = {
         ["Qwen Image 2.1 - prompt from an idea", "Turns a short idea into the long, detailed prompt Qwen Image 2.1 likes, built from Qwen's own published prompt enhancer: the style and the medium first, then everything placed in the frame. Put any words you want written in the picture in quotes in your idea, and it keeps them exactly. Qwen Image 2.1's text encoder is Qwen3-VL 8B, so wire the workflow's Load CLIP into the clip input and one model does both jobs."],
         ["Qwen Image 2.1 - transparent picture from an idea", "For a subject on a transparent background. It wraps your idea in the exact words Qwen Image 2.1 needs to make a real transparency channel and describes only the subject. In testing a plain idea gave a solid background every time, and this preset made most of the picture transparent. Save the result as a PNG."],
         ["Qwen Image 2.1 - prompt from an image", "Wire a Load Image into the image input and it writes the Qwen Image 2.1 prompt that would make a picture like it, naming the style as well as the medium, so a cartoon stays a cartoon. Leave Your idea empty for this one."],
-        ["Qwen Image 2.1 - edit from an instruction", "For Qwen Image 2.1's image edit. Wire your picture into the image input, or two pictures through a Batch Images node, type the change in Your idea, and it writes a clear edit instruction that leads with the change and keeps everything else. Qwen Image 2.1 already follows short edits well, so this helps most with vague requests, style changes and two-picture edits."],
+        ["Qwen Image 2.1 - edit from an instruction", "For Qwen Image 2.1's image edit. Wire your picture into the image input and a second one into image_2 (it appears once the first is wired), type the change in Your idea, and it writes a clear edit instruction that leads with the change and keeps everything else. Qwen Image 2.1 already follows short edits well, so this helps most with vague requests, style changes and two-picture edits."],
         ["Z-Image - prompt from an idea", "The same job as the Krea one, written for Z-Image Turbo, which wants a much longer and more detailed prompt. Built from the makers' own guidance, so its Max len is set high to leave room for one. Leave Thinking off, which is the default: Z-Image's encoder is a reasoning model, and thinking costs about three times the wait for no better prompt."],
       ],
     },
