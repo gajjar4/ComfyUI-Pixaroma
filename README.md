@@ -395,6 +395,11 @@ Master the Pixaroma suite with our video guides and workflow deep-dives:
 
 ## 🛠 Changelog
 
+### **September 29, 2026 · v1.4.177**
+- **Fixed: Ctrl+V pasted nothing while a Load Image or Load Image Mini was selected**, not even copied nodes. Pasting a picture no longer asks Firefox for permission each time.
+- **Save Image: a JPG keeps the prompt** when the workflow is too big to fit inside it.
+- **Save Image and Save Video: "Will save as" shows ‹wired name›** when the name is only made during the run, instead of a wrong name.
+
 ### **September 28, 2026 · v1.4.176**
 - **AI Prompt's "Qwen Image 2.1 - prompt from an idea" preset now writes real selfies**, not photos of someone holding up a phone. Load the preset again to get it.
 
