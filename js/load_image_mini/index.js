@@ -34,6 +34,7 @@ import {
   accentOf, readState, writeState,
 } from "./core.mjs";
 import { openMiniSettings, closeMiniSettingsFor } from "./settings.mjs";
+import { isFolderCopy, folderContext, folderCounter, stepFolder, primeFolderListing } from "../load_image/folders.mjs";
 
 const MINI_WIDGET = "pixaroma_load_image_mini_ui";
 const MIN_W = 250;
@@ -410,14 +411,23 @@ function refreshDropdown(node) {
   const counter = root.querySelector('[data-role="counter"]');
   const value = w?.value || "";
   if (ddName) ddName.textContent = value ? splitFilenameSubfolder(value).filename : "— no image —";
-  const values = w?.options?.values || [];
+  // A picture from one of the user's folders: its folder + path on hover, and
+  // the counter + arrows follow that folder (see ../load_image/folders.mjs).
+  // Copies are not counted among the input pictures; they belong to a folder.
+  const fromFolder = folderContext(node);
+  const ddEl = root.querySelector('[data-role="dropdown"]');
+  if (ddEl) ddEl.title = fromFolder ? `${fromFolder.folder}\n${fromFolder.file}` : "";
+  const values = (w?.options?.values || []).filter((v) => !isFolderCopy(v));
   if (counter) {
-    if (value && values.length > 1) {
+    if (fromFolder) {
+      counter.textContent = folderCounter(node);
+      if (!counter.textContent) primeFolderListing(node, () => refreshDropdown(node));
+    } else if (value && values.length > 1) {
       const idx = values.indexOf(value);
       counter.textContent = idx >= 0 ? `${idx + 1} / ${values.length}` : "";
     } else counter.textContent = "";
   }
-  const disabled = values.length < 2;
+  const disabled = !fromFolder && values.length < 2;
   root.querySelector('[data-role="prev"]')?.classList.toggle("disabled", disabled);
   root.querySelector('[data-role="next"]')?.classList.toggle("disabled", disabled);
 }
@@ -425,7 +435,8 @@ function refreshDropdown(node) {
 function pickByOffset(node, offset) {
   const w = node._pixLiImageWidget;
   if (!w) return;
-  const values = w.options?.values || [];
+  if (stepFolder(node, offset)) return;   // a folder picture steps through its folder
+  const values = (w.options?.values || []).filter((v) => !isFolderCopy(v));
   if (values.length === 0) return;
   const cur = values.indexOf(w.value);
   let next;

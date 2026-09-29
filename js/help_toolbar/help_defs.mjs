@@ -31,12 +31,16 @@ const HELP = {
         defs: [
           ["Upload", "Choose an image file from your computer."],
           ["Paste", "Paste an image from the clipboard (or press Ctrl+V while the node is selected)."],
-          ["Gear", "Open the settings panel: the resize modes, snap, resample, upscaling, and this node's accent colour."],
+          ["Gear", "Open the settings panel: the resize modes, snap, resample, upscaling, your picture folders, and this node's accent colour."],
         ],
       },
       {
         heading: "Picking a file",
         body: "Use the arrows to flip through the images in your input folder one at a time (PageUp / PageDown also work), or click the filename to open the picker and choose from thumbnails. You can also drag an image straight onto the node.",
+      },
+      {
+        heading: "Your own picture folders",
+        body: "Pictures do not have to be in ComfyUI's input folder. Click `+ Folder` in the picker (or `Add folder…` in the gear) and pick a folder in the window that opens. It then shows up on the left of the picker, under `Folders`.\n\nClick a picture to use it. It is copied into ComfyUI's input folder, so everything else works as usual, and at each Run it is refreshed from the original, so changes you make in another program are used. While the picture comes from a folder, the arrows step through that folder. The folder list is shared with Load Image Pixaroma.",
       },
       {
         heading: "Resize lives in the gear",
@@ -866,7 +870,12 @@ const HELP = {
           "Use the thumbnail dropdown (with subfolder groups) or the `◀ ▶` arrows to switch between images.",
           "Pick a resize mode chip in the panel. Its controls appear below.",
           "The node shows a live INPUT to OUTPUT size card so you can confirm the final dimensions before running.",
+          "The gear beside `Upload Image` opens this node's settings: your picture folders, the thumbnail size, and the button colour.",
         ],
+      },
+      {
+        heading: "Your own picture folders",
+        body: "Pictures do not have to be in ComfyUI's input folder. Click `+ Folder` in the picker (or `Add folder…` in the gear) and pick a folder in the window that opens. It then shows up on the left of the picker, under `Folders`, with its subfolders grouped inside.\n\nClick a picture to use it. It is copied into ComfyUI's input folder, so everything else (the preview, the Mask Editor, saved workflows) works as usual, and at each Run it is refreshed from the original, so changes you make in another program are used. While the picture comes from a folder, the `◀ ▶` arrows step through that folder.\n\nThe folder window opens on the computer running ComfyUI; picking a folder there is also what gives Pixaroma permission to read it. The ✕ in the gear removes a folder from the list without touching its pictures.",
       },
       {
         heading: "Outputs",

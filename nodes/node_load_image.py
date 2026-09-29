@@ -19,6 +19,7 @@ from PIL import Image, ImageOps, ImageSequence
 import folder_paths
 import node_helpers
 
+from ._folder_source import refresh_copy, source_for, source_stamp
 from ._resize_helpers import _I16_MODES, _resize_frame
 
 
@@ -84,7 +85,11 @@ class PixaromaLoadImage:
         "Outputs: image, mask, width, height, filename, original_width, "
         "original_height.\n\n"
         "Eliminates the need for downstream Get Image Size + Image Scale + "
-        "Image Resize chains in most workflows."
+        "Image Resize chains in most workflows.\n\n"
+        "Pictures can also come from your own folders, not only ComfyUI's "
+        "input folder: add one with the gear or with + Folder in the picker. "
+        "A picture you take is copied into the input folder and refreshed "
+        "from the original at each Run."
     )
 
     @classmethod
@@ -107,7 +112,7 @@ class PixaromaLoadImage:
         files = folder_paths.filter_files_content_types(files, ["image"])
         return {
             "required": {
-                "image": (sorted(files), {"image_upload": True, "tooltip": "The image to load from ComfyUI's input folder. Use the Upload Image button, drag a file onto the node, paste from the clipboard, or pick one from the dropdown."}),
+                "image": (sorted(files), {"image_upload": True, "tooltip": "The image to load. Use the Upload Image button, drag a file onto the node, paste from the clipboard, or pick one from the dropdown, which also lists your own picture folders (add one with the gear or with + Folder in the picker)."}),
             },
             "hidden": {
                 "LoadImagePixState": (
@@ -135,6 +140,11 @@ class PixaromaLoadImage:
     FUNCTION = "load_image"
 
     def load_image(self, image: str, LoadImagePixState: str = ""):
+        # A picture picked from one of the user's own folders is a COPY in
+        # input/pixaroma_folders; bring it up to date with the original first,
+        # so an edit made in another program is what this Run loads. A no-op
+        # for every other file. See nodes/_folder_source.py.
+        refresh_copy(image)
         image_path = folder_paths.get_annotated_filepath(image)
         img = node_helpers.pillow(Image.open, image_path)
 
@@ -243,14 +253,24 @@ class PixaromaLoadImage:
     def IS_CHANGED(cls, image, LoadImagePixState=""):
         image_path = folder_paths.get_annotated_filepath(image)
         m = hashlib.sha256()
-        with open(image_path, "rb") as f:
-            m.update(f.read())
+        # A folder copy: the ORIGINAL's size + time decide too, so editing it in
+        # another program re-runs the node (the copy is refreshed at Run, and may
+        # not even exist yet). "" for every other file, which keeps their hash
+        # byte-identical to before.
+        stamp = source_stamp(image)
+        if stamp:
+            m.update(stamp.encode("utf-8"))
+        if not stamp or os.path.isfile(image_path):
+            with open(image_path, "rb") as f:
+                m.update(f.read())
         m.update((LoadImagePixState or "").encode("utf-8"))
         return m.hexdigest()
 
     @classmethod
     def VALIDATE_INPUTS(cls, image, LoadImagePixState=""):
-        if not folder_paths.exists_annotated_filepath(image):
+        # A folder copy that was deleted from input is fine while its original
+        # is still there: the Run copies it again.
+        if not folder_paths.exists_annotated_filepath(image) and not source_for(image):
             return f"Invalid image file: {image}"
         return True
 

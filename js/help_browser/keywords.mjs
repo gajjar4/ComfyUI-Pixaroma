@@ -32,8 +32,8 @@ export const KEYWORDS = {
   PixaromaOutpaintStitch: "restore original seam blend outpaint",
 
   // ── Image ──
-  PixaromaLoadImage: "open file input picker photo import",
-  PixaromaLoadImageMini: "small compact loader tidy",
+  PixaromaLoadImage: "open file input picker photo import folder folders directory browse my pictures outside",
+  PixaromaLoadImageMini: "small compact loader tidy folder folders directory browse my pictures",
   PixaromaImageInfo: "width height mask filename size dimensions",
   PixaromaLoadImagesFolder: "batch folder directory many bulk each one by one subfolders recursive keep structure tree mirror flatten",
   PixaromaPreview: "view result thumbnail show display civitai metadata parameters resources share",

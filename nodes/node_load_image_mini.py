@@ -23,6 +23,7 @@ from PIL import Image, ImageOps, ImageSequence
 import folder_paths
 import node_helpers
 
+from ._folder_source import refresh_copy, source_for, source_stamp
 from ._resize_helpers import _I16_MODES, _resize_frame
 # Reuse Load Image's state parsing verbatim so the resize behaviour is identical
 # (_parse_state merges against its DEFAULT_STATE; _parse_orig_name reads the
@@ -36,7 +37,9 @@ class PixaromaLoadImageMini:
         "paste, or pick a file; the same inline resize suite as Load Image "
         "(max megapixels, longest side, scale by, fit inside, crop to fill, "
         "match ratio) lives in the gear settings panel so the node face stays "
-        "minimal. Mask Editor and Copy/Paste (Clipspace) work as usual.\n\n"
+        "minimal. Mask Editor and Copy/Paste (Clipspace) work as usual. "
+        "Pictures can also come from your own folders: add one in the gear "
+        "panel or with + Folder in the picker.\n\n"
         "Outputs just image and a small image_info bundle. Wire image_info "
         "into Image Info Pixaroma when you need the mask, width, height, or "
         "filename - that keeps this loader small."
@@ -57,7 +60,7 @@ class PixaromaLoadImageMini:
         files = folder_paths.filter_files_content_types(files, ["image"])
         return {
             "required": {
-                "image": (sorted(files), {"image_upload": True, "tooltip": "The image to load from ComfyUI's input folder. Use the Upload button, the paste button, drag a file onto the node, or pick one from the dropdown."}),
+                "image": (sorted(files), {"image_upload": True, "tooltip": "The image to load. Use the Upload button, the paste button, drag a file onto the node, or pick one from the dropdown, which also lists your own picture folders (add one in the gear panel or with + Folder in the picker)."}),
             },
             "hidden": {
                 "LoadImageMiniState": (
@@ -77,6 +80,9 @@ class PixaromaLoadImageMini:
     FUNCTION = "load_image"
 
     def load_image(self, image: str, LoadImageMiniState: str = ""):
+        # A picture from one of the user's own folders is a copy in input; bring
+        # it up to date with the original first (nodes/_folder_source.py).
+        refresh_copy(image)
         image_path = folder_paths.get_annotated_filepath(image)
         img = node_helpers.pillow(Image.open, image_path)
 
@@ -172,8 +178,14 @@ class PixaromaLoadImageMini:
     def IS_CHANGED(cls, image, LoadImageMiniState=""):
         image_path = folder_paths.get_annotated_filepath(image)
         m = hashlib.sha256()
-        with open(image_path, "rb") as f:
-            m.update(f.read())
+        # A folder copy: the original decides too (see Load Image's IS_CHANGED).
+        # "" for every other file, so their hash is unchanged.
+        stamp = source_stamp(image)
+        if stamp:
+            m.update(stamp.encode("utf-8"))
+        if not stamp or os.path.isfile(image_path):
+            with open(image_path, "rb") as f:
+                m.update(f.read())
         # Hash only the RESIZE-relevant state (canonical) + the original-name
         # field, NOT the raw string. A purely-cosmetic frontend key (the accent
         # colour) lives inside the state object; hashing the raw string would let
@@ -187,7 +199,7 @@ class PixaromaLoadImageMini:
 
     @classmethod
     def VALIDATE_INPUTS(cls, image, LoadImageMiniState=""):
-        if not folder_paths.exists_annotated_filepath(image):
+        if not folder_paths.exists_annotated_filepath(image) and not source_for(image):
             return f"Invalid image file: {image}"
         return True
 

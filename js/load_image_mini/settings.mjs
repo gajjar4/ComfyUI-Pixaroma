@@ -11,6 +11,7 @@ import { openPixaromaColorPickerPopup, BUTTON_PALETTE } from "../shared/color_pi
 import { injectCSS as injectLiCSS, renderGlobalControls } from "../load_image/ui.mjs";
 import { buildModePanel } from "../load_image/resize_modes.mjs";
 import { applyInlineLabel, applyWHLayout, applyCoverControls } from "../load_image/panel_polish.mjs";
+import { buildFoldersSection } from "../load_image/folders.mjs";
 import { GLOBAL_ACCENT_SETTING, repaintAllAccents } from "../shared/node_settings.mjs";
 import {
   ACCENT_SETTING, BRAND, STATE_PROP, accentOf, readState, writeState,
@@ -253,6 +254,9 @@ export function openMiniSettings(node, ctx) {
     resize.appendChild(renderGlobalControls(node, state, writeState, () => fire()));
 
     body.appendChild(resize);
+
+    // ── your own picture folders (shared with Load Image; per person) ──
+    body.appendChild(buildFoldersSection());
 
     // ── accent ──
     const acc = el("div", "pix-lmset-acc");

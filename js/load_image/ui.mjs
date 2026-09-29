@@ -100,6 +100,25 @@ export function injectCSS() {
       flex-shrink: 0;
     }
     .pix-li-nav:hover:not(.disabled) { border-color: var(--pix-acc,#f66744); }
+    /* Top row: [ Upload Image ][gear]. The gear opens this node's settings
+       (picture folders, thumbnail size, colour). Same box as the arrows below;
+       the icon is the bundled gear as a mask (node UI convention #28), coloured
+       by currentColor so its hover follows the button. */
+    .pix-li-toprow { display: flex; gap: 6px; align-items: stretch; }
+    .pix-li-toprow .pix-li-upload-btn { flex: 1; width: auto; min-width: 0; }
+    .pix-li-gear {
+      flex: none; width: 30px; padding: 0;
+      background: #1d1d1d; border: 1px solid #444; border-radius: 4px;
+      color: #aaa; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      transition: border-color 0.08s, color 0.08s;
+    }
+    .pix-li-gear::before {
+      content: ""; display: block; width: 14px; height: 14px; background: currentColor;
+      -webkit-mask: url("${pixAsset("icons/note/gear.svg")}") center/contain no-repeat;
+              mask: url("${pixAsset("icons/note/gear.svg")}") center/contain no-repeat;
+    }
+    .pix-li-gear:hover { border-color: var(--pix-acc,#f66744); color: #ddd; }
     .pix-li-nav.disabled { opacity: 0.3; cursor: default; }
     .pix-li-dropdown {
       background: #1d1d1d;
@@ -611,6 +630,16 @@ export function injectCSS() {
     .pix-li-pop-empty { padding:10px; color:#666; text-align:center; }
     .pix-li-pop-foot { padding:6px 10px; font-size:9px; color:#777; background:#141414;
       border-top:1px solid #333; text-align:center; }
+    /* The user's own picture folders (folders.mjs). */
+    .pix-li-pop-addfolder { flex:none; padding:2px 7px; font-size:10px; color:#aaa; border:1px solid #444;
+      border-radius:4px; cursor:pointer; user-select:none; white-space:nowrap; line-height:1.4; }
+    .pix-li-pop-addfolder:hover { border-color:var(--pix-acc,#f66744); color:#ddd; }
+    .pix-li-pop-addfolder.busy { opacity:.5; cursor:default; }
+    .pix-li-bfold-h { padding:7px 9px 3px; font-size:9px; color:#777; text-transform:uppercase;
+      letter-spacing:.5px; border-top:1px solid #333; }
+    .pix-li-pop-msg { padding:10px; color:#999; font-size:10.5px; line-height:1.45; white-space:pre-wrap; }
+    .pix-li-pop-link { display:inline-block; margin:0 10px 10px; color:var(--pix-acc,#f66744);
+      font-size:10.5px; cursor:pointer; text-decoration:underline; }
   `;
   const el = document.createElement("style");
   el.id = "pixaroma-load-image-css";
@@ -622,7 +651,9 @@ export function buildRoot() {
   const root = document.createElement("div");
   root.className = "pix-li-root";
 
-  // Upload button (orange, prominent, primary action).
+  // Upload button (orange, prominent, primary action) + the settings gear.
+  const top = document.createElement("div");
+  top.className = "pix-li-toprow";
   const btn = document.createElement("button");
   btn.type = "button";
   btn.className = "pix-li-upload-btn";
@@ -631,7 +662,14 @@ export function buildRoot() {
   const lbl = document.createElement("span");
   lbl.textContent = "Upload Image";
   btn.append(ico, lbl);
-  root.appendChild(btn);
+  const gear = document.createElement("button");
+  gear.type = "button";
+  gear.className = "pix-li-gear";
+  gear.dataset.role = "gear";
+  gear.dataset.pixSettingsGear = "1";   // the settings panel lets this toggle it
+  gear.title = "Settings: your picture folders, thumbnail size, colour";
+  top.append(btn, gear);
+  root.appendChild(top);
 
   // Hint line for alternate upload methods (shown when no image yet).
   const hint = document.createElement("div");
@@ -710,6 +748,10 @@ export function hideNativeImageCombo(node) {
 }
 
 import { updateNativePreview, setSelectedImage, splitFilenameSubfolder } from "./api.mjs";
+import {
+  isFolderCopy, getFolders, folderName, folderFiles, folderThumbURL, pickFromFolder,
+  addFolderViaDialog, removeFolder, folderContext, sameFolder,
+} from "./folders.mjs";
 
 // Group combo values by subfolder so the popup renders:
 //   ─ root ─
@@ -773,7 +815,9 @@ function setThumbSize(v) {
 export function openImageDropdown(node, anchorEl, onPick) {
   const imageWidget = node._pixLiImageWidget;
   if (!imageWidget) return;
-  const values = imageWidget.options?.values || [];
+  // Copies of pictures taken from the user's own folders live in
+  // input/pixaroma_folders. They are shown under their FOLDER, not here.
+  const values = (imageWidget.options?.values || []).filter((v) => !isFolderCopy(v));
 
   // Close any existing popup. Call its stored cleanup (not a bare remove) so
   // the prior popup's document-level capture listeners are detached too.
@@ -797,6 +841,7 @@ export function openImageDropdown(node, anchorEl, onPick) {
 
   // ── close handling (defined early so row click handlers can call it) ──
   function closePopup() {
+    popup._pixClosed = true;   // async folder work checks this after its await
     popup.remove();
     document.removeEventListener("mousedown", onDocDown, true);
     document.removeEventListener("pointerdown", onDocDown, true);
@@ -808,27 +853,30 @@ export function openImageDropdown(node, anchorEl, onPick) {
   const onKey = (e) => { if (e.key === "Escape") closePopup(); };
   popup._pixClose = closePopup; // so a later open can detach our listeners
 
-  if (values.length === 0) {
-    const empty = document.createElement("div");
-    empty.className = "pix-li-pop-empty";
-    empty.textContent = "(no images uploaded yet)";
-    popup.appendChild(empty);
-    document.body.appendChild(popup);
-    setTimeout(() => {
-      document.addEventListener("mousedown", onDocDown, true);
-      document.addEventListener("pointerdown", onDocDown, true);
-      document.addEventListener("wheel", onWheel, true);
-      document.addEventListener("keydown", onKey, true);
-    }, 0);
-    return;
-  }
-
+  // (An empty input folder used to get a bare "(no images uploaded yet)" box
+  // with nothing else in it. It now gets the full picker, so the "+ Folder"
+  // button is reachable before anything was ever uploaded; the input pane says
+  // the same sentence.)
   const groups = groupValuesByFolder(values); // [{folder, files:[{full,name}]}], root first
   const curVal = imageWidget.value;
   const hasSubfolders = groups.some((g) => g.folder !== "");
 
+  // The user's own picture folders (per person, see folders.mjs). A folder is
+  // an active pane keyed "src:<path>", which cannot collide with an input
+  // subfolder key ("" or a relative name) or "__all".
+  let folders = getFolders();
+  const isSrc = (key) => typeof key === "string" && key.startsWith("src:");
+  const ctx = folderContext(node);                 // where the CURRENT picture came from
+  let loaded = null;                               // {path, res} of the folder on screen
+  let folderReq = 0;
+  let taking = false;
+
   // ── state ──
-  let activeFolder = "__all"; // "__all" | "" (root) | "<FolderName>"
+  let activeFolder = "__all"; // "__all" | "" (root) | "<FolderName>" | "src:<path>"
+  if (ctx) {
+    const hit = folders.find((f) => sameFolder(f, ctx.folder));
+    if (hit) activeFolder = "src:" + hit;          // open on the folder the picture came from
+  }
   let query = "";
   let thumbSize = getThumbSize();
   let scrollTarget = null;
@@ -846,7 +894,13 @@ export function openImageDropdown(node, anchorEl, onPick) {
   const segS = document.createElement("span"); segS.textContent = "S"; segS.title = "Small thumbnails";
   const segL = document.createElement("span"); segL.textContent = "L"; segL.title = "Large thumbnails";
   sizeToggle.append(segS, segL);
-  searchRow.append(mag, input, sizeToggle);
+  // Add one of the user's own picture folders. The folder window opens on the
+  // computer running ComfyUI; picking there is also what approves the folder.
+  const addFolderBtn = document.createElement("span");
+  addFolderBtn.className = "pix-li-pop-addfolder";
+  addFolderBtn.textContent = "+ Folder";
+  addFolderBtn.title = "Add a folder of pictures. A folder window opens; the folder you pick there shows up on the left.";
+  searchRow.append(mag, input, addFolderBtn, sizeToggle);
   popup.appendChild(searchRow);
 
   // ── body: sidebar (optional) + scrollable pane ──
@@ -856,9 +910,17 @@ export function openImageDropdown(node, anchorEl, onPick) {
   sidebar.className = "pix-li-bfolders";
   const pane = document.createElement("div");
   pane.className = "pix-li-bpane";
-  if (hasSubfolders) body.append(sidebar, pane);
+  // The left column exists when there is something to choose between: input
+  // subfolders (as before) or any of the user's folders.
+  let showSidebar = hasSubfolders || folders.length > 0;
+  if (showSidebar) body.append(sidebar, pane);
   else body.append(pane);
   popup.appendChild(body);
+  const ensureSidebar = () => {
+    if (showSidebar) return;
+    showSidebar = true;
+    body.insertBefore(sidebar, pane);
+  };
 
   // ── footer ──
   const footer = document.createElement("div");
@@ -903,6 +965,52 @@ export function openImageDropdown(node, anchorEl, onPick) {
     s.appendChild(c);
     return s;
   };
+  // A picture in one of the user's folders. Clicking copies it into input and
+  // makes it the node's picture (folders.mjs pickFromFolder); the popup stays
+  // open with the reason if that is refused.
+  const makeFolderRow = (path, f) => {
+    const row = document.createElement("div");
+    const isCur = !!ctx && sameFolder(ctx.folder, path) && ctx.file === f.file;
+    row.className = "pix-li-imgrow" + (isCur ? " cur" : "");
+    const th = document.createElement("span");
+    th.className = "pix-li-pop-thumb";
+    const glyph = document.createElement("span");
+    glyph.className = "pix-li-pop-glyph";
+    glyph.textContent = "▣";
+    const img = document.createElement("img");
+    img.loading = "lazy";
+    img.onerror = () => { img.style.display = "none"; };
+    img.src = folderThumbURL(path, f.file, f.mtime);
+    th.append(glyph, img);
+    const lbl = document.createElement("span");
+    lbl.className = "pix-li-imgrow-lbl";
+    lbl.textContent = f.name || f.file;
+    lbl.title = f.file;
+    row.append(th, lbl);
+    if (isCur) scrollTarget = row;
+    row.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      if (taking) return;
+      taking = true;
+      footer.textContent = "Taking the picture…";
+      let r;
+      try { r = await pickFromFolder(node, path, f.file); } finally { taking = false; }
+      if (popup._pixClosed) return;
+      if (r.ok) {
+        closePopup();
+        if (onPick) onPick(r.name);
+      } else {
+        footer.textContent = r.message || "Could not take the picture.";
+      }
+    });
+    return row;
+  };
+  const makeMsg = (text) => {
+    const m = document.createElement("div");
+    m.className = "pix-li-pop-msg";
+    m.textContent = text;
+    return m;
+  };
   const folderLabel = (key) => (key === "" ? "root" : key);
   // Scroll the current image's row into view (deferred so the pane is laid out).
   // Called on every non-search render so a folder switch / search-clear re-centers it.
@@ -914,15 +1022,33 @@ export function openImageDropdown(node, anchorEl, onPick) {
 
   // ── renderers ──
   const renderSidebar = () => {
-    if (!hasSubfolders) return;
+    if (!showSidebar) return;
     sidebar.replaceChildren();
-    const entries = [["__all", "All", values.length]];
-    for (const g of groups) entries.push([g.folder, folderLabel(g.folder), g.files.length]);
-    for (const [key, label, count] of entries) {
+    // With folders present the first entry means "ComfyUI's input folder", so
+    // it says so; without them it keeps its old name.
+    const entries = [["__all", folders.length ? "Input" : "All", values.length]];
+    if (hasSubfolders) for (const g of groups) entries.push([g.folder, folderLabel(g.folder), g.files.length]);
+    if (folders.length) entries.push(null);         // the "Folders" heading
+    for (const p of folders) {
+      const known = loaded && sameFolder(loaded.path, p) && loaded.res.ok ? loaded.res.files.length : "";
+      entries.push(["src:" + p, folderName(p), known, p]);
+    }
+    for (const entry of entries) {
+      if (entry === null) {
+        const h = document.createElement("div");
+        h.className = "pix-li-bfold-h";
+        h.textContent = "Folders";
+        sidebar.appendChild(h);
+        continue;
+      }
+      const [key, label, count, fullPath] = entry;
       const f = document.createElement("div");
+      // A folder stays lit while filtering, since the filter searches inside it.
+      const lit = key === activeFolder && (isSrc(key) || !query.trim());
       f.className = "pix-li-bfolder"
         + (key === "__all" ? " all" : "")
-        + (key === activeFolder && !query.trim() ? " on" : "");
+        + (lit ? " on" : "");
+      if (fullPath) f.title = fullPath;
       const t = document.createElement("span");
       t.textContent = label;
       const n = document.createElement("span");
@@ -941,9 +1067,80 @@ export function openImageDropdown(node, anchorEl, onPick) {
     }
   };
 
+  // One of the user's folders: listed fresh on every open (a rename or a new
+  // file on disk shows up at once - node UI convention #18), then filtered here.
+  const ROW_CAP = 1500;
+  const renderFolderPane = () => {
+    const path = activeFolder.slice(4);
+    if (!loaded || !sameFolder(loaded.path, path)) {
+      pane.appendChild(makeMsg("Loading…"));
+      footer.textContent = folderName(path);
+      const my = ++folderReq;
+      folderFiles(node, path, { fresh: true }).then((res) => {
+        if (my !== folderReq || popup._pixClosed) return;
+        loaded = { path, res };
+        renderSidebar();
+        renderPane();
+      });
+      return;
+    }
+    const res = loaded.res;
+    if (!res.ok) {
+      pane.appendChild(makeMsg(res.message || "Could not read this folder."));
+      const rm = document.createElement("span");
+      rm.className = "pix-li-pop-link";
+      rm.textContent = "Remove it from the list";
+      rm.addEventListener("click", async (e) => {
+        e.stopPropagation();
+        await removeFolder(path);
+        if (popup._pixClosed) return;
+        folders = getFolders();
+        activeFolder = "__all";
+        loaded = null;
+        renderSidebar();
+        renderPane();
+      });
+      pane.appendChild(rm);
+      footer.textContent = folderName(path) + " · not available";
+      return;
+    }
+    const q = query.trim().toLowerCase();
+    const files = q ? res.files.filter((f) => (f.name || f.file).toLowerCase().includes(q)) : res.files;
+    if (!files.length) {
+      pane.appendChild(makeMsg(q ? "(no matches)" : "(no pictures in this folder)"));
+      footer.textContent = `0 pictures · ${folderName(path)}`;
+      return;
+    }
+    // Group by subfolder inside the folder, under the same sticky headers the
+    // input side uses. A folder with no subfolders gets no header at all.
+    const dirOf = (f) => { const i = f.file.lastIndexOf("/"); return i >= 0 ? f.file.slice(0, i) : ""; };
+    const multi = files.some((f) => dirOf(f) !== "");
+    let shown = 0;
+    let lastDir = null;
+    for (const f of files) {
+      if (shown >= ROW_CAP) break;
+      const d = dirOf(f);
+      if (multi && d !== lastDir) {
+        lastDir = d;
+        pane.appendChild(makeSec(d || folderName(path), files.filter((x) => dirOf(x) === d).length));
+      }
+      pane.appendChild(makeFolderRow(path, f));
+      shown += 1;
+    }
+    footer.textContent = `${files.length} picture${files.length === 1 ? "" : "s"} · ${folderName(path)}`
+      + (files.length > shown ? ` · showing the first ${shown}, type to filter` : "");
+    scrollCurrentIntoView();
+  };
+
   const renderPane = () => {
     pane.replaceChildren();
     scrollTarget = null;
+    if (isSrc(activeFolder)) { renderFolderPane(); return; }
+    if (values.length === 0) {
+      pane.appendChild(makeMsg("(no images uploaded yet)"));
+      footer.textContent = "0 images";
+      return;
+    }
     const q = query.trim().toLowerCase();
 
     if (q) {
@@ -1018,6 +1215,30 @@ export function openImageDropdown(node, anchorEl, onPick) {
   segL.addEventListener("click", (e) => {
     e.stopPropagation();
     thumbSize = "Large"; setThumbSize(thumbSize); applyThumbSize();
+  });
+  addFolderBtn.addEventListener("click", async (e) => {
+    e.stopPropagation();
+    if (addFolderBtn.classList.contains("busy")) return;
+    addFolderBtn.classList.add("busy");
+    footer.textContent = "Pick a folder in the folder window…";
+    let r;
+    try { r = await addFolderViaDialog(); } finally { addFolderBtn.classList.remove("busy"); }
+    if (popup._pixClosed) return;       // added all the same; it is there next time
+    if (r.ok) {
+      folders = getFolders();
+      const hit = folders.find((f) => sameFolder(f, r.path)) || r.path;
+      ensureSidebar();
+      activeFolder = "src:" + hit;
+      input.value = "";
+      query = "";
+      loaded = null;
+      renderSidebar();
+      renderPane();
+      if (r.message) footer.textContent = r.message;
+    } else {
+      renderPane();                     // put the footer back
+      if (r.message) footer.textContent = r.message;
+    }
   });
 
   // ── initial render ──

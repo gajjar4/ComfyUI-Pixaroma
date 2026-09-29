@@ -178,6 +178,11 @@ export function registerNodeAccent(comfyClass, opts = {}) {
     // a node's own settings are all in one place. See the `rows` doc above.
     rows: Array.isArray(opts.rows) ? opts.rows : [],
     onRowChange: typeof opts.onRowChange === "function" ? opts.onRowChange : null,
+    // Optional: (node) => element, for a block the option rows cannot express
+    // (Load Image's list of picture folders). Placed after the rows, before the
+    // colour. It must not open popups on <body> of its own (outsideClose would
+    // not know them).
+    sections: typeof opts.sections === "function" ? opts.sections : null,
     // A node with NO orange on its face (3D Builder, Inpaint Crop, Set/Get) can
     // host rows without offering a colour that would change nothing.
     accent: opts.accent !== false,
@@ -609,7 +614,15 @@ function outsideClose(e) {
   // cannot save them - that is a BUBBLE listener on the window, and this one is
   // CAPTURE on the document, so this always runs first.
   if (e.target.closest?.(".pixhb-win, .pixwb-win, .pix-cp-popup, .pix-cp-modal-backdrop, .pix-nset-pop")) return;
+  // A settings gear ON a node face toggles the panel itself: closing here on
+  // pointerdown would make its click reopen it at once (panel checklist #3).
+  if (e.target.closest?.("[data-pix-settings-gear]")) return;
   closeNodeSettingsPanel();
+}
+
+/** Is the generic settings panel open for this node? (for a face gear toggle) */
+export function nodeSettingsOpenFor(node) {
+  return !!_panel && _panel.isConnected && _panelNode === node;
 }
 
 function escClose(e) {
@@ -934,10 +947,22 @@ export function openAccentPanel(node) {
     }));
   }
 
+  // A node's own extra block (see `sections` in registerNodeAccent).
+  let hasSection = false;
+  if (typeof def?.sections === "function") {
+    let extra = null;
+    try { extra = def.sections(node); } catch (e) { console.warn("[Pixaroma] settings section failed", e); }
+    if (extra) {
+      if (def?.rows?.length) body.appendChild(el("div", "pix-nset-rule"));
+      body.appendChild(extra);
+      hasSection = true;
+    }
+  }
+
   // A node with no orange on its face opts out of the colour block entirely
   // rather than offering a colour that would change nothing.
   if (def?.accent !== false) {
-    if (def?.rows?.length) body.appendChild(el("div", "pix-nset-rule"));
+    if (def?.rows?.length || hasSection) body.appendChild(el("div", "pix-nset-rule"));
     body.appendChild(createAccentSection(node, {
       title,
       label: def?.swatchLabel,

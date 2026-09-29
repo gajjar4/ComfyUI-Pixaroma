@@ -2377,6 +2377,45 @@ async def api_lif_pick_native(request):
         return web.json_response({"ok": False, "message": str(e)})
 
 
+@PromptServer.instance.routes.post("/pixaroma/api/load_image/import")
+async def api_load_image_import(request):
+    """Load Image Pixaroma + Mini: take one picture from an approved folder.
+
+    Request JSON: {folder, file} - the folder the picker listed and the file's
+    path inside it (the same pair the thumbnail route takes).
+    Response JSON: {ok: true, name} where name is the input-folder name the node
+    should hold, or {ok: false, message, denied?}.
+
+    The picture is COPIED into input/pixaroma_folders and the node holds that
+    ordinary input name, so everything Load Image already does keeps working.
+    JSON only: a cross-origin form cannot send it without a preflight that is
+    never answered (registry-compliance.md #2c). Every value is untrusted; all
+    of the containment lives in nodes/_folder_source.import_file, which the
+    harness tests directly (path-containment.md): the folder must already be
+    approved, and the copy can only land inside input/pixaroma_folders.
+    """
+    hdrs = {"Cache-Control": "no-store"}
+    if request.content_type != "application/json":
+        return web.json_response({"ok": False, "message": "send JSON"}, status=415, headers=hdrs)
+    try:
+        data = await request.json()
+    except Exception:
+        return web.json_response({"ok": False, "message": "invalid JSON"}, status=400, headers=hdrs)
+    if not isinstance(data, dict):        # request.json() can be ANY JSON value
+        return web.json_response({"ok": False, "message": "invalid request"}, status=400, headers=hdrs)
+    from .nodes._folder_source import import_file as _li_import_file
+    try:
+        import asyncio
+        loop = asyncio.get_running_loop()
+        # A big picture on a slow disk takes a moment to copy: off the event loop.
+        name, err = await loop.run_in_executor(None, _li_import_file, data.get("folder"), data.get("file"))
+    except Exception as e:
+        return web.json_response({"ok": False, "message": f"Could not take the picture: {e}"}, headers=hdrs)
+    if err:
+        return web.json_response({"ok": False, "message": err, "denied": "not approved" in err}, headers=hdrs)
+    return web.json_response({"ok": True, "name": name}, headers=hdrs)
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Save Image Pixaroma routes: live filename-counter preview, open-in-explorer,
 # and token-served previews for files saved OUTSIDE ComfyUI's folders.

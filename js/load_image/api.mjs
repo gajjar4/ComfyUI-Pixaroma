@@ -244,6 +244,12 @@ export function setSelectedImage(node, filename) {
   }
   w.value = filename;
   node._pixLiSelectedFilename = filename;
+  // A picture taken from one of the user's folders records where it came from
+  // (folders.mjs sets it just before calling here). Any OTHER pick means the
+  // picture no longer comes from that folder, so the arrows go back to stepping
+  // through the input folder. Every caller of this function is a real pick.
+  const fp = node.properties?.pixLiFolderPick;
+  if (fp && fp.name !== filename) delete node.properties.pixLiFolderPick;
   // Track the original (non-clipspace) name directly here too, not only via the
   // imageWidget.value setter — that setter is skipped when the widget's `value`
   // property is non-configurable, and every caller of this fn is a real pick

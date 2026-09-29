@@ -13,6 +13,8 @@ import {
 } from "./ui.mjs";
 import { pickAndUploadFile, installLoaderPaste, uploadImageToInput, setSelectedImage, updateNativePreview, previewMatches, schedulePreviewRepair, splitFilenameSubfolder, splitTypeAnnotation } from "./api.mjs";
 import { buildModePanel, previewResize } from "./resize_modes.mjs";
+import { isFolderCopy, folderCopyLabel, folderContext, folderCounter, stepFolder, buildFoldersSection, primeFolderListing } from "./folders.mjs";
+import { openNodeSettings, closeNodeSettingsPanel, nodeSettingsOpenFor } from "../shared/node_settings.mjs";
 import { applyInlineLabel, applyWHLayout, applyCoverControls } from "./panel_polish.mjs";
 
 let _activeLoadImageNode = null;
@@ -24,12 +26,21 @@ function refreshDropdown(node) {
   const ddName = root.querySelector('[data-role="dropdown"] .name');
   const counter = root.querySelector('[data-role="counter"]');
   const value = w?.value || "";
-  if (ddName) ddName.textContent = value ? value : "— no image —";
+  // A picture from one of the user's folders reads "Photos / cat.png", not
+  // the long name of its copy in input/pixaroma_folders.
+  const fromFolder = folderContext(node);
+  if (ddName) ddName.textContent = value ? (isFolderCopy(value) ? folderCopyLabel(value) : value) : "— no image —";
+  const ddEl = root.querySelector('[data-role="dropdown"]');
+  if (ddEl) ddEl.title = fromFolder ? `${fromFolder.folder}\n${fromFolder.file}` : "";
   // Counter "3 / 247" tells the user where they are when arrow-stepping.
-  // Hidden when no images are uploaded yet.
+  // Hidden when no images are uploaded yet. Copies of folder pictures are not
+  // counted here: they belong to their folder, which has its own counter.
+  const values = (w?.options?.values || []).filter((v) => !isFolderCopy(v));
   if (counter) {
-    const values = w?.options?.values || [];
-    if (value && values.length > 1) {
+    if (fromFolder) {
+      counter.textContent = folderCounter(node);
+      if (!counter.textContent) primeFolderListing(node, () => refreshDropdown(node));
+    } else if (value && values.length > 1) {
       const idx = values.indexOf(value);
       counter.textContent = idx >= 0 ? `${idx + 1} / ${values.length}` : "";
     } else {
@@ -37,10 +48,9 @@ function refreshDropdown(node) {
     }
   }
   // Disable arrow buttons when there's nothing to step through.
-  const values = w?.options?.values || [];
   const prev = root.querySelector('[data-role="prev"]');
   const next = root.querySelector('[data-role="next"]');
-  const disabled = values.length < 2;
+  const disabled = !fromFolder && values.length < 2;
   if (prev) prev.classList.toggle("disabled", disabled);
   if (next) next.classList.toggle("disabled", disabled);
 }
@@ -50,7 +60,13 @@ function refreshDropdown(node) {
 function pickByOffset(node, offset) {
   const w = node._pixLiImageWidget;
   if (!w) return;
-  const values = w.options?.values || [];
+  // A picture from one of the user's folders steps through THAT folder.
+  if (folderContext(node)) {
+    node._pixLiFitPending = true;
+    stepFolder(node, offset);
+    return;
+  }
+  const values = (w.options?.values || []).filter((v) => !isFolderCopy(v));
   if (values.length === 0) return;
   const cur = values.indexOf(w.value);
   // If nothing currently selected, "next" → first, "prev" → last.
@@ -952,6 +968,14 @@ function setupLoadImageNode(node) {
     }
   });
 
+  // The gear beside Upload: this node's settings (picture folders, thumbnail
+  // size, colour). A second click closes it again.
+  root.querySelector('[data-role="gear"]')?.addEventListener("click", (e) => {
+    e.stopPropagation();
+    if (nodeSettingsOpenFor(node)) closeNodeSettingsPanel();
+    else openNodeSettings(node);
+  });
+
   // Silent drop fallback on the DOM widget root. ComfyUI's native
   // image_upload extension wires a node-level drop handler that covers
   // the bottom preview area, but it's not guaranteed to reach over our
@@ -1297,4 +1321,6 @@ registerNodeAccent("PixaromaLoadImage", {
       defaultValue: "Large", label: "Thumbnail size",
       hint: "How big the pictures are in the file dropdown" },
   ],
+  // Your own picture folders (shared with Load Image Mini; kept per person).
+  sections: () => buildFoldersSection(),
 });
