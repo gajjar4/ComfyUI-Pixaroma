@@ -379,8 +379,11 @@ class AIPromptInputs(dict):
     Iterating this dict yields ONLY the five, so they are all the schema lists -
     ComfyUI therefore never adds image_2 to a node saved before it existed, and
     an old workflow opens exactly as it was. `in` and `[]` still answer for the
-    extra names, so a prompt carrying them validates, links its upstream and
-    hands the picture to run(). Deliberately NARROW (only image_N) rather than
+    extra names, so a prompt carrying them links its upstream and hands the
+    picture to run(). They are NOT pre-flight validated (core's validate_inputs
+    iterates the declared keys only), so a broken source on image_2 fails when
+    it runs, with a clear error on THAT node, rather than before the run starts
+    - measured with a missing-file Load Image. Deliberately NARROW (only image_N) rather than
     the "contains everything" FlexibleOptionalInputType: that one would also
     claim the HIDDEN AIPromptState input as optional."""
 
