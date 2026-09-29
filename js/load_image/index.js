@@ -11,7 +11,7 @@ import {
   injectCSS, buildRoot, hideNativeImageCombo, openImageDropdown,
   renderChips, renderGlobalControls,
 } from "./ui.mjs";
-import { pickAndUploadFile, pasteFromClipboard, uploadImageToInput, setSelectedImage, updateNativePreview, previewMatches, schedulePreviewRepair, splitFilenameSubfolder, splitTypeAnnotation } from "./api.mjs";
+import { pickAndUploadFile, installLoaderPaste, uploadImageToInput, setSelectedImage, updateNativePreview, previewMatches, schedulePreviewRepair, splitFilenameSubfolder, splitTypeAnnotation } from "./api.mjs";
 import { buildModePanel, previewResize } from "./resize_modes.mjs";
 import { applyInlineLabel, applyWHLayout, applyCoverControls } from "./panel_polish.mjs";
 
@@ -433,24 +433,16 @@ function fitPreview(node) {
   });
 }
 
-// Global Ctrl+V handler for the active load-image node.
-window.addEventListener("keydown", async (e) => {
-  if (!_activeLoadImageNode) return;
-  if (!(e.ctrlKey || e.metaKey) || e.key.toLowerCase() !== "v") return;
-  const tag = (e.target?.tagName || "").toUpperCase();
-  if (tag === "INPUT" || tag === "TEXTAREA") return;
-  if (e.target?.isContentEditable) return;
-  e.preventDefault();
-  e.stopPropagation();
-  try {
-    _activeLoadImageNode._pixLiFitPending = true;
-    const saved = await pasteFromClipboard(_activeLoadImageNode);
-    if (saved) refreshDropdown(_activeLoadImageNode);
-  } catch (err) {
+// Ctrl+V with a picture on the clipboard pastes it into the selected node.
+// Anything else (copied nodes, text) is left to ComfyUI - see installLoaderPaste.
+installLoaderPaste(() => _activeLoadImageNode, {
+  beforeUpload: (node) => { node._pixLiFitPending = true; },
+  afterUpload: (node, saved) => { if (saved) refreshDropdown(node); },
+  onError: (err) => {
     console.error("[PixaromaLoadImage] paste failed", err);
     alert("Paste failed: " + err.message);
-  }
-}, true);
+  },
+});
 
 // Global PageUp / PageDown for the active load-image node - matches native
 // ComfyUI LoadImage's arrow-key stepping convention.

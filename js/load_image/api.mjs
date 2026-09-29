@@ -332,6 +332,9 @@ export function pickAndUploadFile(node) {
 }
 
 // Reads clipboard for an image; uploads as pasted_<ts>.png.
+// Used by the Mini's Paste BUTTON only: a click carries no clipboard data, so
+// this is the one path that has to ask the browser. Ctrl+V goes through
+// installLoaderPaste below and never asks.
 export async function pasteFromClipboard(node) {
   if (!navigator.clipboard?.read) {
     throw new Error("Clipboard read not supported in this browser");
@@ -341,11 +344,76 @@ export async function pasteFromClipboard(node) {
     for (const type of item.types) {
       if (type.startsWith("image/")) {
         const blob = await item.getType(type);
-        const ext = type.split("/")[1] || "png";
-        const name = `pasted_${Date.now()}.${ext}`;
-        return uploadImageToInput(node, blob, name);
+        return uploadPastedImage(node, blob, type);
       }
     }
   }
   return null; // no image in clipboard
+}
+
+// Upload a pasted picture under the name every paste path uses.
+function uploadPastedImage(node, blob, type) {
+  const ext = String(type || blob.type || "").split("/")[1] || "png";
+  return uploadImageToInput(node, blob, `pasted_${Date.now()}.${ext}`);
+}
+
+// The picture a PASTE EVENT carries, or null when it carries none (copied
+// nodes, text).
+function clipboardImageFile(dt) {
+  const items = dt?.items;
+  if (!items) return null;
+  for (const item of items) {
+    if (item.kind === "file" && String(item.type || "").startsWith("image/")) {
+      const file = item.getAsFile();
+      if (file) return file;
+    }
+  }
+  return null;
+}
+
+// Ctrl+V onto the selected loader. One call per loader module, handed that
+// module's own "which node is selected" getter.
+//
+// Take the picture from the PASTE EVENT, never from the Ctrl+V KEYDOWN (fixed
+// 2026-09-29, Discord). Both loaders used to preventDefault the keydown and then
+// call navigator.clipboard.read(), which broke two things:
+//   - cancelling the keydown cancels the paste event, and that event is how
+//     ComfyUI pastes copied NODES, so with a loader selected Ctrl+V, Ctrl+Shift+V
+//     and copy-paste of the loader itself did nothing at all;
+//   - clipboard.read() needs permission: Chrome asks once, Firefox and Zen ask on
+//     EVERY paste and throw when refused.
+// The event's own data needs no permission (the user's Ctrl+V is the consent), so
+// this is what ComfyUI and the Crop editors already do. Only a paste that
+// carries a picture is taken; anything else passes through to ComfyUI untouched.
+export function installLoaderPaste(getNode, { beforeUpload, afterUpload, onError } = {}) {
+  // Ctrl+Shift+V is ComfyUI's "paste nodes WITH their connections", which core's
+  // own paste handler leaves to LiteGraph even when a picture is on the
+  // clipboard. Match that. Only RECORDED here, never cancelled.
+  let shiftPaste = false;
+  window.addEventListener("keydown", (e) => {
+    if ((e.ctrlKey || e.metaKey) && String(e.key || "").toLowerCase() === "v") {
+      shiftPaste = e.shiftKey;
+    }
+  }, true);
+  // Capture phase on window: runs before ComfyUI's own paste listener on the
+  // document, so stopImmediatePropagation keeps core from ALSO pasting the
+  // picture as a new Load Image node.
+  window.addEventListener("paste", (e) => {
+    const shift = shiftPaste;
+    shiftPaste = false; // a later paste from a menu has no keydown of its own
+    const node = getNode();
+    if (!node || shift) return;
+    const t = e.target;
+    const tag = String(t?.tagName || "").toUpperCase();
+    if (tag === "INPUT" || tag === "TEXTAREA" || t?.isContentEditable) return;
+    const file = clipboardImageFile(e.clipboardData);
+    if (!file) return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    beforeUpload?.(node);
+    uploadPastedImage(node, file, file.type).then(
+      (saved) => afterUpload?.(node, saved),
+      (err) => onError?.(err),
+    );
+  }, true);
 }

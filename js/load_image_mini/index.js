@@ -24,7 +24,7 @@ import { onRendererChange } from "../shared/renderer_switch.mjs";
 import { isLiveNode } from "../shared/live_node.mjs";
 import {
   setSelectedImage, updateNativePreview, previewMatches, pickAndUploadFile,
-  pasteFromClipboard, uploadImageToInput, splitFilenameSubfolder,
+  pasteFromClipboard, installLoaderPaste, uploadImageToInput, splitFilenameSubfolder,
   splitTypeAnnotation, schedulePreviewRepair,
 } from "../load_image/api.mjs";
 import { openImageDropdown, injectCSS as injectLiCSS } from "../load_image/ui.mjs";
@@ -899,16 +899,13 @@ app.registerExtension({
   },
 });
 
-// Global Ctrl+V + PageUp/PageDown for the active mini node.
-window.addEventListener("keydown", async (e) => {
-  if (!_activeMiniNode) return;
-  if (!(e.ctrlKey || e.metaKey) || e.key.toLowerCase() !== "v") return;
-  const tag = (e.target?.tagName || "").toUpperCase();
-  if (tag === "INPUT" || tag === "TEXTAREA" || e.target?.isContentEditable) return;
-  e.preventDefault(); e.stopPropagation();
-  try { const saved = await pasteFromClipboard(_activeMiniNode); if (saved) refreshDropdown(_activeMiniNode); }
-  catch (err) { console.error("[Load Image Mini] paste failed", err); }
-}, true);
+// Ctrl+V with a picture on the clipboard pastes it into the selected mini node;
+// anything else (copied nodes, text) is left to ComfyUI - see installLoaderPaste.
+installLoaderPaste(() => _activeMiniNode, {
+  afterUpload: (node, saved) => { if (saved) refreshDropdown(node); },
+  onError: (err) => console.error("[Load Image Mini] paste failed", err),
+});
+// PageUp/PageDown for the active mini node.
 window.addEventListener("keydown", (e) => {
   if (!_activeMiniNode) return;
   if (e.key !== "PageUp" && e.key !== "PageDown") return;
