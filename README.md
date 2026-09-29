@@ -395,7 +395,8 @@ Master the Pixaroma suite with our video guides and workflow deep-dives:
 
 ## 🛠 Changelog
 
-### **September 29, 2026 · v1.4.177–v1.4.180**
+### **September 29, 2026 · v1.4.177–v1.4.181**
+- **Load Image and Load Image Mini: pictures from your own folders** (`+ Folder` in the picker), refreshed from the original at each Run. Load Image also gets a settings gear.
 - **AI Prompt: several pictures at once.** Wiring a picture adds a slot for another, up to 8, each seen at its own size.
 - **Paint: "Canvas size from added image".** Turn it on under Add Image and every picture you add sets the canvas to its size.
 - **Fixed: Inpaint Crop behind an Image Composer showed the picture going into the Composer**, so the mask was painted on the wrong image.
