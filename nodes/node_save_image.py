@@ -209,9 +209,18 @@ def _build_jpeg_exif(prompt=None, workflow=None, parameters=None, max_bytes=None
     cap = _EXIF_MAX if max_bytes is None else int(max_bytes)
     try:
         # (workflow, prompt, include_user_comment), most complete first.
+        #
+        # The two PROMPT-ONLY rungs (2026-09-29, Discord report "metadata gone
+        # for all instances"): once a workflow passed the JPG limit the file
+        # was saved with NOTHING, although the prompt alone - a fraction of the
+        # workflow's size - would have fitted. The workflow is shared by every
+        # Save Image node, so all of them went blank at once. They come after
+        # every workflow rung, so a file that fitted before embeds exactly
+        # what it did before.
         attempts = (
             (workflow, prompt, True),
             (workflow, None, True),
+            (None, prompt, True),
             (None, None, True),
             # Last resorts with the user comment dropped, so a huge prompt does
             # not also cost the workflow EXIF that fitted before this feature.
@@ -219,6 +228,7 @@ def _build_jpeg_exif(prompt=None, workflow=None, parameters=None, max_bytes=None
             # skipped in favour of the smaller one tried earlier.
             (workflow, prompt, False),
             (workflow, None, False),
+            (None, prompt, False),
         )
         for wf, pr, include in attempts:
             if wf is None and pr is None and not (include and have_params):
