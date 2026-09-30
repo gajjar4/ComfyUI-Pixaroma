@@ -94,7 +94,10 @@ class PixaromaResizeCrop:
 
         # Crop-to-fill (cover) via the shared engine: scale to cover, then
         # center-crop the overflow. allow_upscale True so small sources fill
-        # the box; snap 0 so the output is EXACTLY tw x th.
+        # the box; snap 0 so the output is EXACTLY tw x th. Lanczos both ways:
+        # "auto" enlarged with bilinear, visibly softer than core's lanczos
+        # resize when this node replaced Resize Image/Mask in the Ep36
+        # workflows (2026-09-30).
         state = {
             "mode": "cover",
             "cover_w": tw,
@@ -103,7 +106,7 @@ class PixaromaResizeCrop:
             "crop_scale": True,
             "allow_upscale": True,
             "snap": 0,
-            "resample": "auto",
+            "resample": "lanczos",
         }
 
         rgb_frames = _tensor_to_pils(image)
