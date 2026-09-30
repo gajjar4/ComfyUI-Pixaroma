@@ -517,6 +517,10 @@ app.registerExtension({
     // first mount and never reserve the title height. See the note at the top.
     const LG = (typeof window !== "undefined" && window.LiteGraph) || {};
     nodeType.title_mode = LG.NO_TITLE != null ? LG.NO_TITLE : 1;
+    // No pack badge above a title-less node: frontend 1.53.6 draws it from a
+    // central provider in LGraphNode.drawBadges, so node.badges = [] alone no
+    // longer hides it (same as Label).
+    nodeType.prototype.drawBadges = function () {};
 
     if (nodeType.prototype._pixPmPatched) return;   // hot reload: never double-wrap
     nodeType.prototype._pixPmPatched = true;

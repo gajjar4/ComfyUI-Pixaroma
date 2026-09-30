@@ -297,6 +297,10 @@ app.registerExtension({
     if (nodeData.name !== "PixaromaLabel") return;
 
     nodeType.title_mode = NO_TITLE;
+    // No pack badge floating above a title-less node. Frontend 1.53.6 draws the
+    // source badge from a central provider in LGraphNode.drawBadges, not from
+    // node.badges, so the "badges = []" below no longer hides it on its own.
+    nodeType.prototype.drawBadges = function () {};
 
     // ── Creation ─────────────────────────────────────────
     const _origCreated = nodeType.prototype.onNodeCreated;

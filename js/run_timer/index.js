@@ -1903,6 +1903,10 @@ app.registerExtension({
     // on remount, so it keeps reserving the 30px).
     const LG = (typeof window !== "undefined" && window.LiteGraph) || {};
     nodeType.title_mode = (LG.NO_TITLE != null) ? LG.NO_TITLE : 1;
+    // No pack badge above a title-less node: frontend 1.53.6 draws it from a
+    // central provider in LGraphNode.drawBadges, so node.badges = [] alone no
+    // longer hides it (same as Label).
+    nodeType.prototype.drawBadges = function () {};
 
     if (nodeType.prototype._pixRtPatched) return; // hot-reload: don't double-wrap
     nodeType.prototype._pixRtPatched = true;
