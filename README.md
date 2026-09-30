@@ -395,6 +395,10 @@ Master the Pixaroma suite with our video guides and workflow deep-dives:
 
 ## 🛠 Changelog
 
+### **September 30, 2026 · v1.4.182**
+- **Resize Crop: sharper when it enlarges a picture.** It now uses lanczos both ways, the same as ComfyUI's own resize.
+- **Fixed: a "Pixaroma" badge floating above Label, Run Timer and Monitor** after the latest ComfyUI update.
+
 ### **September 29, 2026 · v1.4.177–v1.4.181**
 - **Load Image and Load Image Mini: pictures from your own folders** (`+ Folder` in the picker), refreshed from the original at each Run. Load Image also gets a settings gear.
 - **AI Prompt: several pictures at once.** Wiring a picture adds a slot for another, up to 8, each seen at its own size.
