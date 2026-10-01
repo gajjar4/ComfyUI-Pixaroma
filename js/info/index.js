@@ -249,7 +249,11 @@ if (typeof window !== "undefined" && !window._pixInfoClickWired) {
     if (e.button !== 0 || e.shiftKey || e.ctrlKey || e.metaKey || e.altKey) return;
     const n = infoAt(e);
     if (!n) return;
-    down = { node: n, x: e.clientX, y: e.clientY, t: performance.now(), px: n.pos[0], py: n.pos[1] };
+    // The starter popup closes itself on this same press (its listener runs
+    // after ours), so whether it was open must be read NOW, not at the release:
+    // a click that dismisses the popup is not a request to read (reproduced).
+    down = { node: n, x: e.clientX, y: e.clientY, t: performance.now(), px: n.pos[0], py: n.pos[1],
+      pop: starterPopupOpen() };
   }, true);
   window.addEventListener("pointerup", (e) => {
     const d = down;
@@ -261,7 +265,7 @@ if (typeof window !== "undefined" && !window._pixInfoClickWired) {
     if (n.pos[0] !== d.px || n.pos[1] !== d.py) return;
     // The click that PLACES a just-added node is not a request to read it.
     if (performance.now() - (n._pixInfoBorn || 0) < 500) return;
-    if (starterPopupOpen() || !isLiveNode(n)) return;
+    if (d.pop || starterPopupOpen() || !isLiveNode(n)) return;
     if (infoAt(e) !== n) return;
     openReader(n);
   }, true);

@@ -210,12 +210,27 @@ export function openInfoEditor(node, opts = {}) {
     ? cfg.backgroundColor : null;
   if (pageBg) node.bgcolor = pageBg;
 
+  // Note's _keyBlock (window capture) takes Ctrl/Cmd+Z, Y, B, I and U for the
+  // note body: pressed in the TITLE box they undid the NOTE's last edit and
+  // moved the focus there (reproduced). Registered BEFORE editor.open(), so on
+  // the same target and phase this runs first: for those keys typed in the
+  // strip it stops Note's handler (and ComfyUI's), and the box's own undo /
+  // redo still happens, because nothing calls preventDefault.
+  const stripKeys = (e) => {
+    if (!(e.ctrlKey || e.metaKey) || !e.target?.closest?.(".pix-info-strip")) return;
+    const k = (e.key || "").toLowerCase();
+    if (k === "z" || k === "y" || k === "b" || k === "i" || k === "u") e.stopImmediatePropagation();
+  };
+  window.addEventListener("keydown", stripKeys, true);
+
   const origSave = editor.save;
   editor.save = function () {
     const oldInfo = readCfg(node).info;
     const info = {
       title: String(staged.title || "").slice(0, TITLE_MAX),
-      icon: iconOrDefault(staged.icon),
+      // Kept as stored: an icon this pack does not know (a newer version
+      // added it) must survive a save here. It is drawn as the Info icon.
+      icon: staged.icon,
       color: staged.color,
     };
     this.cfg.info = info;
@@ -234,6 +249,7 @@ export function openInfoEditor(node, opts = {}) {
     const r = origCleanup.apply(this, arguments);
     if (cleaned) return r;
     cleaned = true;
+    window.removeEventListener("keydown", stripKeys, true);
     node._pixInfoRaw = null;
     node._pixInfoRefresh?.();
     try { node.setDirtyCanvas?.(true, true); } catch (_e) {}
@@ -245,6 +261,9 @@ export function openInfoEditor(node, opts = {}) {
 
   try {
     editor.open();
+  } catch (e) {
+    window.removeEventListener("keydown", stripKeys, true);
+    throw e;
   } finally {
     if (pageBg) node.bgcolor = savedBg;
   }

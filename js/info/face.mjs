@@ -139,8 +139,8 @@ export function heightForWidth(node) {
 // load and outside a gesture. The tolerance is deliberate: the title is
 // measured with the system font, which differs a little between computers, so
 // a workflow shared from another PC reads 5-10% off and must NOT be rewritten
-// (it would flag itself modified on open). Beyond the band the fit-scale
-// painter letterboxes instead, which is harmless.
+// (it would flag itself modified on open). INSIDE the band nothing is written
+// and the fit-scale painter simply letterboxes, which is harmless.
 export function repairClassicHeight(node) {
   if (isGraphLoading() || isVueNodes()) return;
   try { if (app.canvas?.resizing_node === node) return; } catch (_e) {}

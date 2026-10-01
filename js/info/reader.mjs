@@ -30,6 +30,10 @@ const CSS = [
   ".pix-info-rbtn .pix-info-rbi{width:13px;height:13px;background:currentColor;-webkit-mask:var(--i) center/contain no-repeat;mask:var(--i) center/contain no-repeat;}",
   ".pix-info-rx{border:0;background:transparent;color:#aaa;font-size:17px;line-height:1;cursor:pointer;padding:4px 8px;border-radius:6px;}",
   ".pix-info-rx:hover{color:#fff;background:rgba(255,255,255,.08);}",
+  // Resize corner: two short diagonal strokes, the usual "drag me" mark.
+  ".pix-info-rgrip{position:absolute;right:0;bottom:0;width:18px;height:18px;cursor:nwse-resize;touch-action:none;z-index:2;",
+  "background:linear-gradient(135deg,transparent 0 55%,#666 55% 61%,transparent 61% 72%,#666 72% 78%,transparent 78%);}",
+  ".pix-info-rgrip:hover{background:linear-gradient(135deg,transparent 0 55%,#f66744 55% 61%,transparent 61% 72%,#f66744 72% 78%,transparent 78%);}",
   // The note itself: Note's body stylesheet, a size up for reading.
   ".pix-info-reader .pix-info-doc.pix-note-body{height:auto;flex:1 1 auto;min-height:80px;overflow-y:auto;padding:20px 32px 26px;",
   "font-size:14.5px;line-height:1.6;background:#1e1e1e;}",
@@ -54,7 +58,15 @@ let _win = null;       // the window element
 let _node = null;      // the node it shows
 let _raw = null;       // the widget string it was drawn from
 let _poll = null;
-let _pos = null;       // where the user dragged it (session only)
+// Where the user put the window and how big they made it. Remembered in this
+// browser (a per-viewer convenience: nothing breaks if storage is blocked).
+const RECT_KEY = "pixaroma.info.reader.v1";
+let _rect = null;      // { left, top, w, h } - any part may be missing
+try { _rect = JSON.parse(localStorage.getItem(RECT_KEY) || "null"); } catch (_e) { _rect = null; }
+function saveRect() {
+  try { localStorage.setItem(RECT_KEY, JSON.stringify(_rect || {})); } catch (_e) {}
+}
+const MIN_W = 360, MIN_H = 180;
 let _onEdit = null;
 let _keyOff = null;
 let _pressInside = false;
@@ -128,48 +140,84 @@ function editFromReader() {
 }
 
 function place(win) {
+  const r = _rect || {};
+  // Size first (a saved size larger than this screen is clamped to it).
+  if (r.w > 0) win.style.width = `${Math.round(Math.max(MIN_W, Math.min(r.w, window.innerWidth - 16)))}px`;
+  else win.style.width = "";
+  if (r.h > 0) win.style.height = `${Math.round(Math.max(MIN_H, Math.min(r.h, window.innerHeight - 16)))}px`;
+  else win.style.height = "";
   const w = win.offsetWidth, h = win.offsetHeight;
   let left, top;
-  if (_pos) { left = _pos.left; top = _pos.top; }
+  if (Number.isFinite(r.left) && Number.isFinite(r.top)) { left = r.left; top = r.top; }
   else { left = (window.innerWidth - w) / 2; top = Math.max(24, window.innerHeight * 0.08); }
   left = Math.max(8, Math.min(window.innerWidth - Math.min(w, window.innerWidth - 16) - 8, left));
-  top = Math.max(8, Math.min(window.innerHeight - 60, top));
+  top = Math.max(8, Math.min(window.innerHeight - Math.min(h, 60), top));
   win.style.left = `${Math.round(left)}px`;
   win.style.top = `${Math.round(top)}px`;
 }
 
-// Title-bar drag with BOTH defences of CLAUDE.md convention #20: pointer
-// capture, and stopping as soon as the button is up (a lost release otherwise
-// leaves the window stuck to the cursor).
+// One pointer drag with BOTH defences of CLAUDE.md convention #20: pointer
+// capture on the handle, and stopping as soon as the button is up (a lost
+// release otherwise leaves the window stuck to the cursor).
+function startDrag(handle, e, onMove, onEnd) {
+  e.preventDefault();
+  let ended = false;
+  try { handle.setPointerCapture(e.pointerId); } catch (_e) {}
+  const move = (ev) => {
+    if (!(ev.buttons & 1)) { end(); return; }
+    onMove(ev);
+  };
+  const end = () => {
+    if (ended) return;
+    ended = true;
+    handle.removeEventListener("pointermove", move);
+    handle.removeEventListener("pointerup", end);
+    handle.removeEventListener("pointercancel", end);
+    handle.removeEventListener("lostpointercapture", end);
+    try { handle.releasePointerCapture(e.pointerId); } catch (_e) {}
+    onEnd?.();
+  };
+  handle.addEventListener("pointermove", move);
+  handle.addEventListener("pointerup", end);
+  handle.addEventListener("pointercancel", end);
+  handle.addEventListener("lostpointercapture", end);
+}
+
+// Move by the title bar.
 function wireDrag(win, bar) {
   bar.addEventListener("pointerdown", (e) => {
     if (e.button !== 0 || e.target.closest("button")) return;
-    e.preventDefault();
     const r = win.getBoundingClientRect();
     const dx = e.clientX - r.left, dy = e.clientY - r.top;
-    let ended = false;
-    try { bar.setPointerCapture(e.pointerId); } catch (_e) {}
-    const move = (ev) => {
-      if (!(ev.buttons & 1)) { end(); return; }
-      const left = Math.max(8 - r.width + 80, Math.min(window.innerWidth - 80, ev.clientX - dx));
+    startDrag(bar, e, (ev) => {
+      const left = Math.max(80 - r.width, Math.min(window.innerWidth - 80, ev.clientX - dx));
       const top = Math.max(0, Math.min(window.innerHeight - 40, ev.clientY - dy));
       win.style.left = `${Math.round(left)}px`;
       win.style.top = `${Math.round(top)}px`;
-      _pos = { left, top };
-    };
-    const end = () => {
-      if (ended) return;
-      ended = true;
-      bar.removeEventListener("pointermove", move);
-      bar.removeEventListener("pointerup", end);
-      bar.removeEventListener("pointercancel", end);
-      bar.removeEventListener("lostpointercapture", end);
-      try { bar.releasePointerCapture(e.pointerId); } catch (_e) {}
-    };
-    bar.addEventListener("pointermove", move);
-    bar.addEventListener("pointerup", end);
-    bar.addEventListener("pointercancel", end);
-    bar.addEventListener("lostpointercapture", end);
+      _rect = { ...(_rect || {}), left, top };
+    }, saveRect);
+  });
+}
+
+// Size by the bottom-right corner. Double-click it to go back to the default.
+function wireResize(win, grip) {
+  grip.addEventListener("pointerdown", (e) => {
+    if (e.button !== 0) return;
+    const r = win.getBoundingClientRect();
+    // Where in the corner the pointer landed, so the corner does not jump.
+    const ox = e.clientX - r.right, oy = e.clientY - r.bottom;
+    startDrag(grip, e, (ev) => {
+      const w = Math.max(MIN_W, Math.min(ev.clientX - ox - r.left, window.innerWidth - r.left - 8));
+      const h = Math.max(MIN_H, Math.min(ev.clientY - oy - r.top, window.innerHeight - r.top - 8));
+      win.style.width = `${Math.round(w)}px`;
+      win.style.height = `${Math.round(h)}px`;
+      _rect = { ...(_rect || {}), left: r.left, top: r.top, w, h };
+    }, saveRect);
+  });
+  grip.addEventListener("dblclick", () => {
+    if (_rect) { delete _rect.w; delete _rect.h; }
+    saveRect();
+    place(win);
   });
 }
 
@@ -211,6 +259,9 @@ export function openReader(node) {
   win.appendChild(bar);
   const doc = el("div", "pix-info-doc pix-note-body");
   win.appendChild(doc);
+  const grip = el("div", "pix-info-rgrip");
+  grip.title = "Drag to resize. Double-click for the default size.";
+  win.appendChild(grip);
   // A press inside the window (dragging it, selecting text) must not reach
   // ComfyUI. MEASURED in Nodes 2.0: dragging the title bar ALSO moved the
   // selected node underneath, 44,60 for a 50,60 drag. The mover is Pixaroma
@@ -227,6 +278,7 @@ export function openReader(node) {
   fill(win, node);
   place(win);
   wireDrag(win, bar);
+  wireResize(win, grip);
 
   const onKey = (e) => {
     if (e.key !== "Escape" || !_win) return;
