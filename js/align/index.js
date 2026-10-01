@@ -50,6 +50,10 @@ const state = {
   // path is untouched). Captured on the first tick of a group drag.
   groupDrag: null,      // { ref, gx0, gy0, w, h, cursorX, cursorY, contained, ... } or null
   groupResize: null,    // { ref, x0, y0, cornerX0, cornerY0, cursorX, cursorY } or null (native group BR-resize)
+  // Nodes 2.0: did the current press begin on a node (not a text field), and
+  // did it reach the window? Both, or it is not a node drag (pattern #24).
+  _pressInNode: false,
+  _pressBubbled: false,
 };
 
 const ICON_URL = "icons/ui/align-center-v.svg";
@@ -213,6 +217,9 @@ function installPointerHook() {
   // Capture-phase pointerdown so it runs BEFORE the Vue node's resize handler -
   // snapshots all node sizes as the gesture-start baseline (resize guard below).
   window.addEventListener("pointerdown", onWindowPointerDown, true);
+  // Bubble-phase twin: the press REACHED the window, i.e. nothing on the way
+  // (a widget control, a text box) kept it to itself. Pattern #24.
+  window.addEventListener("pointerdown", onWindowPointerDownBubble, false);
   // Reset drag state on every release. Without this, a release-then-click
   // sequence with no intervening pointermove leaves stale dragInfo (with
   // its old lockType) attached to the next drag, breaking classification.
@@ -528,7 +535,28 @@ function resetDrag() {
 // drag (even after the node clamps at its min and stops changing) - so the guard
 // latches reliably from tick 1 and the selected node is never moved while another
 // node is being resized. (Pattern #16 hardening, 2026-06.)
+// Can this press start a NODES 2.0 node drag? Nodes 2.0 starts one only from the
+// node element's own pointer handlers (useNodePointerInteractions.ts), so the
+// press must begin inside a .lg-node, and not in a text field (typing or
+// selecting text there never drags the node). Measured before this existed:
+// with a node selected, a drag on the sidebar, on the Help window's title, or a
+// text selection inside ANOTHER node's text box all moved the selected node.
+function isVueNodePress(t) {
+  if (!t || typeof t.closest !== "function") return false;
+  if (!t.closest(".lg-node")) return false;
+  if (t.isContentEditable || t.closest("input, textarea, select, [contenteditable='true'], [contenteditable='']")) return false;
+  return true;
+}
+
+function onWindowPointerDownBubble(e) {
+  if (e.button === 0) state._pressBubbled = true;
+}
+
 function onWindowPointerDown(e) {
+  // Where the press began, for the Nodes 2.0 gate in onWindowPointerMove. Set on
+  // EVERY press (before any early return) so a stale value never carries over.
+  state._pressInNode = e.button === 0 && isVueNodePress(e.target);
+  state._pressBubbled = false;
   if (!state.enabled) return;
   if (e.button !== 0) return; // primary button only
   const c = app.canvas;
@@ -1002,6 +1030,15 @@ function onWindowPointerMove(e) {
   //    selected_nodes (marquee/pan already bailed above). Agent-verified 2026-06-01.
   let draggedNode = null;
   if (vue) {
+    // Only a press that began on a node (and was not kept by a control or a
+    // text field inside it) can be a node drag. Without this, ANY left-drag with
+    // a node selected - the sidebar, a floating window's title, selecting text
+    // in another node - moved the selected node (pattern #24).
+    if (!(state._pressInNode && state._pressBubbled)) {
+      state.dragInfo = null;
+      if (state.activeGuides.length) { state.activeGuides = []; c.setDirty?.(true, true); }
+      return;
+    }
     // Resize guard (Nodes 2.0): a resize updates node._size, but a MOVE does
     // NOT mutate node._pos, and selected_nodes can't tell us whether the user is
     // moving the selected node or RESIZING a different one. So if ANY node's
