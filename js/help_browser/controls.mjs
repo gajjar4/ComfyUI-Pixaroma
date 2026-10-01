@@ -54,6 +54,12 @@ export function readControls(comfyClass) {
       const opts = Array.isArray(spec) ? spec[1] : null;
       const o = (opts && typeof opts === "object") ? opts : {};
       const forced = !!o.forceInput;
+      // The same for the saved state of a node with its own editor (Note's and
+      // Info's note_json, Label's label_json): declared as a text input so the
+      // editor can store into it, but hidden on the node, and its default is a
+      // block of JSON. Listed, it showed the raw JSON as a "setting" and the
+      // user rightly asked what it meant. A JSON-object default is the mark.
+      if (typeof o.default === "string" && /^\s*\{/.test(o.default)) continue;
       const entry = {
         name,
         type,
