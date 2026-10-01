@@ -53,12 +53,30 @@ export function iconOrDefault(id) {
 function cleanInfo(raw) {
   const r = raw && typeof raw === "object" ? raw : {};
   const title = typeof r.title === "string" ? r.title.replace(/[\r\n\t]+/g, " ").slice(0, TITLE_MAX) : DEFAULT_INFO.title;
-  return {
+  const out = {
     title,
     // Unknown ids are KEPT (a newer pack may have the icon); drawing falls
     // back to the Info icon via iconOrDefault, never a blank.
     icon: typeof r.icon === "string" && /^[A-Za-z0-9_-]{1,64}$/.test(r.icon) ? r.icon : DEFAULT_ICON,
     color: typeof r.color === "string" && HEX_RE.test(r.color) ? r.color.toLowerCase() : DEFAULT_INFO.color,
+  };
+  const reader = cleanReader(r.reader);
+  if (reader) out.reader = reader;
+  return out;
+}
+
+// The reading window's size for THIS button, saved with the workflow (the
+// user's call: a short note opens small, a long one big, as its author set
+// it). Missing = the default width and a height that fits the note.
+export const READER_MIN = { w: 360, h: 180 };
+const READER_MAX = { w: 4000, h: 4000 };
+function cleanReader(r) {
+  if (!r || typeof r !== "object") return null;
+  const w = Number(r.w), h = Number(r.h);
+  if (!Number.isFinite(w) || !Number.isFinite(h)) return null;
+  return {
+    w: Math.round(Math.max(READER_MIN.w, Math.min(READER_MAX.w, w))),
+    h: Math.round(Math.max(READER_MIN.h, Math.min(READER_MAX.h, h))),
   };
 }
 

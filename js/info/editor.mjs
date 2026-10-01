@@ -233,6 +233,8 @@ export function openInfoEditor(node, opts = {}) {
       icon: staged.icon,
       color: staged.color,
     };
+    // The reading-window size is not edited here; carry it through the save.
+    if (oldInfo.reader) info.reader = { ...oldInfo.reader };
     this.cfg.info = info;
     // Note stamps its own node size into the cfg; Info's size lives on the node.
     const r = origSave.apply(this, arguments);

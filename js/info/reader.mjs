@@ -12,7 +12,7 @@ import { injectCSS as injectNoteCSS } from "../note/css.mjs";
 import { renderContent } from "../note/render.mjs";
 import { ensureIcons, injectIconCSS } from "../note/icons.mjs";
 import { isLiveNode } from "../shared/live_node.mjs";
-import { readCfg, findWidget, iconUrl, inkFor } from "./core.mjs";
+import { readCfg, writeCfg, findWidget, iconUrl, inkFor, READER_MIN } from "./core.mjs";
 
 const CSS = [
   ".pix-info-reader{position:fixed;z-index:1400;display:flex;flex-direction:column;width:min(860px, calc(100vw - 32px));",
@@ -58,15 +58,21 @@ let _win = null;       // the window element
 let _node = null;      // the node it shows
 let _raw = null;       // the widget string it was drawn from
 let _poll = null;
-// Where the user put the window and how big they made it. Remembered in this
-// browser (a per-viewer convenience: nothing breaks if storage is blocked).
-const RECT_KEY = "pixaroma.info.reader.v1";
-let _rect = null;      // { left, top, w, h } - any part may be missing
-try { _rect = JSON.parse(localStorage.getItem(RECT_KEY) || "null"); } catch (_e) { _rect = null; }
-function saveRect() {
-  try { localStorage.setItem(RECT_KEY, JSON.stringify(_rect || {})); } catch (_e) {}
+// WHERE the window sits is remembered in this browser (screens differ, so it
+// is a per-viewer convenience: nothing breaks if storage is blocked). HOW BIG
+// it is belongs to each Info button and is saved in the workflow
+// (cfg.info.reader, the user's call 2026-10-01): a short note opens small, a
+// long one big, the way its author sized it.
+const POS_KEY = "pixaroma.info.reader.v1";
+let _pos = null;       // { left, top }
+try {
+  const p = JSON.parse(localStorage.getItem(POS_KEY) || "null");
+  if (p && Number.isFinite(p.left) && Number.isFinite(p.top)) _pos = { left: p.left, top: p.top };
+} catch (_e) { _pos = null; }
+function savePos() {
+  try { localStorage.setItem(POS_KEY, JSON.stringify(_pos || {})); } catch (_e) {}
 }
-const MIN_W = 360, MIN_H = 180;
+const MIN_W = READER_MIN.w, MIN_H = READER_MIN.h;
 let _onEdit = null;
 let _keyOff = null;
 let _pressInside = false;
@@ -139,19 +145,31 @@ function editFromReader() {
   if (n && _onEdit) _onEdit(n, { reopenReader: true });
 }
 
+// The size this button's author gave its window, or the default (width from
+// the stylesheet, height fitting the note). A saved size larger than this
+// screen is clamped to it.
+function applySize(win, node) {
+  const r = node ? readCfg(node).info.reader : null;
+  if (r) {
+    win.style.width = `${Math.round(Math.max(MIN_W, Math.min(r.w, window.innerWidth - 16)))}px`;
+    win.style.height = `${Math.round(Math.max(MIN_H, Math.min(r.h, window.innerHeight - 16)))}px`;
+  } else {
+    win.style.width = "";
+    win.style.height = "";
+  }
+}
+
 function place(win) {
-  const r = _rect || {};
-  // Size first (a saved size larger than this screen is clamped to it).
-  if (r.w > 0) win.style.width = `${Math.round(Math.max(MIN_W, Math.min(r.w, window.innerWidth - 16)))}px`;
-  else win.style.width = "";
-  if (r.h > 0) win.style.height = `${Math.round(Math.max(MIN_H, Math.min(r.h, window.innerHeight - 16)))}px`;
-  else win.style.height = "";
   const w = win.offsetWidth, h = win.offsetHeight;
   let left, top;
-  if (Number.isFinite(r.left) && Number.isFinite(r.top)) { left = r.left; top = r.top; }
+  if (_pos) { left = _pos.left; top = _pos.top; }
   else { left = (window.innerWidth - w) / 2; top = Math.max(24, window.innerHeight * 0.08); }
+  // Keep the WHOLE window on screen: each button opens at its own size, so a
+  // taller note shown where a short one stood would otherwise run off the
+  // bottom (measured: top 275 + 858 tall on a 906 px window). It moves up or
+  // left just enough; the remembered spot itself is not changed.
   left = Math.max(8, Math.min(window.innerWidth - Math.min(w, window.innerWidth - 16) - 8, left));
-  top = Math.max(8, Math.min(window.innerHeight - Math.min(h, 60), top));
+  top = Math.max(8, Math.min(window.innerHeight - Math.min(h, window.innerHeight - 16) - 8, top));
   win.style.left = `${Math.round(left)}px`;
   win.style.top = `${Math.round(top)}px`;
 }
@@ -194,9 +212,24 @@ function wireDrag(win, bar) {
       const top = Math.max(0, Math.min(window.innerHeight - 40, ev.clientY - dy));
       win.style.left = `${Math.round(left)}px`;
       win.style.top = `${Math.round(top)}px`;
-      _rect = { ...(_rect || {}), left, top };
-    }, saveRect);
+      _pos = { left, top };
+    }, savePos);
   });
+}
+
+// Save (or clear, with null) the window size on the button it belongs to.
+// A user action, so it may flag the workflow modified - that is the point:
+// the size travels with the workflow.
+function saveSizeOnNode(node, size) {
+  if (!node || !isLiveNode(node)) return;
+  const cfg = readCfg(node);
+  const info = { ...cfg.info };
+  if (size) info.reader = { w: Math.round(size.w), h: Math.round(size.h) };
+  else delete info.reader;
+  const before = JSON.stringify(cfg.info.reader || null);
+  if (JSON.stringify(info.reader || null) === before) return;
+  writeCfg(node, { ...cfg, info });
+  _raw = findWidget(node)?.value ?? null;   // our own write: no redraw needed
 }
 
 // Size by the bottom-right corner. Double-click it to go back to the default.
@@ -206,17 +239,19 @@ function wireResize(win, grip) {
     const r = win.getBoundingClientRect();
     // Where in the corner the pointer landed, so the corner does not jump.
     const ox = e.clientX - r.right, oy = e.clientY - r.bottom;
+    let size = null;
+    const node = _node;
     startDrag(grip, e, (ev) => {
       const w = Math.max(MIN_W, Math.min(ev.clientX - ox - r.left, window.innerWidth - r.left - 8));
       const h = Math.max(MIN_H, Math.min(ev.clientY - oy - r.top, window.innerHeight - r.top - 8));
       win.style.width = `${Math.round(w)}px`;
       win.style.height = `${Math.round(h)}px`;
-      _rect = { ...(_rect || {}), left: r.left, top: r.top, w, h };
-    }, saveRect);
+      size = { w, h };
+    }, () => { if (size && node === _node) saveSizeOnNode(node, size); });
   });
   grip.addEventListener("dblclick", () => {
-    if (_rect) { delete _rect.w; delete _rect.h; }
-    saveRect();
+    saveSizeOnNode(_node, null);
+    applySize(win, _node);
     place(win);
   });
 }
@@ -231,6 +266,11 @@ export function openReader(node) {
   if (_win && _win.isConnected) {
     _node = node;
     fill(_win, node);
+    // Each button opens at its own size, at the spot the user chose (a taller
+    // note may have been nudged up to fit; a shorter one goes back).
+    if (!_pos) _pos = { left: _win.offsetLeft, top: _win.offsetTop };
+    applySize(_win, node);
+    place(_win);
     return;
   }
   closeReader();
@@ -276,6 +316,7 @@ export function openReader(node) {
   _win = win;
   _node = node;
   fill(win, node);
+  applySize(win, node);
   place(win);
   wireDrag(win, bar);
   wireResize(win, grip);
@@ -292,7 +333,7 @@ export function openReader(node) {
     e.stopPropagation();
     closeReader();
   };
-  const onResize = () => { if (_win) place(_win); };
+  const onResize = () => { if (_win) { applySize(_win, _node); place(_win); } };
   window.addEventListener("keydown", onKey, true);
   window.addEventListener("resize", onResize);
   _keyOff = () => {
@@ -305,6 +346,6 @@ export function openReader(node) {
   _poll = setInterval(() => {
     if (!_node || !isLiveNode(_node) || !_node.graph) { closeReader(); return; }
     const raw = findWidget(_node)?.value ?? null;
-    if (raw !== _raw && _win) fill(_win, _node);
+    if (raw !== _raw && _win) { fill(_win, _node); applySize(_win, _node); place(_win); }
   }, 400);
 }

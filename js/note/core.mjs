@@ -639,6 +639,7 @@ export class NoteEditor {
     // If the user is in Code view, persist what they edited in the textarea,
     // not what's currently in the (hidden) WYSIWYG area. sanitize runs either
     // way so malicious markup added in Code view is stripped before storage.
+    if (this._mode !== "code") this._hoistListsFromParagraphs?.();
     const raw = this._mode === "code"
       ? (this._codeArea?.value || "")
       : (this._editArea?.innerHTML || "");
@@ -649,6 +650,13 @@ export class NoteEditor {
       console.error("[pix-note] sanitize threw during save; keeping raw HTML", e, { raw });
       html = raw;
     }
+    // An EMPTY <p></p> (no <br>, at most layout whitespace) is never something
+    // typed: a blank line the editor makes is <p><br></p>. It is what the
+    // parser leaves behind when a list sat inside a paragraph (see
+    // _hoistListsFromParagraphs) and what older Code-view round trips left
+    // between blocks, so drop it. Not \s: in JS that also matches a non-
+    // breaking space, which IS typed content.
+    html = html.replace(/<p>[ \t\r\n]*<\/p>/g, "");
     this.cfg.content = html;
     // Preserve whatever size the node currently has so reload restores it. The
     // editor overlay doesn't itself resize the node — this captures the size the
@@ -1203,7 +1211,19 @@ NoteEditor.prototype._normalizeEditArea = function (area) {
   if (!root) return;
   const nodes = Array.from(root.childNodes);
   let currentP = null;
+  const isBlockEl = (x) => !!x && x.nodeType === 1 &&
+    /^(P|UL|OL|DIV|H1|H2|H3|PRE|TABLE|BLOCKQUOTE|HR)$/.test(x.tagName);
   for (const n of nodes) {
+    // Whitespace-only text BETWEEN blocks is layout, not content: Code view's
+    // pretty-printer puts two newlines between every block, and wrapping that in a
+    // <p> left a junk paragraph between every pair of blocks after each
+    // Code -> Preview switch (reproduced). Drop it when it does not sit inside
+    // a run of inline content (no open <p>, and a block or nothing follows).
+    if (n.nodeType === 3 && /^[ \t\r\n]*$/.test(n.nodeValue) && !currentP &&
+        (!n.nextSibling || isBlockEl(n.nextSibling))) {
+      n.remove();
+      continue;
+    }
     const isTextish =
       n.nodeType === 3 ||
       (n.nodeType === 1 && (n.tagName === "BR" || n.tagName === "SPAN" ||
@@ -1226,6 +1246,58 @@ NoteEditor.prototype._normalizeEditArea = function (area) {
     p.appendChild(document.createElement("br"));
     root.appendChild(p);
   }
+};
+
+// Chrome's insertUnorderedList / insertOrderedList, run in a <p> (always the
+// case here: the editor makes <p> its paragraph), puts the list INSIDE that
+// <p> - and the paragraph typed after leaving the list too:
+//   <p><ul><li>one</li></ul><p>after</p></p>   (reproduced 2026-10-01)
+// A <p> cannot hold a list, so the HTML parser splits it on save into an EMPTY
+// <p></p> above the list and another below: extra gaps that come back on every
+// open. Move each such list out to the paragraph's level, carry what followed
+// it along (blocks as they are, loose inline content into a new <p>), and drop
+// the paragraph if nothing is left in it. The caret is put back where it was:
+// moving a node collapses any selection inside it.
+//
+// Also called right after the list buttons, where it ALSO wraps loose text in
+// a <p>: turning a list item back into text leaves it bare at the top level
+// ("one<br>" beside the paragraphs, reproduced), and _normalizeEditArea's own
+// note explains why bare text breaks every block operation that follows.
+NoteEditor.prototype._hoistListsFromParagraphs = function (alsoNormalize = false) {
+  const area = this._editArea;
+  if (!area) return false;
+  const lists = Array.from(area.querySelectorAll("p > ul, p > ol"));
+  const loose = alsoNormalize && Array.from(area.childNodes).some((n) =>
+    n.nodeType === 3 ? n.nodeValue.trim() !== "" : (n.nodeType === 1 && !/^(P|UL|OL|DIV|H1|H2|H3|PRE|TABLE|BLOCKQUOTE|HR)$/.test(n.tagName)));
+  if (!lists.length && !loose) return false;
+  const sel = window.getSelection();
+  const saved = sel && sel.rangeCount && area.contains(sel.anchorNode)
+    ? [sel.anchorNode, sel.anchorOffset, sel.focusNode, sel.focusOffset] : null;
+  const BLOCK = /^(P|UL|OL|DIV|H1|H2|H3|PRE|TABLE|BLOCKQUOTE|HR)$/;
+  for (const list of lists) {
+    const p = list.parentElement;
+    if (!p || p.tagName !== "P" || !area.contains(p)) continue;
+    const after = [];
+    for (let n = list.nextSibling; n; n = n.nextSibling) after.push(n);
+    p.after(list);
+    let anchor = list;
+    let loose = null;
+    for (const n of after) {
+      if (n.nodeType === 1 && BLOCK.test(n.tagName)) {
+        anchor.after(n); anchor = n; loose = null;
+      } else {
+        if (!loose) { loose = document.createElement("p"); anchor.after(loose); anchor = loose; }
+        loose.appendChild(n);
+      }
+    }
+    // Remove the paragraph when only whitespace / <br> is left in it.
+    const keep = p.textContent.replace(/[\s\u00a0]+/g, "") ||
+      p.querySelector(".pix-note-ic, a, img, table, code");
+    if (!keep) p.remove();
+  }
+  if (loose) this._normalizeEditArea?.(area);
+  if (saved) { try { sel.setBaseAndExtent(saved[0], saved[1], saved[2], saved[3]); } catch (_e) {} }
+  return true;
 };
 
 // Code / Preview view toggle. "Code" shows the sanitized HTML in a textarea

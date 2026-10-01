@@ -494,6 +494,14 @@ function makeButtonModal(editor, onSubmit, initialValues) {
   sizeInput.placeholder = "e.g. 9.4 GB";
   sizeInput.addEventListener("input", () => {
     state.size = sizeInput.value;
+    // Typing a size means "show it": the field stays typeable while the
+    // toggle is off, and a size typed there was silently dropped on Insert
+    // (found while testing 2026-10-01). Turn the toggle on with the first
+    // character; switching it off again still hides the size.
+    if (state.size.trim() && !state.sizeOn) {
+      state.sizeOn = true;
+      editor._btnPickerSizeOn = true;
+    }
     refresh();
   });
   // Drop the empty label so the size input doesn't have a hanging

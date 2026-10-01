@@ -128,6 +128,7 @@ export function applyStarter(node, st) {
   const cfg = readCfg(node);
   const oldInfo = cfg.info;
   const info = { title: st.title || st.name, icon: st.icon, color: st.color };
+  if (oldInfo.reader) info.reader = { ...oldInfo.reader };   // keep its reader size
   const next = { ...cfg, info };
   if (!String(cfg.content || "").trim()) next.content = starterContent(st);
   refitToContent(node, oldInfo, info);

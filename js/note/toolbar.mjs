@@ -755,13 +755,17 @@ NoteEditor.prototype._buildToolbar = function () {
   const g4 = el("div", "pix-note-tgroup");
   g4.appendChild(makeBtn(
     '<span class="pix-note-tbtn-maskicon pix-note-icon-list-dot"></span>',
-    "Bulleted list", "", () =>
-    document.execCommand("insertUnorderedList"), "insertUnorderedList"
+    "Bulleted list", "", () => {
+      document.execCommand("insertUnorderedList");
+      this._hoistListsFromParagraphs?.(true);   // Chrome nests the list in the <p>
+    }, "insertUnorderedList"
   ));
   g4.appendChild(makeBtn(
     '<span class="pix-note-tbtn-maskicon pix-note-icon-list-number"></span>',
-    "Numbered list", "", () =>
-    document.execCommand("insertOrderedList"), "insertOrderedList"
+    "Numbered list", "", () => {
+      document.execCommand("insertOrderedList");
+      this._hoistListsFromParagraphs?.(true);
+    }, "insertOrderedList"
   ));
   tb.appendChild(g4);
   tb.appendChild(el("div", "pix-note-tsep"));
