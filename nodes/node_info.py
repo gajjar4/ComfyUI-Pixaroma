@@ -33,6 +33,17 @@ class PixaromaInfo:
                         # Keep in sync with DEFAULT_CFG in js/info/core.mjs.
                         "default": '{"version":1,"content":"","buttonColor":"#f66744","lineColor":"#f66744","info":{"title":"Info","icon":"info","color":"#f66744"}}',
                         "multiline": True,
+                        # No input SOCKET: on a title-less button the socket sat
+                        # under the top-left corner, where a press dragged a wire
+                        # out of it (reproduced). The frontend creates no socket
+                        # for a socketless widget; the value saves as before.
+                        "socketless": True,
+                        # Our own widget constructor (js/info/index.js
+                        # getCustomWidgets): the frontend's STRING constructor
+                        # does not carry "socketless" into the widget, ours does.
+                        # A frontend without widgetType support falls back to the
+                        # plain STRING widget, and the JS hides its socket.
+                        "widgetType": "PIXAROMA_INFO_STATE",
                         # No tooltip on purpose: Classic shows a widget's tooltip
                         # while the mouse is over it, and this hidden widget sits
                         # under the whole button.

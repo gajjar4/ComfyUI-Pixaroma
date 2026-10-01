@@ -28,6 +28,8 @@ import { INFO_HELP } from "./help.mjs";
 
 registerNodeHelp(NODE, INFO_HELP);
 
+let _socketlessOk = false;
+
 function edit(node, opts = {}) {
   closeReader();
   closeStarterPopup();
@@ -83,6 +85,24 @@ app.registerExtension({
 
   setup() { installInfoBodyHook(); },
 
+  // The saved-state widget, made by us so it can be SOCKETLESS: the frontend
+  // creates no input socket for a widget whose options say so, and ITS STRING
+  // constructor does not pass the flag through (measured on 1.53.6). A socket
+  // on a title-less button sat under the top-left corner, where a press dragged
+  // a wire out of it. Selected by "widgetType" in nodes/node_info.py.
+  getCustomWidgets() {
+    return {
+      PIXAROMA_INFO_STATE(node, inputName, inputData) {
+        const spec = (Array.isArray(inputData) ? inputData[1] : inputData) || {};
+        const def = typeof spec.default === "string" ? spec.default : "";
+        const widget = node.addWidget("text", inputName, def, () => {}, { socketless: true });
+        widget.options = widget.options || {};
+        widget.options.socketless = true;
+        return { widget };
+      },
+    };
+  },
+
   getNodeMenuItems(node) {
     if (!isInfo(node)) return [];
     return [
@@ -112,6 +132,9 @@ app.registerExtension({
     const _origCreated = nodeType.prototype.onNodeCreated;
     nodeType.prototype.onNodeCreated = function () {
       const r = _origCreated?.apply(this, arguments);
+      // Before configure, the inputs are the def's: none means this frontend
+      // honours "socketless" (older ones still make a socket).
+      if (!(this.inputs || []).some((i) => i && i.name === "note_json")) _socketlessOk = true;
       // A fresh node opens at the scale-1 size of the default button. Set
       // synchronously: configure (load, paste) overwrites it with the saved size.
       this.size[0] = Math.round(unitWidth(DEFAULT_INFO));
@@ -137,6 +160,14 @@ app.registerExtension({
       // so an unchanged workflow stays clean (Vue Compat #18).
       if (!this.flags) this.flags = {};
       if (!this.flags.no_title) this.flags.no_title = true;
+      // A button saved before the input became socketless still carries the
+      // socket in its saved inputs. Drop it (only where this frontend makes
+      // none itself, so an older one is not rewritten on every open). Saved
+      // before the node was released, so only test workflows ever hit this.
+      if (_socketlessOk && Array.isArray(this.inputs)) {
+        const i = this.inputs.findIndex((x) => x && x.name === "note_json" && x.link == null);
+        if (i >= 0) { try { this.removeInput(i); } catch (_e) {} }
+      }
       this._pixInfoRaw = null;
       this._pixInfoRefresh?.();
       return r;
@@ -147,7 +178,17 @@ app.registerExtension({
       // Only a real corner drag (onResize also fires from setSize on restore,
       // fit-to-content, creation: convention #7).
       if (!isVueNodes() && !isGraphLoading()) {
-        try { if (app.canvas?.resizing_node === this) applyResizeAspect(this); } catch (_e) {}
+        try {
+          if (app.canvas?.resizing_node === this) {
+            // The corner being dragged, read on the gesture's FIRST call: the
+            // canvas clears pointer.resizeDirection after that (measured).
+            applyResizeAspect(this, this._pixInfoDir);
+          } else if (!this._pixInfoDir && app.canvas?.pointer?.resizeDirection) {
+            // Fallback for a press our hit test missed (a corner zone can sit
+            // just outside the node): the gesture's first call still has it.
+            this._pixInfoDir = String(app.canvas.pointer.resizeDirection);
+          }
+        } catch (_e) {}
       }
       return _origResize?.apply(this, arguments);
     };
@@ -157,7 +198,7 @@ app.registerExtension({
       const r = _origDraw?.apply(this, arguments);
       if (isVueNodes() || this.flags?.collapsed) return r;
       try {
-        if (app.canvas?.resizing_node === this && !isGraphLoading()) applyResizeAspect(this);
+        if (app.canvas?.resizing_node === this && !isGraphLoading()) applyResizeAspect(this, this._pixInfoDir);
         else repairClassicHeight(this);
         paintClassic(this, ctx);
       } catch (e) {
@@ -246,9 +287,20 @@ if (typeof window !== "undefined" && !window._pixInfoClickWired) {
   let down = null;
   window.addEventListener("pointerdown", (e) => {
     down = null;
-    if (e.button !== 0 || e.shiftKey || e.ctrlKey || e.metaKey || e.altKey) return;
+    if (e.button !== 0) return;
     const n = infoAt(e);
     if (!n) return;
+    // A new gesture. If it starts on a resize corner, remember which one, with
+    // LiteGraph's own test: the canvas sets pointer.resizeDirection after this
+    // listener and clears it again after the first move (measured).
+    n._pixInfoDir = null;
+    if (!isVueNodes()) {
+      try {
+        const p = app.canvas.convertEventToCanvasOffset(e);
+        n._pixInfoDir = n.findResizeDirection?.(p[0], p[1]) || null;
+      } catch (_e) {}
+    }
+    if (e.shiftKey || e.ctrlKey || e.metaKey || e.altKey) return;
     // The starter popup closes itself on this same press (its listener runs
     // after ours), so whether it was open must be read NOW, not at the release:
     // a click that dismisses the popup is not a request to read (reproduced).

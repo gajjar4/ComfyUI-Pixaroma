@@ -119,13 +119,23 @@ export function paintClassic(node, ctx) {
 // Classic resize gesture: the smallest button that CONTAINS the pointer, a
 // pure function of the proposed size with no history (run-timer.md #1c - any
 // rule that compares against what we wrote last frame oscillates).
-export function applyResizeAspect(node) {
+export function applyResizeAspect(node, dir = "") {
   const info = readCfg(node).info;
   const u = unitWidth(info);
   const s = Math.max(MIN_S, Math.min(MAX_S, Math.max(node.size[0] / u, node.size[1] / M.h)));
   const w = Math.round(u * s), h = Math.round(M.h * s);
+  // The canvas pins the OPPOSITE edge for the size it proposed; changing the
+  // size here moved that edge (a top-left drag pushed the right edge 84 px,
+  // measured). Re-pin it: a W corner keeps the right edge, an N corner the
+  // bottom one. `dir` is LiteGraph's pointer.resizeDirection as read at the
+  // START of the gesture (index.js): the canvas clears it after the first move
+  // of the drag (measured: present on the first onResize call only).
+  dir = String(dir || "");
+  const right = node.pos[0] + node.size[0], bottom = node.pos[1] + node.size[1];
   if (Math.abs(node.size[0] - w) > 0.5) node.size[0] = w;
   if (Math.abs(node.size[1] - h) > 0.5) node.size[1] = h;
+  if (dir.includes("W") && Math.abs(node.pos[0] - (right - w)) > 0.5) node.pos[0] = right - w;
+  if (dir.includes("N") && Math.abs(node.pos[1] - (bottom - h)) > 0.5) node.pos[1] = bottom - h;
 }
 
 // The height a Classic button of this width should have.
