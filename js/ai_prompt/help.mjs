@@ -243,6 +243,7 @@ export const AI_PROMPT_HELP = {
         ["Sound - describe what you hear (Gemma 4 E4B)", "Wire a Load Audio in and it says what kind of sound it is, quotes any words spoken or sung, names the instruments and gives the mood. Gemma 4 is the ONLY text encoder ComfyUI can feed audio to, so a Qwen3-VL will take the audio, ignore it and answer anyway. Send its text into a second AI Prompt node to turn it into an image prompt."],
         ["Krea 2 - prompt from an idea", "Turns a rough idea into a full Krea 2 prompt. Built from Krea's own published prompt-expansion instructions, then tightened by watching where it went wrong. Measured on Qwen3-VL 4B and 8B."],
         ["Krea 2 - prompt from an image", "Wire a Load Image into the image input and it writes the prompt that would make a similar picture, naming the medium, the framing and the light. Leave Your idea empty for this one. Needs a vision model. Photographs come back cleanest."],
+        ["Ming Image - prompt from an idea", "Turns a short idea into the structured JSON layout Ming Image 0.1 Design reads best, built on Ming's own published rewriter: every part of the design with its position and colours, and every word you put in quotes kept exactly. Wire a line like Canvas: 832 x 1248 px into the text input (a core Format Text node fed by your width and height) so the layout fits the shape of your picture. Two versions: Qwen3.8 27B, the writer Ming's makers name, and the smaller Qwen3.5 9B. Ming's own text encoder cannot write, so it needs one of these."],
         ["Qwen Image 2.1 - prompt from an idea", "Turns a short idea into the long, detailed prompt Qwen Image 2.1 likes, built from Qwen's own published prompt enhancer: the style and the medium first, then everything placed in the frame. Put any words you want written in the picture in quotes in your idea, and it keeps them exactly. Qwen Image 2.1's text encoder is Qwen3-VL 8B, so wire the workflow's Load CLIP into the clip input and one model does both jobs."],
         ["Qwen Image 2.1 - transparent picture from an idea", "For a subject on a transparent background. It wraps your idea in the exact words Qwen Image 2.1 needs to make a real transparency channel and describes only the subject. In testing a plain idea gave a solid background every time, and this preset made most of the picture transparent. Save the result as a PNG."],
         ["Qwen Image 2.1 - prompt from an image", "Wire a Load Image into the image input and it writes the Qwen Image 2.1 prompt that would make a picture like it, naming the style as well as the medium, so a cartoon stays a cartoon. Leave Your idea empty for this one."],
@@ -260,6 +261,9 @@ export const AI_PROMPT_HELP = {
         + "straight into this node's clip input and write your prompts with the "
         + "model that is already in memory. Nothing extra loads, and a whole "
         + "text-to-image run takes seconds.\n\n"
+        + "Not every text encoder can write, though. Ming Image's only reads: "
+        + "wired in here it stops with \"not a language model\". For a model like "
+        + "that, pick a writer of its own in the gear instead.\n\n"
         + "The banner changes to Model on wire and Free VRAM dims, because a "
         + "model that arrived on a wire belongs to the node feeding it.\n\n"
         + "One thing to watch: a small model needs a lower temperature than a "
