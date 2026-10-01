@@ -1,0 +1,258 @@
+// Info Pixaroma - the reading window.
+//
+// A floating window over the canvas showing one Info node's note: wide, larger
+// text, scrolls, drags by its title bar, Esc or the X closes it. It does not
+// block the canvas (you can read while you work), and one window serves every
+// Info button: clicking another button swaps the note in.
+//
+// The note is drawn by Note Pixaroma's own renderContent + stylesheet, so a
+// download button, an icon or a table looks exactly as the editor made it.
+
+import { injectCSS as injectNoteCSS } from "../note/css.mjs";
+import { renderContent } from "../note/render.mjs";
+import { ensureIcons, injectIconCSS } from "../note/icons.mjs";
+import { isLiveNode } from "../shared/live_node.mjs";
+import { readCfg, findWidget, iconUrl, inkFor } from "./core.mjs";
+
+const CSS = [
+  ".pix-info-reader{position:fixed;z-index:1400;display:flex;flex-direction:column;width:min(860px, calc(100vw - 32px));",
+  "max-height:calc(100vh - 48px);background:#202020;border:1px solid #3d3d3d;border-radius:12px;box-shadow:0 14px 44px rgba(0,0,0,.7);",
+  "overflow:hidden;font-family:'Segoe UI',system-ui,sans-serif;color:#e6e6e6;}",
+  ".pix-info-rbar{display:flex;align-items:center;gap:10px;padding:9px 10px 9px 14px;background:#2a2a2a;border-bottom:1px solid #3a3a3a;",
+  "cursor:move;user-select:none;flex:none;touch-action:none;}",
+  ".pix-info-rbub{width:30px;height:30px;border-radius:8px;display:flex;align-items:center;justify-content:center;flex:none;}",
+  ".pix-info-ric{width:19px;height:19px;display:block;-webkit-mask:var(--i) center/contain no-repeat;mask:var(--i) center/contain no-repeat;}",
+  ".pix-info-rtt{font-weight:700;font-size:15px;color:#f2f2f2;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}",
+  ".pix-info-rsp{flex:1;}",
+  ".pix-info-rbtn{display:inline-flex;align-items:center;gap:6px;font:600 12px 'Segoe UI',system-ui,sans-serif;color:#ddd;cursor:pointer;",
+  "border:1px solid #4a4a4a;border-radius:6px;padding:5px 11px;background:rgba(255,255,255,.04);}",
+  ".pix-info-rbtn:hover{border-color:#f66744;color:#fff;}",
+  ".pix-info-rbtn .pix-info-rbi{width:13px;height:13px;background:currentColor;-webkit-mask:var(--i) center/contain no-repeat;mask:var(--i) center/contain no-repeat;}",
+  ".pix-info-rx{border:0;background:transparent;color:#aaa;font-size:17px;line-height:1;cursor:pointer;padding:4px 8px;border-radius:6px;}",
+  ".pix-info-rx:hover{color:#fff;background:rgba(255,255,255,.08);}",
+  // The note itself: Note's body stylesheet, a size up for reading.
+  ".pix-info-reader .pix-info-doc.pix-note-body{height:auto;flex:1 1 auto;min-height:80px;overflow-y:auto;padding:20px 32px 26px;",
+  "font-size:14.5px;line-height:1.6;background:#1e1e1e;}",
+  ".pix-info-reader .pix-info-doc.pix-note-body h1{font-size:22px;margin:2px 0 8px;}",
+  ".pix-info-reader .pix-info-doc.pix-note-body h2{font-size:18px;margin:14px 0 6px;}",
+  ".pix-info-reader .pix-info-doc.pix-note-body h3{font-size:16px;margin:14px 0 6px;}",
+  ".pix-info-empty{display:flex;flex-direction:column;align-items:center;gap:12px;padding:30px 10px;color:#aaa;font-size:14px;}",
+  ".pix-info-empty button{font:600 13px 'Segoe UI',system-ui,sans-serif;color:#fff;background:#f66744;border:0;border-radius:6px;padding:7px 16px;cursor:pointer;}",
+  ".pix-info-empty button:hover{filter:brightness(1.1);}",
+].join("\n");
+let _cssDone = false;
+function injectReaderCSS() {
+  if (_cssDone) return;
+  _cssDone = true;
+  const s = document.createElement("style");
+  s.setAttribute("data-pixaroma-info-reader", "1");
+  s.textContent = CSS;
+  document.head.appendChild(s);
+}
+
+let _win = null;       // the window element
+let _node = null;      // the node it shows
+let _raw = null;       // the widget string it was drawn from
+let _poll = null;
+let _pos = null;       // where the user dragged it (session only)
+let _onEdit = null;
+let _keyOff = null;
+let _pressInside = false;
+
+// Moves that leave the window during a press that began in it (a text
+// selection dragged past the edge). Installed once; idle unless a press began
+// inside the reader.
+if (typeof window !== "undefined" && !window._pixInfoReaderMoveGuard) {
+  window._pixInfoReaderMoveGuard = true;
+  window.addEventListener("pointermove", (e) => {
+    if (!_pressInside) return;
+    if (!(e.buttons & 1) || !_win || !_win.isConnected) { _pressInside = false; return; }
+    if (!_win.contains(e.target)) e.stopPropagation();
+  }, true);
+  const release = () => { _pressInside = false; };
+  window.addEventListener("pointerup", release, true);
+  window.addEventListener("pointercancel", release, true);
+}
+
+export function setReaderEditHandler(fn) { _onEdit = fn; }
+export function readerNode() { return _win && _win.isConnected ? _node : null; }
+
+export function closeReader() {
+  if (_poll) { clearInterval(_poll); _poll = null; }
+  try { _keyOff?.(); } catch (_e) {}
+  _keyOff = null;
+  if (_win) { try { _win.remove(); } catch (_e) {} }
+  _win = null; _node = null; _raw = null;
+}
+
+function el(tag, cls, text) {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (text != null) e.textContent = text;
+  return e;
+}
+
+function fill(win, node) {
+  const cfg = readCfg(node);
+  const info = cfg.info;
+  win.setAttribute("aria-label", info.title || "Info");
+  win.querySelector(".pix-info-rbub").style.background = info.color;
+  const ric = win.querySelector(".pix-info-ric");
+  ric.style.setProperty("--i", `url("${iconUrl(info.icon)}")`);
+  ric.style.background = inkFor(info.color);
+  win.querySelector(".pix-info-rtt").textContent = info.title || "Info";
+  const doc = win.querySelector(".pix-info-doc");
+  if (!String(cfg.content || "").trim()) {
+    doc.innerHTML = "";
+    const box = el("div", "pix-info-empty");
+    box.appendChild(el("div", null, "This note is empty."));
+    const b = el("button", null, "Write it");
+    b.type = "button";
+    b.addEventListener("click", () => editFromReader());
+    box.appendChild(b);
+    doc.appendChild(box);
+  } else {
+    // renderContent writes node.color / node.bgcolor for Note's own canvas
+    // body. Hand it a stand-in so it can never touch the real node.
+    renderContent({ _noteCfg: cfg, bgcolor: "#000000" }, doc);
+  }
+  const bg = typeof cfg.backgroundColor === "string" && /^#[0-9a-f]{6}$/i.test(cfg.backgroundColor) ? cfg.backgroundColor : "";
+  doc.style.background = bg;
+  _raw = findWidget(node)?.value ?? null;
+}
+
+function editFromReader() {
+  const n = _node;
+  closeReader();
+  if (n && _onEdit) _onEdit(n, { reopenReader: true });
+}
+
+function place(win) {
+  const w = win.offsetWidth, h = win.offsetHeight;
+  let left, top;
+  if (_pos) { left = _pos.left; top = _pos.top; }
+  else { left = (window.innerWidth - w) / 2; top = Math.max(24, window.innerHeight * 0.08); }
+  left = Math.max(8, Math.min(window.innerWidth - Math.min(w, window.innerWidth - 16) - 8, left));
+  top = Math.max(8, Math.min(window.innerHeight - 60, top));
+  win.style.left = `${Math.round(left)}px`;
+  win.style.top = `${Math.round(top)}px`;
+}
+
+// Title-bar drag with BOTH defences of CLAUDE.md convention #20: pointer
+// capture, and stopping as soon as the button is up (a lost release otherwise
+// leaves the window stuck to the cursor).
+function wireDrag(win, bar) {
+  bar.addEventListener("pointerdown", (e) => {
+    if (e.button !== 0 || e.target.closest("button")) return;
+    e.preventDefault();
+    const r = win.getBoundingClientRect();
+    const dx = e.clientX - r.left, dy = e.clientY - r.top;
+    let ended = false;
+    try { bar.setPointerCapture(e.pointerId); } catch (_e) {}
+    const move = (ev) => {
+      if (!(ev.buttons & 1)) { end(); return; }
+      const left = Math.max(8 - r.width + 80, Math.min(window.innerWidth - 80, ev.clientX - dx));
+      const top = Math.max(0, Math.min(window.innerHeight - 40, ev.clientY - dy));
+      win.style.left = `${Math.round(left)}px`;
+      win.style.top = `${Math.round(top)}px`;
+      _pos = { left, top };
+    };
+    const end = () => {
+      if (ended) return;
+      ended = true;
+      bar.removeEventListener("pointermove", move);
+      bar.removeEventListener("pointerup", end);
+      bar.removeEventListener("pointercancel", end);
+      bar.removeEventListener("lostpointercapture", end);
+      try { bar.releasePointerCapture(e.pointerId); } catch (_e) {}
+    };
+    bar.addEventListener("pointermove", move);
+    bar.addEventListener("pointerup", end);
+    bar.addEventListener("pointercancel", end);
+    bar.addEventListener("lostpointercapture", end);
+  });
+}
+
+export function openReader(node) {
+  if (!node) return;
+  injectNoteCSS();
+  injectReaderCSS();
+  ensureIcons().then(() => injectIconCSS()).catch(() => {});
+
+  // Another button's note: reuse the window where it stands.
+  if (_win && _win.isConnected) {
+    _node = node;
+    fill(_win, node);
+    return;
+  }
+  closeReader();
+  const win = el("div", "pix-info-reader");
+  win.setAttribute("role", "dialog");
+  const bar = el("div", "pix-info-rbar");
+  const bub = el("span", "pix-info-rbub");
+  bub.appendChild(el("span", "pix-info-ric"));
+  bar.appendChild(bub);
+  bar.appendChild(el("span", "pix-info-rtt"));
+  bar.appendChild(el("span", "pix-info-rsp"));
+  const edit = el("button", "pix-info-rbtn");
+  edit.type = "button";
+  edit.title = "Edit this note and the button";
+  const ei = el("span", "pix-info-rbi");
+  ei.style.setProperty("--i", `url("${iconUrl("edit")}")`);
+  edit.appendChild(ei);
+  edit.appendChild(document.createTextNode("Edit"));
+  edit.addEventListener("click", () => editFromReader());
+  bar.appendChild(edit);
+  const x = el("button", "pix-info-rx", "✕");
+  x.type = "button";
+  x.title = "Close (Esc)";
+  x.addEventListener("click", () => closeReader());
+  bar.appendChild(x);
+  win.appendChild(bar);
+  const doc = el("div", "pix-info-doc pix-note-body");
+  win.appendChild(doc);
+  // A press inside the window (dragging it, selecting text) must not reach
+  // ComfyUI. MEASURED in Nodes 2.0: dragging the title bar ALSO moved the
+  // selected node underneath, 44,60 for a 50,60 drag. The mover is Pixaroma
+  // Align: its window pointermove listener takes ANY left-button move as a
+  // drag of the selected node (Shift, which Align ignores, left the node put).
+  // So the press, and every move until the release, stays in here: moves on
+  // the window stop at the window; moves that wander off it are stopped at
+  // the top (window capture) so neither Align nor the canvas acts on them.
+  win.addEventListener("pointerdown", (e) => { _pressInside = true; e.stopPropagation(); });
+  win.addEventListener("pointermove", (e) => { if (e.buttons) e.stopPropagation(); });
+  document.body.appendChild(win);
+  _win = win;
+  _node = node;
+  fill(win, node);
+  place(win);
+  wireDrag(win, bar);
+
+  const onKey = (e) => {
+    if (e.key !== "Escape" || !_win) return;
+    // Esc in a text box elsewhere belongs to that box.
+    const t = e.target;
+    if (t && t !== document.body && !_win.contains(t) &&
+        (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
+    // Leave Esc to anything open on top of us (a ComfyUI dialog, a menu).
+    if (document.querySelector(".p-dialog-mask, .litecontextmenu, .pix-info-start")) return;
+    e.preventDefault();
+    e.stopPropagation();
+    closeReader();
+  };
+  const onResize = () => { if (_win) place(_win); };
+  window.addEventListener("keydown", onKey, true);
+  window.addEventListener("resize", onResize);
+  _keyOff = () => {
+    window.removeEventListener("keydown", onKey, true);
+    window.removeEventListener("resize", onResize);
+  };
+
+  // Close when the node goes (deleted, workflow switched), and follow edits
+  // made elsewhere (Ctrl+Z, a starter) by re-drawing when the saved note changes.
+  _poll = setInterval(() => {
+    if (!_node || !isLiveNode(_node) || !_node.graph) { closeReader(); return; }
+    const raw = findWidget(_node)?.value ?? null;
+    if (raw !== _raw && _win) fill(_win, _node);
+  }, 400);
+}

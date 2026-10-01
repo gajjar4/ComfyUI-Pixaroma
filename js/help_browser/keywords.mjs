@@ -67,6 +67,7 @@ export const KEYWORDS = {
   // ── Notes and overlay ──
   PixaromaNote: "comment sticky documentation annotate",
   PixaromaLabel: "caption title heading name explain",
+  PixaromaInfo: "info button read me readme help manual guide instructions documentation notes popup models download tips starter",
   PixaromaTextOverlay: "caption title font subtitle words on image ttf otf typeface custom font own font install font fonts folder",
   PixaromaTextWatermark: "signature logo copyright brand stamp font ttf otf typeface custom font own font install font fonts folder",
 

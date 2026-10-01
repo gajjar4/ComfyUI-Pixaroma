@@ -38,6 +38,8 @@ from .nodes.node_show_text import NODE_CLASS_MAPPINGS as _MAPS_SHOW_TEXT
 from .nodes.node_show_text import NODE_DISPLAY_NAME_MAPPINGS as _NAMES_SHOW_TEXT
 from .nodes.node_note import NODE_CLASS_MAPPINGS as _MAPS_NOTE
 from .nodes.node_note import NODE_DISPLAY_NAME_MAPPINGS as _NAMES_NOTE
+from .nodes.node_info import NODE_CLASS_MAPPINGS as _MAPS_INFO
+from .nodes.node_info import NODE_DISPLAY_NAME_MAPPINGS as _NAMES_INFO
 from .nodes.node_notify import NODE_CLASS_MAPPINGS as _MAPS_NOTIFY
 from .nodes.node_notify import NODE_DISPLAY_NAME_MAPPINGS as _NAMES_NOTIFY
 from .nodes.node_switch import NODE_CLASS_MAPPINGS as _MAPS_SWITCH
@@ -187,6 +189,7 @@ NODE_CLASS_MAPPINGS = {
     **_MAPS_LOAD_IMAGE_MINI,
     **_MAPS_IMAGE_INFO,
     **_MAPS_NOTE,
+    **_MAPS_INFO,
     **_MAPS_NOTIFY,
     **_MAPS_SAVE_MP4,
     **_MAPS_SWITCH,
@@ -267,6 +270,7 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     **_NAMES_LOAD_IMAGE_MINI,
     **_NAMES_IMAGE_INFO,
     **_NAMES_NOTE,
+    **_NAMES_INFO,
     **_NAMES_NOTIFY,
     **_NAMES_SAVE_MP4,
     **_NAMES_SWITCH,
