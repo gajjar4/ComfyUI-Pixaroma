@@ -165,6 +165,9 @@ Keep your workflows tidy with clean, custom labels.
 ![Labels Node](workflows/Labels%20Pixaroma%20Workflow.jpg?v=2)
 ![Labels Editor](workflows/Labels%20Pixaroma%20Workflow%20v2.jpg?v=2)
 
+### ℹ️ Info Pixaroma
+Turn the big notes around a workflow into small buttons. Each **Info** button has a title, an icon (27 built in, so they travel with the workflow) and a colour, and a click opens the note in a reading window you can move and resize. Each button remembers its own window size and text size (**A−** / **A+**). When a workflow has several buttons, the window lists them all so you can jump between them, and resting the mouse on a button shows the note's first lines. **Edit** opens the same rich editor as Note Pixaroma (headings, lists, icons, tables, Download and YouTube buttons) with a **Template** menu that adds ready-made sections. A new button can start from **Read me**, **Download Models**, **Nodes Info**, **Settings**, **Run Times**, **Prompt tips** and more, and an empty one shows a dashed outline until you write it.
+
 ### ✏️ Text Overlay Pixaroma
 Drop a styled text caption straight onto an image. 10 bundled fonts (Inter, Roboto, Montserrat, Oswald, Playfair Display, Lora, Bebas Neue, Anton, Caveat, JetBrains Mono), bold and italic toggles, three alignment options, size, line height, letter spacing, opacity, rotation, X / Y position, text color and an optional background bar behind the text. Type math like `100+12` in any number field and it evaluates. Click **Open Text Editor** for a fullscreen canvas where you can drag the text to move it, drag the corners to resize, drag the round handle on top to rotate, snap to canvas center / thirds / edges, and use **Fit W** or **Fit H** to fill the image. Save your work straight to disk as a PNG. Wire the optional **text** input to feed the caption from any upstream text source (the textarea on the node grays out so you know not to type there). New nodes auto-center the text on whatever image you wire in, no manual positioning needed for the first render.
 
@@ -394,6 +397,12 @@ Master the Pixaroma suite with our video guides and workflow deep-dives:
 ---
 
 ## 🛠 Changelog
+
+### **October 1, 2026 · v1.4.183**
+- **NEW: Info Pixaroma.** A small button on the canvas that opens a note to read. Pick a title, icon and colour, or start from Read me, Download Models, Run Times and more.
+- **Note: lists no longer leave an empty gap above them**, and the Code view no longer adds stray empty lines.
+- **Fixed: in Nodes 2.0, Align moved the selected node** when you dragged the sidebar or a floating window, or selected text in another node.
+- **Help: hidden storage fields are no longer listed as settings** on the Note, Label and Info pages.
 
 ### **September 30, 2026 · v1.4.182**
 - **Resize Crop: sharper when it enlarges a picture.** It now uses lanczos both ways, the same as ComfyUI's own resize.
