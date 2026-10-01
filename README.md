@@ -398,8 +398,9 @@ Master the Pixaroma suite with our video guides and workflow deep-dives:
 
 ## 🛠 Changelog
 
-### **October 1, 2026 · v1.4.183**
-- **NEW: Info Pixaroma.** A small button on the canvas that opens a note to read. Pick a title, icon and colour, or start from Read me, Download Models, Run Times and more.
+### **October 1, 2026 · v1.4.183–v1.4.184**
+- **NEW: Info Pixaroma.** A small button on the canvas that opens a note to read. Pick a title, icon and colour, or start from Read me, Download Models, Run Times and more. Also in the canvas right-click menu, under Add Label.
+- **AI Prompt: two Ming Image presets** that turn a short idea into the layout prompt Ming Image 0.1 reads best, written by Qwen3.8 27B or Qwen3.5 9B.
 - **Note: lists no longer leave an empty gap above them**, and the Code view no longer adds stray empty lines.
 - **Fixed: in Nodes 2.0, Align moved the selected node** when you dragged the sidebar or a floating window, or selected text in another node.
 - **Help: hidden storage fields are no longer listed as settings** on the Note, Label and Info pages.
