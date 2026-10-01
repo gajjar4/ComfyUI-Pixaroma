@@ -7,7 +7,7 @@ export const INFO_HELP = {
   sections: [
     {
       heading: "What it does",
-      body: "Info turns a workflow note into a button. The canvas stays clean: instead of big notes around the graph, you see small buttons like Read me, Models or Run times, and a click opens the note in a reading window.\n\nThe note is the same rich text Note Pixaroma makes: headings, lists, icons, tables, code, and Download, YouTube and Discord buttons.",
+      body: "Info turns a workflow note into a button. The canvas stays clean: instead of big notes around the graph, you see small buttons like Read me, Download Models or Run Times, and a click opens the note in a reading window.\n\nThe note is the same rich text Note Pixaroma makes: headings, lists, icons, tables, code, and Download, YouTube and Discord buttons.",
     },
     {
       heading: "How to use",

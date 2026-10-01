@@ -19,7 +19,9 @@ const DELAY = 500;
 const CSS = [
   ".pix-info-peek{position:fixed;z-index:1380;width:290px;max-width:calc(100vw - 16px);background:#252525;border:1px solid #474747;",
   "border-radius:9px;box-shadow:0 10px 28px rgba(0,0,0,.7);padding:10px 12px 9px;pointer-events:none;",
-  "font:12.5px/1.45 'Segoe UI',system-ui,sans-serif;color:#cfcfcf;}",
+  // overflow-wrap: a long file name has no space to break at and ran out of
+  // the card (reported on a Models note).
+  "font:12.5px/1.45 'Segoe UI',system-ui,sans-serif;color:#cfcfcf;overflow-wrap:anywhere;}",
   ".pix-info-peek b{display:block;color:#fff;font-size:13.5px;margin-bottom:3px;}",
   ".pix-info-peek .m{margin-top:6px;font-size:11.5px;color:#f66744;}",
 ].join("\n");
@@ -51,6 +53,12 @@ function summary(node) {
   if (html) {
     try {
       const doc = new DOMParser().parseFromString(sanitize(html), "text/html");
+      // Note's blocks put their parts in separate elements with no space
+      // between ("...safetensors" + "5.75 GB" read "safetensors5.75 GB").
+      // textContent joins them, so add a space after each block part and line
+      // break, on BOTH sides (the size label sits right after the name, so the
+      // missing space was before it); the whitespace is collapsed below.
+      for (const el of doc.body.querySelectorAll("[class], br, div")) { el.before(" "); el.after(" "); }
       const h = doc.body.querySelector("h1, h2, h3");
       s.head = (h?.textContent || "").replace(/\s+/g, " ").trim();
       for (const el of doc.body.querySelectorAll("p, li")) {

@@ -21,14 +21,14 @@ export const STARTERS = [
       ["to-do", "How to use", "ol", ["First step", "Second step", "Press Run"]],
       ["checkmark", "What you need", "ul", ["Models (see the Models button)", "Custom nodes, if any"]],
     ] },
-  { id: "models", name: "Models", icon: "download-model", color: "#c8742a",
+  { id: "models", name: "Models", title: "Download Models", icon: "download-model", color: "#f66744",
     h1: "MODELS", intro: "Download each file and put it in the folder written under it.",
     sections: [
       ["download-model", "Diffusion model", "p", ["File name, size and folder."]],
       ["download-model", "Text encoder", "p", ["File name, size and folder."]],
       ["download-model", "VAE", "p", ["File name, size and folder."]],
     ] },
-  { id: "nodes", name: "Nodes", icon: "node-v5", color: "#3d7cc9",
+  { id: "nodes", name: "Nodes", title: "Nodes Info", icon: "node-v5", color: "#3d7cc9",
     h1: "NODES", intro: "What the nodes in this workflow do.",
     sections: [
       ["node-v5", "Custom nodes to install", "ul", ["Name, and where to get it"]],
@@ -49,7 +49,7 @@ export const STARTERS = [
       ["question-v2", "Example prompts", "ul", ["An example prompt"]],
       ["idea", "Words that help", "ul", ["A word or phrase, and what it does"]],
     ] },
-  { id: "runtimes", name: "Run times", icon: "run-timer", color: "#3f9a4f",
+  { id: "runtimes", name: "Run times", title: "Run Times", icon: "run-timer", color: "#3f9a4f",
     h1: "RUN TIMES", intro: "How long a run takes, and how much memory it needs.",
     sections: [
       ["run-timer", "Time per size", "ul", ["1024 x 1024: seconds, on your card"]],
