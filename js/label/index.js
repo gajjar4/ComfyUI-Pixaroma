@@ -271,26 +271,28 @@ app.registerExtension({
     return [];
   },
 
-  // "👑 Add Label Pixaroma" on the canvas right-click menu (mirrors the group's
-  // add). New context-menu API (getCanvasMenuItems), not a deprecated patch. Drops
-  // a Label node at the cursor; double-click it to open the editor.
+  // "👑 Add Label Pixaroma" and "👑 Add Info Pixaroma" on the canvas right-click
+  // menu (mirrors the group's add). New context-menu API (getCanvasMenuItems), not
+  // a deprecated patch. Each drops its node at the cursor. Info's entry lives HERE
+  // on purpose: entries from separate extensions are merged in load order and
+  // js/info loads before js/label, so a hook of Info's own would land ABOVE Label.
+  // A fresh Info offers its starters by itself (js/info/index.js onNodeCreated).
   getCanvasMenuItems(canvas) {
-    return [
-      null,
-      {
-        content: "👑 Add Label Pixaroma",
-        callback: () => {
-          const LG = window.LiteGraph;
-          if (!LG?.createNode || !app.graph) return;
-          const node = LG.createNode("PixaromaLabel");
-          if (!node) return;
-          const gm = canvas?.graph_mouse || app.canvas?.graph_mouse || [0, 0];
-          node.pos = [gm[0], gm[1]];
-          app.graph.add(node);
-          app.graph.setDirtyCanvas(true, true);
-        },
-      },
-    ];
+    const addAtCursor = (type) => {
+      const LG = window.LiteGraph;
+      if (!LG?.createNode || !app.graph) return;
+      const node = LG.createNode(type);
+      if (!node) return;
+      const gm = canvas?.graph_mouse || app.canvas?.graph_mouse || [0, 0];
+      node.pos = [gm[0], gm[1]];
+      app.graph.add(node);
+      app.graph.setDirtyCanvas(true, true);
+    };
+    const items = [null, { content: "👑 Add Label Pixaroma", callback: () => addAtCursor("PixaromaLabel") }];
+    if (window.LiteGraph?.registered_node_types?.PixaromaInfo) {
+      items.push({ content: "👑 Add Info Pixaroma", callback: () => addAtCursor("PixaromaInfo") });
+    }
+    return items;
   },
 
   async beforeRegisterNodeDef(nodeType, nodeData) {

@@ -12,7 +12,7 @@ export const INFO_HELP = {
     {
       heading: "How to use",
       bullets: [
-        "Add the node. A small popup offers starters: pick one to set the title, icon, colour and the empty headings of that kind of note, or close it for a plain Info button.",
+        "Add the node: right-click an empty spot on the canvas and choose Add Info Pixaroma, or find it in Add Node. A small popup offers starters: pick one to set the title, icon, colour and the empty headings of that kind of note, or close it for a plain Info button.",
         "Click the button to read the note. A click only opens the note: the button is not left selected, so ComfyUI's selection bar does not pop up.",
         "Rest the mouse on a button for half a second to see a peek: the note's first heading and first line, without opening it.",
         "A button with a dashed outline has an empty note. Clicking it opens the editor straight away.",
