@@ -19,12 +19,14 @@ import { isLiveNode } from "../shared/live_node.mjs";
 import { registerNodeHelp } from "../shared/help.mjs";
 import { registerNodeSettings } from "../shared/node_settings.mjs";
 import { NODE, M, DEFAULT_INFO, unitWidth, readCfg } from "./core.mjs";
-import { isInfo, installInfoBodyHook, paintClassic, applyResizeAspect, repairClassicHeight,
+import { isInfo, isEmptyNote, installInfoBodyHook, paintClassic, applyResizeAspect, repairClassicHeight,
   buildVueFace, teardownVueFace, renderVueFace, classicComputeSize, heightForWidth } from "./face.mjs";
 import { openReader, closeReader, readerNode, setReaderEditHandler } from "./reader.mjs";
 import { openInfoEditor } from "./editor.mjs";
 import { showStarterPopup, closeStarterPopup, starterPopupOpen } from "./starters.mjs";
 import { INFO_HELP } from "./help.mjs";
+import { infoAt } from "./hit.mjs";
+import { hidePeek } from "./peek.mjs";
 
 registerNodeHelp(NODE, INFO_HELP);
 
@@ -240,46 +242,75 @@ app.registerExtension({
 });
 
 // ── A click opens the note ──────────────────────────────────────────────────
-// One window-capture pair for both renderers. Classic: the node is painted on
-// the canvas, so hit-test graph coordinates (the topmost node wins). Nodes 2.0:
-// the face is pointer-events:none (so the node can still be placed and dragged,
-// label.md #2), so hit-test the visible button's rectangle.
+// One window-capture pair for both renderers; the hit test is hit.mjs.
 //
 // A click = down and up on the same button, moving under 5 px, within 700 ms,
 // and the node did not move (that was a drag). Modifier keys are left to
-// ComfyUI (multi-select). Nothing is blocked: ComfyUI still selects the node.
+// ComfyUI (multi-select). An EMPTY note opens the editor straight away.
+//
+// The click is a "read this", not a "select this": afterwards the button is
+// deselected again, so ComfyUI's selection toolbar (delete, colour, help...)
+// does not pop up over the canvas each time a note is opened (user's call
+// 2026-10-01). Dragging still selects, and so do Shift/Ctrl-click, a marquee
+// and right-click, for when the button itself is what you want.
 
-function canvasTarget(e) {
-  const c = app.canvas?.canvas;
-  if (!c) return false;
-  const t = e.target;
-  if (t === c) return true;
-  // Nodes 2.0: the event can land on a node element above the canvas.
-  return !!(t && t.closest && t.closest(".lg-node"));
+// While a press that started on an Info button is down, ComfyUI's selection
+// toolbar is hidden: the press selects the node at once, and the deselect can
+// only come after the release, so a plain click flashed the toolbar for a few
+// frames (measured: 3 of 60). A drag or a long press shows it on release.
+const PRESSING = "pix-info-pressing";
+let _pressTok = 0;
+function pressing(on) {
+  _pressTok++;
+  try { document.documentElement.classList.toggle(PRESSING, !!on); } catch (_e) {}
+}
+if (typeof document !== "undefined" && !document.querySelector("style[data-pixaroma-info-press]")) {
+  const st = document.createElement("style");
+  st.setAttribute("data-pixaroma-info-press", "1");
+  st.textContent = `html.${PRESSING} .selection-toolbox{visibility:hidden!important;}`;
+  document.head.appendChild(st);
 }
 
-function infoAt(e) {
-  if (!canvasTarget(e)) return null;
-  const g = app.canvas?.graph;
-  if (!g) return null;
-  if (isVueNodes()) {
-    const over = e.target.closest?.(".lg-node");
-    let hit = null;
-    for (const n of g._nodes || []) {
-      if (!isInfo(n) || !n._pixInfoRoot || !n._pixInfoRoot.isConnected) continue;
-      const nodeEl = n._pixInfoRoot.closest(".lg-node");
-      // Another node's element on top of this point is the one being clicked.
-      if (over && nodeEl && over !== nodeEl) continue;
-      const r = n._pixInfoRoot.getBoundingClientRect();
-      if (e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom) hit = n;
-    }
-    return hit;
-  }
-  try {
-    const p = app.canvas.convertEventToCanvasOffset(e);
-    const n = g.getNodeOnPos(p[0], p[1], app.canvas.visible_nodes);
-    return isInfo(n) ? n : null;
-  } catch (_e) { return null; }
+function deselectAfterClick(n) {
+  // After ComfyUI's own handlers, which select on this same release.
+  setTimeout(() => {
+    try {
+      const c = app.canvas;
+      if (n.selected || c?.selected_nodes?.[n.id]) {
+        if (typeof c.deselect === "function") c.deselect(n);
+        else c.deselectNode?.(n);
+        // deselect() does not announce the change; processSelect announces it
+        // after calling it (LGraphCanvas.ts). Without this ComfyUI's selection
+        // store keeps the node: Nodes 2.0 kept the selection ring on it and
+        // the selection toolbar stayed (measured).
+        c.onSelectionChange?.(c.selected_nodes);
+        c.setDirty?.(true, true);
+      }
+      // Nodes 2.0 focuses the node element on press, and the Esc that closes
+      // the reader then makes Chrome draw its keyboard-focus ring round the
+      // button (core nodes do the same after a click + Esc). Drop that focus.
+      const a = document.activeElement;
+      if (a && a !== document.body && n._pixInfoRoot && a.contains?.(n._pixInfoRoot)) a.blur?.();
+    } catch (_e) {}
+    // The toolbar fades out over a few frames after the deselect (measured: 2
+    // frames still showed when the class came off here), so keep it hidden a
+    // moment longer. Any new press clears it at once.
+    const mine = ++_pressTok;
+    setTimeout(() => { if (mine === _pressTok) pressing(false); }, 300);
+  }, 0);
+}
+
+// A release that completes a read: same button, under 5 px of travel, within
+// 700 ms, the node did not move (that was a drag).
+function isReadClick(d, e) {
+  if (Math.hypot(e.clientX - d.x, e.clientY - d.y) > 5) return false;
+  if (performance.now() - d.t > 700) return false;
+  const n = d.node;
+  if (n.pos[0] !== d.px || n.pos[1] !== d.py) return false;
+  // The click that PLACES a just-added node is not a request to read it.
+  if (performance.now() - (n._pixInfoBorn || 0) < 500) return false;
+  if (d.pop || starterPopupOpen() || !isLiveNode(n)) return false;
+  return infoAt(e) === n;
 }
 
 if (typeof window !== "undefined" && !window._pixInfoClickWired) {
@@ -287,6 +318,7 @@ if (typeof window !== "undefined" && !window._pixInfoClickWired) {
   let down = null;
   window.addEventListener("pointerdown", (e) => {
     down = null;
+    pressing(false);
     if (e.button !== 0) return;
     const n = infoAt(e);
     if (!n) return;
@@ -306,19 +338,20 @@ if (typeof window !== "undefined" && !window._pixInfoClickWired) {
     // a click that dismisses the popup is not a request to read (reproduced).
     down = { node: n, x: e.clientX, y: e.clientY, t: performance.now(), px: n.pos[0], py: n.pos[1],
       pop: starterPopupOpen() };
+    pressing(true);
   }, true);
+  // A press that never gets its release must not leave the toolbar hidden.
+  const release = () => { down = null; pressing(false); };
+  window.addEventListener("pointercancel", release, true);
+  window.addEventListener("blur", release);
   window.addEventListener("pointerup", (e) => {
     const d = down;
     down = null;
-    if (!d || e.button !== 0) return;
-    if (Math.hypot(e.clientX - d.x, e.clientY - d.y) > 5) return;
-    if (performance.now() - d.t > 700) return;
+    if (!d || e.button !== 0 || !isReadClick(d, e)) { pressing(false); return; }
     const n = d.node;
-    if (n.pos[0] !== d.px || n.pos[1] !== d.py) return;
-    // The click that PLACES a just-added node is not a request to read it.
-    if (performance.now() - (n._pixInfoBorn || 0) < 500) return;
-    if (d.pop || starterPopupOpen() || !isLiveNode(n)) return;
-    if (infoAt(e) !== n) return;
-    openReader(n);
+    hidePeek();
+    if (isEmptyNote(n)) edit(n);
+    else openReader(n);
+    deselectAfterClick(n);
   }, true);
 }

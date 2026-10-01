@@ -22,6 +22,24 @@ import { isVueNodes, applyAdaptiveCanvasOnly } from "../shared/nodes2.mjs";
 import { installCanvasZoomPassthrough } from "../shared/canvas_zoom.mjs";
 import { isGraphLoading } from "../shared/graph_loading.mjs";
 
+// Nothing written in the note yet: no text, and nothing visual (a picture, a
+// line, an icon). Blank markup the editor leaves behind counts as empty.
+// Cached on the content string: the Classic face asks on every frame.
+const _empty = new Map();
+export function isEmptyNote(node) {
+  const html = String(readCfg(node).content || "");
+  if (!html.trim()) return true;
+  let v = _empty.get(html);
+  if (v === undefined) {
+    if (/<(img|hr|iframe|a\s|span[^>]*pix-note-ic)/i.test(html)) v = false;
+    // trim() also strips U+00A0, so only the entity needs replacing.
+    else v = !html.replace(/<[^>]*>/g, "").replace(/&nbsp;/g, " ").trim();
+    if (_empty.size > 200) _empty.clear();
+    _empty.set(html, v);
+  }
+  return v;
+}
+
 export function isInfo(node) {
   return !!node && (node.comfyClass === NODE || node.type === NODE);
 }
@@ -97,6 +115,23 @@ export function paintClassic(node, ctx) {
   ctx.stroke();
   ctx.globalAlpha /= 0.18;
 
+  // An EMPTY note: a dashed inner outline, the "nothing written yet" cue.
+  // A click on it opens the editor instead of an empty window.
+  if (isEmptyNote(node)) {
+    const inset = 4 * s;
+    ctx.globalAlpha *= 0.55;
+    ctx.strokeStyle = ink;
+    ctx.lineWidth = Math.max(1, 1.5 * s);
+    ctx.setLineDash([4 * s, 3 * s]);
+    ctx.beginPath();
+    const rr = Math.max(0, radius - inset);
+    if (ctx.roundRect) ctx.roundRect(inset, inset, w - 2 * inset, h - 2 * inset, rr);
+    else ctx.rect(inset, inset, w - 2 * inset, h - 2 * inset);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.globalAlpha /= 0.55;
+  }
+
   const tw = titleWidth(info.title) * s;
   const iconPx = M.icon * s;
   const gap = info.title ? M.gap * s : 0;
@@ -170,6 +205,8 @@ const CSS = [
   "-webkit-mask:var(--i) center/contain no-repeat;mask:var(--i) center/contain no-repeat;}",
   // line-height 1.3: at 1 the clip cut the descenders off g, y, p (measured).
   ".pix-info-root .pix-info-tt{overflow:hidden;text-overflow:clip;line-height:1.3;}",
+  // An empty note: the same dashed inner outline Classic paints.
+  ".pix-info-root.is-empty{outline:max(1px,calc(1.5px * var(--s))) dashed color-mix(in srgb,var(--ink) 55%,transparent);outline-offset:calc(-4px * var(--s));}",
   // ── the title-less frame-hiding stack (run-timer.md #4e, label.md #4/#7) ──
   ".lg-node:has(.pix-info-root){background:transparent!important;border:none!important;box-shadow:none!important;}",
   // The node's direct child (the header-surface wrapper, rgb 29,29,29 on
@@ -211,7 +248,10 @@ export function renderVueFace(node) {
   node._pixInfoIc.style.setProperty("--i", `url("${iconUrl(iconOrDefault(info.icon))}")`);
   node._pixInfoTt.textContent = info.title;
   node._pixInfoTt.style.display = info.title ? "" : "none";
-  root.title = info.title ? `${info.title} - click to read` : "Click to read";
+  const empty = isEmptyNote(node);
+  root.classList.toggle("is-empty", empty);
+  root.title = empty ? "Empty note - click to write it"
+    : (info.title ? `${info.title} - click to read` : "Click to read");
   node._pixInfoApplyScale?.();
 }
 

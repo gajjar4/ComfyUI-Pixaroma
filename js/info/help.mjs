@@ -13,9 +13,22 @@ export const INFO_HELP = {
       heading: "How to use",
       bullets: [
         "Add the node. A small popup offers starters: pick one to set the title, icon, colour and the empty headings of that kind of note, or close it for a plain Info button.",
-        "Click the button to read the note. Drag the reading window by its title bar; Esc or the X closes it.",
+        "Click the button to read the note. A click only opens the note: the button is not left selected, so ComfyUI's selection bar does not pop up.",
+        "Rest the mouse on a button for half a second to see a peek: the note's first heading and first line, without opening it.",
+        "A button with a dashed outline has an empty note. Clicking it opens the editor straight away.",
         "To change the note or the button, press Edit in the reading window, or right-click the button and choose Edit.",
         "Drag the button's corner to make it bigger or smaller. The text and icon grow with it.",
+      ],
+    },
+    {
+      heading: "The reading window",
+      defs: [
+        ["Move and resize", "Drag the title bar to move it, and the corner to resize it. Each button remembers its own window size, saved in the workflow, so a short note can open small and a long one big. Double-click the corner to go back to the automatic size."],
+        ["A- and A+", "Make the text smaller or bigger, for that button. Saved in the workflow too."],
+        ["The list on the left", "When the workflow has two or more Info buttons, the window lists them all. Click one to read it without closing the window."],
+        ["Edit", "Opens the editor for this note."],
+        ["?", "Opens this help."],
+        ["Esc or X", "Closes the window."],
       ],
     },
     {
@@ -24,6 +37,7 @@ export const INFO_HELP = {
         ["Title", "The text on the button."],
         ["Icon", "One of the Pixaroma icons. They ship with Pixaroma, so a shared workflow shows the same icon on every PC."],
         ["Colour", "The button colour. The text turns dark on a light colour so it stays readable."],
+        ["Template", "Adds the empty headings of a starter where the cursor is, for example a Models section inside a Read me note. Ctrl+Z takes it out again."],
         ["The note", "Everything below the strip is the Note Pixaroma editor. Save keeps both the note and the button."],
       ],
     },

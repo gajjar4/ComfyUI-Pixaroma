@@ -508,6 +508,6 @@ app.registerExtension({
     loadPins();
     mountToolbarButton();
     // So the per-node ? popup can link through to the full page.
-    try { window.PixaromaHelpBrowser = { open: openHelpBrowser, toggle: toggleHelpBrowser }; } catch { /* optional */ }
+    try { window.PixaromaHelpBrowser = { open: openHelpBrowser, toggle: toggleHelpBrowser, close: closeHelpBrowser, isOpen: () => !!S.win?.isOpen() }; } catch { /* optional */ }
   },
 });

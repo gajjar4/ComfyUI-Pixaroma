@@ -5,41 +5,73 @@
 // block the canvas (you can read while you work), and one window serves every
 // Info button: clicking another button swaps the note in.
 //
+// When the workflow has two or more Info buttons, a list on the left shows
+// them all (subgraphs included), so the next note is one click away instead
+// of a hunt on the canvas.
+//
 // The note is drawn by Note Pixaroma's own renderContent + stylesheet, so a
 // download button, an icon or a table looks exactly as the editor made it.
 
+import { app } from "../../../scripts/app.js";
 import { injectCSS as injectNoteCSS } from "../note/css.mjs";
 import { renderContent } from "../note/render.mjs";
 import { ensureIcons, injectIconCSS } from "../note/icons.mjs";
 import { isLiveNode } from "../shared/live_node.mjs";
-import { readCfg, writeCfg, findWidget, iconUrl, inkFor, READER_MIN } from "./core.mjs";
+import { openHelpFor } from "../shared/help.mjs";
+import { NODE, readCfg, writeCfg, withInfo, findWidget, iconUrl, inkFor, READER_MIN,
+  TEXT_SCALE, clampTextScale } from "./core.mjs";
+import { INFO_HELP } from "./help.mjs";
+import { isEmptyNote } from "./face.mjs";
 
 const CSS = [
-  ".pix-info-reader{position:fixed;z-index:1400;display:flex;flex-direction:column;width:min(860px, calc(100vw - 32px));",
+  // z-index 1390: one under the Help window (1400), so the ? opens Help ON TOP.
+  ".pix-info-reader{position:fixed;z-index:1390;display:flex;flex-direction:column;width:min(860px, calc(100vw - 32px));",
   "max-height:calc(100vh - 48px);background:#202020;border:1px solid #3d3d3d;border-radius:12px;box-shadow:0 14px 44px rgba(0,0,0,.7);",
   "overflow:hidden;font-family:'Segoe UI',system-ui,sans-serif;color:#e6e6e6;}",
-  ".pix-info-rbar{display:flex;align-items:center;gap:10px;padding:9px 10px 9px 14px;background:#2a2a2a;border-bottom:1px solid #3a3a3a;",
+  ".pix-info-reader.has-rail{width:min(1070px, calc(100vw - 32px));}",
+  ".pix-info-rbar{display:flex;align-items:center;gap:8px;padding:9px 10px 9px 14px;background:#2a2a2a;border-bottom:1px solid #3a3a3a;",
   "cursor:move;user-select:none;flex:none;touch-action:none;}",
   ".pix-info-rbub{width:30px;height:30px;border-radius:8px;display:flex;align-items:center;justify-content:center;flex:none;}",
   ".pix-info-ric{width:19px;height:19px;display:block;-webkit-mask:var(--i) center/contain no-repeat;mask:var(--i) center/contain no-repeat;}",
-  ".pix-info-rtt{font-weight:700;font-size:15px;color:#f2f2f2;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}",
+  ".pix-info-rtt{font-weight:700;font-size:15px;color:#f2f2f2;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-left:2px;}",
   ".pix-info-rsp{flex:1;}",
-  ".pix-info-rbtn{display:inline-flex;align-items:center;gap:6px;font:600 12px 'Segoe UI',system-ui,sans-serif;color:#ddd;cursor:pointer;",
-  "border:1px solid #4a4a4a;border-radius:6px;padding:5px 11px;background:rgba(255,255,255,.04);}",
-  ".pix-info-rbtn:hover{border-color:#f66744;color:#fff;}",
+  ".pix-info-rbtn{display:inline-flex;align-items:center;justify-content:center;gap:6px;font:600 12px 'Segoe UI',system-ui,sans-serif;color:#ddd;cursor:pointer;",
+  "border:1px solid #4a4a4a;border-radius:6px;padding:5px 11px;background:rgba(255,255,255,.04);flex:none;}",
+  ".pix-info-rbtn:hover:not([disabled]){border-color:#f66744;color:#fff;}",
+  ".pix-info-rbtn[disabled]{opacity:.35;cursor:default;}",
   ".pix-info-rbtn .pix-info-rbi{width:13px;height:13px;background:currentColor;-webkit-mask:var(--i) center/contain no-repeat;mask:var(--i) center/contain no-repeat;}",
-  ".pix-info-rx{border:0;background:transparent;color:#aaa;font-size:17px;line-height:1;cursor:pointer;padding:4px 8px;border-radius:6px;}",
+  // A- / A+ as one segmented control.
+  ".pix-info-rsz{display:inline-flex;flex:none;}",
+  ".pix-info-rsz .pix-info-rbtn{padding:4px 9px;min-width:30px;}",
+  ".pix-info-rsz .pix-info-rbtn:first-child{border-radius:6px 0 0 6px;font-size:11px;}",
+  ".pix-info-rsz .pix-info-rbtn:last-child{border-radius:0 6px 6px 0;border-left:0;font-size:14px;}",
+  ".pix-info-rhelp{width:28px;height:28px;padding:0;border-radius:50%;font-size:14px;font-weight:700;}",
+  ".pix-info-rx{border:0;background:transparent;color:#aaa;font-size:17px;line-height:1;cursor:pointer;padding:4px 8px;border-radius:6px;flex:none;}",
   ".pix-info-rx:hover{color:#fff;background:rgba(255,255,255,.08);}",
+  // Body: the list of notes (only with 2+ buttons) and the note.
+  ".pix-info-rmain{display:flex;flex:1 1 auto;min-height:0;}",
+  ".pix-info-rail{display:none;flex:none;width:210px;overflow-y:auto;background:#1a1a1a;border-right:1px solid #333;padding:10px 8px;}",
+  ".pix-info-reader.has-rail .pix-info-rail{display:block;}",
+  ".pix-info-rail-h{font-size:10.5px;font-weight:700;color:#888;letter-spacing:.06em;margin:2px 6px 6px;}",
+  ".pix-info-ri{display:flex;align-items:center;gap:8px;width:100%;padding:6px 8px;border:0;border-radius:7px;background:transparent;",
+  "font:13px 'Segoe UI',system-ui,sans-serif;color:#ccc;cursor:pointer;text-align:left;margin:1px 0;}",
+  ".pix-info-ri:hover{background:#262626;color:#fff;}",
+  ".pix-info-ri.on{background:#2c2c2c;color:#fff;box-shadow:inset 3px 0 0 #f66744;}",
+  ".pix-info-ri .sq{width:22px;height:22px;border-radius:6px;display:flex;align-items:center;justify-content:center;flex:none;}",
+  ".pix-info-ri .sq i{width:14px;height:14px;display:block;-webkit-mask:var(--i) center/contain no-repeat;mask:var(--i) center/contain no-repeat;}",
+  ".pix-info-ri .t{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;}",
+  ".pix-info-ri small{color:#777;font-size:10.5px;flex:none;}",
   // Resize corner: two short diagonal strokes, the usual "drag me" mark.
   ".pix-info-rgrip{position:absolute;right:0;bottom:0;width:18px;height:18px;cursor:nwse-resize;touch-action:none;z-index:2;",
   "background:linear-gradient(135deg,transparent 0 55%,#666 55% 61%,transparent 61% 72%,#666 72% 78%,transparent 78%);}",
   ".pix-info-rgrip:hover{background:linear-gradient(135deg,transparent 0 55%,#f66744 55% 61%,transparent 61% 72%,#f66744 72% 78%,transparent 78%);}",
-  // The note itself: Note's body stylesheet, a size up for reading.
-  ".pix-info-reader .pix-info-doc.pix-note-body{height:auto;flex:1 1 auto;min-height:80px;overflow-y:auto;padding:20px 32px 26px;",
-  "font-size:14.5px;line-height:1.6;background:#1e1e1e;}",
-  ".pix-info-reader .pix-info-doc.pix-note-body h1{font-size:22px;margin:2px 0 8px;}",
-  ".pix-info-reader .pix-info-doc.pix-note-body h2{font-size:18px;margin:14px 0 6px;}",
-  ".pix-info-reader .pix-info-doc.pix-note-body h3{font-size:16px;margin:14px 0 6px;}",
+  // The note: an outer scroller and an inner Note body that carries the text
+  // size as a zoom (so the scrollbar keeps its normal size).
+  ".pix-info-doc{flex:1 1 auto;min-width:0;min-height:80px;overflow-y:auto;padding:20px 32px 26px;background:#1e1e1e;}",
+  ".pix-info-reader .pix-info-docin.pix-note-body{height:auto;overflow:visible;padding:0;font-size:14.5px;line-height:1.6;}",
+  ".pix-info-reader .pix-info-docin.pix-note-body h1{font-size:22px;margin:2px 0 8px;}",
+  ".pix-info-reader .pix-info-docin.pix-note-body h2{font-size:18px;margin:14px 0 6px;}",
+  ".pix-info-reader .pix-info-docin.pix-note-body h3{font-size:16px;margin:14px 0 6px;}",
   ".pix-info-empty{display:flex;flex-direction:column;align-items:center;gap:12px;padding:30px 10px;color:#aaa;font-size:14px;}",
   ".pix-info-empty button{font:600 13px 'Segoe UI',system-ui,sans-serif;color:#fff;background:#f66744;border:0;border-radius:6px;padding:7px 16px;cursor:pointer;}",
   ".pix-info-empty button:hover{filter:brightness(1.1);}",
@@ -57,6 +89,7 @@ function injectReaderCSS() {
 let _win = null;       // the window element
 let _node = null;      // the node it shows
 let _raw = null;       // the widget string it was drawn from
+let _railSig = "";     // what the list of notes was built from
 let _poll = null;
 // WHERE the window sits is remembered in this browser (screens differ, so it
 // is a per-viewer convenience: nothing breaks if storage is blocked). HOW BIG
@@ -100,7 +133,7 @@ export function closeReader() {
   try { _keyOff?.(); } catch (_e) {}
   _keyOff = null;
   if (_win) { try { _win.remove(); } catch (_e) {} }
-  _win = null; _node = null; _raw = null;
+  _win = null; _node = null; _raw = null; _railSig = "";
 }
 
 function el(tag, cls, text) {
@@ -110,6 +143,65 @@ function el(tag, cls, text) {
   return e;
 }
 
+// ── The list of notes ───────────────────────────────────────────────────────
+// Every live Info button of the open workflow: the root graph first, then each
+// subgraph, each in reading order (top to bottom, then left to right).
+export function listInfoNodes() {
+  const out = [];
+  const take = (graph, inSub) => {
+    const nodes = (graph?._nodes || []).filter((n) => n && (n.comfyClass === NODE || n.type === NODE) && isLiveNode(n));
+    nodes.sort((a, b) => (a.pos[1] - b.pos[1]) || (a.pos[0] - b.pos[0]));
+    for (const n of nodes) out.push({ node: n, inSub });
+  };
+  try {
+    take(app.graph, false);
+    const subs = app.graph?.subgraphs;
+    if (subs && typeof subs.values === "function") for (const sg of subs.values()) take(sg, true);
+  } catch (_e) {}
+  return out;
+}
+
+function railSignature(list) {
+  return list.map(({ node, inSub }) => {
+    const i = readCfg(node).info;
+    return `${node.id}|${inSub ? 1 : 0}|${i.title}|${i.icon}|${i.color}|${isEmptyNote(node) ? 1 : 0}`;
+  }).join("/");
+}
+
+function buildRail(win) {
+  const rail = win.querySelector(".pix-info-rail");
+  const list = listInfoNodes();
+  const sig = railSignature(list) + "#" + (_node ? _node.id : "");
+  if (sig === _railSig) return;
+  _railSig = sig;
+  const show = list.length >= 2;
+  const wasShown = win.classList.contains("has-rail");
+  win.classList.toggle("has-rail", show);
+  rail.innerHTML = "";
+  if (!show) { if (wasShown) { applySize(win, _node); place(win); } return; }
+  rail.appendChild(el("div", "pix-info-rail-h", "THIS WORKFLOW"));
+  for (const { node, inSub } of list) {
+    const info = readCfg(node).info;
+    const b = el("button", "pix-info-ri" + (node === _node ? " on" : ""));
+    b.type = "button";
+    b.title = inSub ? `${info.title || "Info"} (inside a subgraph)` : (info.title || "Info");
+    const sq = el("span", "sq");
+    sq.style.background = info.color;
+    const ic = el("i");
+    ic.style.setProperty("--i", `url("${iconUrl(info.icon)}")`);
+    ic.style.background = inkFor(info.color);
+    sq.appendChild(ic);
+    b.appendChild(sq);
+    b.appendChild(el("span", "t", info.title || "Info"));
+    if (inSub) b.appendChild(el("small", null, "subgraph"));
+    else if (isEmptyNote(node)) b.appendChild(el("small", null, "empty"));
+    b.addEventListener("click", () => { if (node !== _node) openReader(node); });
+    rail.appendChild(b);
+  }
+  if (!wasShown) { applySize(win, _node); place(win); }
+}
+
+// ── The note ────────────────────────────────────────────────────────────────
 function fill(win, node) {
   const cfg = readCfg(node);
   const info = cfg.info;
@@ -120,23 +212,52 @@ function fill(win, node) {
   ric.style.background = inkFor(info.color);
   win.querySelector(".pix-info-rtt").textContent = info.title || "Info";
   const doc = win.querySelector(".pix-info-doc");
-  if (!String(cfg.content || "").trim()) {
-    doc.innerHTML = "";
+  const inner = win.querySelector(".pix-info-docin");
+  // The same test the button uses for its dashed "empty" outline.
+  if (isEmptyNote(node)) {
+    inner.innerHTML = "";
     const box = el("div", "pix-info-empty");
     box.appendChild(el("div", null, "This note is empty."));
     const b = el("button", null, "Write it");
     b.type = "button";
     b.addEventListener("click", () => editFromReader());
     box.appendChild(b);
-    doc.appendChild(box);
+    inner.appendChild(box);
   } else {
     // renderContent writes node.color / node.bgcolor for Note's own canvas
     // body. Hand it a stand-in so it can never touch the real node.
-    renderContent({ _noteCfg: cfg, bgcolor: "#000000" }, doc);
+    renderContent({ _noteCfg: cfg, bgcolor: "#000000" }, inner);
   }
   const bg = typeof cfg.backgroundColor === "string" && /^#[0-9a-f]{6}$/i.test(cfg.backgroundColor) ? cfg.backgroundColor : "";
   doc.style.background = bg;
+  applyTextScale(win, info);
   _raw = findWidget(node)?.value ?? null;
+  buildRail(win);
+}
+
+function applyTextScale(win, info) {
+  const s = clampTextScale(info.textScale ?? 1);
+  const inner = win.querySelector(".pix-info-docin");
+  inner.style.zoom = s === 1 ? "" : String(s);
+  const [minus, plus] = win.querySelectorAll(".pix-info-rsz .pix-info-rbtn");
+  if (minus) { minus.disabled = s <= TEXT_SCALE.min + 1e-6; minus.title = `Smaller text (now ${Math.round(s * 100)}%)`; }
+  if (plus) { plus.disabled = s >= TEXT_SCALE.max - 1e-6; plus.title = `Bigger text (now ${Math.round(s * 100)}%)`; }
+}
+
+// A- / A+ for THIS button, saved with the workflow like its window size.
+function stepTextScale(dir) {
+  const node = _node;
+  if (!node || !isLiveNode(node) || !_win) return;
+  const cfg = readCfg(node);
+  const now = clampTextScale(cfg.info.textScale ?? 1);
+  const next = clampTextScale(now + dir * TEXT_SCALE.step);
+  if (next === now) return;
+  const changes = next === 1 ? { textScale: undefined } : { textScale: next };
+  const out = withInfo(cfg, changes);
+  if (next === 1) delete out.info.textScale;
+  writeCfg(node, out);
+  _raw = findWidget(node)?.value ?? null;   // our own write: no redraw needed
+  applyTextScale(_win, out.info);
 }
 
 function editFromReader() {
@@ -145,6 +266,7 @@ function editFromReader() {
   if (n && _onEdit) _onEdit(n, { reopenReader: true });
 }
 
+// ── Size and position ───────────────────────────────────────────────────────
 // The size this button's author gave its window, or the default (width from
 // the stylesheet, height fitting the note). A saved size larger than this
 // screen is clamped to it.
@@ -223,12 +345,12 @@ function wireDrag(win, bar) {
 function saveSizeOnNode(node, size) {
   if (!node || !isLiveNode(node)) return;
   const cfg = readCfg(node);
-  const info = { ...cfg.info };
-  if (size) info.reader = { w: Math.round(size.w), h: Math.round(size.h) };
-  else delete info.reader;
   const before = JSON.stringify(cfg.info.reader || null);
-  if (JSON.stringify(info.reader || null) === before) return;
-  writeCfg(node, { ...cfg, info });
+  const reader = size ? { w: Math.round(size.w), h: Math.round(size.h) } : null;
+  if (JSON.stringify(reader) === before) return;
+  const out = withInfo(cfg, { reader });
+  if (!reader) delete out.info.reader;
+  writeCfg(node, out);
   _raw = findWidget(node)?.value ?? null;   // our own write: no redraw needed
 }
 
@@ -256,6 +378,7 @@ function wireResize(win, grip) {
   });
 }
 
+// ── Open ────────────────────────────────────────────────────────────────────
 export function openReader(node) {
   if (!node) return;
   injectNoteCSS();
@@ -282,6 +405,16 @@ export function openReader(node) {
   bar.appendChild(bub);
   bar.appendChild(el("span", "pix-info-rtt"));
   bar.appendChild(el("span", "pix-info-rsp"));
+  const sz = el("span", "pix-info-rsz");
+  const minus = el("button", "pix-info-rbtn", "A−");
+  minus.type = "button";
+  minus.addEventListener("click", () => stepTextScale(-1));
+  const plus = el("button", "pix-info-rbtn", "A+");
+  plus.type = "button";
+  plus.addEventListener("click", () => stepTextScale(1));
+  sz.appendChild(minus);
+  sz.appendChild(plus);
+  bar.appendChild(sz);
   const edit = el("button", "pix-info-rbtn");
   edit.type = "button";
   edit.title = "Edit this note and the button";
@@ -291,14 +424,23 @@ export function openReader(node) {
   edit.appendChild(document.createTextNode("Edit"));
   edit.addEventListener("click", () => editFromReader());
   bar.appendChild(edit);
+  const help = el("button", "pix-info-rbtn pix-info-rhelp", "?");
+  help.type = "button";
+  help.title = "How Info Pixaroma works";
+  help.addEventListener("click", () => openHelpFor(NODE, INFO_HELP));
+  bar.appendChild(help);
   const x = el("button", "pix-info-rx", "✕");
   x.type = "button";
   x.title = "Close (Esc)";
   x.addEventListener("click", () => closeReader());
   bar.appendChild(x);
   win.appendChild(bar);
-  const doc = el("div", "pix-info-doc pix-note-body");
-  win.appendChild(doc);
+  const main = el("div", "pix-info-rmain");
+  main.appendChild(el("div", "pix-info-rail"));
+  const doc = el("div", "pix-info-doc");
+  doc.appendChild(el("div", "pix-info-docin pix-note-body"));
+  main.appendChild(doc);
+  win.appendChild(main);
   const grip = el("div", "pix-info-rgrip");
   grip.title = "Drag to resize. Double-click for the default size.";
   win.appendChild(grip);
@@ -327,8 +469,25 @@ export function openReader(node) {
     const t = e.target;
     if (t && t !== document.body && !_win.contains(t) &&
         (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
-    // Leave Esc to anything open on top of us (a ComfyUI dialog, a menu).
-    if (document.querySelector(".p-dialog-mask, .litecontextmenu, .pix-info-start")) return;
+    // Leave Esc to anything open on top of us (a ComfyUI dialog, a menu, Help).
+    if (document.querySelector(".p-dialog-mask, .litecontextmenu, .pix-info-start, .pix-help-backdrop")) return;
+    // The Help window sits above us (it is opened from our ? button), so Esc
+    // closes it first, wherever the focus is. Its own Esc only works while the
+    // focus is inside it, and a click on its text leaves the focus on the page,
+    // which used to close THIS window underneath instead (reproduced).
+    const hb = document.querySelector(".pixhb-win");
+    const hbOpen = window.PixaromaHelpBrowser?.isOpen
+      ? window.PixaromaHelpBrowser.isOpen()
+      : !!(hb && hb.offsetParent !== null && getComputedStyle(hb).display !== "none");
+    if (hbOpen) {
+      if (hb && hb.contains(document.activeElement)) return;   // its own handler closes it
+      if (typeof window.PixaromaHelpBrowser?.close === "function") {
+        e.preventDefault();
+        e.stopPropagation();
+        window.PixaromaHelpBrowser.close();
+      }
+      return;
+    }
     e.preventDefault();
     e.stopPropagation();
     closeReader();
@@ -341,11 +500,13 @@ export function openReader(node) {
     window.removeEventListener("resize", onResize);
   };
 
-  // Close when the node goes (deleted, workflow switched), and follow edits
-  // made elsewhere (Ctrl+Z, a starter) by re-drawing when the saved note changes.
+  // Close when the node goes (deleted, workflow switched), follow edits made
+  // elsewhere (Ctrl+Z, a starter) by re-drawing when the saved note changes,
+  // and keep the list of notes current (a button added, renamed, removed).
   _poll = setInterval(() => {
     if (!_node || !isLiveNode(_node) || !_node.graph) { closeReader(); return; }
     const raw = findWidget(_node)?.value ?? null;
     if (raw !== _raw && _win) { fill(_win, _node); applySize(_win, _node); place(_win); }
+    else if (_win) buildRail(_win);
   }, 400);
 }

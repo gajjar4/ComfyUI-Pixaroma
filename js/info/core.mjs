@@ -62,7 +62,23 @@ function cleanInfo(raw) {
   };
   const reader = cleanReader(r.reader);
   if (reader) out.reader = reader;
+  // The reading window's text size for THIS button (A- / A+), 1 = normal.
+  const ts = Number(r.textScale);
+  if (Number.isFinite(ts) && Math.abs(ts - 1) > 0.001) out.textScale = clampTextScale(ts);
   return out;
+}
+
+export const TEXT_SCALE = { min: 0.8, max: 2, step: 0.1 };
+export function clampTextScale(v) {
+  const n = Number.isFinite(v) ? v : 1;
+  return Math.round(Math.max(TEXT_SCALE.min, Math.min(TEXT_SCALE.max, n)) * 10) / 10;
+}
+
+// Every place that rebuilds the button's info (the editor's Save, a starter,
+// the reader's size and text controls) goes through this, so fields it does
+// not own - the window size, the text size, anything added later - are kept.
+export function withInfo(cfg, changes) {
+  return { ...cfg, info: { ...cfg.info, ...changes } };
 }
 
 // The reading window's size for THIS button, saved with the workflow (the

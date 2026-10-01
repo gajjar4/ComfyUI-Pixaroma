@@ -98,6 +98,24 @@ export function starterContent(st) {
   return html;
 }
 
+// One starter as a SECTION of a longer note (the editor's Template button):
+// its heading becomes an h2 with the starter's icon, then the same empty
+// headings starterContent writes. `rule` puts a line above it, to separate it
+// from what is already in the note.
+export function starterSection(st, rule = false) {
+  if (!st || !st.h1) return "";
+  const ic = (id) => renderIconHTML(id, st.color);
+  let html = rule ? "<hr>" : "";
+  html += `<h2>${ic(st.icon)}${esc(st.h1)}</h2>`;
+  if (st.intro) html += `<p>${esc(st.intro)}</p>`;
+  for (const [icon, heading, kind, lines] of st.sections) {
+    html += `<h3>${ic(icon)}${esc(heading)}</h3>`;
+    if (kind === "p") html += lines.map((l) => `<p>${esc(l)}</p>`).join("");
+    else html += `<${kind}>${lines.map((l) => `<li>${esc(l)}</li>`).join("")}</${kind}>`;
+  }
+  return html;
+}
+
 // Current scale of the button, from its width (both renderers carry the scale
 // in the width).
 export function currentScale(node, info) {
@@ -127,8 +145,8 @@ export function applyStarter(node, st) {
   if (!node || !st) return;
   const cfg = readCfg(node);
   const oldInfo = cfg.info;
-  const info = { title: st.title || st.name, icon: st.icon, color: st.color };
-  if (oldInfo.reader) info.reader = { ...oldInfo.reader };   // keep its reader size
+  // Spread the current info: the window size and text size stay.
+  const info = { ...oldInfo, title: st.title || st.name, icon: st.icon, color: st.color };
   const next = { ...cfg, info };
   if (!String(cfg.content || "").trim()) next.content = starterContent(st);
   refitToContent(node, oldInfo, info);
