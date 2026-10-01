@@ -18,10 +18,13 @@ import { renderContent } from "../note/render.mjs";
 import { ensureIcons, injectIconCSS } from "../note/icons.mjs";
 import { isLiveNode } from "../shared/live_node.mjs";
 import { openHelpFor } from "../shared/help.mjs";
+import { pixAsset } from "../shared/api_url.mjs";
 import { NODE, readCfg, writeCfg, withInfo, findWidget, iconUrl, inkFor, READER_MIN,
   TEXT_SCALE, clampTextScale } from "./core.mjs";
 import { INFO_HELP } from "./help.mjs";
 import { isEmptyNote } from "./face.mjs";
+
+const QUESTION_ICON = pixAsset("icons/note/question-mark.svg");
 
 const CSS = [
   // z-index 1390: one under the Help window (1400), so the ? opens Help ON TOP.
@@ -45,7 +48,11 @@ const CSS = [
   ".pix-info-rsz .pix-info-rbtn{padding:4px 9px;min-width:30px;}",
   ".pix-info-rsz .pix-info-rbtn:first-child{border-radius:6px 0 0 6px;font-size:11px;}",
   ".pix-info-rsz .pix-info-rbtn:last-child{border-radius:0 6px 6px 0;border-left:0;font-size:14px;}",
-  ".pix-info-rhelp{width:28px;height:28px;padding:0;border-radius:50%;font-size:14px;font-weight:700;}",
+  // The ? is the SAME orange circle as the Pixaroma Help button on the node
+  // selection toolbar (help_toolbar/index.js), so people recognise it.
+  ".pix-info-rhelp{width:24px;height:24px;padding:0;border:0;border-radius:50%;background:#f66744;margin:0 2px;}",
+  `.pix-info-rhelp::before{content:"";width:14px;height:14px;background:#fff;-webkit-mask:url("${QUESTION_ICON}") center/contain no-repeat;mask:url("${QUESTION_ICON}") center/contain no-repeat;}`,
+  ".pix-info-rhelp:hover:not([disabled]){filter:brightness(1.12);}",
   ".pix-info-rx{border:0;background:transparent;color:#aaa;font-size:17px;line-height:1;cursor:pointer;padding:4px 8px;border-radius:6px;flex:none;}",
   ".pix-info-rx:hover{color:#fff;background:rgba(255,255,255,.08);}",
   // Body: the list of notes (only with 2+ buttons) and the note.
@@ -424,8 +431,9 @@ export function openReader(node) {
   edit.appendChild(document.createTextNode("Edit"));
   edit.addEventListener("click", () => editFromReader());
   bar.appendChild(edit);
-  const help = el("button", "pix-info-rbtn pix-info-rhelp", "?");
+  const help = el("button", "pix-info-rbtn pix-info-rhelp");
   help.type = "button";
+  help.setAttribute("aria-label", "Help");
   help.title = "How Info Pixaroma works";
   help.addEventListener("click", () => openHelpFor(NODE, INFO_HELP));
   bar.appendChild(help);
