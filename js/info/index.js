@@ -21,7 +21,7 @@ import { registerNodeSettings } from "../shared/node_settings.mjs";
 import { NODE, M, DEFAULT_INFO, unitWidth, readCfg } from "./core.mjs";
 import { isInfo, isEmptyNote, installInfoBodyHook, paintClassic, applyResizeAspect, repairClassicHeight,
   buildVueFace, teardownVueFace, renderVueFace, classicComputeSize, heightForWidth } from "./face.mjs";
-import { openReader, closeReader, readerNode, setReaderEditHandler } from "./reader.mjs";
+import { openReader, closeReader, readerNode, setReaderEditHandler, setReaderDeleteHandler } from "./reader.mjs";
 import { openInfoEditor } from "./editor.mjs";
 import { showStarterPopup, closeStarterPopup, starterPopupOpen } from "./starters.mjs";
 import { INFO_HELP } from "./help.mjs";
@@ -38,6 +38,32 @@ function edit(node, opts = {}) {
   openInfoEditor(node, { ...opts, onReopen: (n) => { if (isLiveNode(n)) openReader(n); } });
 }
 setReaderEditHandler((node, opts) => edit(node, opts));
+
+// Delete a button the way core's own Delete does (LGraphCanvas.deleteSelected):
+// inside the canvas and graph before/after-change events, so Ctrl+Z brings it
+// back. A button that is part of the selection deletes the whole selection,
+// exactly like core's Delete. People could not find core's entry in the menu
+// (user, 2026-10-02), hence our own line next to Open / Edit.
+function deleteInfo(node) {
+  const g = node?.graph;
+  if (!g || !isLiveNode(node) || node.block_delete) return;
+  const c = app.canvas;
+  if (c && c.graph === g && typeof c.deleteSelected === "function" &&
+      (c.selectedItems?.has?.(node) || c.selected_nodes?.[node.id] === node)) {
+    c.deleteSelected();
+    return;
+  }
+  try { c?.emitBeforeChange?.(); } catch (_e) {}
+  try { g.beforeChange?.(); } catch (_e) {}
+  try {
+    g.remove(node);
+  } finally {
+    try { c?.setDirty?.(true, true); } catch (_e) {}
+    try { g.afterChange?.(); } catch (_e) {}
+    try { c?.emitAfterChange?.(); } catch (_e) {}
+  }
+}
+setReaderDeleteHandler((node) => deleteInfo(node));
 
 // The gear in the selection toolbar opens the editor: the strip on top of it IS
 // this node's settings (title, icon, colour). ownMenuItem: Edit is our own line.
@@ -112,6 +138,9 @@ app.registerExtension({
       { content: "📖 Open", callback: () => openReader(node) },
       { content: "✏️ Edit", callback: () => edit(node) },
       { content: "✨ Start from...", callback: () => showStarterPopup(node) },
+      // Straight away, like core's Delete (Ctrl+Z undoes it). The reading
+      // window's Delete asks first.
+      { content: "🗑️ Delete", callback: () => deleteInfo(node) },
     ];
   },
 

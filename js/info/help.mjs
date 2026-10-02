@@ -18,6 +18,7 @@ export const INFO_HELP = {
         "A button with a dashed outline has an empty note. Clicking it opens the editor straight away.",
         "To change the note or the button, press Edit in the reading window, or right-click the button and choose Edit.",
         "Drag the button's corner to make it bigger or smaller. The text and icon grow with it.",
+        "To remove a button, right-click it and choose Delete, or press Delete in its reading window, which asks first. Ctrl+Z brings it back.",
       ],
     },
     {
@@ -27,6 +28,7 @@ export const INFO_HELP = {
         ["A- and A+", "Make the text smaller or bigger, for that button. Saved in the workflow too."],
         ["The list on the left", "When the workflow has two or more Info buttons, the window lists them all. Click one to read it without closing the window."],
         ["Edit", "Opens the editor for this note."],
+        ["Delete", "Removes this Info button and its note from the workflow, after asking. Ctrl+Z brings it back."],
         ["?", "Opens this help."],
         ["Esc or X", "Closes the window."],
       ],

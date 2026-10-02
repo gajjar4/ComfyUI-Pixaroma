@@ -19,12 +19,14 @@ import { ensureIcons, injectIconCSS } from "../note/icons.mjs";
 import { isLiveNode } from "../shared/live_node.mjs";
 import { openHelpFor } from "../shared/help.mjs";
 import { pixAsset } from "../shared/api_url.mjs";
+import { pixConfirm } from "../shared/confirm_dialog.mjs";
 import { NODE, readCfg, writeCfg, withInfo, findWidget, iconUrl, inkFor, READER_MIN,
   TEXT_SCALE, clampTextScale } from "./core.mjs";
 import { INFO_HELP } from "./help.mjs";
 import { isEmptyNote } from "./face.mjs";
 
 const QUESTION_ICON = pixAsset("icons/note/question-mark.svg");
+const DELETE_ICON = pixAsset("icons/ui/delete.svg");
 
 const CSS = [
   // z-index 1390: one under the Help window (1400), so the ? opens Help ON TOP.
@@ -114,6 +116,7 @@ function savePos() {
 }
 const MIN_W = READER_MIN.w, MIN_H = READER_MIN.h;
 let _onEdit = null;
+let _onDelete = null;
 let _keyOff = null;
 let _pressInside = false;
 
@@ -133,6 +136,7 @@ if (typeof window !== "undefined" && !window._pixInfoReaderMoveGuard) {
 }
 
 export function setReaderEditHandler(fn) { _onEdit = fn; }
+export function setReaderDeleteHandler(fn) { _onDelete = fn; }
 export function readerNode() { return _win && _win.isConnected ? _node : null; }
 
 export function closeReader() {
@@ -271,6 +275,23 @@ function editFromReader() {
   const n = _node;
   closeReader();
   if (n && _onEdit) _onEdit(n, { reopenReader: true });
+}
+
+// Delete from the window asks first (the right-click Delete does not: user's
+// call 2026-10-02). Cancel has the focus, so Enter keeps the button.
+async function deleteFromReader() {
+  const n = _node;
+  if (!n || !isLiveNode(n) || !_onDelete) return;
+  const title = readCfg(n).info.title || "Info";
+  const ok = await pixConfirm({
+    title: "Delete this Info button?",
+    message: `"${title}" and its note will be removed from the workflow. Ctrl+Z brings it back.`,
+    okText: "Delete",
+    danger: true,
+  });
+  if (!ok || !isLiveNode(n) || !n.graph) return;
+  if (readerNode() === n) closeReader();
+  _onDelete(n);
 }
 
 // ── Size and position ───────────────────────────────────────────────────────
@@ -431,6 +452,15 @@ export function openReader(node) {
   edit.appendChild(document.createTextNode("Edit"));
   edit.addEventListener("click", () => editFromReader());
   bar.appendChild(edit);
+  const del = el("button", "pix-info-rbtn");
+  del.type = "button";
+  del.title = "Delete this Info button from the workflow (asks first)";
+  const di = el("span", "pix-info-rbi");
+  di.style.setProperty("--i", `url("${DELETE_ICON}")`);
+  del.appendChild(di);
+  del.appendChild(document.createTextNode("Delete"));
+  del.addEventListener("click", () => { deleteFromReader(); });
+  bar.appendChild(del);
   const help = el("button", "pix-info-rbtn pix-info-rhelp");
   help.type = "button";
   help.setAttribute("aria-label", "Help");
@@ -477,8 +507,9 @@ export function openReader(node) {
     const t = e.target;
     if (t && t !== document.body && !_win.contains(t) &&
         (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
-    // Leave Esc to anything open on top of us (a ComfyUI dialog, a menu, Help).
-    if (document.querySelector(".p-dialog-mask, .litecontextmenu, .pix-info-start, .pix-help-backdrop")) return;
+    // Leave Esc to anything open on top of us (a ComfyUI dialog, a menu, Help,
+    // the "Delete this Info button?" question, which Esc must cancel alone).
+    if (document.querySelector(".p-dialog-mask, .litecontextmenu, .pix-info-start, .pix-help-backdrop, .pix-cfm-back")) return;
     // The Help window sits above us (it is opened from our ? button), so Esc
     // closes it first, wherever the focus is. Its own Esc only works while the
     // focus is inside it, and a click on its text leaves the focus on the page,

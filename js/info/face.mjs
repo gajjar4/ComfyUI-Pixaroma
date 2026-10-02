@@ -277,6 +277,43 @@ function installScaleObserver(node, root) {
   return () => { node._pixInfoApplyScale = null; try { ro.disconnect(); } catch (_e) {} };
 }
 
+// ── Ctrl+Z in Nodes 2.0 (measured 2026-10-02, frontend 1.53.6) ──────────────
+// Undo / redo rebuild EVERY node through app.loadGraphData, with the same ids.
+// Vue keeps each node's component (same key), and core's WidgetDOM.vue mounts
+// a widget's element only in onMounted, so the NEW node's face is never put on
+// the page. Our old face is torn down in onRemoved, so every Info button went
+// blank after any Ctrl+Z (and could not be clicked: the hit test needs the face
+// on the page). The fix: teardown remembers the host the face sat in (the
+// WidgetDOM div), and a new face that is still off the page shortly after it
+// was built is put into that host - the same replaceChildren WidgetDOM does.
+// Only when the host is on the page, EMPTY, and inside this node's element on
+// the graph being shown, so it can never take another node's place.
+const _hosts = new Map();   // String(node.id) -> the WidgetDOM div of the old face
+const REMOUNT_WAIT = [0, 40, 120, 300, 800];
+
+function hostOf(root) {
+  const host = root?.parentElement;
+  // Nodes 2.0 only: in Classic the parent is ComfyUI's .dom-widget wrapper.
+  if (!host || host.classList.contains("dom-widget") || !host.closest(".lg-node")) return null;
+  return host;
+}
+
+function remountIfOrphan(node, step = 0) {
+  const root = node._pixInfoRoot;
+  const key = String(node.id);
+  if (!root || root.isConnected || !isVueNodes() || !node.graph) { if (root?.isConnected) _hosts.delete(key); return; }
+  const host = _hosts.get(key);
+  const nodeEl = host?.isConnected ? host.closest(".lg-node") : null;
+  if (host && nodeEl && !host.firstElementChild && nodeEl.getAttribute("data-node-id") === key &&
+      node.graph === app.canvas?.graph) {
+    host.replaceChildren(root);
+    _hosts.delete(key);
+    renderVueFace(node);
+    return;
+  }
+  if (step + 1 < REMOUNT_WAIT.length) setTimeout(() => remountIfOrphan(node, step + 1), REMOUNT_WAIT[step + 1]);
+}
+
 export function buildVueFace(node) {
   if (node._pixInfoRoot) return;
   injectFaceCSS();
@@ -307,6 +344,7 @@ export function buildVueFace(node) {
   widget.computeLayoutSize = () => ({ minHeight: isVueNodes() ? Math.round(M.h * MIN_S) : 0, minWidth: 1 });
   node._pixInfoScaleOff = installScaleObserver(node, root);
   renderVueFace(node);
+  setTimeout(() => remountIfOrphan(node), REMOUNT_WAIT[0]);
 }
 
 export function teardownVueFace(node) {
@@ -321,6 +359,13 @@ export function teardownVueFace(node) {
     if (i >= 0) node.widgets.splice(i, 1);
   }
   try {
+    // Remember where a Nodes 2.0 face sat, for an undo that rebuilds this node
+    // under the same id (remountIfOrphan above).
+    const host = hostOf(node._pixInfoRoot);
+    if (host) {
+      if (_hosts.size > 200) _hosts.clear();
+      _hosts.set(String(node.id), host);
+    }
     const wrap = node._pixInfoRoot?.closest?.(".dom-widget");
     if (wrap) wrap.remove();
     node._pixInfoRoot?.remove();
