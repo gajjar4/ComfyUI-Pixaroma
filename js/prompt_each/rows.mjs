@@ -134,9 +134,12 @@ function autoGrow(ta) {
 // box-sizing:border-box with a 1px border, so its height must be scrollHeight
 // PLUS the border, or it ends 2px short and shows a scrollbar on text that
 // fits (seen on every row once the boxes were sized on open, 2026-10-02).
-// Read with the height at "auto", in the read pass.
+// The +1 is for the fractional line height: 12px x 1.4 = 16.8px a line, so
+// three lines are 50.4px of text, scrollHeight reports it ROUNDED DOWN, and the
+// lost 0.4px is enough for a scrollbar (measured: 3-line rows still scrolled
+// while 2- and 5-line rows did not). Read with the height at "auto".
 export function fitHeight(ta) {
-  return Math.min(Math.max(ta.scrollHeight + (ta.offsetHeight - ta.clientHeight), 30), 140);
+  return Math.min(Math.max(ta.scrollHeight + (ta.offsetHeight - ta.clientHeight) + 1, 30), 140);
 }
 
 // Size every row box in ONE read pass and ONE write pass.
