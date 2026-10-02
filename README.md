@@ -398,6 +398,11 @@ Master the Pixaroma suite with our video guides and workflow deep-dives:
 
 ## 🛠 Changelog
 
+### **October 2, 2026 · v1.4.185**
+- **Info: Delete.** Right-click a button and choose Delete, or press Delete in its reading window, which asks first. Ctrl+Z brings it back.
+- **Prompt Each: the prompt boxes fit their text again** when a workflow opens and when you make the node wider, with no scrollbar.
+- **Fixed: in Nodes 2.0, Ctrl+Z turned every Info button into an empty box** that could not be clicked.
+
 ### **October 1, 2026 · v1.4.183–v1.4.184**
 - **NEW: Info Pixaroma.** A small button on the canvas that opens a note to read. Pick a title, icon and colour, or start from Read me, Download Models, Run Times and more. Also in the canvas right-click menu, under Add Label.
 - **AI Prompt: two Ming Image presets** that turn a short idea into the layout prompt Ming Image 0.1 reads best, written by Qwen3.8 27B or Qwen3.5 9B.
