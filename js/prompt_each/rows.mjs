@@ -127,7 +127,16 @@ export function rowsToText(rows, split) {
 function autoGrow(ta) {
   if (!ta || ta.offsetParent === null) return;
   ta.style.height = "auto";
-  ta.style.height = Math.min(Math.max(ta.scrollHeight, 30), 140) + "px";
+  ta.style.height = fitHeight(ta) + "px";
+}
+
+// The height a row box needs to show all of its text. The box is
+// box-sizing:border-box with a 1px border, so its height must be scrollHeight
+// PLUS the border, or it ends 2px short and shows a scrollbar on text that
+// fits (seen on every row once the boxes were sized on open, 2026-10-02).
+// Read with the height at "auto", in the read pass.
+export function fitHeight(ta) {
+  return Math.min(Math.max(ta.scrollHeight + (ta.offsetHeight - ta.clientHeight), 30), 140);
 }
 
 // Size every row box in ONE read pass and ONE write pass.
@@ -142,7 +151,7 @@ export function growAll(parts) {
     .filter((ta) => ta.offsetParent !== null);   // never measure an unlaid-out box
   if (!tas.length) return;
   for (const ta of tas) ta.style.height = "auto";
-  const heights = tas.map((ta) => Math.min(Math.max(ta.scrollHeight, 30), 140));
+  const heights = tas.map(fitHeight);
   tas.forEach((ta, i) => { ta.style.height = heights[i] + "px"; });
 }
 

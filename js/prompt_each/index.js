@@ -4,7 +4,7 @@ import {
 } from "./core.mjs";
 import { injectCSS, buildRoot, applyState, updateCount, placeBand,
   contentHeight, WIDGET_MIN_H } from "./ui.mjs";
-import { textToRows, rowsToText, renderRows, rowToPrompt, growAll } from "./rows.mjs";
+import { textToRows, rowsToText, renderRows, rowToPrompt, growAll, fitHeight } from "./rows.mjs";
 import { buildFromPieces } from "./expand.mjs";
 import { openSettingsPanel, closeSettingsPanelFor, isPanelOpenFor } from "./settings.mjs";
 import { PROMPT_EACH_HELP } from "./help.mjs";
@@ -252,7 +252,7 @@ function wireRow(node, rowEl, i, refs) {
     // rebuild=false: keep the caret where the user is typing.
     commitRows(node, rows, false);
     ta.style.height = "auto";
-    ta.style.height = Math.min(Math.max(ta.scrollHeight, 30), 140) + "px";
+    ta.style.height = fitHeight(ta) + "px";
     // the box changed height, so the node follows it - in BOTH directions when
     // the height is ours (see reflow)
     reflow(node, false);
