@@ -117,7 +117,10 @@ registerNodeHelp(CLASS, {
           + "following the built-in one."],
         ["Save as", "Keeps the current wording and numbers under a name of your "
           + "own. It suggests `(mine)` on the end when you started from the "
-          + "shipped set. Your sets live in one file in your ComfyUI user "
+          + "shipped set. After changing one of your own sets, its name is "
+          + "already filled in: press Enter to update it, or type a new name to "
+          + "keep both. Typing the name of another set of yours asks before "
+          + "replacing it. Your sets live in one file in your ComfyUI user "
           + "folder, so a reinstall of the node does not touch them."],
         ["Delete", "Removes one of yours. The set that ships with Pixaroma "
           + "cannot be deleted or overwritten, so there is always a way back."],

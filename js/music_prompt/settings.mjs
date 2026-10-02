@@ -435,6 +435,17 @@ function loadedSet(node) {
   return hit(SETS.user || []) || hit(SETS.shipped || []) || null;
 }
 
+/** The set this node's wording STARTED from - the last one the picker showed
+ *  as current - even after the wording was edited. loadedSet forgets it at the
+ *  first change, so Save as offered "My set" and updating your own set meant
+ *  remembering and retyping its name (the same gap AI Prompt had, Discord
+ *  report 2026-10-02, ai-prompt.md #30). Runtime-only like the pick, so a
+ *  reload forgets it and Save as falls back to matching. */
+function startedFromSet(node) {
+  const name = node?._pixMpPickedSet;
+  return name ? allSets().find((s) => s.name === name) || null : null;
+}
+
 /** Copy a set's wording AND its numbers onto the node. */
 function applySet(node, set, body) {
   const ship = (SETS.shipped || [])[0];
@@ -513,6 +524,19 @@ function buildFormulaSet(node, body) {
   const wrap = el("div");
   const loaded = loadedSet(node);
   const ship = (SETS.shipped || [])[0];
+  // Whatever the picker shows as current is where an edit starts from, so
+  // remember it for Save as (startedFromSet). That covers a fresh node, which
+  // shows the built-in set without anyone picking it, and a reopened node
+  // matched by its wording. It cannot fight loadedSet: that honours this
+  // marker only while it still matches, and here it IS the match.
+  // EXCEPT the built-in set over a set already remembered: saving the
+  // untouched built-in wording under your own name leaves the formulas EMPTY,
+  // so the picker goes on showing the built-in one (16g), and the name just
+  // saved is the one to offer next. Runtime-only, never node.properties (Vue
+  // Compat #18).
+  if (loaded && !(isShipped(loaded) && node._pixMpPickedSet)) {
+    node._pixMpPickedSet = loaded.name;
+  }
 
   wrap.appendChild(el("div", "pix-mps-lbl", "Formula set"));
 
@@ -626,15 +650,36 @@ function buildFormulaSet(node, body) {
     // NEVER window.prompt: Electron does not implement it and refuses SILENTLY,
     // which has produced three false "the button does nothing" reports in this
     // pack (ai-prompt.md #19 / #19c).
-    const suggested = loaded && isShipped(loaded) ? loaded.name + " (mine)"
-                                                  : (loaded ? loaded.name : "My set");
-    const name = await askName("Save formula set", "A name saying what it is for",
-                               suggested);
+    // An EDITED set counts too: startedFromSet remembers which one the wording
+    // came from, so updating your own set is Save as + Enter. A shipped one
+    // cannot be replaced, so it is offered as "(mine)".
+    const known = loaded || startedFromSet(node);
+    const fromShipped = !!known && isShipped(known);
+    const suggested = !known ? "My set"
+      : (fromShipped ? known.name + " (mine)" : known.name);
+    // The one name that may replace a set without a question: the set of yours
+    // the wording came from, and only because the dialog SAYS Enter updates it.
+    const update = known && !fromShipped ? known.name : null;
+    const name = String(await askName("Save formula set", update
+      ? "Keep this name to update your set, or type a new name to save a copy:"
+      : "A name saying what it is for", suggested) || "").trim();
     if (!name) return;
+    // Saving replaces any set of yours with the same name, and that set lives
+    // in a file on disk, so Ctrl+Z cannot bring it back. It used to happen with
+    // no question at all, so Enter on "My set" could wipe an older "My set".
+    // EXACT match, because that is what the server replaces on.
+    if (name !== update && (SETS.user || []).some((x) => x.name === name)
+        && !(await askConfirm("That name is already yours",
+             "You already have a set called “" + name + "”. Replace it?",
+             { okText: "Replace" }))) return;
     const now = effective(node);
     const s = readState(node);
     const res = await savePreset({
       name,
+      // An update keeps the set's note. Save as never sent one, so re-saving a
+      // set wiped it. A copy starts without: the built-in set's note says it
+      // was measured, which an edited copy is not.
+      note: name === update ? known.note || "" : "",
       caption: now.caption,
       lyrics: now.lyrics,
       model_hint: s.model,
