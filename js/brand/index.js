@@ -2,6 +2,7 @@ import { app } from "../../../scripts/app.js";
 import { installPixaromaChangeNet } from "../shared/graph_changed.mjs";
 import { installBypassRepair } from "../shared/bypass_repair.mjs";
 import { installTextNodesLightTheme, setThemeMode } from "../shared/light_theme.mjs";
+import { installUndoDomRemount } from "../shared/undo_dom_remount.mjs";
 
 // ── Pixaroma brand defaults ──────────────────────────────────────────────
 // Single source of truth for the dark brand colors that every Pixaroma node
@@ -40,6 +41,11 @@ installBypassRepair();
 // prompt-typing nodes, which were designed dark. One stylesheet, inert while a
 // dark palette is active. Installed here for the same "always loaded" reason.
 installTextNodesLightTheme();
+
+// Nodes 2.0: after Ctrl+Z / Ctrl+Y the page kept every Pixaroma node's OLD
+// controls, wired to the dead node objects, so edits made afterwards were lost.
+// Puts the live controls back (undo_dom_remount.mjs, CLAUDE.md Vue Compat #26).
+installUndoDomRemount();
 
 app.registerExtension({
   name: "Pixaroma.BrandDefaults",

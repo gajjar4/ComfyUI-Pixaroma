@@ -533,6 +533,11 @@ app.registerExtension({
       this._pixPlFloorOff = null;
       if (this._pixPlParkPoll) { clearInterval(this._pixPlParkPoll); this._pixPlParkPoll = null; }
       closePortraitPanelFor(this);
+      // Take the band off the page too. In Nodes 2.0 it is PARKED in the output
+      // slot block, outside the widget, and Ctrl+Z keeps that block (same node
+      // id): the rebuilt node then parked a second band over this dead one
+      // (pattern #14).
+      try { this._pixPlTopRow?.remove(); } catch (_e) {}
       this._pixPlTopRow = null;
       return _origOnRemoved?.apply(this, arguments);
     };
