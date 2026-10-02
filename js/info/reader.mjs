@@ -282,10 +282,19 @@ function editFromReader() {
 async function deleteFromReader() {
   const n = _node;
   if (!n || !isLiveNode(n) || !_onDelete) return;
-  const title = readCfg(n).info.title || "Info";
+  // The name goes in the title, shortened so it stays on one line; the message
+  // is two fixed lines that fit the box, so no line is left with a lone word
+  // (user, 2026-10-02: one word on its own line looks bad).
+  const name = readCfg(n).info.title || "Info";
+  let short = name;
+  if (name.length > 40) {
+    const cut = name.slice(0, 40);
+    const sp = cut.lastIndexOf(" ");
+    short = (sp > 20 ? cut.slice(0, sp) : cut.slice(0, 39)).trimEnd() + "…";   // at a whole word
+  }
   const ok = await pixConfirm({
-    title: "Delete this Info button?",
-    message: `"${title}" and its note will be removed from the workflow. Ctrl+Z brings it back.`,
+    title: `Delete "${short}"?`,
+    message: "The button and its note will be removed from the workflow.\nCtrl+Z brings it back.",
     okText: "Delete",
     danger: true,
   });
