@@ -4,7 +4,7 @@ import {
 } from "./core.mjs";
 import { injectCSS, buildRoot, applyState, updateCount, placeBand,
   contentHeight, WIDGET_MIN_H } from "./ui.mjs";
-import { textToRows, rowsToText, renderRows, rowToPrompt } from "./rows.mjs";
+import { textToRows, rowsToText, renderRows, rowToPrompt, growAll } from "./rows.mjs";
 import { buildFromPieces } from "./expand.mjs";
 import { openSettingsPanel, closeSettingsPanelFor, isPanelOpenFor } from "./settings.mjs";
 import { PROMPT_EACH_HELP } from "./help.mjs";
@@ -541,6 +541,24 @@ app.registerExtension({
         });
         wireEvents(node, parts);
         refresh(node);
+
+        // Re-size the row boxes whenever the list gets a new WIDTH. renderRows
+        // sizes them only on a structural change and only when they are on
+        // screen, so a node built before its DOM widget was attached (every
+        // workflow open), opened zoomed out or in a background tab kept every
+        // box at the textarea default of two lines with a scrollbar, and
+        // nothing re-measured them when it came into view or was dragged wider
+        // (user report 2026-10-02, prompt-each.md #43). Width only: growAll
+        // changes heights, so reacting to height would feed itself. Writes DOM
+        // style only, never node.size, so it cannot dirty a workflow.
+        let rowsW = -1;
+        node._pixEachRowsRO = new ResizeObserver(() => {
+          const w = node._pixEachParts?.rows?.clientWidth || 0;
+          if (w === rowsW) return;
+          rowsW = w;
+          if (w > 0) growAll(node._pixEachParts);
+        });
+        node._pixEachRowsRO.observe(parts.rows);
         node.setDirtyCanvas(true, true);
       });
     };
@@ -599,6 +617,8 @@ app.registerExtension({
       this._pixEachFloorOff = null;
       this._pixEachRendererOff?.();
       this._pixEachRendererOff = null;
+      this._pixEachRowsRO?.disconnect();
+      this._pixEachRowsRO = null;
       this._pixEachParts = null;
       if (origRemoved) return origRemoved.apply(this, arguments);
     };
