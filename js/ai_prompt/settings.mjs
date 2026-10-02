@@ -1023,6 +1023,18 @@ function loadedPreset(node) {
   return allPresets().find((p) => p.formula === formula) || null;
 }
 
+/** The preset this node's formula STARTED from - the last one picked or saved
+ *  here - even after the wording was edited. loadedPreset forgets it at the
+ *  first keystroke, so Save current offered the node title and people had to
+ *  remember and retype the name to update their own preset (Discord report,
+ *  2026-10-02). Runtime-only like the pick, so a reload or an undo (which
+ *  rebuilds the node) forgets it and Save falls back to matching. Import and
+ *  Clear forget it too: after those the wording no longer comes from it. */
+function startedFrom(node) {
+  const picked = node?._pixApPickedPreset;
+  return picked ? allPresets().find((x) => x.name === picked) || null : null;
+}
+
 /** This node's whole recipe: the wording AND the settings that make it work. */
 function currentRecipe(node) {
   const st = readState(node);
@@ -1146,6 +1158,9 @@ async function applyRecipeText(node, raw, sourceName) {
     patch.model = recipe.model;
   }
   writeState(node, patch);
+  // The wording now comes from the file, so Save current must not offer to
+  // update the preset that was picked before it (startedFrom).
+  node._pixApPickedPreset = null;
   changed(node);
 
   // Keeping it is the obvious intent for a recipe somebody deliberately
@@ -1423,7 +1438,12 @@ function renderPanel(node, body) {
   // because a native confirm is easy to dismiss without noticing, which made
   // a button that works look like a button that does nothing. Undo is Ctrl+Z,
   // and Export exists for anything worth keeping.
-  clear.addEventListener("click", () => set({ formula: "" }));
+  // Clearing also forgets which preset the wording came from (startedFrom), so
+  // a new formula written into the empty box is never offered as an update.
+  clear.addEventListener("click", () => {
+    node._pixApPickedPreset = null;
+    set({ formula: "" });
+  });
 
   frow.append(edit, exp, imp, clear);
   frow.appendChild(el("span", "cnt", st.formula.length.toLocaleString()));
@@ -1477,7 +1497,9 @@ function renderPanel(node, body) {
         // file (2026-08-19), the mirror of the same fault in Music Prompt.
         // Runtime-only, never node.properties - a display preference must not
         // flag a clean workflow modified on load (Vue Compat #18).
-        node._pixApPickedPreset = name;
+        // Set only AFTER the question below: Save current now offers this name
+        // as the preset to update (startedFrom), so a Cancel must not leave it
+        // pointing at a preset whose wording never reached the node.
         // A dialog earns its place only when something would be LOST. Switching
         // away from a preset you have not edited loses nothing - the preset is
         // still in the list, one click away - so asking there is pure friction,
@@ -1492,6 +1514,7 @@ function renderPanel(node, body) {
               "This node's formula is not one of the presets, so it is writing of "
               + "your own. Replace it with “" + name + "”?",
               { okText: "Replace" })) return;
+        node._pixApPickedPreset = name;
         const patch = { formula: preset.formula };
         // The user's choice: the wording alone, or the whole recipe.
         if (node._pixApPresetSettings !== false && preset.settings) {
@@ -1574,13 +1597,15 @@ function renderPanel(node, body) {
     const recipe = currentRecipe(node);
     // Tweaking a shipped preset and keeping it is the common case, so the name
     // is offered ready-made rather than suggesting one that is then refused.
-    const known = loadedPreset(node);
+    // An EDITED preset counts too: startedFrom remembers which one the wording
+    // came from, so updating your own preset is Save current + Enter.
+    const known = loadedPreset(node) || startedFrom(node);
     const shipped = !!known && PRESETS.shipped.some((p) => p.name === known.name);
     // Never offer an EMPTY box. currentRecipe returns "" for an untouched node
     // title on purpose (nobody wants a preset called "AI Prompt Pixaroma"), but
     // handing that to the dialog means Enter saves nothing and looks broken.
-    const suggested = shipped ? recipe.name + " (mine)"
-      : (recipe.name || "My formula");
+    const base = known ? known.name : recipe.name;
+    const suggested = shipped ? base + " (mine)" : (base || "My formula");
     // The ONE overwrite that may pass without a question: re-saving the preset
     // you currently have loaded, and only when it is your own. Keying this on
     // the SUGGESTED STRING was wrong twice over, and both holes were real
@@ -1589,8 +1614,10 @@ function renderPanel(node, body) {
     // falls back to the node TITLE, so a node renamed "My style" replaced an
     // unrelated preset called "My style". Identity, never a string we built.
     const quiet = known && !shipped ? known.name.toLowerCase() : null;
-    let name = (await askName("Save preset",
-      "Save this formula and its settings as:", suggested) || "").trim();
+    // That quiet update is only safe when the dialog SAYS it will happen.
+    let name = (await askName("Save preset", quiet
+      ? "Keep this name to update your preset, or type a new name to save a copy:"
+      : "Save this formula and its settings as:", suggested) || "").trim();
     if (!name) return;
     // A shipped preset cannot be replaced, so its name would put two
     // identical-looking rows in the list. Offer the name that WOULD work
@@ -1618,7 +1645,9 @@ function renderPanel(node, body) {
              { okText: "Replace" })) return;
     const res = await savePreset({
       name,
-      note: recipe.note,
+      // From known, not recipe: recipe's note is gone once the wording is
+      // edited, and an update must not wipe the preset's description.
+      note: known?.note || recipe.note,
       formula: recipe.formula,
       settings: recipe.settings,
       model_hint: recipe.model,
