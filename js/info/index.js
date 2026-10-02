@@ -41,15 +41,21 @@ setReaderEditHandler((node, opts) => edit(node, opts));
 
 // Delete a button the way core's own Delete does (LGraphCanvas.deleteSelected):
 // inside the canvas and graph before/after-change events, so Ctrl+Z brings it
-// back. A button that is part of the selection deletes the whole selection,
-// exactly like core's Delete. People could not find core's entry in the menu
-// (user, 2026-10-02), hence our own line next to Open / Edit.
-function deleteInfo(node) {
+// back. People could not find core's entry in the menu (user, 2026-10-02),
+// hence our own line next to Open / Edit.
+//  - Right-click Delete on a button that is part of the selection deletes the
+//    whole selection, exactly like core's Delete.
+//  - `only` (the reading window): THIS button and nothing else. Its question
+//    names one button, and the window stays open while the selection changes
+//    underneath: with Ctrl+A on, it deleted the whole graph (reproduced, review
+//    2026-10-02).
+function deleteInfo(node, { only = false } = {}) {
   const g = node?.graph;
   if (!g || !isLiveNode(node) || node.block_delete) return;
   const c = app.canvas;
-  if (c && c.graph === g && typeof c.deleteSelected === "function" &&
-      (c.selectedItems?.has?.(node) || c.selected_nodes?.[node.id] === node)) {
+  const selected = !!(c && c.graph === g &&
+    (c.selectedItems?.has?.(node) || c.selected_nodes?.[node.id] === node));
+  if (selected && !only && typeof c.deleteSelected === "function") {
     c.deleteSelected();
     return;
   }
@@ -58,12 +64,15 @@ function deleteInfo(node) {
   try {
     g.remove(node);
   } finally {
+    // graph.remove takes the node out of the selection with deselect(), which
+    // does not announce it (info.md #6b): tell ComfyUI's selection store.
+    if (selected) { try { c.onSelectionChange?.(c.selected_nodes); } catch (_e) {} }
     try { c?.setDirty?.(true, true); } catch (_e) {}
     try { g.afterChange?.(); } catch (_e) {}
     try { c?.emitAfterChange?.(); } catch (_e) {}
   }
 }
-setReaderDeleteHandler((node) => deleteInfo(node));
+setReaderDeleteHandler((node) => deleteInfo(node, { only: true }));
 
 // The gear in the selection toolbar opens the editor: the strip on top of it IS
 // this node's settings (title, icon, colour). ownMenuItem: Edit is our own line.
