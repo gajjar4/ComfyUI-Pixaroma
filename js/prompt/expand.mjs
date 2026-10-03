@@ -9,10 +9,10 @@
 
 import { getTags } from "./library.mjs";
 
-// @name = a saved tag; *name = a random-from-category wildcard; #name = a random
+// @name = a saved tag; *name = a random-from-category wildcard; #name or /name = a random
 // LINE from that tag's text. name = letters / digits / _ / - .
-const TOKEN_RE = /([@*#])([a-zA-Z0-9_\-]+)/g;
-const KIND_BY_SYM = { "@": "tag", "*": "wild", "#": "list" };
+const TOKEN_RE = /([@*#/])([a-zA-Z0-9_\-]+)/g;
+const KIND_BY_SYM = { "@": "tag", "*": "wild", "#": "list", "/": "list" };
 
 // Left-to-right scan for @tag, *wild and #list tokens. A token counts when it's at
 // the very start, after a NON-word char (space, comma, ...), OR immediately after a
@@ -38,7 +38,7 @@ export function prevCodePoint(text, at) {
 
 export function scanTokens(text) {
   const out = [];
-  if (typeof text !== "string" || !/[@*#]/.test(text)) return out;
+  if (typeof text !== "string" || !/[@*#/]/.test(text)) return out;
   TOKEN_RE.lastIndex = 0;
   let m, lastEnd = -1, lastKind = null;
   while ((m = TOKEN_RE.exec(text))) {
@@ -77,7 +77,7 @@ export function scanLists(text) { return scanTokens(text).filter((t) => t.kind =
 // Returns { out, knownTags, unknownTags, knownWilds, unknownWilds, knownLists, unknownLists }.
 export function expandAll(text, opts = {}) {
   const { tags, resolveWild, resolveList } = opts;
-  if (typeof text !== "string" || !/[@*#]/.test(text)) {
+  if (typeof text !== "string" || !/[@*#/]/.test(text)) {
     return {
       out: typeof text === "string" ? text : "",
       // `spans` must be present on EVERY return, not just the one that fills it, or a
@@ -142,6 +142,6 @@ export function hasWilds(text) {
 }
 // Does this text reference at least one #list?
 export function hasLists(text) {
-  if (typeof text !== "string" || text.indexOf("#") === -1) return false;
+  if (typeof text !== "string" || (text.indexOf("#") === -1 && text.indexOf("/") === -1)) return false;
   return scanLists(text).length > 0;
 }
