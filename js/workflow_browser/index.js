@@ -22,6 +22,7 @@ import { renderTidy } from "./tidy.mjs";
 import { CARD_MIME } from "./drag.mjs";
 import { renderDetail } from "./detail.mjs";
 import { searchEntries } from "./search.mjs";
+import { byFolderName } from "./sort.mjs";
 import { installOutputCoverCapture, hasHandCover } from "./cover.mjs";
 import { globalAccent, BRAND } from "../shared/index.mjs";
 import { versionParts, versionLine } from "../shared/version.mjs";
@@ -198,7 +199,7 @@ function computeVisible() {
   if (sel.kind === "fav") {
     list = list.filter((e) => S.favourites.has(e.rel));
   } else if (sel.kind === "recent") {
-    list = [...list].sort((a, b) => (b.modified || 0) - (a.modified || 0)).slice(0, 20);
+    list = [...list].sort((a, b) => (b.modified || 0) - (a.modified || 0) || byFolderName(a, b)).slice(0, 20);
   } else if (sel.kind === "folder") {
     // A folder shows what is IN it, including its sub-folders: picking a parent
     // and seeing nothing because the work sits one level down is a papercut.
@@ -219,9 +220,9 @@ function computeVisible() {
   // would throw that away.
   if (!S.query && S.sel.kind !== "recent") {
     const by = {
-      recent: (a, b) => (b.modified || 0) - (a.modified || 0),
-      name: (a, b) => a.name.localeCompare(b.name),
-      nodes: (a, b) => (b.node_count || 0) - (a.node_count || 0),
+      recent: (a, b) => (b.modified || 0) - (a.modified || 0) || byFolderName(a, b),
+      name: byFolderName,
+      nodes: (a, b) => (b.node_count || 0) - (a.node_count || 0) || byFolderName(a, b),
     }[S.sort];
     if (by) list = [...list].sort(by);
   }

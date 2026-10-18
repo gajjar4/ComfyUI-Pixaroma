@@ -17,6 +17,7 @@
 import { el, markRendering, isRendering } from "./window.mjs";
 import { FOLDER_MIME, isFolderDrag, DROP_TARGET_ATTR } from "./drag.mjs";
 import { passComfyShortcut } from "../shared/text_shortcuts.mjs";
+import { byPath } from "./sort.mjs";
 
 // Two clicks on the same folder row this close together mean "rename". Module
 // scope on purpose: the row element does not survive the first click, so the
@@ -59,7 +60,7 @@ export function orderedFolders(folders, order) {
     const ra = rank.has(a) ? rank.get(a) : Infinity;
     const rb = rank.has(b) ? rank.get(b) : Infinity;
     if (ra !== rb) return ra - rb;
-    return a.localeCompare(b, undefined, { sensitivity: "base" });
+    return byPath(a, b);                // "2. Edit" before "10. Video" (sort.mjs)
   };
   const out = [];
   const walk = (parent) => {
