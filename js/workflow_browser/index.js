@@ -280,6 +280,9 @@ function refreshSortButton() {
   const why = sortDisabledReason();
   b.disabled = !!why;
   b.title = why || "Change the order";
+  // The panel can open (Alt+W) before setup() has read the saved sort: the bar
+  // was built saying "Recent" while the list below used the saved one.
+  b.textContent = "Sort: " + SORT_LABELS[S.sort];
 }
 
 // ── small dialogs, in the panel's own style ──────────────────────────────────
