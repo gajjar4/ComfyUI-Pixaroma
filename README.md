@@ -245,9 +245,10 @@ The two editors can also use **rembg** (`pip install rembg`, then restart ComfyU
 
 ## 🛠 Changelog
 
-### **October 18, 2026 · v1.4.223**
+### **October 18, 2026 · v1.4.223-v1.4.224**
 - **Civitai info keeps the seed in Flux 2 and FLUX 3 workflows:** a seed, steps or CFG wired into the sampler's side nodes now reach Civitai.
 - **AI Prompt, Music Prompt and Video Prompt get a Faster writing (MTP) switch** in the gear. Turn it off if a Qwen3.5 model crashes with a CUDA error.
+- **Workflows panel sorts numbers as numbers:** Sort by Name puts 2 before 10 and keeps each folder's workflows together, and the Sort button always names the order shown.
 
 ### **October 17, 2026 · v1.4.221-v1.4.222**
 - **Resolution and Sizes get a batch box beside the latent output:** one Run makes 1 to 64 pictures.
