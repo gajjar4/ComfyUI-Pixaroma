@@ -4,6 +4,7 @@ import { attachVideoSnapshot } from "../shared/video_snapshot.mjs";
 import { applyAdaptiveCanvasOnly,
   installCanvasZoomPassthrough, installNodeAccent, registerNodeAccent,
   onRendererChange, createSlotBand, settleSlotBand, watchSlotBand,
+  notifyGraphChanged,
 } from "../shared/index.mjs";
 
 // Load Video Pixaroma — upload/pick a video and preview the SOURCE clip right
@@ -215,6 +216,50 @@ function restorePreview(node, tries = 0) {
   requestAnimationFrame(() => restorePreview(node, tries + 1));
 }
 
+// The extensions the upload route and the dropdown accept (VIDEO_EXTS in
+// nodes/_video_helpers.py), to tell a dropped video from any other file.
+const VIDEO_FILE_RE = /\.(mp4|mov|mkv|webm|avi|m4v|gif|mpg|mpeg|wmv|flv|ogv|ts)$/i;
+
+// Upload one video FILE to input/ and select it on this node. Shared by the
+// upload button and a file dropped on the node.
+async function uploadVideoFile(node, file) {
+  const fd = new FormData();
+  fd.append("file", file, file.name);
+  try {
+    const res = await fetch(pixApiUrl("/pixaroma/api/load_video/upload"), {
+      method: "POST",
+      body: fd,
+    });
+    if (!res.ok) {
+      let msg = `Upload failed (HTTP ${res.status})`;
+      try { msg = (await res.json()).error || msg; } catch {}
+      showToast(msg);
+      return;
+    }
+    const data = await res.json();
+    const name = data?.name;
+    if (!name) { showToast("Upload failed"); return; }
+    const vw = node.widgets?.find((x) => x.name === "video");
+    if (vw) {
+      const vals = Array.isArray(vw.options?.values) ? vw.options.values : [];
+      if (!vals.includes(name)) {
+        vw.options.values = [...vals, name].sort();
+      }
+      vw.value = name;
+      vw.callback?.(name); // fires the wrapped callback -> setPreview
+    }
+    setPreview(node);
+    node.graph?.setDirtyCanvas(true, true);
+    // The pick lands after an async upload, long after the mouseup core
+    // snapshots on (and a drop from the desktop has no mouseup at all), so
+    // record it here or the workflow never looks modified (convention #31).
+    notifyGraphChanged();
+  } catch (e) {
+    console.error("[Pixaroma] Load Video — upload error", e);
+    showToast("Upload failed");
+  }
+}
+
 async function uploadVideo(node) {
   const inp = document.createElement("input");
   inp.type = "file";
@@ -227,40 +272,22 @@ async function uploadVideo(node) {
     const file = inp.files?.[0];
     inp.remove();
     if (!file) return;
-    const fd = new FormData();
-    fd.append("file", file, file.name);
-    try {
-      const res = await fetch(pixApiUrl("/pixaroma/api/load_video/upload"), {
-        method: "POST",
-        body: fd,
-      });
-      if (!res.ok) {
-        let msg = `Upload failed (HTTP ${res.status})`;
-        try { msg = (await res.json()).error || msg; } catch {}
-        showToast(msg);
-        return;
-      }
-      const data = await res.json();
-      const name = data?.name;
-      if (!name) { showToast("Upload failed"); return; }
-      const vw = node.widgets?.find((x) => x.name === "video");
-      if (vw) {
-        const vals = Array.isArray(vw.options?.values) ? vw.options.values : [];
-        if (!vals.includes(name)) {
-          vw.options.values = [...vals, name].sort();
-        }
-        vw.value = name;
-        vw.callback?.(name); // fires the wrapped callback -> setPreview
-      }
-      setPreview(node);
-      node.graph?.setDirtyCanvas(true, true);
-    } catch (e) {
-      console.error("[Pixaroma] Load Video — upload error", e);
-      showToast("Upload failed");
-    }
+    await uploadVideoFile(node, file);
   };
   document.body.appendChild(inp);
   inp.click();
+}
+
+// A drag from the desktop: while it is over the node only the item TYPES are
+// readable (the files list stays empty until the drop), so accept any video
+// type, and an untyped file (some systems give .mkv no type) that the drop then
+// checks by name. Everything else is left to ComfyUI (a picture still makes a
+// Load Image node, a workflow file still opens).
+function draggingVideo(e) {
+  const items = e?.dataTransfer?.items;
+  if (!items) return false;
+  return Array.from(items).some((it) =>
+    it.kind === "file" && (!it.type || it.type.startsWith("video/") || it.type === "image/gif"));
 }
 
 app.registerExtension({
@@ -299,6 +326,16 @@ app.registerExtension({
       // same box, so the video is clipped exactly as before.
       wrap.style.cssText =
         "position:relative;width:100%;flex:1 1 0;min-height:0;box-sizing:border-box;";
+      // A file dragged over the PREVIEW: in Classic it sits above the canvas,
+      // so core's canvas dragover never sees the node there and the drop was
+      // refused. Allow it and name this node as the target; core's document
+      // drop handler then calls onDragDrop below. (Nodes 2.0 does the same
+      // from the node element; setting it twice is harmless.)
+      wrap.addEventListener("dragover", (e) => {
+        if (!node.onDragOver?.(e)) return;
+        e.preventDefault();
+        app.dragOverNode = node;
+      });
 
       // The source clip's size, on the LEFT of the slot band - this node's dead
       // space is that side, because all seven dots are outputs on the right.
@@ -330,7 +367,7 @@ app.registerExtension({
 
       const placeholder = document.createElement("div");
       placeholder.className = "pix-lv-placeholder";
-      placeholder.textContent = "(no video — click 'choose video to upload' or pick one above)";
+      placeholder.textContent = "(no video: click 'choose video to upload', drop a video file here, or pick one above)";
       placeholder.style.cssText =
         "position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#888;font-size:12px;text-align:center;padding:16px;box-sizing:border-box;background:#1a1a1a;";
       media.appendChild(placeholder);
@@ -541,6 +578,27 @@ app.registerExtension({
       // The DOM widget + restored combo value are in place by the next tick.
       queueMicrotask(() => restorePreview(node));
       return r;
+    };
+
+    // Drop a video file on the node to load it, like Load Image. Core asks
+    // onDragOver while the drag is over the node (both renderers) and calls
+    // onDragDrop on the drop; true = handled here, false = ComfyUI does its
+    // own thing (it used to make a SECOND, core video node beside this one).
+    // A COLLAPSED node declines (ComfyUI handles the drop as before): in Nodes
+    // 2.0 its body is unmounted, so the preview could not follow and showed the
+    // old clip after expanding. Checked in onDragDrop too, because Nodes 2.0
+    // names the node as the drop target whatever onDragOver answered.
+    nodeType.prototype.onDragOver = function (e) {
+      if (this.flags?.collapsed) return false;
+      return draggingVideo(e);
+    };
+    nodeType.prototype.onDragDrop = async function (e) {
+      if (!this.graph || this.flags?.collapsed) return false;
+      const file = Array.from(e?.dataTransfer?.files || [])
+        .find((f) => VIDEO_FILE_RE.test(f.name || ""));
+      if (!file) return false;
+      await uploadVideoFile(this, file);
+      return true;
     };
 
     // Collapsing hides the preview; on expand re-fit (and re-show the source if

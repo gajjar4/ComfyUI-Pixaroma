@@ -1368,6 +1368,7 @@ const HELP = {
         heading: "How to use",
         bullets: [
           "Click `choose video to upload` to add a file from your computer, or pick one from the dropdown (use the arrows to flip through).",
+          "Or drag a video file from your computer and drop it on the node: it is uploaded and loaded into this node.",
           "Wire `video_frames` into an image or video node. To rebuild a video later, send `video_frames` and `audio` straight into Save Mp4 Pixaroma.",
           "The clip plays in the preview as soon as it is selected, no need to run first.",
         ],
