@@ -245,6 +245,10 @@ The two editors can also use **rembg** (`pip install rembg`, then restart ComfyU
 
 ## 🛠 Changelog
 
+### **October 20, 2026 · v1.4.225**
+- **Load Video loads phone videos the right way up:** a clip filmed upright on a phone no longer comes out turned sideways and cropped.
+- **Drop a video file on Load Video to load it,** like a picture on Load Image. It used to make a second video node instead.
+
 ### **October 18, 2026 · v1.4.223-v1.4.224**
 - **Civitai info keeps the seed in Flux 2 and FLUX 3 workflows:** a seed, steps or CFG wired into the sampler's side nodes now reach Civitai.
 - **AI Prompt, Music Prompt and Video Prompt get a Faster writing (MTP) switch** in the gear. Turn it off if a Qwen3.5 model crashes with a CUDA error.
