@@ -467,6 +467,9 @@ registerNodeHelp(CLASS, {
         "The latent is the same as ComfyUI's Empty Latent Image, so you can wire it straight into the " +
         "KSampler and skip that node. It works for image models: SD 1.5, SDXL, SD3, Flux, Flux 2, Qwen Image and " +
         "others, because the KSampler adapts it to the model.\n\n" +
+        "That adapting step is in ComfyUI's own samplers (KSampler, SamplerCustomAdvanced). Some samplers from " +
+        "other packs (Easy-Use, Impact Pack) skip it, so with Flux 2, Qwen Image 2.1 and similar models the picture " +
+        "comes out twice the size. With those samplers, wire width and height into the model's own latent node.\n\n" +
         "The batch box on the same line as the latent output sets how many pictures one Run makes, from 1 to 64: " +
         "click + or -, or click the number and type. It only changes the latent; width and height stay the same.\n\n" +
         "For video models, wire width and height into that model's own latent node instead. For Flux 2, keep the " +
