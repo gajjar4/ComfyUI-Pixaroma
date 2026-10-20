@@ -149,6 +149,23 @@ def _resize_rgb(arr, w, h):
     return _scale_rgb(src, tw, th)
 
 
+def _upright(frame, arr):
+    """Turn a PyAV frame's pixels the way its display-rotation tag says.
+
+    A phone filming in portrait (iPhones always) stores the frames SIDEWAYS
+    plus a tag telling players to turn them. Browsers, ffmpeg and imageio all
+    obey it; PyAV's to_ndarray does not, so without this a portrait phone clip
+    came out still portrait-sized (custom_width/height crop it to the asked
+    shape) but with the picture turned 90 degrees and cropped. Same rule as
+    ComfyUI core's own video loader (`_rotation_quadrant` in
+    comfy_api/latest/_input_impl/video_types.py): `frame.rotation` is in
+    degrees counter-clockwise, `np.rot90` turns counter-clockwise. An older
+    PyAV without `frame.rotation` keeps the old behaviour."""
+    rot = getattr(frame, "rotation", 0)
+    k = int(round(rot // 90)) % 4 if rot else 0
+    return np.rot90(arr, k=k, axes=(0, 1)) if k else arr
+
+
 def _resample_iter(raw_iter, native_fps, force_fps):
     """Nearest-hold resample a frame iterator from native_fps to force_fps.
     Drops frames when force < native, duplicates when force > native."""
@@ -221,7 +238,8 @@ def _decode_av(path, force_fps, skip_first, max_frames, custom_w, custom_h):
 
         def raw():
             for frame in container.decode(v):
-                yield frame.to_ndarray(format="rgb24")
+                # a view; _collect's resize makes it contiguous
+                yield _upright(frame, frame.to_ndarray(format="rgb24"))
 
         out, out_fps = _collect(
             raw(), native_fps, force_fps, skip_first,
@@ -490,7 +508,7 @@ def _decode_one_av(path, frame_index):
                 ft = float(frame.time) if frame.time is not None else target_t
             except Exception:
                 ft = target_t
-            arr = frame.to_ndarray(format="rgb24")
+            arr = _upright(frame, frame.to_ndarray(format="rgb24"))
             dt = abs(ft - target_t)
             if best_dt is None or dt <= best_dt:
                 best_dt = dt
