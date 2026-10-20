@@ -3,6 +3,7 @@ import { installCanvasZoomPassthrough } from "../shared/canvas_zoom.mjs";
 import { isVueNodes, applyAdaptiveCanvasOnly } from "../shared/nodes2.mjs";
 import { installResizeFloor } from "../shared/resize_floor.mjs";
 import { isGraphLoading } from "../shared/graph_loading.mjs";
+import { notifyGraphChanged } from "../shared/graph_changed.mjs";
 import { passComfyShortcut } from "../shared/text_shortcuts.mjs";
 import {
   registerNodeSettings, createAccentSection, applyAccent, installNodeAccent,
@@ -241,15 +242,43 @@ function bodyHeight(node) {
 // with a gap above the footer — re-assert node.size = body + fixed chrome so it
 // hugs on add AND remove. Never on the load path (dirty-on-load); the signature
 // gate in renderNode means this only runs when the group set actually changes.
+//
+// A height the USER dragged is kept (Discord 2026-10-20: "doesn't remember the
+// size of the node"; in Nodes 2.0 a taller drag stuck until the next switch flip
+// re-ran this and snapped it back). It is stored in BODY pixels as
+// `groupSwitchState.height` (0 / absent = hug the rows), so it means the same in
+// both renderers. The node is never auto-sized below it: more groups still grow
+// the node, fewer shrink it down to that height, not below.
+function userBody(node) {
+  const h = Number(readState(node).height);
+  return h > 0 ? h : 0;
+}
 function refreshNodeSize(node) {
   if (isGraphLoading()) return;
   try {
     if (typeof node.setSize !== "function") return;
-    const target = isVueNodes()
-      ? bodyHeight(node) + VUE_CHROME
-      : (typeof node.computeSize === "function" ? node.computeSize()[1] : bodyHeight(node));
-    if (Math.abs((node.size[1] || 0) - target) > 1) node.setSize([node.size[0], target]);
+    const inner = Math.max(bodyHeight(node), userBody(node));
+    const target = isVueNodes() ? inner + VUE_CHROME : inner;
+    if (Math.abs((node.size[1] || 0) - target) > 1) {
+      // our own resize: noteUserHeight (via onResize) must not take it for a drag
+      node._pixGsSizing = true;
+      try { node.setSize([node.size[0], target]); } finally { node._pixGsSizing = false; }
+    }
   } catch (_e) {}
+}
+// Called from onResize. In Classic that fires during a corner drag; in Nodes 2.0
+// core's notifyLayoutChanges calls it after a Vue-side resize (the corner handle).
+// Our own setSize is flagged above and the load path is skipped (no dirty-on-load).
+// A height at or below the rows means "hug" again, so dragging it back clears it.
+function noteUserHeight(node) {
+  if (node._pixGsSizing || isGraphLoading() || !node.graph) return;
+  const body = bodyHeight(node);
+  const h = Math.round((node.size?.[1] || 0) - (isVueNodes() ? VUE_CHROME : 0));
+  const want = h > body + 2 ? h : 0;
+  if (userBody(node) !== want) {
+    writeState(node, { height: want });
+    notifyGraphChanged();   // the drag's own capture may run before this write (convention #31)
+  }
 }
 
 function rowEl(node, g) {
@@ -739,7 +768,7 @@ const HELP = {
   tagline: "On/off switches for your Pixaroma Groups, in one small panel.",
   sections: [
     { heading: "What it does", body: "Each switch turns a whole Pixaroma Group on or off by muting or bypassing every node inside it. Flip a switch and that section of your workflow stops running, without unplugging a single wire." },
-    { heading: "The switches", body: "The node body is just the switches. Click anywhere on a row to flip that group on or off - not only the small switch. An enabled row shows bright white text; a switched-off row is dimmed, so you can read the state at a glance. A small tag in the corner shows whether this one mutes or bypasses, and the colored dot and name (plus a number when two groups share a name) tell the groups apart." },
+    { heading: "The switches", body: "The node body is just the switches. Click anywhere on a row to flip that group on or off - not only the small switch. An enabled row shows bright white text; a switched-off row is dimmed, so you can read the state at a glance. A small tag in the corner shows whether this one mutes or bypasses, and the colored dot and name (plus a number when two groups share a name) tell the groups apart.\n\nDrag the corner to make the node wider or taller: it keeps that size when you flip switches, change tabs or reopen the workflow, and still grows by itself when more groups need room. Drag it back up to the switches to make it fit them again." },
     { heading: "Finding a group on the canvas", body: "Each row has a small arrow next to its switch. Click it and the canvas jumps to that group, which saves hunting for it in a big workflow. It works whether the group is switched on or off, so you can turn a section off and then go and look at it. Clicking the arrow only moves the view; it never flips the switch." },
     { heading: "All on / All off", body: "The two buttons at the top flip every group in the list at once, so you can kill a whole set of sections (or bring them all back) in one click instead of clicking each switch. They only touch the groups this switch lists, so if you set it to a hand-picked set, the rest are left alone.\n\nIf you have chosen a switching rule that only allows one group on at a time, turning them all on is impossible, so that button is greyed out - and hovering it tells you why. The same goes for All off when the rule always keeps one group on." },
     { heading: "Settings (the gear, or right-click)", defs: [
@@ -778,16 +807,18 @@ app.registerExtension({
       if (_panelNode === this) closePanel();
       if (_origRemoved) return _origRemoved.apply(this, arguments);
     };
-    // Classic only: keep resize HORIZONTAL. Width is free (floored at MIN_W by the
-    // computeSize override); lock the height to the content so a corner-drag can't
-    // grow it and leave a gap below the switches (the vertical size is the row
-    // count, not draggable). Vue sizes via computeLayoutSize — leave it alone.
+    // Classic: width floored at MIN_W, height floored at the rows (it used to be
+    // LOCKED to them; since 2026-10-20 a taller drag is kept, see refreshNodeSize).
+    // Both renderers: remember a height the user dragged. Vue's own floor is
+    // computeLayoutSize / installResizeFloor.
     const _origResize = nodeType.prototype.onResize;
     nodeType.prototype.onResize = function (size) {
       if (!isVueNodes()) {
         if (this.size[0] < MIN_W) this.size[0] = MIN_W;
-        this.size[1] = bodyHeight(this);
+        const body = bodyHeight(this);
+        if (this.size[1] < body) this.size[1] = body;
       }
+      noteUserHeight(this);
       if (_origResize) return _origResize.apply(this, arguments);
     };
   },
