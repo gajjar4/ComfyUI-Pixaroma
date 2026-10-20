@@ -807,8 +807,11 @@ app.registerExtension({
       if (_panelNode === this) closePanel();
       if (_origRemoved) return _origRemoved.apply(this, arguments);
     };
-    // Classic: width floored at MIN_W, height floored at the rows (it used to be
-    // LOCKED to them; since 2026-10-20 a taller drag is kept, see refreshNodeSize).
+    // Classic: width floored at MIN_W. Height: during a real corner drag
+    // (resizing_node) only floored at the rows, so a taller drag is kept (since
+    // 2026-10-20, see refreshNodeSize); any other resize is LOCKED, as it always
+    // was, to the rows or the stored user height, so core's own small size
+    // nudges (a fresh drop settled at 98 for a 96 body) never change the node.
     // Both renderers: remember a height the user dragged. Vue's own floor is
     // computeLayoutSize / installResizeFloor.
     const _origResize = nodeType.prototype.onResize;
@@ -816,7 +819,11 @@ app.registerExtension({
       if (!isVueNodes()) {
         if (this.size[0] < MIN_W) this.size[0] = MIN_W;
         const body = bodyHeight(this);
-        if (this.size[1] < body) this.size[1] = body;
+        if (app.canvas?.resizing_node === this) {
+          if (this.size[1] < body) this.size[1] = body;
+        } else {
+          this.size[1] = Math.max(body, userBody(this));
+        }
       }
       noteUserHeight(this);
       if (_origResize) return _origResize.apply(this, arguments);
