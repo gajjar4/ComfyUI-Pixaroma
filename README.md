@@ -14,7 +14,7 @@
   <p>
     <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue?style=flat-square" alt="License: MIT"></a>
     <a href="https://www.youtube.com/@pixaroma"><img src="https://img.shields.io/badge/YouTube-122K%20subscribers-FF0000?style=flat-square&logo=youtube&logoColor=white" alt="YouTube subscribers"></a>
-    <a href="https://discord.gg/gggpkVgBf3"><img src="https://img.shields.io/badge/Discord-97.9K%20members-5865F2?style=flat-square&logo=discord&logoColor=white" alt="Discord members"></a>
+    <a href="https://discord.gg/gggpkVgBf3"><img src="https://img.shields.io/badge/Discord-98K%20members-5865F2?style=flat-square&logo=discord&logoColor=white" alt="Discord members"></a>
   </p>
 </div>
 
@@ -244,6 +244,9 @@ The two editors can also use **rembg** (`pip install rembg`, then restart ComfyU
 ---
 
 ## 🛠 Changelog
+
+### **October 21, 2026 · v1.4.227**
+- **AI Prompt has two MOSS-Image presets:** one turns a short idea into a detailed caption, the other writes the caption that makes a picture again.
 
 ### **October 20, 2026 · v1.4.225-v1.4.226**
 - **Load Video loads phone videos the right way up:** a clip filmed upright on a phone no longer comes out turned sideways and cropped.
