@@ -41,7 +41,7 @@ from ._video_prompt_helpers import (
     word_count,
 )
 # The MTP switch helper is shared with AI Prompt and Music Prompt (ai-prompt.md #34).
-from .node_ai_prompt import mtp_kwargs
+from .node_ai_prompt import generate_text, mtp_kwargs
 
 # ---------------------------------------------------------------------------
 # Model cache
@@ -481,7 +481,8 @@ class PixaromaVideoPrompt:
                 video=None,
                 audio=None,
             )
-            generated = model.generate(
+            generated = generate_text(
+                model,
                 tokens,
                 do_sample=True,
                 max_length=st["max_length"],

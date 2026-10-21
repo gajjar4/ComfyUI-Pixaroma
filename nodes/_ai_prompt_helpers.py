@@ -194,6 +194,88 @@ def generate_kwargs(st, accepts_mtp):
     return {"mtp": False}
 
 
+# comfy-kitchen's fast decode kernel (ComfyUI 0.42, `FixedKVCache.attend`) can
+# REFUSE its tensors with this RuntimeError on some GPU / PyTorch setups (a
+# 5070 Ti on PyTorch 2.8, Discord 2026-10-21); every Qwen3.5 run then stops at
+# its first written word (ai-prompt.md #36).
+KITCHEN_REFUSAL = "Unsupported Flash Attention"
+# Any non-None `comfy_attention.method` makes Qwen3.5's attention decode with
+# ComfyUI's regular attention over the cache instead of that kernel; core reads
+# the value only to compare it with None and "comfy_kitchen_int8".
+PLAIN_DECODE = "pixaroma_plain_decode"
+_plain_decode_on = [False]   # remembered for the process after one fallback worked
+
+
+def kitchen_refused(err):
+    """True for the comfy-kitchen decode kernel refusing its tensors."""
+    return isinstance(err, RuntimeError) and KITCHEN_REFUSAL in str(err)
+
+
+def decode_switches(model):
+    """The ComfyAttention objects whose decode path ComfyUI picks by `.method`:
+    attention layers with a `kv_cache_type` (Qwen3.5's GatedAttention) still on
+    the default (method None). Empty for any other model, which this fallback
+    cannot help."""
+    modules = getattr(model, "modules", None)
+    if not callable(modules):
+        return []
+    found = []
+    try:
+        for m in modules():
+            ca = getattr(m, "comfy_attention", None)
+            if ca is not None and hasattr(m, "kv_cache_type") and getattr(ca, "method", 0) is None:
+                found.append(ca)
+    except Exception:
+        return []
+    return found
+
+
+def _with_plain_decode(switches, generate):
+    for s in switches:
+        s.method = PLAIN_DECODE
+    try:
+        return generate()
+    finally:
+        # The model is shared (our cache, or a wired CLIPLoader that core nodes
+        # use too): never leave it switched.
+        for s in switches:
+            s.method = None
+
+
+def generate_with_fallback(generate, model, reset, log=print):
+    """Call `generate()`; when comfy-kitchen's decode kernel refuses, run it ONCE
+    more with ComfyUI's regular attention on `model`'s attention layers.
+
+    The first call is untouched, so every setup the kernel works on behaves
+    exactly as before. `reset` runs between the two calls: the failed one left
+    the per-node runtime half used, and a second generation in one node without
+    the reset can abort ComfyUI (ai-prompt.md #25). After one fallback worked,
+    later calls in this process go straight to the regular attention instead of
+    failing first every time.
+    """
+    if _plain_decode_on[0]:
+        switches = decode_switches(model)
+        if switches:
+            return _with_plain_decode(switches, generate)
+    try:
+        return generate()
+    except RuntimeError as e:
+        if not kitchen_refused(e):
+            raise
+        switches = decode_switches(model)
+        if not switches:
+            raise
+        log("[Pixaroma] ComfyUI's fast text-writing kernel (comfy-kitchen) refused "
+            "this GPU / PyTorch setup (%s). Writing with ComfyUI's regular attention "
+            "instead, a little slower, until ComfyUI restarts." % e)
+    # Outside the except: the failed attempt's traceback, and the KV cache and
+    # buffers its frames hold, are released before the retry allocates its own.
+    reset()
+    out = _with_plain_decode(switches, generate)
+    _plain_decode_on[0] = True
+    return out
+
+
 def _join(parts, sep):
     """Join, dropping blank pieces so a missing one takes its separator too.
 

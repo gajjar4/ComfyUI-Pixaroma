@@ -39,7 +39,7 @@ from ._music_prompt_helpers import (
 # The SHARED loader and the SHARED one-entry cache. Importing rather than
 # copying is the one architectural rule of this node: these took twenty-odd
 # documented fixes on the sibling and a second copy would drift.
-from .node_ai_prompt import _load_clip, _release_clip, mtp_kwargs, repeat_generation, reset_generation_runtime
+from .node_ai_prompt import _load_clip, _release_clip, generate_text, mtp_kwargs, repeat_generation, reset_generation_runtime
 
 _NEEDED = (
     "  Put a language model in your ComfyUI/models/text_encoders folder and\n"
@@ -163,7 +163,8 @@ class PixaromaMusicPrompt:
             audio=None,
         )
         try:
-            generated_ids = clip.generate(
+            generated_ids = generate_text(
+                clip,
                 tokens,
                 seed=seed,
                 **dict(COMMON_SAMPLING, **sampling),

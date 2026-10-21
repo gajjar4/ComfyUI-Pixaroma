@@ -28,6 +28,7 @@ from ._ai_prompt_helpers import (
     AIPromptInputs,
     extra_image_keys,
     generate_kwargs,
+    generate_with_fallback,
     parse_state,
     plan_prompt,
     reasoning_only,
@@ -338,6 +339,18 @@ def mtp_kwargs(st, clip):
     return generate_kwargs(st, _takes_kwarg(getattr(clip, "generate", None), "mtp"))
 
 
+def generate_text(clip, tokens, **kwargs):
+    """`clip.generate(tokens, **kwargs)`, run once more with ComfyUI's regular
+    attention when comfy-kitchen's fast decode kernel refuses this GPU / PyTorch
+    setup (ai-prompt.md #36). Shared by AI Prompt, Music Prompt and Video Prompt;
+    when the kernel works the call is exactly the plain one."""
+    return generate_with_fallback(
+        lambda: clip.generate(tokens, **kwargs),
+        getattr(clip, "cond_stage_model", None),
+        reset_generation_runtime,
+    )
+
+
 class PixaromaAIPrompt:
     DESCRIPTION = (
         "Runs a language model you already have, on your own machine, using an "
@@ -560,7 +573,8 @@ class PixaromaAIPrompt:
         # {} unless the MTP switch is OFF, so the default call is unchanged.
         mtp_kw = mtp_kwargs(st, clip)
         try:
-            generated_ids = clip.generate(
+            generated_ids = generate_text(
+                clip,
                 tokens,
                 do_sample=st["do_sample"],
                 max_length=st["max_length"],
