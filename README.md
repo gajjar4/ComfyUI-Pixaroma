@@ -245,8 +245,9 @@ The two editors can also use **rembg** (`pip install rembg`, then restart ComfyU
 
 ## 🛠 Changelog
 
-### **October 21, 2026 · v1.4.227**
+### **October 21, 2026 · v1.4.227-v1.4.228**
 - **AI Prompt has two MOSS-Image presets:** one turns a short idea into a detailed caption, the other writes the caption that makes a picture again.
+- **AI Prompt, Music Prompt and Video Prompt work on more graphics cards:** when ComfyUI's fast text writing stops with "Unsupported Flash Attention tensor strides", they write the text the regular way instead.
 
 ### **October 20, 2026 · v1.4.225-v1.4.226**
 - **Load Video loads phone videos the right way up:** a clip filmed upright on a phone no longer comes out turned sideways and cropped.
