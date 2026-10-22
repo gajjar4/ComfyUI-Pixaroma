@@ -64,7 +64,7 @@ export function injectCSS() {
   background:transparent;border:1px dashed #555;color:#9a9a9a;font:10px "Segoe UI",sans-serif;}
 .pix-h3t-pic.empty:hover{border-color:${ACC};color:#ddd;}
 .pix-h3t-cap{max-width:62px;padding:0;border:none;background:none;color:#9a9a9a;font:10px "Segoe UI",sans-serif;
-  text-align:center;line-height:1.25;cursor:default;}
+  text-align:center;line-height:1.25;cursor:default;white-space:pre-line;}
 .pix-h3t-cap.ok{color:#9fd9b4;}
 .pix-h3t-cap.cut{color:#ffd27a;cursor:pointer;text-decoration:underline;text-underline-offset:2px;}
 .pix-h3t-cap.link{cursor:pointer;text-decoration:underline;text-underline-offset:2px;}

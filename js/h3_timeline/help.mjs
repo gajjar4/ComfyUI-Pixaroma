@@ -17,7 +17,7 @@ export const H3_TIMELINE_HELP = {
     },
     {
       heading: "Example",
-      body: "Open the EP41 workflow `Minimax H3 - Audio Sync - Make a Picture Sing`. Delete MiniMax H3 Reference to Video and put H3 Timeline in its place: `clip`, `vae`, `audio_vae` from the loaders, `model` from ModelAttentionBackend, the song from Load Audio into `audio`. Then H3 Timeline's `model` and `latent` go into H3 Audio Sync, and its `positive` into the sampler. Make three scenes of 10 seconds: hands clasped, then dancing with arms open, then waving at the camera. The song must be at least 30 seconds long.",
+      body: "Open the EP41 workflow `Minimax H3 - Audio Sync - Make a Picture Sing`. Delete MiniMax H3 Reference to Video, and delete the Duration node too: it sets how much of the song Load Audio sends (10 seconds), and now the scenes set the length. In Load Audio pick a song of 30 seconds or more (the workflow's own song is shorter).\n\nPut H3 Timeline where Reference to Video was: `clip`, `vae`, `audio_vae` from the loaders, `model` from ModelAttentionBackend, the song from Load Audio into `audio`. Then H3 Timeline's `model` and `latent` go into H3 Audio Sync, and its `positive` into the sampler. H3 Timeline is taller than the node it replaces, so move the nodes under it down until nothing is covered.\n\nMake three scenes of 10 seconds: hands clasped, then dancing with arms open, then waving at the camera.",
     },
     {
       heading: "Writing a scene",
@@ -38,7 +38,7 @@ export const H3_TIMELINE_HELP = {
     },
     {
       heading: "Length",
-      body: "Each scene is 4 seconds or more. The total is the scenes added up, shown under the list, and comes out as `seconds` (handy for a Load Audio length). With Sing or Talk the node cuts the audio to the video's length; after a run the bar says if the audio was shorter (the rest is silent then).",
+      body: "Each scene is 4 seconds or more. The total is the scenes added up, shown under the list, and comes out as `seconds` (for a node after this one, like a filename or a timer). Do not wire it into the Load Audio that feeds this node, that makes a loop: the scenes set the length. With Sing or Talk the node cuts the audio to the video's length; after a run the bar says if the audio was shorter (the rest is silent then).",
     },
     {
       heading: "Mode",

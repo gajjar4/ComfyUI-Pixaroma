@@ -340,7 +340,11 @@ function captionFor(node, i, s, L) {
       cap.dataset.pixH3tPick = "";                  // opens the picker (pictures.mjs: a click here keeps it coming)
       cap.title = "Scene 1 needs a picture: the start picture";
       cap.onclick = (e) => pickFor(node, i, e.currentTarget.previousSibling);
-    } else cap.textContent = "keeps the look";
+    } else {
+      // short enough for one line in the 62 px column (never one word alone on a line); the time bar says the same
+      cap.textContent = "same look";
+      cap.title = "No picture: this scene keeps the look of the scene before it";
+    }
     return cap;
   }
   if (i > 0 && s.role === ROLE_PERSON) {
@@ -365,7 +369,8 @@ function captionFor(node, i, s, L) {
     cap.textContent = "nothing cut";
     cap.classList.add("ok");
   } else {
-    cap.textContent = `cut: ${k.side === "the sides" ? "sides" : "top, bottom"}`;
+    // two words a line, never one alone (the column is 62 px)
+    cap.textContent = k.side === "the sides" ? "cut: sides" : "cut: top\nand bottom";
     cap.classList.add("cut");
   }
   cap.title = "Click to see what the video keeps of this picture, and move the cut";

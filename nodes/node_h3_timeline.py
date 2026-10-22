@@ -251,7 +251,8 @@ class PixaromaH3Timeline:
         "Scene 1's conditioning (the node swaps in the other scenes while it samples). Wire it to the sampler, and "
         "through Conditioning Zero Out to its negative.",
         "The empty video + sound latent for the whole length. Wire it to H3 Audio Sync's latent (or the sampler).",
-        "The video's length in seconds (all scenes added up, on H3's frame grid). Handy for a Load Audio length.",
+        "The video's length in seconds (all scenes added up, on H3's frame grid). Not for the Load Audio that feeds "
+        "this node: the scenes set the length.",
     )
     FUNCTION = "run"
     CATEGORY = "👑 Pixaroma/🎵 Audio"
