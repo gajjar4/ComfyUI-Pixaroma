@@ -20,7 +20,8 @@ from __future__ import annotations
 
 from ._folder_source import refresh_copy, source_stamp
 from ._h3_long_video_helpers import FPS
-from ._h3_timeline_helpers import clip_frames, cut_box, describe_scenes, fit_box, parse_state, scene_windows
+from ._h3_timeline_helpers import (clip_frames, cut_box, describe_scenes, fit_box, parse_state, scene_windows,
+                                   split_scenes)
 from ._h3_timeline_prompts import MODES, ROLE_PERSON, build_prompt
 from ._path_guard import is_path_under, rel_is_rooted
 from ._resize_helpers import normalize_bit_depth
@@ -35,8 +36,9 @@ class _SceneWindows(_Windows):
         super().__init__(0, 0)
         self.lengths = list(lengths)
         self.scene_conds = scene_conds          # [(cross_attn, extras) or None] per scene
-        # {scene: (cross_attn, extras)}: the conditioning for the LATER windows of a scene that was split (above
-        # 15 s), when someone walked in during its first window: worded as already there (people_sentence `arrived`)
+        # {scene: (cross_attn, extras)}: the conditioning for the LATER windows of a scene that was split (too long
+        # for one window even at the smallest reach, scene_windows), when someone walked in during its first window:
+        # worded as already there (people_sentence `arrived`)
         self.later_conds = dict(later_conds or {})
         self._ctx = {}
 
@@ -311,6 +313,7 @@ class PixaromaH3Timeline:
 
         look, people, built, scene_conds, later_conds = None, [], {}, [], {}
         positive = latent = None
+        split = split_scenes(lengths)
 
         def make(text, i):
             key = (text, look[:4], tuple(people))
@@ -339,8 +342,8 @@ class PixaromaH3Timeline:
                 scene_conds.append(None)
             else:
                 scene_conds.append(None if cond is positive else (cond[0][0], cond[0][1]))
-            if entering:
-                # Only used when this scene is split into windows (wrapper): the later ones see them already there.
+            if entering and i in split:
+                # Only read when this scene is split into windows (wrapper): the later ones see them already there.
                 later, _ = make(build_prompt(mode, sc["words"], len(people), later=True, arrived=entering), i)
                 later_conds[i] = (later[0][0], later[0][1])
 

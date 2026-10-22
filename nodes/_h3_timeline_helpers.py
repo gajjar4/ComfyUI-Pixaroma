@@ -4,9 +4,10 @@ No torch, no ComfyUI (harness: D:\\Claude Tests\\_h3_timeline_test.py). The grid
 (_h3_long_video_helpers.py): windows start on 17-frame chunks and are 17n + 5 frames (5n + 2 tokens) long.
 
 H3 Long Video uses one window length everywhere. Here every SCENE gets its own window(s), so a prompt change lands
-exactly on the border between two scenes: a scene's window reaches EDGE_CHUNKS into each neighbour, so the two
-windows share 2 * EDGE_CHUNKS chunks + 2 tokens around the border. A scene too long for one window (H3 was trained
-on 4 to 15 s) is split into several windows that read the same prompt.
+exactly on the border between two scenes: a scene's window reaches up to EDGE_CHUNKS into each neighbour, so the
+two windows share up to 2 * EDGE_CHUNKS chunks + 2 tokens around the border. A scene a little too long for one
+window (H3 was trained on 4 to 15 s) first reaches less, down to MIN_REACH_CHUNKS; only a scene too long even then
+is split into several windows that read the same prompt (scene_windows).
 """
 from __future__ import annotations
 
@@ -129,6 +130,17 @@ def scene_windows(latent_t, audio_t, lengths, max_chunks=MAX_WINDOW_CHUNKS):
         a1 = audio_t if l1 == latent_t else min(audio_t, audio_at(frames_of(l1)))
         wins.append((l0, l1, a0, max(a0 + 1, a1), i))
     return wins
+
+
+def split_scenes(lengths) -> set:
+    """The scenes made in MORE than one window, on the latent the node makes for these lengths (clip_frames:
+    17n + 5 frames = 5n + 2 tokens), by the same scene_windows the wrapper calls at sample time. Only their later
+    windows read the node's `later_conds`, so the node builds that extra prompt only for them: each build is one more
+    text + picture + audio encode (review 10-22: it was built for every scene a person joins in)."""
+    count = {}
+    for w in scene_windows(5 * ((clip_frames(lengths) - 5) // CHUNK_FRAMES) + 2, 1, lengths) or []:
+        count[w[4]] = count.get(w[4], 0) + 1
+    return {s for s, n in count.items() if n > 1}
 
 
 MAX_WORDS = 2000
