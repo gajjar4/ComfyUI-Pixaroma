@@ -2099,8 +2099,12 @@ const HELP = {
   },
   "PixaromaH3LongVideo": {
     title: "H3 Long Video Pixaroma",
-    tagline: "Make a MiniMax H3 video of 30 seconds, a minute or more, in one run with no joins.",
+    tagline: "Make a MiniMax H3 video LONGER than 15 seconds (30 seconds, a minute or more) in one run, with no joins.",
     sections: [
+      {
+        heading: "When to use it",
+        body: "Only when your MiniMax H3 video is longer than about 15 seconds, for example a whole song or a long talk with H3 Audio Sync.\n\nFor a video of 15 seconds or less you do not need it. If it is on the wire anyway, nothing changes: the video is made in one piece as usual.",
+      },
       {
         heading: "What it does",
         body: "MiniMax H3 was trained on clips of up to about 15 seconds. Longer videos used to mean making several clips and joining them, and every join showed: the next clip came out a little darker and softer, which you see as a flash and a drop in quality.\n\nThis node makes the whole video as ONE piece instead. On every step the model looks at it in overlapping windows of about 10 seconds, each with its own part of your song, and the windows are blended where they overlap. Because every window is worked on at every step, they agree with each other all the way through, so there is nothing to join.\n\nIt is also lighter and faster than one long run. A minute at 480x864 took 4.5 minutes instead of 9.4 on a 4090, and with 12 GB of graphics memory free it ran at the same speed, while one long run of a minute could not even finish its first step.",
@@ -2108,6 +2112,10 @@ const HELP = {
       {
         heading: "Where it goes",
         body: "On the MODEL wire, after your LoRAs and BEFORE H3 Audio Sync: model, then H3 Long Video, then H3 Audio Sync, then the sampler. In that order Audio Sync can see the windows and skips its 15 second warning.\n\nThen simply make the video as long as you want: set the length on the latent node (or Duration Pixaroma) to the whole song, and cut the same length of song with Load Audio Pixaroma. Everything else in the workflow stays the same.",
+      },
+      {
+        heading: "Example",
+        body: "Open the EP41 workflow \"Minimax H3 - Audio Sync - Make a Picture Sing\". Add H3 Long Video Pixaroma between ModelAttentionBackend and H3 Audio Sync. In Duration Pixaroma open the gear and add 30 to the lengths, then click 30. In Load Audio Pixaroma pick a song that is at least 30 seconds long. Run: you get one 30 second singing video with no joins.",
       },
       {
         heading: "Window and overlap",
@@ -2118,8 +2126,8 @@ const HELP = {
         bullets: [
           "Use MiniMax H3 Reference to Video. Your picture reaches every window. With Image to Video's first frame, only the first window sees the picture.",
           "Use your real song or voice with H3 Audio Sync. Every window sings its own part of the track, so the sound has no seam at all.",
-          "At 480x864 each window leans a little toward the pose in your picture, so a striking gesture there, like a hand raised to the collarbone, comes back now and then in a long video. At 576x1024 it did not come back at all. Use 1024, or a picture in a relaxed pose.",
-          "Make sure your song is as long as the video. Where the track ends the node fills it with silence, and the character stops singing there.",
+          "Each window leans a little toward the pose in your picture. A striking pose there, like a hand on the chest, can come back now and then in a long video (more at 480x864 than at 576x1024). A picture in a relaxed pose avoids it.",
+          "Make sure your song is as long as the video. Where the track ends, H3 Audio Sync fills the rest with silence, and the character stops singing there.",
           "It makes new video from scratch. Running it over an upscaled low-resolution video does NOT sharpen it: H3 keeps a soft input soft.",
         ],
       },
