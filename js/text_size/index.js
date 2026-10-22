@@ -90,14 +90,14 @@ app.registerExtension({
     const options = [
       { content: "All text boxes: Bigger", disabled: v >= MAX, callback: () => setComfySize(v + STEP) },
       { content: "All text boxes: Smaller", disabled: v <= MIN, callback: () => setComfySize(v - STEP) },
-      { content: `All text boxes: Reset (now ${v})`, disabled: v === NORMAL, callback: () => setComfySize(NORMAL) },
+      { content: "All text boxes: Reset", disabled: v === NORMAL, callback: () => setComfySize(NORMAL) },
     ];
     if (own) {
       const z = nodeTextZoom(node);
       options.push(null,
         { content: "Only this node: Bigger", disabled: z >= ZOOM_MAX, callback: () => setNodeTextZoom(node, z + ZOOM_STEP) },
         { content: "Only this node: Smaller", disabled: z <= ZOOM_MIN, callback: () => setNodeTextZoom(node, z - ZOOM_STEP) },
-        { content: `Only this node: Reset (now ${Math.round(z * 100)}%)`, disabled: z === 1, callback: () => setNodeTextZoom(node, 1) });
+        { content: "Only this node: Reset", disabled: z === 1, callback: () => setNodeTextZoom(node, 1) });
     }
     return [null, { content: "Text size", has_submenu: true, submenu: { options } }];
   },
