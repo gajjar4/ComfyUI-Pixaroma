@@ -59,15 +59,35 @@ def scene_bounds(lengths, chunks):
     return b
 
 
+SPLIT_OVERLAP_CHUNKS = 10      # ~7 s: inside ONE scene, the overlap that kept a person who walked in (test C)
+
+
 def _split(a, b, max_chunks):
-    """Chunk range [a, b) -> sub-windows of at most max_chunks, 2 chunks of overlap between them."""
-    if b - a <= max_chunks:
+    """Chunk range [a, b) -> sub-windows of at most max_chunks. As few windows as with a 2 * EDGE overlap, but
+    then overlapping by up to SPLIT_OVERLAP_CHUNKS: a short overlap let the next window start again from the start
+    picture, so a man who had walked in faded out and walked in a second time (measured 10-22, t4_room, 2.8 s).
+    Each later window still starts 2 * EDGE past [a] (never reaching the previous scene's window) and each earlier
+    one ends 2 * EDGE before [b] (never reaching the next scene's)."""
+    n = b - a
+    if n <= max_chunks:
         return [(a, b)]
-    over = 2 * EDGE_CHUNKS
-    k = -(-(b - a - over) // (max_chunks - over))
-    w = -(-(b - a + over * (k - 1)) // k)
-    starts = [a + j * (w - over) for j in range(k - 1)] + [b - w]
-    return [(s, s + w) for s in starts]
+    edge2 = 2 * EDGE_CHUNKS
+    k = -(-(n - edge2) // (max_chunks - edge2))
+
+    def plan(over):
+        w = -(-(n + over * (k - 1)) // k)
+        return [(s, s + w) for s in [a + j * (w - over) for j in range(k - 1)] + [b - w]]
+
+    def fits(p):        # strict: a window's 2 tail tokens reach into the next chunk, so touching chunks overlap
+        return (all(t - s <= max_chunks for s, t in p)
+                and p[1][0] > a + edge2                        # clear of the previous scene's window
+                and p[-2][1] < b - edge2                       # clear of the next scene's window
+                and all(p[j - 2][1] < p[j][0] for j in range(2, len(p))))   # only neighbours overlap
+
+    over = max(edge2, min(SPLIT_OVERLAP_CHUNKS, (k * max_chunks - n) // (k - 1)))
+    while over > edge2 and not fits(plan(over)):
+        over -= 1
+    return plan(over)
 
 
 def scene_windows(latent_t, audio_t, lengths, max_chunks=MAX_WINDOW_CHUNKS):

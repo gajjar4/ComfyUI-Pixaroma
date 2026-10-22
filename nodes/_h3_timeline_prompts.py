@@ -155,16 +155,22 @@ def person_line(subject_n, picture_n) -> str:
             ).format(s=subject_n, p=picture_n)
 
 
-def people_sentence(n_people, entering=()) -> str:
+def people_sentence(n_people, entering=(), arrived=()) -> str:
     """Said for the user after their scene words. MEASURED 2026-10-22: plain words ("A man walks in from the
     right...") with only the <Subject 3> definition brought him in as a sliver at the edge for one second; words
-    that NAMED him ("<Subject 3>, the man from <Picture 2>, walks into the frame...") brought him in properly."""
+    that NAMED him ("<Subject 3>, the man from <Picture 2>, walks into the frame...") brought him in properly.
+    `arrived` = people who came in earlier in this SAME scene: its later windows (a long scene is split) must not
+    bring them in again (measured 10-22, t4_room: he faded out and walked in a second time at the split)."""
     out = []
     for k in range(max(0, int(n_people))):
         s, p = 3 + k, 2 + k
         if k in entering:
             out.append("<Subject {s}>, the person in <Picture {p}>, comes into the frame in this part and then stays "
                        "clearly visible in it.".format(s=s, p=p))
+        elif k in arrived:
+            out.append("<Subject {s}>, the person in <Picture {p}>, has already come into the frame: from the first "
+                       "frame of this part they stand where they arrived, clearly visible for the whole clip."
+                       .format(s=s, p=p))
         else:
             out.append("<Subject {s}>, the person in <Picture {p}>, is still in the frame for the whole clip, clearly "
                        "visible, in the same place as at the start of this part.".format(s=s, p=p))
@@ -192,13 +198,15 @@ CONTINUE = (
 )
 
 
-def build_prompt(mode, words, n_people, entering=(), later=False) -> str:
+def build_prompt(mode, words, n_people, entering=(), later=False, arrived=()) -> str:
     """The full prompt for one scene: the template, the scene sentence (+ who is in the frame), a <Subject N> line
     per added person. `entering` = the indexes (0 = the first added person) of people who first appear in this
-    scene; `later` = any scene after the first (worded as a later moment of the same shot, CONTINUE)."""
+    scene; `later` = any scene after the first (worded as a later moment of the same shot, CONTINUE); `arrived` =
+    for a later window of a split scene, the people who came in earlier in that scene (people_sentence)."""
     tpl = TEMPLATES.get(mode, SING)
     if later:
         for a, b in CONTINUE:
             tpl = tpl.replace(a, b)
     people = "".join(person_line(3 + k, 2 + k) for k in range(max(0, int(n_people))))
-    return tpl.replace(PEOPLE_SLOT, people).replace(SCENE_SLOT, scene_line(words) + people_sentence(n_people, entering))
+    return tpl.replace(PEOPLE_SLOT, people).replace(
+        SCENE_SLOT, scene_line(words) + people_sentence(n_people, entering, arrived))

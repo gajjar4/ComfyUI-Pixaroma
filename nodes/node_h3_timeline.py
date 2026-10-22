@@ -31,14 +31,17 @@ class _SceneWindows(_Windows):
     """The H3 Long Video wrapper with windows that follow the scenes, each window reading its scene's text,
     token tags and references. Scene 1 is the sampler's own conditioning, so its windows run unchanged."""
 
-    def __init__(self, lengths, scene_conds):
+    def __init__(self, lengths, scene_conds, later_conds=None):
         super().__init__(0, 0)
         self.lengths = list(lengths)
         self.scene_conds = scene_conds          # [(cross_attn, extras) or None] per scene
+        # {scene: (cross_attn, extras)}: the conditioning for the LATER windows of a scene that was split (above
+        # 15 s), when someone walked in during its first window: worded as already there (people_sentence `arrived`)
+        self.later_conds = dict(later_conds or {})
         self._ctx = {}
 
     def _context(self, dm, sc, cond, like):
-        key = (sc, str(like.device), str(like.dtype))
+        key = (sc, str(like.device), str(like.dtype))      # sc = a scene index, or ("later", scene)
         if key not in self._ctx:
             self._ctx[key] = dm.preprocess_text_embeds(cond.to(device=like.device, dtype=like.dtype))
         return self._ctx[key]
@@ -65,12 +68,19 @@ class _SceneWindows(_Windows):
         mask_v, mask_a = kwargs.get("denoise_mask"), kwargs.get("audio_denoise_mask")
         out_v = torch.zeros(video.shape, dtype=torch.float32, device=video.device)
         out_a = torch.zeros(audio.shape, dtype=torch.float32, device=audio.device)
+        seen = set()
         for (l0, l1, a0, a1, sc), w_v, w_a in zip(wins, wv, wa):
             ctx, src = context, payload
-            entry = self.scene_conds[sc] if own_text and sc < len(self.scene_conds) else None
+            ck, entry = sc, None
+            if own_text:
+                if sc in seen and sc in self.later_conds:       # windows come in time order: not the scene's first
+                    ck, entry = ("later", sc), self.later_conds[sc]
+                elif sc < len(self.scene_conds):
+                    entry = self.scene_conds[sc]
+            seen.add(sc)
             if entry is not None and dm is not None and hasattr(dm, "preprocess_text_embeds"):
                 cond, extras = entry
-                ctx = self._context(dm, sc, cond, context)
+                ctx = self._context(dm, ck, cond, context)
                 src = dict(payload)
                 if extras.get("minimax_refs") is not None:
                     src["refs"] = extras["minimax_refs"]
@@ -297,17 +307,10 @@ class PixaromaH3Timeline:
                 loaded[name] = _load_picture(name, n)
             return loaded[name]
 
-        look, people, built, scene_conds = None, [], {}, []
+        look, people, built, scene_conds, later_conds = None, [], {}, [], {}
         positive = latent = None
-        for i, sc in enumerate(scenes):
-            entering = ()
-            if sc["picture"]:
-                if i == 0 or sc["role"] != ROLE_PERSON:
-                    look = (sc["picture"], sc["fit"], sc["x"], sc["y"], i + 1)
-                elif sc["picture"] not in people:
-                    people = people + [sc["picture"]]
-                    entering = (len(people) - 1,)
-            text = build_prompt(mode, sc["words"], len(people), entering, later=i > 0)
+
+        def make(text, i):
             key = (text, look[:4], tuple(people))
             if key not in built:
                 refs = {"ref_image_0": _frame_picture(picture(look[0], look[4]), w, h, look[1], look[2], look[3])}
@@ -318,19 +321,33 @@ class PixaromaH3Timeline:
                     vae=vae, audio_vae=audio_vae, ref_images=refs,
                     ref_audios={"ref_audio_0": track} if track is not None else None)
                 built[key] = (out[0], out[1])
-            cond, lat = built[key]
+            return built[key]
+
+        for i, sc in enumerate(scenes):
+            entering = ()
+            if sc["picture"]:
+                if i == 0 or sc["role"] != ROLE_PERSON:
+                    look = (sc["picture"], sc["fit"], sc["x"], sc["y"], i + 1)
+                elif sc["picture"] not in people:
+                    people = people + [sc["picture"]]
+                    entering = (len(people) - 1,)
+            cond, lat = make(build_prompt(mode, sc["words"], len(people), entering, later=i > 0), i)
             if i == 0:
                 positive, latent = cond, lat
                 scene_conds.append(None)
             else:
                 scene_conds.append(None if cond is positive else (cond[0][0], cond[0][1]))
+            if entering:
+                # Only used when this scene is split into windows (wrapper): the later ones see them already there.
+                later, _ = make(build_prompt(mode, sc["words"], len(people), later=True, arrived=entering), i)
+                later_conds[i] = (later[0][0], later[0][1])
 
         if type(getattr(model, "model", None)).__name__ != "MiniMaxH3":
             print("[Pixaroma] H3 Timeline: this model is not MiniMax H3, the scenes will not work.")
         m = model.clone()
         kind = _diffusion_model_kind()
         m.remove_wrappers_with_key(kind, WRAPPER_KEY)     # H3 Long Video before this node: the scenes take over
-        m.add_wrapper_with_key(kind, WRAPPER_KEY, _SceneWindows(lengths, scene_conds))
+        m.add_wrapper_with_key(kind, WRAPPER_KEY, _SceneWindows(lengths, scene_conds, later_conds))
 
         spans = describe_scenes(lengths, frames)
         ui = {"h3_timeline": [{"frames": frames, "seconds": round(seconds, 2), "mode": mode, "audio": note,
