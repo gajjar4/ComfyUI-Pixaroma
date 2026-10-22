@@ -2097,6 +2097,34 @@ const HELP = {
     ],
     footer: "No inputs, no outputs, no work on Run - it is a pure info panel.",
   },
+  "PixaromaH3LongVideo": {
+    title: "H3 Long Video Pixaroma",
+    tagline: "Make a MiniMax H3 video of 30 seconds, a minute or more, in one run with no joins.",
+    sections: [
+      {
+        heading: "What it does",
+        body: "MiniMax H3 was trained on clips of up to about 15 seconds. Longer videos used to mean making several clips and joining them, and every join showed: the next clip came out a little darker and softer, which you see as a flash and a drop in quality.\n\nThis node makes the whole video as ONE piece instead. On every step the model looks at it in overlapping windows of about 10 seconds, each with its own part of your song, and the windows are blended where they overlap. Because every window is worked on at every step, they agree with each other all the way through, so there is nothing to join.\n\nIt is also lighter and faster than one long run. A minute at 480x864 took 4.5 minutes instead of 9.4 on a 4090, and with 12 GB of graphics memory free it ran at the same speed, while one long run of a minute could not even finish its first step.",
+      },
+      {
+        heading: "Where it goes",
+        body: "On the MODEL wire, after your LoRAs and BEFORE H3 Audio Sync: model, then H3 Long Video, then H3 Audio Sync, then the sampler. In that order Audio Sync can see the windows and skips its 15 second warning.\n\nThen simply make the video as long as you want: set the length on the latent node (or Duration Pixaroma) to the whole song, and cut the same length of song with Load Audio Pixaroma. Everything else in the workflow stays the same.",
+      },
+      {
+        heading: "Window and overlap",
+        body: "Window is how much of the video the model looks at at once. 10 seconds is the tested default and it held up best; 5 second windows worked too but drifted a little more in brightness. Overlap is how much two neighbouring windows share; 1.5 seconds is the tested default.\n\nBoth are snapped to H3's frame grid, so 10 becomes 10.12 and 1.5 becomes 1.62. A video no longer than one window is made in one piece exactly as without this node.",
+      },
+      {
+        heading: "Tips",
+        bullets: [
+          "Use MiniMax H3 Reference to Video. Your picture reaches every window. With Image to Video's first frame, only the first window sees the picture.",
+          "Use your real song or voice with H3 Audio Sync. Every window sings its own part of the track, so the sound has no seam at all.",
+          "Each window leans a little toward the pose in your picture, so a striking gesture there, like a hand raised to the collarbone, comes back now and then in a long video. If you do not want that, use a picture in a relaxed pose.",
+          "It makes new video from scratch. Running it over an upscaled low-resolution video does NOT sharpen it: H3 keeps a soft input soft.",
+        ],
+      },
+    ],
+    footer: "This node only works with MiniMax H3. On any other model it changes nothing.",
+  },
 };
 
 for (const [cls, def] of Object.entries(HELP)) registerNodeHelp(cls, def);

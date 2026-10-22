@@ -37,6 +37,7 @@ import json
 
 from ._audio_window_helpers import apply_window, plan_window
 from ._h3_sync_helpers import LIMIT_DEFAULT_S, clip_info, over_limit, status, target_samples
+from .node_h3_long_video import is_windowed
 
 HIDDEN_INPUT = "H3SyncState"
 
@@ -61,7 +62,9 @@ class PixaromaH3AudioSync:
         "It works out how long the clip is by itself, so you never type a duration. If your track is "
         "shorter than the clip the node fills the rest with silence or loops it, whichever you chose, "
         "and says so on the node. If the clip is longer than about 15 seconds it warns you before the "
-        "render rather than after, because H3 was only trained to about that length.\n\n"
+        "render rather than after, because H3 was only trained to about that length. For a longer video put "
+        "H3 Long Video Pixaroma on the model wire before this node: it makes the clip in windows, and this "
+        "node then skips the warning.\n\n"
         "This node only works with MiniMax H3. Find it by searching for h3, minimax, lipsync, sync, "
         "or music video."
     )
@@ -107,6 +110,9 @@ class PixaromaH3AudioSync:
 
         st = _state(kwargs.get(HIDDEN_INPUT, "{}"))
         limit = st.get("limit", LIMIT_DEFAULT_S)
+        # H3 Long Video earlier on the model wire makes the clip in ~10 s windows, so the 15 s wall does not apply
+        if is_windowed(model):
+            limit = 0
         when_short = "loop" if st.get("whenShort") == "loop" else "silence"
 
         samples = latent.get("samples") if isinstance(latent, dict) else None

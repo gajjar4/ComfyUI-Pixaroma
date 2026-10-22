@@ -40,6 +40,9 @@ export const H3_SYNC_HELP = {
         "MiniMax H3 was only trained on clips up to about fifteen seconds, and past that it "
         + "usually falls apart. This node checks before the render rather than after: by default "
         + "it prints a warning, and you can set it to stop the run instead so nothing is wasted.\n\n"
+        + "For a longer video, 30 seconds or a minute, put H3 Long Video Pixaroma on the model wire BEFORE "
+        + "this node. It makes the clip in overlapping windows of about 10 seconds, so the wall no longer "
+        + "applies, and this node then skips the warning (and never stops the run for it).\n\n"
         + "Note that H3 cannot make round durations at all. Its frame count has to land on a fixed "
         + "pattern, so the lengths you can actually have are 5.17s, 5.88s, 6.58s and so on up to "
         + "15.08s. Only 8.00s is a whole number. Duration Pixaroma works this out for you.",
