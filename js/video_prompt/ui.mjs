@@ -21,6 +21,7 @@ import { installResizeFloor } from "../shared/resize_floor.mjs";
 import { notifyGraphChanged } from "../shared/graph_changed.mjs";
 // The themed seed question (no cycle: ai_prompt never imports video_prompt).
 import { askName } from "../ai_prompt/settings.mjs";
+import { textSize } from "../shared/text_size.mjs";
 import {
   IDEA_SHARE_DEFAULT, IDEA_SHARE_MAX, IDEA_SHARE_MIN,
   MODE_HINTS, MODE_LABELS, SEED_RANDOM, displaySeed, looksSpoken, modeOf,
@@ -142,7 +143,7 @@ export function injectCSS() {
   .pix-vp-idea, .pix-vp-out{
     width:100%; background:#1d1d1d; color:#e0e0e0;
     border:1px solid #333; border-radius:4px; padding:6px 8px;
-    font:12px monospace; resize:none; outline:none;
+    font:12px monospace; font-size:${textSize(12)}; resize:none; outline:none;
   }
   /* THE TWO BOXES SHARE THE NODE'S SPARE HEIGHT. flex-basis 0 makes the two grow
      numbers a pure ratio, so dragging the node taller grows BOTH - which is what
@@ -162,7 +163,7 @@ export function injectCSS() {
      rules below, so those still win on their border and opacity. */
   .pix-vp-out{
     flex:var(--pix-vp-out-grow,680) 1 0; min-height:64px; line-height:1.45;
-    font-size:11px; color:#d8d8d8; cursor:text;
+    font-size:${textSize(11)}; color:#d8d8d8; cursor:text;
     background:#2d2d2d; border-color:#3a3a3a;
   }
 

@@ -6,6 +6,7 @@
 
 import { readState } from "./core.mjs";
 import { attachLabelEditor, attachTextareaEditor, attachDragHandlers } from "./interaction.mjs";
+import { textSize } from "../shared/text_size.mjs";
 
 const CSS_ID = "pix-prompt-stack-css";
 
@@ -19,6 +20,9 @@ const CSS = `
   font-family: inherit;
   color: #ddd;
 }
+/* An opened node keeps its saved height until you act on it (index.js contentMinHeight): rows that need more room
+   (a bigger text size) scroll inside the body instead of spilling below the node. */
+.pix-ps-root.is-held { overflow-y: auto; }
 
 .pix-ps-row {
   display: flex;
@@ -146,6 +150,7 @@ const CSS = `
   border-radius: 4px;
   color: #e0e0e0;
   font: 12px monospace;
+  font-size: ${textSize(12)};
   padding: 6px 8px;
   outline: none;
   box-sizing: border-box;

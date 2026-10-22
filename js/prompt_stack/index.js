@@ -15,6 +15,7 @@ import { applyAdaptiveCanvasOnly, installResizeFloor, isVueNodes,
 } from "../shared/index.mjs";
 import { installNativeTextMenu } from "../shared/native_text_menu.mjs";
 import { pixConfirm, autoGrowTextareas } from "./interaction.mjs";
+import { onTextSizeChange } from "../shared/text_size.mjs";
 
 const DEFAULT_W = 400;
 const DEFAULT_H = 180;
@@ -70,9 +71,23 @@ function chromeAllowance(node) {
   return titleH + slots * slotH;
 }
 
+// A node opened from a file keeps its saved height until the user acts on it, as in Prompt Multi (its
+// contentMinHeight has the why: a bigger text size grew it after the open and after every Ctrl+Z back to it in
+// Classic, an undo jam, 2026-10-22). Held, the rows scroll inside the body instead.
+function contentMinHeight(node, root) {
+  const h = measureContentHeight(root);
+  return node._pixPsHeld && !isVueNodes() ? Math.min(h, Math.max(120, node.size[1] - chromeAllowance(node))) : h;
+}
+
+function releaseHeld(node) {
+  node._pixPsHeld = false;
+  node._pixPsRoot?.classList.remove("is-held");
+}
+
 function growNodeToContent(node) {
   const root = node._pixPsRoot;
   if (!root) return;
+  releaseHeld(node);
   const contentH = measureContentHeight(root);
   const desired = contentH + chromeAllowance(node);
   if (desired > node.size[1]) setNodeHeight(node, desired);
@@ -84,6 +99,7 @@ function growNodeToContent(node) {
 function fitNodeToContent(node) {
   const root = node._pixPsRoot;
   if (!root) return;
+  releaseHeld(node);
   const contentH = measureContentHeight(root);
   const desired = Math.max(DEFAULT_H, contentH + chromeAllowance(node));
   setNodeHeight(node, desired);
@@ -206,7 +222,16 @@ app.registerExtension({
         // (DOM measurement rounding) which would falsely flag the workflow
         // "modified" on a plain open. Auto-grow stays on the user-action
         // handlers (add/delete/text) where a size change is legitimate.
-        node._pixPsRenderOnly = () => renderRows(node, root, handlers);
+        // A LOADED node also holds the row editors' first-frame grow (their rAF calls _pixPsGrow), as Prompt Multi
+        // does: a file saved at text size 10 and opened bigger grew 198 -> 250 in Nodes 2.0 and read "modified"
+        // (2026-10-22). Fresh nodes still grow.
+        node._pixPsRenderOnly = () => {
+          if (node._pixPsConfigured) {
+            node._pixPsHoldGrow = true;
+            requestAnimationFrame(() => requestAnimationFrame(() => { node._pixPsHoldGrow = false; }));
+          }
+          renderRows(node, root, handlers);
+        };
 
         installCanvasZoomPassthrough(root);
         // Right-click inside a row's text box gets the BROWSER's Cut/Copy/Paste
@@ -218,9 +243,10 @@ app.registerExtension({
           serialize: false,
           // canvasOnly set adaptively below (CLAUDE.md Nodes 2.0): true in
           // legacy (out of Parameters tab), false in Nodes 2.0 (Vue body).
-          getMinHeight: () => measureContentHeight(root),
+          getMinHeight: () => contentMinHeight(node, root),
         });
         applyAdaptiveCanvasOnly(_psWidget);
+        if (node._pixPsHeld) root.classList.add("is-held");
         // Floor the node at its content height while a resize handle is dragged
         // (Nodes 2.0) so the bottom button row can't be squished out of frame.
         node._pixPsFloorOff = installResizeFloor(root, measureContentHeight);
@@ -245,9 +271,17 @@ app.registerExtension({
         // Expose a tiny grow helper so interaction handlers (textarea
         // autogrow) can ask the node to expand without doing a full rerender.
         node._pixPsGrow = () => {
+          if (node._pixPsHoldGrow) return;
           growNodeToContent(node);
           node.setDirtyCanvas(true, true);
         };
+        // A text size change (js/shared/text_size.mjs): the boxes re-fit their text, and when the user made it, the
+        // node grows to show them, like typing. A node not laid out (another graph, zoomed far out) is left as it is.
+        onTextSizeChange(root, (byUser) => {
+          if (root.offsetWidth < 100) return;
+          autoGrowTextareas(root);
+          if (byUser) node._pixPsGrow();
+        });
 
         node._pixPsRenderOnly();
 
@@ -266,6 +300,8 @@ app.registerExtension({
     const origConfigure = nodeType.prototype.onConfigure;
     nodeType.prototype.onConfigure = function (info) {
       this._pixPsConfigured = true;
+      this._pixPsHeld = true;         // keeps its saved height (contentMinHeight)
+      this._pixPsRoot?.classList.add("is-held");
       const r = origConfigure ? origConfigure.apply(this, arguments) : undefined;
       stripLegacyWireSlots(this);
       restoreFromProperties(this);

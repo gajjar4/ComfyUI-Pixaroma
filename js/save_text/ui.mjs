@@ -10,6 +10,7 @@
 
 import { ACC } from "../shared/node_settings.mjs";
 import { pixAsset } from "../shared/api_url.mjs";
+import { textSize } from "../shared/text_size.mjs";
 
 export function el(tag, cls, text) {
   const n = document.createElement(tag);
@@ -64,7 +65,7 @@ export function injectCSS() {
     // min-height is the floor the Nodes 2.0 resize handle measures against.
     ".pix-stx-box{flex:1 1 0;min-height:54px;width:100%;box-sizing:border-box;" +
       "background:#1d1d1d;color:#e0e0e0;border:1px solid #333;border-radius:4px;" +
-      "padding:6px 8px;font:12px monospace;line-height:1.45;resize:none;outline:none;" +
+      "padding:6px 8px;font:12px monospace;font-size:" + textSize(12) + ";line-height:1.45;resize:none;outline:none;" +
       "white-space:pre-wrap;overflow-wrap:break-word;}",
     ".pix-stx-box:focus{border-color:" + ACC + ";}",
     ".pix-stx-box::placeholder{color:#6a6a6a;}",

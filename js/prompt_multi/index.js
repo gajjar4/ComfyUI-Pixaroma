@@ -21,6 +21,7 @@ import { installResizeFloor, isVueNodes,
 import { pixConfirm, autoGrowTextareas } from "./interaction.mjs";
 import { isQueueLoopActive, runQueueLoop, feedsOnlyInactiveSwitch } from "../shared/queue_drivers.mjs";
 import { applyAdaptiveCanvasOnly } from "../shared/index.mjs";
+import { onTextSizeChange } from "../shared/text_size.mjs";
 
 const BRAND = "#f66744";
 
@@ -56,9 +57,25 @@ function setNodeHeight(node, h) {
   node.setSize?.([node.size[0], h]);
 }
 
+// A node opened from a file keeps its saved height until the user acts on it (types, adds / removes / toggles a
+// row, right-click Text size). Its text can need more room than when it was saved (a bigger text size,
+// js/shared/text_size.mjs), and Classic core grows any node whose widget asks for more than its body: after the
+// open AND after every Ctrl+Z back to it, so the next click wiped the redo (an undo jam, measured 2026-10-22:
+// 358 -> 438 at text size 24). Held, the rows scroll inside the body instead. Nodes 2.0 never grew this way.
+function contentMinHeight(node, root) {
+  const h = measureContentHeight(root);
+  return node._pixPmHeld && !isVueNodes() ? Math.min(h, Math.max(120, node.size[1] - chromeAllowance(node))) : h;
+}
+
+function releaseHeld(node) {
+  node._pixPmHeld = false;
+  node._pixPmRoot?.classList.remove("is-held");
+}
+
 function growNodeToContent(node) {
   const root = node._pixPmRoot;
   if (!root) return;
+  releaseHeld(node);
   const contentH = measureContentHeight(root);
   const desired = contentH + chromeAllowance(node);
   if (desired > node.size[1]) setNodeHeight(node, desired);
@@ -67,6 +84,7 @@ function growNodeToContent(node) {
 function fitNodeToContent(node) {
   const root = node._pixPmRoot;
   if (!root) return;
+  releaseHeld(node);
   const contentH = measureContentHeight(root);
   const desired = Math.max(DEFAULT_H, contentH + chromeAllowance(node));
   setNodeHeight(node, desired);
@@ -220,9 +238,10 @@ app.registerExtension({
           serialize: false,
           // canvasOnly set adaptively (CLAUDE.md Nodes 2.0): true in legacy
           // (out of Parameters tab), false in Nodes 2.0 (renders in Vue body).
-          getMinHeight: () => measureContentHeight(root),
+          getMinHeight: () => contentMinHeight(node, root),
         });
         applyAdaptiveCanvasOnly(_pmWidget);
+        if (node._pixPmHeld) root.classList.add("is-held");
         // Floor the node at its content height while a resize handle is dragged
         // (Nodes 2.0) so the bottom button row can't be squished out of frame.
         node._pixPmFloorOff = installResizeFloor(root, measureContentHeight);
@@ -251,6 +270,13 @@ app.registerExtension({
           growNodeToContent(node);
           node.setDirtyCanvas(true, true);
         };
+        // A text size change (js/shared/text_size.mjs): the boxes re-fit their text, and when the user made it, the
+        // node grows to show them, like typing. A node not laid out (another graph, zoomed far out) is left as it is.
+        onTextSizeChange(root, (byUser) => {
+          if (root.offsetWidth < 100) return;
+          autoGrowTextareas(root);
+          if (byUser) node._pixPmGrow();
+        });
 
         node._pixPmRenderOnly();
         node.setDirtyCanvas(true, true);
@@ -260,6 +286,8 @@ app.registerExtension({
     const origConfigure = nodeType.prototype.onConfigure;
     nodeType.prototype.onConfigure = function (info) {
       this._pixPmConfigured = true;   // loaded from a workflow: its render holds the first-frame grow
+      this._pixPmHeld = true;         // ... and its saved height (contentMinHeight)
+      this._pixPmRoot?.classList.add("is-held");
       const r = origConfigure ? origConfigure.apply(this, arguments) : undefined;
       restoreFromProperties(this);
       // DOM-only render on load (no auto-grow) so the saved node.size is

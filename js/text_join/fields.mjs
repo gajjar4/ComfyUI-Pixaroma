@@ -19,6 +19,7 @@ import { widgetOf, BRAND, readState, labelFor } from "./core.mjs";
 import { applyAdaptiveCanvasOnly, keepRowWhenWired, isVueNodes, installResizeFloor, installCanvasZoomPassthrough, installNativeTextMenu } from "../shared/index.mjs";
 import { ACC, installNodeAccent } from "../shared/node_settings.mjs";
 import { isComfyTextShortcut } from "../shared/text_shortcuts.mjs";
+import { textSize } from "../shared/text_size.mjs";
 
 export const MIN_FIELD_H = 56;     // smallest a single field box can shrink to
 const DEF_FIELD_H = 84;            // comfortable default per field on a fresh node
@@ -88,7 +89,7 @@ export function injectCSS() {
        fixed label (the overlap bug). Small padding-top for breathing room only. */
     .pix-tj-ta { position:absolute; top:19px; right:0; bottom:0; left:0; box-sizing:border-box;
       background:transparent; color:#e0e0e0; border:0; outline:none; resize:none;
-      font:12px monospace; padding:2px 8px 7px; }
+      font:12px monospace; font-size:${textSize(12)}; padding:2px 8px 7px; }
     .pix-tj-ta::placeholder { color:#5c5c5c; font-style:italic; }
     .pix-tj-icons { position:absolute; top:3px; right:5px; z-index:3; display:none; gap:3px; }
     .pix-tj-field:hover .pix-tj-icons { display:flex; }

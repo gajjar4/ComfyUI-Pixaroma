@@ -34,6 +34,7 @@ import {
   maybeAC, syncColumns,
 } from "../prompt/tag_field.mjs";
 import { openLibraryEditor, closeLibraryEditorFor } from "../prompt/library_editor.mjs";
+import { textSize, onTextSizeChange } from "../shared/text_size.mjs";
 import {
   IDEA_SHARE_DEFAULT,
   IDEA_SHARE_MAX,
@@ -186,7 +187,7 @@ export function injectCSS() {
        code does not keep. */
 
     .pix-ap-out { background:#191919; border:1px solid #343436;
-      border-radius:4px; padding:6px 8px; color:#ddd9d4; font:11.5px/1.45 monospace;
+      border-radius:4px; padding:6px 8px; color:#ddd9d4; font:11.5px/1.45 monospace; font-size:${textSize(11.5)};
       resize:none; outline:none; box-sizing:border-box; width:100%; }
 
     /* The idea box is TWO STACKED LAYERS so @tags can be coloured while you type.
@@ -204,7 +205,7 @@ export function injectCSS() {
        a focus ring is the strongest "you can type here" cue there is. */
     .pix-ap-ideawrap:focus-within { border-color:${ACC}; }
     .pix-ap-ideabd { position:absolute; inset:0; padding:6px 8px; border:0;
-      font:11.5px/1.45 monospace; color:#ddd9d4; white-space:pre-wrap;
+      font:11.5px/1.45 monospace; font-size:${textSize(11.5)}; color:#ddd9d4; white-space:pre-wrap;
       word-wrap:break-word; overflow:hidden; scrollbar-gutter:stable;
       pointer-events:none; box-sizing:border-box; }
     /* overflow-wrap MUST match .pix-ap-ideabd's. syncColumns equalises the two
@@ -216,7 +217,7 @@ export function injectCSS() {
        machine only because a ComfyUI stylesheet happens to supply break-word. */
     .pix-ap-idea { flex:1 1 auto; width:100%; height:100%; box-sizing:border-box;
       background:transparent; color:transparent; caret-color:${ACC}; border:0;
-      border-radius:4px; padding:6px 8px; font:11.5px/1.45 monospace; resize:none;
+      border-radius:4px; padding:6px 8px; font:11.5px/1.45 monospace; font-size:${textSize(11.5)}; resize:none;
       outline:none; scrollbar-gutter:stable;
       white-space:pre-wrap; overflow-wrap:break-word; }
     /* ⚠️ color:transparent does NOT hide this layer while text is SELECTED.
@@ -705,6 +706,8 @@ export function buildFace(node, openPanel, openIdeaEditor) {
     node._pixApColRO = new ResizeObserver(() => syncColumns(idea, ideabd));
     node._pixApColRO.observe(idea);
   } catch (e) { /* no observer: the focus listener still corrects it */ }
+  // A text size change (js/shared/text_size.mjs) changes the font, not the box, so the observer never hears it.
+  onTextSizeChange(idea, () => syncColumns(idea, ideabd));
 
   applyShare(node);
   placeBand(node);

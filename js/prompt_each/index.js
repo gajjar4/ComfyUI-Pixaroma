@@ -16,6 +16,7 @@ import {
 } from "../shared/index.mjs";
 import { isGraphLoading } from "../shared/graph_loading.mjs";
 import { pixConfirm } from "../shared/confirm_dialog.mjs";
+import { onTextSizeChange } from "../shared/text_size.mjs";
 
 const CLASS = "PixaromaPromptEach";
 
@@ -559,6 +560,8 @@ app.registerExtension({
           if (w > 0) growAll(node._pixEachParts);
         });
         node._pixEachRowsRO.observe(parts.rows);
+        // A text size change (js/shared/text_size.mjs) changes the font, not the width: re-fit the boxes the same way.
+        onTextSizeChange(parts.rows, () => { if (node._pixEachParts?.rows?.clientWidth > 0) growAll(node._pixEachParts); });
         node.setDirtyCanvas(true, true);
       });
     };

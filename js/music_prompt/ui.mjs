@@ -36,6 +36,7 @@ import { passComfyShortcut } from "../shared/text_shortcuts.mjs";
 import { installNativeTextMenu } from "../shared/native_text_menu.mjs";
 import { installResizeFloor } from "../shared/resize_floor.mjs";
 import { notifyGraphChanged } from "../shared/graph_changed.mjs";
+import { textSize, onTextSizeChange } from "../shared/text_size.mjs";
 import {
   IDEA_SHARE_DEFAULT,
   IDEA_SHARE_MAX,
@@ -162,7 +163,7 @@ export function injectCSS() {
        a focus ring is the strongest "you can type here" cue there is. */
     .pix-mp-ideawrap:focus-within { border-color:${ACC}; }
     .pix-mp-ideabd { position:absolute; inset:0; padding:6px 8px; border:0;
-      font:12px/1.45 monospace; color:#e0e0e0; white-space:pre-wrap;
+      font:12px/1.45 monospace; font-size:${textSize(12)}; color:#e0e0e0; white-space:pre-wrap;
       word-wrap:break-word; overflow:hidden; scrollbar-gutter:stable;
       pointer-events:none; box-sizing:border-box; }
     /* overflow-wrap MUST match .pix-mp-ideabd's. syncColumns equalises the two
@@ -173,7 +174,7 @@ export function injectCSS() {
        this node shares that backdrop, so it would share the bug. */
     .pix-mp-idea { flex:1 1 auto; width:100%; height:100%; min-height:0;
       background:transparent; color:transparent; caret-color:${ACC};
-      border:0; font:12px/1.45 monospace; scrollbar-gutter:stable;
+      border:0; font:12px/1.45 monospace; font-size:${textSize(12)}; scrollbar-gutter:stable;
       white-space:pre-wrap; overflow-wrap:break-word; }
     .pix-mp-idea::placeholder { color:#5c5a57; }
     /* A transparent text colour does NOT hide this layer while text is
@@ -213,7 +214,7 @@ export function injectCSS() {
        selectable and copyable, which cursor:text says. */
     .pix-mp-out { flex:var(--pix-mp-out-grow,660) 1 0; min-height:64px;
       background:#2d2d2d; border:1px solid #3a3a3a; color:#d8d8d8;
-      font:11.5px/1.45 monospace; cursor:text; }
+      font:11.5px/1.45 monospace; font-size:${textSize(11.5)}; cursor:text; }
     .pix-mp-out::placeholder { color:#7d7a76; }
     .pix-mp-out.is-error { color:#e0a33a; border-color:#7a5a20; }
 
@@ -799,6 +800,8 @@ export function buildFace(node, openPanel, openIdeaEditor) {
     node._pixMpColRO = new ResizeObserver(() => syncColumns(idea, ideabd));
     node._pixMpColRO.observe(idea);
   } catch (e) { /* no observer: the focus listener still corrects it */ }
+  // A text size change (js/shared/text_size.mjs) changes the font, not the box, so the observer never hears it.
+  onTextSizeChange(idea, () => syncColumns(idea, ideabd));
 
   applyShare(node);
   renderFace(node);

@@ -13,6 +13,7 @@ import {
 } from "./core.mjs";
 import { attachFieldEditor, attachDragHandlers } from "./interaction.mjs";
 import { registerNodeHelp } from "../shared/index.mjs";
+import { textSize } from "../shared/text_size.mjs";
 
 const CSS_ID = "pix-find-replace-css";
 
@@ -135,6 +136,7 @@ const CSS = `
   border-radius: 4px;
   color: #e0e0e0;
   font: 12px monospace;
+  font-size: ${textSize(12)};
   padding: 6px 8px;
   outline: none;
   box-sizing: border-box;

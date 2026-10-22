@@ -13,6 +13,7 @@
 import { ACC } from "../shared/node_settings.mjs";
 import { isVueNodes } from "../shared/nodes2.mjs";
 import { pixAsset } from "../shared/api_url.mjs";
+import { textSize } from "../shared/text_size.mjs";
 
 const CSS_ID = "pix-prompt-each-css";
 
@@ -207,7 +208,7 @@ const CSS = `
 .pix-each-rowta {
   width: 100%; min-height: 30px; max-height: 140px; resize: none;
   background: #1d1d1d; border: 1px solid #333; border-radius: 4px;
-  color: #e0e0e0; font: 12px monospace; line-height: 1.4;
+  color: #e0e0e0; font: 12px monospace; font-size: ${textSize(12)}; line-height: 1.4;
   padding: 5px 7px; outline: none; box-sizing: border-box;
   overflow-y: auto; white-space: pre-wrap; overflow-wrap: break-word;
 }

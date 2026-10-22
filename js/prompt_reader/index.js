@@ -15,6 +15,7 @@ import { BRAND, applyAdaptiveCanvasOnly,
   installCanvasZoomPassthrough, installNodeAccent, registerNodeAccent,
 } from "../shared/index.mjs";
 import { isGraphLoading } from "../shared/graph_loading.mjs";
+import { textSize } from "../shared/text_size.mjs";
 
 const STATE_PROP = "promptReaderState";
 
@@ -208,7 +209,7 @@ function injectCSS() {
       padding: 8px;
       color: #ddd;
       font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-      font-size: 11px;
+      font-size: ${textSize(11)};
       line-height: 1.45;
       resize: none;
       min-height: 80px;

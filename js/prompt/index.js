@@ -7,6 +7,7 @@ import { isGraphLoading } from "../shared/graph_loading.mjs";
 import { growToCoreMinHeight } from "../shared/core_min_size.mjs";
 import { registerNodeSettings } from "../shared/node_settings.mjs";
 import { isComfyTextShortcut } from "../shared/text_shortcuts.mjs";
+import { textSize, onTextSizeChange } from "../shared/text_size.mjs";
 // Only the re-highlight fanout is still needed here: everything that READS the
 // library (which tags exist, which category rolls what) moved into tag_field.mjs.
 import { subscribe } from "./library.mjs";
@@ -126,7 +127,7 @@ function injectCSS() {
        ::-webkit-scrollbar to a different width for a textarea than for a div. So
        syncBackdropBox() MEASURES both columns and corrects any leftover gap. */
     .pix-prm-backdrop { position:absolute; inset:0; padding:6px 8px; border:0;
-      font:12px/1.5 monospace; color:#e0e0e0; white-space:pre-wrap; word-wrap:break-word; overflow:hidden; scrollbar-gutter:stable; pointer-events:none; box-sizing:border-box; }
+      font:12px/1.5 monospace; font-size:${textSize(12)}; color:#e0e0e0; white-space:pre-wrap; word-wrap:break-word; overflow:hidden; scrollbar-gutter:stable; pointer-events:none; box-sizing:border-box; }
     /* overflow-wrap MUST match the backdrop's. syncBackdropBox equalises the two
        columns' WIDTH, but width parity is not wrap parity: the backdrop breaks a
        long unbroken token and a textarea defaults to overflow-wrap:normal, which
@@ -140,7 +141,7 @@ function injectCSS() {
        State it explicitly instead of inheriting it. A long tag name is exactly
        what a tag library produces, so this node is the one most exposed. */
     .pix-prm-ta { flex:1 1 auto; width:100%; height:100%; box-sizing:border-box; background:transparent; color:transparent;
-      border:0; border-radius:4px; padding:6px 8px; font:12px/1.5 monospace; resize:none; outline:none; scrollbar-gutter:stable;
+      border:0; border-radius:4px; padding:6px 8px; font:12px/1.5 monospace; font-size:${textSize(12)}; resize:none; outline:none; scrollbar-gutter:stable;
       white-space:pre-wrap; overflow-wrap:break-word; caret-color:var(--acc); }
     .pix-prm-ta::placeholder { color:#6a6a6a; }
     /* ⚠️ color:transparent does NOT hide this layer while text is SELECTED, so
@@ -174,7 +175,7 @@ function injectCSS() {
        not on .mine: a descendant rule such as .pix-prm-expand .mine would out-rank the
        single-class token colours above and grey the whole thing out. */
     .pix-prm-expand { flex:1 1 0; background:#2d2d2d; border:1px solid #3a3a3a; border-radius:4px; padding:6px 8px;
-      font:11px/1.5 monospace; white-space:pre-wrap; min-height:30px; overflow-y:auto; color:#d8d8d8; }
+      font:11px/1.5 monospace; font-size:${textSize(11)}; white-space:pre-wrap; min-height:30px; overflow-y:auto; color:#d8d8d8; }
     .pix-prm-expand .lbl { color:#6d6d6d; }
     .pix-prm-expand .note { color:#8a8a8a; font-style:italic; }
     .pix-prm-bar { display:flex; align-items:center; flex:0 0 auto; gap:4px; flex-wrap:wrap; row-gap:4px; padding:0 2px; user-select:none; }
@@ -888,6 +889,8 @@ function setupNode(node) {
     node._pixPromptBoxRO = new ResizeObserver(() => syncBackdropBox(root._els));
     node._pixPromptBoxRO.observe(root._els.ta);
   }
+  // A text size change (js/shared/text_size.mjs) changes the font, not the box, so the observer never hears it.
+  onTextSizeChange(root._els.ta, () => syncBackdropBox(root._els));
 
   wireEvents(node, root);
 

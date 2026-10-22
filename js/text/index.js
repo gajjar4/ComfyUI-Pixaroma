@@ -4,6 +4,7 @@ import { BRAND, applyAdaptiveCanvasOnly, registerNodeHelp, closeHelpPopup, isVue
 } from "../shared/index.mjs";
 import { resolveDynamicPrompt } from "./dynamic_prompts.mjs";
 import { isComfyTextShortcut } from "../shared/text_shortcuts.mjs";
+import { textSize } from "../shared/text_size.mjs";
 
 // Text Pixaroma: multi-line text field with a STRING output. The native
 // ComfyUI multiline widget is HIDDEN; we render our own DOM widget so the
@@ -70,6 +71,7 @@ function injectCSS() {
       border-radius: 4px;
       padding: 6px 8px;
       font: 12px monospace;
+      font-size: ${textSize(12)};
       resize: none;
       outline: none;
     }

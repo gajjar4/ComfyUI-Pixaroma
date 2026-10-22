@@ -8,6 +8,7 @@
 import { BRAND } from "../shared/utils.mjs";
 import { ACC_HOVER } from "../shared/node_settings.mjs";
 import { getState, isEdited } from "./state.mjs";
+import { textSize } from "../shared/text_size.mjs";
 import { isComfyTextShortcut } from "../shared/text_shortcuts.mjs";
 
 // Fixed vertical budget for the non-fill rows -> getMinHeight is a per-renderer
@@ -63,7 +64,7 @@ function injectCSS() {
     .pix-pt-hic.off { opacity:0.35; cursor:default; }
     .pix-pt-ta { flex:1 1 0; min-height:0; width:100%; box-sizing:border-box;
       background:transparent; color:#e0e0e0; border:0; outline:none; resize:none;
-      font:12px monospace; line-height:1.4; padding:6px 8px; }
+      font:12px monospace; font-size:${textSize(12)}; line-height:1.4; padding:6px 8px; }
     .pix-pt-ta::placeholder { color:#5c5c5c; font-style:italic; }
     .pix-pt-ta:disabled { color:#9a9a9a; }
 

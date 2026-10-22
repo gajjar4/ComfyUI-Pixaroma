@@ -24,6 +24,7 @@ import { applyAdaptiveCanvasOnly, installResizeFloor, isVueNodes, closeHelpPopup
   installCanvasZoomPassthrough, installNativeTextMenu, installNodeAccent, registerNodeAccent,
 } from "../shared/index.mjs";
 import { runTab, eachRestoredOutput } from "../shared/run_tab.mjs";
+import { onTextSizeChange } from "../shared/text_size.mjs";
 
 const DEFAULT_W = 380;
 const DEFAULT_H = 320;
@@ -222,6 +223,8 @@ app.registerExtension({
           ro.observe(root);
           node._pixFrFieldRO = ro;
         } catch (_e) {}
+        // A text size change (js/shared/text_size.mjs) changes the font, not the width: re-fit the fields the same way.
+        onTextSizeChange(root, () => autoGrowAllFields(root));
 
         // Open at a comfortable default size on FRESH placement only. onConfigure
         // sets _pixFrConfigured for a loaded workflow (it runs before this

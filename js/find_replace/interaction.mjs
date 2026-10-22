@@ -7,13 +7,20 @@
 import { setFind, setReplace } from "./core.mjs";
 import { isComfyTextShortcut } from "../shared/text_shortcuts.mjs";
 
+// One line at the field's own font: 30 px at text size 10 (12px x 1.35 + 12 padding + 2 border), taller with a bigger
+// text size (js/shared/text_size.mjs), or the "find..." placeholder is cut in half.
+function oneLine(ta) {
+  const lh = parseFloat(getComputedStyle(ta).lineHeight);
+  return lh > 0 ? Math.max(30, Math.round(lh + 14)) : 30;
+}
+
 function autoGrow(ta) {
   // Empty field: pin to one line. Do NOT grow for the wrapped PLACEHOLDER -
   // when the node is narrow the placeholder ("find...") wraps to many lines and
   // scrollHeight balloons, leaving the field tall (and it wouldn't shrink back
   // when the node is widened, since autoGrow only runs on input). Only real
   // typed content grows the field.
-  if (!ta.value) { ta.style.height = "30px"; return; }
+  if (!ta.value) { ta.style.height = oneLine(ta) + "px"; return; }
   // Not laid out at a real width yet: a node rebuilt by Ctrl+Z / open is attached for a few frames ~16 px wide,
   // where every character wraps and each field would hit the 120 px cap, and the node grew to fit them (426 ->
   // 606 on one Ctrl+Z = an undo jam, find-replace.md). The width ResizeObserver re-runs this at the real width.

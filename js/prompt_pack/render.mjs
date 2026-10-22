@@ -17,6 +17,7 @@
 // MODES table - never hard-code a mode here.
 
 import { MODES, parsePrompts } from "./core.mjs";
+import { textSize } from "../shared/text_size.mjs";
 
 const BRAND = "#f66744";
 
@@ -89,6 +90,7 @@ export function injectCSS() {
       border-radius: 4px;
       padding: 6px 8px;
       font: 12px monospace;
+      font-size: ${textSize(12)};
       resize: none;
       outline: none;
     }

@@ -3,6 +3,7 @@ import { BRAND, applyAdaptiveCanvasOnly,
   installCanvasZoomPassthrough, installNativeTextMenu, installNodeAccent, registerNodeAccent,
 } from "../shared/index.mjs";
 import { runTab, eachRestoredOutput } from "../shared/run_tab.mjs";
+import { textSize } from "../shared/text_size.mjs";
 
 // Resize clamp - user verified 210 x 118 as the smallest comfortable
 // size for a compact label/readout. WIDGET_MIN_H is kept smaller than
@@ -119,7 +120,7 @@ app.registerExtension({
         padding: 6px 8px;
         margin: 0;
         font-family: monospace;
-        font-size: 12px;
+        font-size: ${textSize(12)};
         line-height: 1.35;
         resize: none;
         outline: none;
