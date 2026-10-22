@@ -10,9 +10,10 @@
 // the sound lane. Then one row per scene: its picture, its length, the picture's
 // role, its words. Then Add scene and the total.
 //
-// Height: getMinHeight is a CONSTANT (convention #39 E). The node grows by one
-// row when YOU add a scene and shrinks when you remove one; the drag floor is
-// measured live only while a resize handle is held.
+// Height: getMinHeight is a CONSTANT (convention #39 E). A fresh node and every
+// change YOU make to the rows fit the node to its content (no space left under
+// Add scene); a node you made shorter keeps its scrolling list and moves by what
+// the rows changed. The drag floor is measured live only while a handle is held.
 
 import { installCanvasZoomPassthrough } from "../shared/canvas_zoom.mjs";
 import { notifyGraphChanged } from "../shared/graph_changed.mjs";
@@ -91,7 +92,8 @@ async function uploadInto(node, i, file) {
 
 function pickFor(node, i, anchor) {
   const sc = readState(node).scenes[i];
-  openPicker(anchor, {
+  // Under the whole row: the picker needs the width for its folders and thumbnails.
+  openPicker(anchor.closest?.(".pix-h3t-row") || anchor, {
     current: sc?.picture,
     canRemove: !!sc?.picture && i > 0,
     onPick: (name) => change(node, (s) => {
@@ -156,7 +158,10 @@ export function buildFace(node) {
   const face = { root, inner, bar, strip, ruler, lane, list, foot, add, total, widget };
   node._pixH3tFace = face;
   face.floorOff = installResizeFloor(root, () => contentMin(node));
-  face.ro = new ResizeObserver(() => renderStrip(node));
+  face.ro = new ResizeObserver(() => {
+    renderStrip(node);
+    fitFresh(node);
+  });
   face.ro.observe(strip);
   return widget;
 }
@@ -172,7 +177,14 @@ export function contentMin(node) {
   return Math.max(FLOOR, Math.ceil(pad + 2 * gap + f.bar.offsetHeight + row + f.foot.offsetHeight));
 }
 
-const listWant = (f) => f.list.scrollHeight;
+/** What the body needs to show everything: the bar, every row, the footer. The
+ *  list never grows past its rows (flex 0 1 auto), so its scrollHeight is them. */
+function contentWant(f) {
+  const cs = getComputedStyle(f.inner);
+  const gap = parseFloat(cs.rowGap) || 8;
+  const pad = (parseFloat(cs.paddingTop) || 0) + (parseFloat(cs.paddingBottom) || 0);
+  return Math.ceil(pad + 2 * gap + f.bar.offsetHeight + f.list.scrollHeight + f.foot.offsetHeight);
+}
 
 function growBy(node, dy) {
   if (!dy || isGraphLoading() || !node?.size) return;
@@ -180,23 +192,37 @@ function growBy(node, dy) {
   node.setDirtyCanvas?.(true, true);
 }
 
+// A body that is not laid out (off screen, zoomed far out, a hidden tab) has no
+// real heights: never resize from it (convention #39).
+const laidOut = (f) => f.root.isConnected && f.root.offsetWidth >= 100;
+
+/** A node just added from the menu (never one opened, pasted or cloned: those
+ *  run onConfigure, which clears the flag) fits its content once it is laid out. */
+export function fitFresh(node) {
+  const f = node._pixH3tFace;
+  if (!f || !node._pixH3tFresh || !node.graph || isGraphLoading() || !laidOut(f)) return;
+  node._pixH3tFresh = false;
+  const dy = contentWant(f) - f.root.offsetHeight;
+  if (Math.abs(dy) >= 1 && dy < 2000) growBy(node, dy);
+}
+
 /** Re-sync everything; rebuild the rows on a structural change. `userAction` is
  *  what allows the node to change size - the load path never passes it. */
 export function renderFace(node, structural = true, userAction = false) {
   const f = node._pixH3tFace;
   if (!f) return;
-  // A body that is not laid out (off screen, zoomed far out, a hidden tab) has no
-  // real heights: never resize from it (convention #39).
-  const laidOut = f.root.offsetWidth >= 100;
-  const before = listWant(f);
+  const sized = structural && userAction && laidOut(f);
+  // A list that scrolls = a node made shorter than its rows: keep that window.
+  const before = f.list.scrollHeight;
+  const scrolled = before - f.list.clientHeight > 1;
   const st = readState(node);
   if (structural) renderRows(node, st);
   else syncRows(node, st);
   renderStrip(node, st);
   renderFoot(node, st);
-  if (structural && userAction && laidOut) {
-    const after = listWant(f);
-    if (before > 0 && after !== before) growBy(node, Math.max(-400, Math.min(400, after - before)));
+  if (sized) {
+    const dy = scrolled ? f.list.scrollHeight - before : contentWant(f) - f.root.offsetHeight;
+    if (Math.abs(dy) >= 1 && Math.abs(dy) < 2000) growBy(node, dy);
   }
 }
 
@@ -210,6 +236,17 @@ export function destroyFace(node) {
 }
 
 // ── the time bar ───────────────────────────────────────────────────────────
+// A short scene's block cannot hold "2 · 5.5 s": the badge drops to the number,
+// then goes; the tag goes. Never cut by the block's edge (the tooltip and the row
+// still say it all). Measured, so it follows the text size and the selection border.
+function fitLabels(W, b, badge, tag, i) {
+  if (!W) return;                                  // the strip is not laid out yet: the resize observer comes back
+  const room = b.clientWidth - 12;                 // left 4, and 8 clear on the right (no tangents)
+  if (badge.offsetWidth > room) badge.textContent = String(i + 1);
+  if (badge.offsetWidth > room) badge.hidden = true;
+  if (tag && tag.offsetWidth > room) tag.hidden = true;
+}
+
 function tileStyle(t, look, tw) {
   t.style.width = tw + "px";
   if (!look?.picture || pictureFailed(look.picture)) return;
@@ -245,15 +282,19 @@ export function renderStrip(node, st = readState(node)) {
       tiles.appendChild(t);
     }
     b.appendChild(tiles);
-    b.appendChild(el("span", "pix-h3t-badge", `${i + 1} · ${fmtS(s.length)}`));
-    if (!L.own && i > 0) b.appendChild(el("span", "pix-h3t-tag", "same look"));
-    else if (L.entering) b.appendChild(el("span", "pix-h3t-tag", "+ person"));
+    const badge = el("span", "pix-h3t-badge", `${i + 1} · ${fmtS(s.length)}`);
+    b.appendChild(badge);
+    let tag = null;
+    if (!L.own && i > 0) tag = el("span", "pix-h3t-tag", "same look");
+    else if (L.entering) tag = el("span", "pix-h3t-tag", "+ person");
+    if (tag) b.appendChild(tag);
     b.title = `Scene ${i + 1}: ${fmtS(starts[i])} to ${fmtS(starts[i] + s.length)}`;
     b.onclick = () => {
       select(node, i);
       f.list.children[i]?.scrollIntoView({ block: "nearest" });
     };
     f.strip.appendChild(b);
+    fitLabels(W, b, badge, tag, i);
   });
   // ruler: round ticks (5 s, 10 s...), about five of them, and the end
   f.ruler.replaceChildren();
@@ -296,6 +337,7 @@ function captionFor(node, i, s, L) {
     if (i === 0) {
       cap.textContent = "needed";
       cap.classList.add("cut");
+      cap.dataset.pixH3tPick = "";                  // opens the picker (pictures.mjs: a click here keeps it coming)
       cap.title = "Scene 1 needs a picture: the start picture";
       cap.onclick = (e) => pickFor(node, i, e.currentTarget.previousSibling);
     } else cap.textContent = "keeps the look";
@@ -337,6 +379,7 @@ function pictureButton(node, i, s, L) {
   const person = i > 0 && s.role === ROLE_PERSON;
   const b = el("button", "pix-h3t-pic");
   b.type = "button";
+  b.dataset.pixH3tPick = "";                    // opens the picker (pictures.mjs: a click here keeps it coming)
   b.style.height = h + "px";
   if (!s.picture) {
     b.classList.add("empty");

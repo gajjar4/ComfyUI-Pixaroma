@@ -74,9 +74,12 @@ app.registerExtension({
       }
       // Fresh size, SYNCHRONOUSLY: configure() restores a saved size right after
       // this, so a deferred write would clobber it on every reload (convention #9).
+      // DEFAULT_H is about one scene; the exact fit comes once the body is laid
+      // out (ui.mjs fitFresh), only for a node no configure() ran on.
       if (!Array.isArray(node.size)) node.size = [DEFAULT_W, DEFAULT_H];
       node.size[0] = DEFAULT_W;
       node.size[1] = DEFAULT_H;
+      node._pixH3tFresh = !isGraphLoading();
       // configure() fills node.properties after this; render once it has (Vue Compat #8).
       queueMicrotask(() => renderFace(node, true, false));
     };
@@ -86,6 +89,7 @@ app.registerExtension({
       const r = _configure?.apply(this, arguments);
       // DOM only: nothing here may write node.size, properties or slots (Vue Compat #18).
       this._pixH3tSel = -1;
+      this._pixH3tFresh = false;          // opened, pasted or cloned: keeps its saved size
       renderFace(this, true, false);
       return r;
     };

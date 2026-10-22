@@ -47,8 +47,9 @@ export function injectCSS() {
 .pix-h3t-lane .note.ok{color:#9fd9b4;}
 .pix-h3t-lane .note.warn{color:#ffd27a;}
 
-/* the scene list: the part that grows with the node, scrolls when it is shorter */
-.pix-h3t-list{flex:1 1 0 !important;min-height:120px;overflow-y:auto;display:flex;flex-direction:column;gap:8px;
+/* the scene list: as tall as its rows, never taller (Add scene sits right under the last row), scrolls when the
+   node is shorter (convention #39 B) */
+.pix-h3t-list{flex:0 1 auto !important;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:8px;
   padding-right:2px;}
 .pix-h3t-row{display:flex;gap:10px;padding:8px;border-radius:6px;background:rgba(255,255,255,.05);
   border:1px solid rgba(255,255,255,.15);flex-shrink:0;}
@@ -105,19 +106,10 @@ export function injectCSS() {
 .pix-h3t-add:disabled{opacity:.45;cursor:default;}
 .pix-h3t-total{flex:1 1 auto;color:#ccc;font-size:11px;}
 
-/* the picture list (body-level popup) */
-.pix-h3t-pop{position:fixed;z-index:10000;min-width:220px;max-height:320px;overflow-y:auto;box-sizing:border-box;
-  padding:4px 0;background:#181818;border:1px solid #555;border-radius:6px;box-shadow:0 8px 24px rgba(0,0,0,.55);
-  font:12px "Segoe UI",system-ui,sans-serif;color:#ddd;}
-.pix-h3t-pop .act{display:block;width:100%;box-sizing:border-box;padding:7px 12px;border:none;background:none;
-  color:${ACC};font:600 12px "Segoe UI",sans-serif;text-align:left;cursor:pointer;}
-.pix-h3t-pop .act:hover,.pix-h3t-pop .item:hover{background:#2a2a2a;}
-.pix-h3t-pop .act.plain{color:#ddd;font-weight:400;}
-.pix-h3t-pop .sec{padding:6px 12px 2px;color:#888;font-size:10px;text-transform:uppercase;letter-spacing:.04em;}
-.pix-h3t-pop .item{display:block;width:100%;box-sizing:border-box;padding:5px 12px;border:none;border-top:1px solid #2a2a2a;
-  background:none;color:#ddd;font:12px "Segoe UI",sans-serif;text-align:left;cursor:pointer;white-space:nowrap;}
-.pix-h3t-pop .item.on{color:${ACC};font-weight:600;}
-.pix-h3t-pop .empty{padding:8px 12px;color:#888;}
+/* the picker is Load Image's; its Upload button is the primary action. Only our own class here (one prefix per
+   node, convention #38), doubled so it outranks Load Image's button rule whichever stylesheet loads last */
+.pix-h3t-upload.pix-h3t-upload{background:${ACC};border-color:${ACC};color:#fff;}
+.pix-h3t-upload.pix-h3t-upload:hover{background:${ACC_HOVER};border-color:${ACC_HOVER};color:#fff;}
 
 /* the crop view (D2) */
 .pix-h3t-modal{position:fixed;inset:0;z-index:10001;display:flex;align-items:center;justify-content:center;

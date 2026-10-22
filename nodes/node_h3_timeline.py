@@ -18,10 +18,12 @@ The scenes live in the browser (js/h3_timeline/) and reach this node through the
 """
 from __future__ import annotations
 
+from ._folder_source import refresh_copy, source_stamp
 from ._h3_long_video_helpers import FPS
 from ._h3_timeline_helpers import clip_frames, cut_box, describe_scenes, fit_box, parse_state, scene_windows
 from ._h3_timeline_prompts import MODES, ROLE_PERSON, build_prompt
 from ._path_guard import is_path_under, rel_is_rooted
+from ._resize_helpers import normalize_bit_depth
 from .node_h3_long_video import WRAPPER_KEY, _diffusion_model_kind, _Windows
 
 
@@ -115,13 +117,48 @@ def _load_picture(name, n):
     import torch
     import node_helpers
     from PIL import Image, ImageOps
+    # A picture taken from one of the user's own folders (Load Image's picker, + Folder) is a COPY in
+    # input/pixaroma_folders: bring it up to date with the original first, like Load Image does. Never raises; a
+    # no-op for every other picture.
+    refresh_copy(name)
     path = _resolve_picture(name)
     if path is None:
         raise ValueError("H3 Timeline: scene {}'s picture \"{}\" is not in ComfyUI's input folder. Pick it again on "
                          "the node.".format(n, name))
     img = node_helpers.pillow(Image.open, path)
-    img = node_helpers.pillow(ImageOps.exif_transpose, img).convert("RGB")
+    img = node_helpers.pillow(ImageOps.exif_transpose, img)
+    img = normalize_bit_depth(img).convert("RGB")      # a 16-bit picture would clip to near white
     return torch.from_numpy(np.asarray(img).astype(np.float32) / 255.0)[None]
+
+
+def _pictures_stamp(state):
+    """For IS_CHANGED: what each scene picture IS now, so a picture changed under the same name re-runs the node.
+    A folder copy: the ORIGINAL's size + time (the copy is refreshed later, inside the Run; hashing it here would
+    change the key once more at the next Run, node_load_image.IS_CHANGED). Any other: the file's bytes, like core
+    Load Image. Only through _resolve_picture (IS_CHANGED is a second entry point). Never raises."""
+    import hashlib
+    m = hashlib.sha256()
+    try:
+        names = []
+        for sc in parse_state(state)["scenes"]:
+            if sc["picture"] and sc["picture"] not in names:
+                names.append(sc["picture"])
+        for name in names:
+            m.update(name.encode("utf-8", "replace") + b"\0")
+            stamp = source_stamp(name)
+            if stamp:
+                m.update(stamp.encode("utf-8"))
+                continue
+            path = _resolve_picture(name)
+            if path is None:
+                m.update(b"missing")
+                continue
+            with open(path, "rb") as f:
+                for chunk in iter(lambda: f.read(1 << 20), b""):
+                    m.update(chunk)
+    except Exception as e:
+        m.update(repr(e).encode("utf-8", "replace"))
+    return m.hexdigest()
 
 
 def _frame_picture(img, w, h, fit, x, y):
@@ -218,6 +255,12 @@ class PixaromaH3Timeline:
     )
     FUNCTION = "run"
     CATEGORY = "👑 Pixaroma/🎵 Audio"
+
+    @classmethod
+    def IS_CHANGED(cls, TimelineState=None, **kwargs):
+        # The scenes text is already in the cache key; this adds what the pictures ARE, so a picture edited or
+        # replaced under the same name (or a folder picture's original) re-runs the node.
+        return _pictures_stamp(TimelineState)
 
     def run(self, model, clip, vae, audio_vae, mode, width, height, audio=None, TimelineState=None, unique_id=None):
         try:

@@ -169,6 +169,14 @@ export async function pickFromFolder(node, folder, file) {
   return { ok: true, name: r.name };
 }
 
+/** Copy one folder picture into input WITHOUT touching any node (H3 Timeline's
+ *  scene pictures): -> { ok, name } or { ok: false, message }. */
+export async function takeFolderPicture(folder, file) {
+  const r = await importFromFolder(folder, file);
+  if (!r?.ok || !r.name) return { ok: false, message: r?.message || "Could not take the picture." };
+  return { ok: true, name: r.name };
+}
+
 /** The folder the CURRENT picture came from, or null. */
 export function folderContext(node) {
   const pick = node?.properties?.pixLiFolderPick;

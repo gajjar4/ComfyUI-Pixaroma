@@ -749,7 +749,7 @@ export function hideNativeImageCombo(node) {
 
 import { updateNativePreview, setSelectedImage, splitFilenameSubfolder } from "./api.mjs";
 import {
-  isFolderCopy, getFolders, folderName, folderFiles, folderThumbURL, pickFromFolder,
+  isFolderCopy, getFolders, folderName, folderFiles, folderThumbURL, pickFromFolder, takeFolderPicture,
   addFolderViaDialog, removeFolder, folderContext, sameFolder,
 } from "./folders.mjs";
 
@@ -812,12 +812,19 @@ function setThumbSize(v) {
 //  - Right pane shows thumbnail rows; opens to "All" grouped by folder.
 //  - Small/Large thumbnail size toggle, persisted via the ThumbSize setting.
 // Reuses groupValuesByFolder, splitFilenameSubfolder, setSelectedImage.
-export function openImageDropdown(node, anchorEl, onPick) {
-  const imageWidget = node._pixLiImageWidget;
-  if (!imageWidget) return;
+//
+// `target` (optional) picks for something that is NOT a loader's image widget
+// (H3 Timeline's scene pictures): { values, current, actions }. A pick then only
+// calls onPick(name) (a folder picture is copied into input first), and
+// `actions` adds buttons to the top row: [{ label, title, cls, onClick }], each
+// closing the popup first. Without it, everything below is exactly as before.
+// Returns the popup.
+export function openImageDropdown(node, anchorEl, onPick, target = null) {
+  const imageWidget = node?._pixLiImageWidget;
+  if (!target && !imageWidget) return null;
   // Copies of pictures taken from the user's own folders live in
   // input/pixaroma_folders. They are shown under their FOLDER, not here.
-  const values = (imageWidget.options?.values || []).filter((v) => !isFolderCopy(v));
+  const values = ((target ? target.values : imageWidget.options?.values) || []).filter((v) => !isFolderCopy(v));
 
   // Close any existing popup. Call its stored cleanup (not a bare remove) so
   // the prior popup's document-level capture listeners are detached too.
@@ -860,7 +867,7 @@ export function openImageDropdown(node, anchorEl, onPick) {
   // button is reachable before anything was ever uploaded; the input pane says
   // the same sentence.)
   const groups = groupValuesByFolder(values); // [{folder, files:[{full,name}]}], root first
-  const curVal = imageWidget.value;
+  const curVal = target ? target.current : imageWidget.value;
   const hasSubfolders = groups.some((g) => g.folder !== "");
 
   // The user's own picture folders (per person, see folders.mjs). A folder is
@@ -868,7 +875,7 @@ export function openImageDropdown(node, anchorEl, onPick) {
   // subfolder key ("" or a relative name) or "__all".
   let folders = getFolders();
   const isSrc = (key) => typeof key === "string" && key.startsWith("src:");
-  const ctx = folderContext(node);                 // where the CURRENT picture came from
+  const ctx = target ? null : folderContext(node); // where the CURRENT picture came from
   let loaded = null;                               // {path, res} of the folder on screen
   let folderReq = 0;
   let taking = false;
@@ -902,7 +909,20 @@ export function openImageDropdown(node, anchorEl, onPick) {
   addFolderBtn.className = "pix-li-pop-addfolder";
   addFolderBtn.textContent = "+ Folder";
   addFolderBtn.title = "Add a folder of pictures. A folder window opens; the folder you pick there shows up on the left.";
-  searchRow.append(mag, input, addFolderBtn, sizeToggle);
+  const extra = (target?.actions || []).map((a) => {
+    const b = document.createElement("span");
+    b.className = "pix-li-pop-addfolder" + (a.cls ? " " + a.cls : "");
+    b.setAttribute("role", "button");
+    b.textContent = a.label;
+    if (a.title) b.title = a.title;
+    b.addEventListener("click", (e) => {
+      e.stopPropagation();
+      closePopup();
+      a.onClick();
+    });
+    return b;
+  });
+  searchRow.append(mag, input, ...extra, addFolderBtn, sizeToggle);
   popup.appendChild(searchRow);
 
   // ── body: sidebar (optional) + scrollable pane ──
@@ -951,7 +971,7 @@ export function openImageDropdown(node, anchorEl, onPick) {
     if (entry.full === curVal) scrollTarget = row;
     row.addEventListener("click", (e) => {
       e.stopPropagation();
-      setSelectedImage(node, entry.full);
+      if (!target) setSelectedImage(node, entry.full);
       closePopup();
       if (onPick) onPick(entry.full);
     });
@@ -996,7 +1016,9 @@ export function openImageDropdown(node, anchorEl, onPick) {
       taking = true;
       footer.textContent = "Taking the picture…";
       let r;
-      try { r = await pickFromFolder(node, path, f.file); } finally { taking = false; }
+      try {
+        r = target ? await takeFolderPicture(path, f.file) : await pickFromFolder(node, path, f.file);
+      } finally { taking = false; }
       if (popup._pixClosed) return;
       if (r.ok) {
         closePopup();
@@ -1078,7 +1100,7 @@ export function openImageDropdown(node, anchorEl, onPick) {
       pane.appendChild(makeMsg("Loading…"));
       footer.textContent = folderName(path);
       const my = ++folderReq;
-      folderFiles(node, path, { fresh: true }).then((res) => {
+      folderFiles(target ? null : node, path, { fresh: true }).then((res) => {
         if (my !== folderReq || popup._pixClosed) return;
         loaded = { path, res };
         renderSidebar();
@@ -1273,6 +1295,7 @@ export function openImageDropdown(node, anchorEl, onPick) {
     document.addEventListener("wheel", onWheel, true);
     document.addEventListener("keydown", onKey, true);
   }, 0);
+  return popup;
 }
 
 const MODE_CHIPS = [

@@ -9,7 +9,7 @@ export const H3_TIMELINE_HELP = {
       heading: "How to use it",
       bullets: [
         "Wire your MiniMax H3 `model` (after its LoRAs), `clip`, `vae` and `audio_vae` in. It replaces MiniMax H3 Reference to Video and H3 Long Video.",
-        "Scene 1: click `+ picture` and pick or upload the start picture. Write what happens, like `sings softly with her hands clasped`.",
+        "Scene 1: click `+ picture` and pick the start picture. It is the same picker as Load Image: search, your own folders (`+ Folder`), and `Upload` for a picture from your computer. You can also drop a picture file on a scene. Write what happens, like `sings softly with her hands clasped`.",
         "Click `+ Add scene` for the next part, set its length and write what changes, like `sways and dances, arms open wide`.",
         "For Sing or Talk, wire the song or the voice into `audio`, and the same sound into H3 Audio Sync's `track` so the mouth follows it.",
         "Wire `model` and `latent` into H3 Audio Sync, then to the sampler, and `positive` into the sampler (and through Conditioning Zero Out into its negative). Run.",

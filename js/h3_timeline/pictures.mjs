@@ -1,13 +1,14 @@
 // H3 Timeline Pixaroma - scene pictures: the input-folder list, upload, the
-// picture URL, each picture's real size, and the small picker popup.
+// picture URL, each picture's real size, and the picker (Load Image's own).
 //
 // A scene picture is a NAME in ComfyUI's input folder ("singer.jpg",
-// "Studio/hat.png"), exactly like core Load Image's value, so Python resolves it
-// the same way (nodes/node_h3_timeline._resolve_picture, input folder only).
+// "Studio/hat.png", "pixaroma_folders/..." for one taken from a folder), exactly
+// like core Load Image's value, so Python resolves it the same way
+// (nodes/node_h3_timeline._resolve_picture, input folder only).
 
 import { api } from "../../../scripts/api.js";
+import { openImageDropdown, injectCSS as injectLiCSS } from "../load_image/ui.mjs";
 import { pixApiUrl } from "../shared/api_url.mjs";
-import { placeZoomedPopup } from "../shared/popup_zoom.mjs";
 import { comboViewRoute } from "../shared/view_url.mjs";
 
 /** The picture's URL for an <img> or a CSS background (never root-relative). */
@@ -66,90 +67,48 @@ export function askFile() {
 }
 
 let openPop = null;
+let openReq = 0;
 
 export function closePicker() {
+  openReq += 1;                     // a picker still waiting for its list never opens
   const p = openPop;
   openPop = null;
-  p?.close();
+  if (p?.isConnected) p._pixClose?.();
 }
 
-/** The picker popup under a scene's picture: Upload, Remove (when it has one),
- *  then the input pictures grouped by folder. `onPick(name | null)`. */
+/** The picker under a scene: Load Image's own (search, + Folder, S / L, the
+ *  folders on the left, thumbnails), reused through its `target` option, with
+ *  Upload (and Remove, when the scene may have none) in its top row.
+ *  `onPick(name | null)`. */
 export async function openPicker(anchor, { current, canRemove, onPick, onUpload }) {
   closePicker();
-  const pop = document.createElement("div");
-  pop.className = "pix-h3t-pop";
-  pop.setAttribute("role", "listbox");
-  const up = document.createElement("button");
-  up.className = "act";
-  up.textContent = "Upload a picture...";
-  up.onclick = () => { closePicker(); onUpload(); };
-  pop.appendChild(up);
-  if (canRemove) {
-    const rm = document.createElement("button");
-    rm.className = "act plain";
-    rm.textContent = "No picture (keeps the look)";
-    rm.onclick = () => { closePicker(); onPick(null); };
-    pop.appendChild(rm);
-  }
-  const loading = document.createElement("div");
-  loading.className = "empty";
-  loading.textContent = "Loading the input folder...";
-  pop.appendChild(loading);
-  document.body.appendChild(pop);
-
-  const onDown = (e) => { if (!pop.contains(e.target)) closePicker(); };
-  const onWheel = (e) => { if (!pop.contains(e.target)) closePicker(); };
-  const onKey = (e) => { if (e.key === "Escape") { e.stopPropagation(); closePicker(); } };
-  window.addEventListener("pointerdown", onDown, true);
-  window.addEventListener("wheel", onWheel, true);
-  window.addEventListener("keydown", onKey, true);
-  const me = {
-    close() {
-      window.removeEventListener("pointerdown", onDown, true);
-      window.removeEventListener("wheel", onWheel, true);
-      window.removeEventListener("keydown", onKey, true);
-      pop.remove();
-    },
+  const my = openReq;
+  injectLiCSS();                    // the picker does not inject its own stylesheet (load-image-mini.md)
+  // Nothing shows while the list loads: any click but on something that opens a picker itself (the same row's
+  // words box and the crop caption included) or Esc in that time cancels the open, or the picker would pop up
+  // later and take the caret or cover the crop view. A click on another picture opens that one instead.
+  const cancel = (e) => {
+    if (e.type === "keydown" ? e.key === "Escape" : !e.target?.closest?.("[data-pix-h3t-pick]")) openReq += 1;
   };
-  openPop = me;
-  placeZoomedPopup(pop, anchor, { baseMaxHeightPx: 320 });
-
-  const names = await listPictures();
-  if (openPop !== me) return;
-  loading.remove();
-  if (!names.length) {
-    const e = document.createElement("div");
-    e.className = "empty";
-    e.textContent = "No pictures in the input folder yet.";
-    pop.appendChild(e);
+  window.addEventListener("pointerdown", cancel, true);
+  window.addEventListener("keydown", cancel, true);
+  let values;
+  try {
+    values = await listPictures();
+  } finally {
+    window.removeEventListener("pointerdown", cancel, true);
+    window.removeEventListener("keydown", cancel, true);
   }
-  const groups = new Map();
-  for (const n of names) {
-    const i = n.lastIndexOf("/");
-    const g = i < 0 ? "" : n.slice(0, i);
-    if (!groups.has(g)) groups.set(g, []);
-    groups.get(g).push(n);
-  }
-  let onItem = null;
-  for (const [g, list] of [...groups.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
-    if (groups.size > 1) {
-      const sec = document.createElement("div");
-      sec.className = "sec";
-      sec.textContent = g || "input";
-      pop.appendChild(sec);
-    }
-    for (const n of list) {
-      const b = document.createElement("button");
-      b.className = "item" + (n === current ? " on" : "");
-      b.textContent = n.slice(n.lastIndexOf("/") + 1);
-      b.title = n;
-      b.setAttribute("role", "option");
-      b.onclick = () => { closePicker(); onPick(n); };
-      pop.appendChild(b);
-      if (n === current) onItem = b;
-    }
-  }
-  placeZoomedPopup(pop, anchor, { baseMaxHeightPx: 320 });
-  onItem?.scrollIntoView({ block: "nearest" });
+  if (my !== openReq || !anchor.isConnected) return;
+  const actions = [{
+    label: "Upload", cls: "pix-h3t-upload",
+    title: "Upload a picture from your computer (it goes into the input folder)",
+    onClick: onUpload,
+  }];
+  if (canRemove) actions.push({
+    label: "Remove",
+    title: "No picture: this scene keeps the look of the scene before it",
+    onClick: () => onPick(null),
+  });
+  openPop = openImageDropdown(null, anchor, (name) => onPick(name), { values, current, actions });
 }
