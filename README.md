@@ -202,6 +202,8 @@ The groups are in order of how much they are used in real workflows, and inside 
 |---|---|
 | [Load&nbsp;Audio&nbsp;Pixaroma](https://workflows.pixaroma.com/help/nodes/load-audio/) | Shows a sound file's shape so you can take just the part you&nbsp;want. |
 | [H3&nbsp;Audio&nbsp;Sync&nbsp;Pixaroma](https://workflows.pixaroma.com/help/nodes/h3-audio-sync/) | Makes a MiniMax H3 video sing your song instead of one it makes&nbsp;up. |
+| [H3&nbsp;Timeline&nbsp;Pixaroma](https://workflows.pixaroma.com/help/nodes/h3-timeline/) | Tells one long MiniMax H3 video as scenes, each with its own words and, if needed, a&nbsp;picture. |
+| [H3&nbsp;Long&nbsp;Video&nbsp;Pixaroma](https://workflows.pixaroma.com/help/nodes/h3-long-video/) | Makes one MiniMax H3 video longer than 15 seconds, in one run with no&nbsp;cuts. |
 
 ### 🖱️ Canvas tools (no node needed)
 
@@ -244,6 +246,11 @@ The two editors can also use **rembg** (`pip install rembg`, then restart ComfyU
 ---
 
 ## 🛠 Changelog
+
+### **October 22, 2026 · v1.4.229**
+- **NEW: H3 Timeline Pixaroma.** Tell one long MiniMax H3 video as scenes, each with its own length, words and, if needed, a picture: a new look, or a person who walks in. One run, no cuts, tested up to 60 seconds.
+- **NEW: H3 Long Video Pixaroma.** One MiniMax H3 video longer than 15 seconds, made in one run with no cuts.
+- **Text size:** the text boxes of the text and prompt nodes follow ComfyUI's text size setting, and each node can have its own size from the right-click menu.
 
 ### **October 21, 2026 · v1.4.227-v1.4.228**
 - **AI Prompt has two MOSS-Image presets:** one turns a short idea into a detailed caption, the other writes the caption that makes a picture again.
