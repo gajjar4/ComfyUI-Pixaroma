@@ -2118,7 +2118,8 @@ const HELP = {
         bullets: [
           "Use MiniMax H3 Reference to Video. Your picture reaches every window. With Image to Video's first frame, only the first window sees the picture.",
           "Use your real song or voice with H3 Audio Sync. Every window sings its own part of the track, so the sound has no seam at all.",
-          "Each window leans a little toward the pose in your picture, so a striking gesture there, like a hand raised to the collarbone, comes back now and then in a long video. If you do not want that, use a picture in a relaxed pose.",
+          "At 480x864 each window leans a little toward the pose in your picture, so a striking gesture there, like a hand raised to the collarbone, comes back now and then in a long video. At 576x1024 it did not come back at all. Use 1024, or a picture in a relaxed pose.",
+          "Make sure your song is as long as the video. Where the track ends the node fills it with silence, and the character stops singing there.",
           "It makes new video from scratch. Running it over an upscaled low-resolution video does NOT sharpen it: H3 keeps a soft input soft.",
         ],
       },
