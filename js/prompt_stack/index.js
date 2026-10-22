@@ -73,14 +73,15 @@ function chromeAllowance(node) {
 
 // A node opened from a file keeps its saved height until the user acts on it, as in Prompt Multi (its
 // contentMinHeight has the why: a bigger text size grew it after the open and after every Ctrl+Z back to it in
-// Classic, an undo jam, 2026-10-22). Held, the rows scroll inside the body instead.
+// Classic, an undo jam, 2026-10-22). Held, the rows scroll inside the body instead. _pixPsHeld is the height it
+// was opened with, never the live size (a corner drag re-reads computeSize on every move).
 function contentMinHeight(node, root) {
   const h = measureContentHeight(root);
-  return node._pixPsHeld && !isVueNodes() ? Math.min(h, Math.max(120, node.size[1] - chromeAllowance(node))) : h;
+  return node._pixPsHeld && !isVueNodes() ? Math.min(h, Math.max(120, node._pixPsHeld - chromeAllowance(node))) : h;
 }
 
 function releaseHeld(node) {
-  node._pixPsHeld = false;
+  node._pixPsHeld = 0;
   node._pixPsRoot?.classList.remove("is-held");
 }
 
@@ -247,6 +248,11 @@ app.registerExtension({
         });
         applyAdaptiveCanvasOnly(_psWidget);
         if (node._pixPsHeld) root.classList.add("is-held");
+        // ... and grows to fit on the first press inside it while its rows do not fit: a user action, undoable like
+        // typing. A node whose rows fit stays as it is (a click to read or copy must not change it).
+        root.addEventListener("pointerdown", (e) => {
+          if (e.button === 0 && node._pixPsHeld && !isVueNodes() && root.scrollHeight > root.clientHeight + 1) node._pixPsGrow?.();
+        }, true);
         // Floor the node at its content height while a resize handle is dragged
         // (Nodes 2.0) so the bottom button row can't be squished out of frame.
         node._pixPsFloorOff = installResizeFloor(root, measureContentHeight);
@@ -300,7 +306,7 @@ app.registerExtension({
     const origConfigure = nodeType.prototype.onConfigure;
     nodeType.prototype.onConfigure = function (info) {
       this._pixPsConfigured = true;
-      this._pixPsHeld = true;         // keeps its saved height (contentMinHeight)
+      this._pixPsHeld = this.size[1];         // keeps its saved height (contentMinHeight)
       this._pixPsRoot?.classList.add("is-held");
       const r = origConfigure ? origConfigure.apply(this, arguments) : undefined;
       stripLegacyWireSlots(this);

@@ -62,13 +62,15 @@ function setNodeHeight(node, h) {
 // js/shared/text_size.mjs), and Classic core grows any node whose widget asks for more than its body: after the
 // open AND after every Ctrl+Z back to it, so the next click wiped the redo (an undo jam, measured 2026-10-22:
 // 358 -> 438 at text size 24). Held, the rows scroll inside the body instead. Nodes 2.0 never grew this way.
+// _pixPmHeld is the height it was opened with, not the live size: a corner drag re-reads computeSize on every
+// move, and a cap on the live size let the node be dragged shorter than its rows (review, 2026-10-22).
 function contentMinHeight(node, root) {
   const h = measureContentHeight(root);
-  return node._pixPmHeld && !isVueNodes() ? Math.min(h, Math.max(120, node.size[1] - chromeAllowance(node))) : h;
+  return node._pixPmHeld && !isVueNodes() ? Math.min(h, Math.max(120, node._pixPmHeld - chromeAllowance(node))) : h;
 }
 
 function releaseHeld(node) {
-  node._pixPmHeld = false;
+  node._pixPmHeld = 0;
   node._pixPmRoot?.classList.remove("is-held");
 }
 
@@ -242,6 +244,11 @@ app.registerExtension({
         });
         applyAdaptiveCanvasOnly(_pmWidget);
         if (node._pixPmHeld) root.classList.add("is-held");
+        // ... and grows to fit on the first press inside it while its rows do not fit: a user action, undoable like
+        // typing. A node whose rows fit stays as it is (a click to read or copy must not change it).
+        root.addEventListener("pointerdown", (e) => {
+          if (e.button === 0 && node._pixPmHeld && !isVueNodes() && root.scrollHeight > root.clientHeight + 1) node._pixPmGrow?.();
+        }, true);
         // Floor the node at its content height while a resize handle is dragged
         // (Nodes 2.0) so the bottom button row can't be squished out of frame.
         node._pixPmFloorOff = installResizeFloor(root, measureContentHeight);
@@ -286,7 +293,7 @@ app.registerExtension({
     const origConfigure = nodeType.prototype.onConfigure;
     nodeType.prototype.onConfigure = function (info) {
       this._pixPmConfigured = true;   // loaded from a workflow: its render holds the first-frame grow
-      this._pixPmHeld = true;         // ... and its saved height (contentMinHeight)
+      this._pixPmHeld = this.size[1];         // ... and its saved height (contentMinHeight)
       this._pixPmRoot?.classList.add("is-held");
       const r = origConfigure ? origConfigure.apply(this, arguments) : undefined;
       restoreFromProperties(this);

@@ -222,6 +222,7 @@ const CSS = `
   border-radius: 4px;
   padding: 7px 9px;
   font: 11px monospace;
+  font-size: ${textSize(11)};
   color: #cfcfcf;
   line-height: 1.5;
   flex: 1 1 0;

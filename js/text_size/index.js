@@ -9,6 +9,7 @@
 import { app } from "../../../scripts/app.js";
 import { TEXT_SIZE_SETTING, nodeTextZoom, applyNodeTextZoom, setNodeTextZoom, notifyTextSize } from "../shared/text_size.mjs";
 import { getNodeHelp } from "../shared/help.mjs";
+import { notifyGraphChanged } from "../shared/graph_changed.mjs";
 
 // true = the node's text boxes are ours (the node level works); false = its box is ComfyUI's own (Text Match's
 // words): only the setting reaches it.
@@ -58,7 +59,10 @@ app.registerExtension({
       if (v === last) return;
       const was = last;
       last = v;
-      if (was) notifyTextSize();
+      if (!was) return;
+      notifyTextSize();
+      // the nodes that grew to fit (Prompt Multi / Stack) are their own undo step, not part of the next action's
+      notifyGraphChanged();
     }).observe(html, { attributes: true, attributeFilter: ["style"] });
 
     // every node file has registered its help by now (they do it when their module loads)
