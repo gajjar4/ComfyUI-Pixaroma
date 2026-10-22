@@ -28,7 +28,7 @@ export const H3_TIMELINE_HELP = {
       defs: [
         ["Start picture", "Scene 1's picture is the first frame and the look of the whole video. It is needed: without a picture H3 cannot keep a long video together."],
         ["No picture", "The scene keeps the look of the scene before it. Most scenes need no picture: the words change what happens."],
-        ["New look", "The same shot with one change, like a hat or another dress. It becomes the look from that scene on and fades in over about half a second. Make it from the start picture with an edit model (Flux Klein Image Edit) so the framing stays the same."],
+        ["New look", "The same shot with one change, like a hat or another dress. It becomes the look from that scene on and fades in over about half a second. Make it from the start picture with an edit model (Flux Klein Image Edit) so the framing stays the same. For a change that looks natural, let her make it first in a scene with no picture, and give the New look to the scene after (see Tips)."],
         ["Add person", "Any photo of someone who joins, kept whole (never cut). Write what they do, like `a man walks in from the right and stands beside her`."],
       ],
     },
@@ -53,7 +53,7 @@ export const H3_TIMELINE_HELP = {
       bullets: [
         "A scene change blends over a couple of seconds, so it reads as one continuous shot.",
         "At the start of a new scene she can drift back toward the picture's pose for a moment. A relaxed pose in the start picture looks most natural.",
-        "Something new cannot appear from nowhere: a New look fades in. For a real action (she puts a hat on) the hat must be in the picture or her hand first.",
+        "Action first, picture after. A New look on its own makes the change fade in, which looks like magic. To make it natural, write the action in a scene with NO picture (`lifts a black hat and puts it on her head`), then give the next scene the New look picture (her wearing the hat): it only keeps the hat on from there. Tested: she raises her hands, the hat comes into them and she puts it on, with no fade.",
         "A person who joins stays for the scene they join in, but can drift out at the next scene change. Write their arrival and what they do next in ONE scene (`a man walks in from the right and stands beside her, smiling`), as long as you want them there.",
         "A person who joins fits best when there is room in the frame beside the main person.",
         "Works only with MiniMax H3. H3 Long Video is the simpler node for one long scene.",

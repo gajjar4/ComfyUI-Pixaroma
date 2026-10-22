@@ -467,7 +467,7 @@ function renderRows(node, st) {
     } else if (s.picture) {
       const seg = el("span", "pix-h3t-seg");
       for (const [role, label, tip] of [
-        [ROLE_LOOK, "New look", "The same shot with a change (a hat, another dress): it becomes the look from here on, and fades in"],
+        [ROLE_LOOK, "New look", "The same shot with a change (a hat, another dress): it becomes the look from here on, and fades in. For a natural change, write the action in the scene before, with no picture"],
         [ROLE_PERSON, "Add person", "Someone who joins: any photo, kept whole. They can walk in"],
       ]) {
         const b = el("button", s.role === role ? "on" : "", label);

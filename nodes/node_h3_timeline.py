@@ -205,7 +205,8 @@ class PixaromaH3Timeline:
     DESCRIPTION = (
         "Tell one long MiniMax H3 video as scenes: each scene has its own length, a few words for what happens, "
         "and, if it needs one, its own picture. Scene 1's picture is the start picture. A later picture is either a "
-        "New look (the same shot with a change, like a hat or another dress; it fades in) or Add person (any photo "
+        "New look (the same shot with a change, like a hat or another dress; it fades in, so for a natural change write "
+        "the action in the scene before, with no picture) or Add person (any photo "
         "of someone who joins; they can walk in).\n\n"
         "It replaces MiniMax H3 Reference to Video and H3 Long Video: wire model, clip and both VAEs in, and the "
         "model, positive and latent out to H3 Audio Sync and the sampler. Sing and Talk put your words into the "
