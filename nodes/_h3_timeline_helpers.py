@@ -60,6 +60,7 @@ def scene_bounds(lengths, chunks):
 
 
 SPLIT_OVERLAP_CHUNKS = 10      # ~7 s: inside ONE scene, the overlap that kept a person who walked in (test C)
+MIN_REACH_CHUNKS = 1           # a scene may reach this little into a neighbour to stay in ONE window (scene_windows)
 
 
 def _split(a, b, max_chunks):
@@ -103,9 +104,21 @@ def scene_windows(latent_t, audio_t, lengths, max_chunks=MAX_WINDOW_CHUNKS):
     k = len(b) - 1
     out = []
     for i in range(k):
-        a = b[i] - (EDGE_CHUNKS if i > 0 else 0)
-        e = b[i + 1] + (EDGE_CHUNKS if i < k - 1 else 0)
-        for s, t in _split(a, e, max_chunks):
+        back = EDGE_CHUNKS if i > 0 else 0
+        ahead = EDGE_CHUNKS if i < k - 1 else 0
+        # A scene a little too long for one window keeps ONE window by reaching less into its neighbours (the
+        # previous one first), never below 1 chunk (each border must stay inside an overlap). MEASURED 10-22
+        # (t4_room, 10 s + 14 s, Add person): split in two, the windows put the man in different places and he
+        # slid across their overlap. Too long even then: split as before, with the full reach.
+        nb, na = back, ahead
+        while b[i + 1] + na - (b[i] - nb) > max_chunks and (nb > MIN_REACH_CHUNKS or na > MIN_REACH_CHUNKS):
+            if nb > MIN_REACH_CHUNKS:
+                nb -= 1
+            else:
+                na -= 1
+        if b[i + 1] + na - (b[i] - nb) <= max_chunks:
+            back, ahead = nb, na
+        for s, t in _split(b[i] - back, b[i + 1] + ahead, max_chunks):
             out.append((s, t, i))
     if len(out) == 1:
         return None

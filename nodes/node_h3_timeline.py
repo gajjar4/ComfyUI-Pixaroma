@@ -224,7 +224,9 @@ class PixaromaH3Timeline:
         "no audio and H3 makes the sound itself.\n\n"
         "The video is made in one run, in windows that follow your scenes, so each scene change blends over a "
         "couple of seconds with no cut or flash. A scene is 4 seconds or more. A person who joins stays for the "
-        "scene they join in: write their arrival and what they do next in one scene. Works only with MiniMax H3."
+        "scene they join in: write their arrival and what they do next in one scene, and keep that scene at about "
+        "13 seconds or less (a longer one is made in two parts and the person can slide between them). Works only "
+        "with MiniMax H3."
     )
 
     @classmethod
