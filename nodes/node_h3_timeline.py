@@ -40,6 +40,7 @@ class _SceneWindows(_Windows):
         self.max_chunks = max_chunks            # the longest window (window_chunks)
         self.preroll = preroll                  # chunks a cut scene starts before its border (scene_windows)
         self._priv = {}                         # per window: (noise level, x0, eps) of its own frames across a cut
+        self._gones = None                      # (weights, per window: its zero-weight positions), _gone_of
         self.scene_conds = scene_conds          # [(cross_attn, extras) or None] per scene
         # {scene: (cross_attn, extras)}: the conditioning for the LATER windows of a scene that was split (too long
         # for one window even at the smallest reach, scene_windows), when someone walked in during its first window:
@@ -59,6 +60,18 @@ class _SceneWindows(_Windows):
                 [torch.tensor(w, dtype=torch.float32, device=device).view(1, 1, -1, 1, 1) for w in wv],
                 [torch.tensor(w, dtype=torch.float32, device=device).view(1, 1, 1, -1) for w in wa])}
         return self._weights[key]
+
+    def _gone_of(self, wv):
+        """Per window: the positions it renders only to throw away (blend weight 0: across a clean cut), as an
+        index on the weights' device, or None. Worked out once per weight set, so the window loop never waits for
+        the GPU to say whether a window has any."""
+        if self._gones is None or self._gones[0] is not wv:     # holding wv keeps its id from being reused
+            out = []
+            for w in wv:
+                idx = (w.view(-1) <= 0).nonzero().view(-1)
+                out.append(idx if idx.numel() else None)
+            self._gones = (wv, out)
+        return self._gones[1]
 
     def _context(self, dm, sc, cond, like):
         key = (sc, str(like.device), str(like.dtype))      # sc = a scene index, or ("later", scene)
@@ -95,10 +108,11 @@ class _SceneWindows(_Windows):
         held_v, held_a = _held(mask_v, 2), _held(mask_a, -1)
         sg = transformer_options.get("sigmas")
         sig = float(sg.max()) if torch.is_tensor(sg) and sg.numel() else None     # this step's noise level
+        gones = self._gone_of(wv)
         out_v = torch.zeros(video.shape, dtype=torch.float32, device=video.device)
         out_a = torch.zeros(audio.shape, dtype=torch.float32, device=audio.device)
         seen = set()
-        for (l0, l1, a0, a1, sc), w_v, w_a in zip(wins, wv, wa):
+        for k, ((l0, l1, a0, a1, sc), w_v, w_a) in enumerate(zip(wins, wv, wa)):
             if (held_v is not None and held_a is not None
                     and bool(held_v[l0:l1][w_v.view(-1) > 0].all()) and bool(held_a[a0:a1][w_a.view(-1) > 0].all())):
                 seen.add(sc)
@@ -130,12 +144,17 @@ class _SceneWindows(_Windows):
             # nearest frame repeated there gave black streaks in the last frames before the cut (seed 111). So
             # there this window keeps its OWN continuation of its shot, stepped from its own predictions as if the
             # scene were made alone (as 4 separate renders were, clean), marked as ordinary frames (1).
+            # MEASURED 10-23: a CLONE of each such window + GPU reads in this loop made Full HD (1088 x 1920, Window
+            # 5 s) run out of memory on 24 GB, where the loop without them fit. So the model gets a slice of the
+            # shared latent as before, those few positions are written IN PLACE and put back right after, and which
+            # positions they are is worked out once (_gone_of), so the cut handling adds no waits for the GPU.
             xv = video[:, :, l0:l1]
-            gone = (w_v.view(-1) <= 0).to(video.device)
+            gone = gones[k]
             pk = (l0, l1, tuple(transformer_options.get("cond_or_uncond") or [0]))
-            if bool(gone.any()) and sig is not None:
+            saved = None
+            if gone is not None and sig is not None:
+                saved = xv[:, :, gone].clone()
                 prev = self._priv.get(pk)
-                xv = xv.clone()
                 if prev is not None and prev[0] > sig:          # a later step of the same sampling
                     xv[:, :, gone] = ((1.0 - sig) * prev[1] + sig * prev[2]).to(xv.dtype)
                 else:
@@ -144,21 +163,22 @@ class _SceneWindows(_Windows):
                     # model_base.MiniMaxH3.scale_latent_inpaint), so the window's start would differ with Keep
                     seed = int((kw.get("minimax_payload") or {}).get("seed", 0) or 0)
                     g = torch.Generator().manual_seed((seed * 1000003 + l0) % (2 ** 62))
-                    n = torch.randn(tuple(xv[:, :, gone].shape), generator=g, dtype=torch.float32).to(xv.device)
-                    xv[:, :, gone] = (sig * n + (1.0 - sig) * xv[:, :, gone].float()).to(xv.dtype)
+                    n = torch.randn(tuple(saved.shape), generator=g, dtype=torch.float32).to(xv.device)
+                    xv[:, :, gone] = (sig * n + (1.0 - sig) * saved.float()).to(xv.dtype)
             if mask_v is not None:
                 mv = mask_v[:, :, l0:l1]
-                if bool(gone.any()):
+                if gone is not None:
                     mv = mv.clone()
                     mv[:, :, gone.to(mv.device)] = 1.0
                 kw["denoise_mask"] = mv
             if mask_a is not None:
                 kw["audio_denoise_mask"] = mask_a[..., a0:a1]
             o = executor([xv, audio[..., a0:a1]], timestep, ctx, transformer_options.copy(), **kw)
-            if bool(gone.any()) and sig is not None:
+            if saved is not None:
                 # flow model: x = (1 - s) x0 + s eps and the output v = eps - x0, so x0 = x - s v, eps = x + (1 - s) v
                 xin, vv = xv[:, :, gone].float(), o[0][:, :, gone].float()
                 self._priv[pk] = (sig, xin - sig * vv, xin + (1.0 - sig) * vv)
+                xv[:, :, gone] = saved                          # the shared latent back as the sampler gave it
             out_v[:, :, l0:l1] += o[0].float() * w_v
             out_a[..., a0:a1] += o[1].float() * w_a.to(audio.device)
             del o
