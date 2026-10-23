@@ -20,8 +20,8 @@ from __future__ import annotations
 
 from ._folder_source import refresh_copy, source_stamp
 from ._h3_long_video_helpers import FPS
-from ._h3_timeline_helpers import (clip_frames, cut_box, describe_scenes, fit_box, parse_state, scene_windows,
-                                   split_scenes)
+from ._h3_timeline_helpers import (MAX_WINDOW_CHUNKS, clip_frames, cut_borders, cut_box, cut_weights,
+                                   describe_scenes, fit_box, parse_state, scene_windows, split_scenes, window_chunks)
 from ._h3_timeline_prompts import MODES, ROLE_PERSON, build_prompt
 from ._path_guard import is_path_under, rel_is_rooted
 from ._resize_helpers import normalize_bit_depth
@@ -32,15 +32,30 @@ class _SceneWindows(_Windows):
     """The H3 Long Video wrapper with windows that follow the scenes, each window reading its scene's text,
     token tags and references. Scene 1 is the sampler's own conditioning, so its windows run unchanged."""
 
-    def __init__(self, lengths, scene_conds, later_conds=None):
+    def __init__(self, lengths, scene_conds, later_conds=None, cuts=(), max_chunks=MAX_WINDOW_CHUNKS):
         super().__init__(0, 0)
         self.lengths = list(lengths)
+        self.cuts = frozenset(cuts or ())       # the scenes that start with a clean cut (scene_windows)
+        self.max_chunks = max_chunks            # the longest window (window_chunks)
         self.scene_conds = scene_conds          # [(cross_attn, extras) or None] per scene
         # {scene: (cross_attn, extras)}: the conditioning for the LATER windows of a scene that was split (too long
         # for one window even at the smallest reach, scene_windows), when someone walked in during its first window:
         # worded as already there (people_sentence `arrived`)
         self.later_conds = dict(later_conds or {})
         self._ctx = {}
+
+    def _blend_cut(self, spans, borders, device):
+        """_Windows._blend with clean cuts: what two windows share at a cut is split at the border, no blend."""
+        import torch
+        hv, ha = borders
+        key = (tuple(spans), tuple(hv), str(device))
+        if key not in self._weights:
+            wv = cut_weights([(l0, l1) for l0, l1, _, _ in spans], hv)
+            wa = cut_weights([(a0, a1) for _, _, a0, a1 in spans], ha)
+            self._weights = {key: (
+                [torch.tensor(w, dtype=torch.float32, device=device).view(1, 1, -1, 1, 1) for w in wv],
+                [torch.tensor(w, dtype=torch.float32, device=device).view(1, 1, 1, -1) for w in wa])}
+        return self._weights[key]
 
     def _context(self, dm, sc, cond, like):
         key = (sc, str(like.device), str(like.dtype))      # sc = a scene index, or ("later", scene)
@@ -54,15 +69,19 @@ class _SceneWindows(_Windows):
         if not isinstance(x, (list, tuple)) or len(x) != 2 or getattr(x[0], "ndim", 0) != 5:
             return executor(x, timestep, context, transformer_options, **kwargs)
         video, audio = x[0], x[1]
-        wins = scene_windows(video.shape[2], audio.shape[-1], self.lengths)
+        wins = scene_windows(video.shape[2], audio.shape[-1], self.lengths, self.max_chunks, self.cuts)
         if wins is None:
             return executor(x, timestep, context, transformer_options, **kwargs)
         import torch
         if self._told != video.shape[2]:
             self._told = video.shape[2]
-            print("[Pixaroma] H3 Timeline: {} scenes, {} windows".format(len(self.lengths), len(wins)))
+            print("[Pixaroma] H3 Timeline: {} scenes, {} windows{}".format(
+                len(self.lengths), len(wins), ", {} clean cuts".format(len(self.cuts)) if self.cuts else ""))
         spans = [w[:4] for w in wins]
-        wv, wa = self._blend(spans, video.device)
+        if self.cuts:
+            wv, wa = self._blend_cut(spans, cut_borders(video.shape[2], self.lengths, wins, self.cuts), video.device)
+        else:
+            wv, wa = self._blend(spans, video.device)
         payload = kwargs.get("minimax_payload") or {}
         own_text = list(transformer_options.get("cond_or_uncond") or [0]) == [0]
         dm = getattr(executor, "class_obj", None)
@@ -283,7 +302,9 @@ class PixaromaH3Timeline:
             from comfy_extras.nodes_minimax_h3 import MiniMaxH3ReferenceToVideo
         except Exception as e:
             raise RuntimeError("H3 Timeline needs a ComfyUI with MiniMax H3 support (core 0.42 or newer).") from e
-        scenes = parse_state(TimelineState)["scenes"]
+        state = parse_state(TimelineState)
+        scenes = state["scenes"]
+        max_chunks = window_chunks(state["window"])
         lengths = [s["length"] for s in scenes]
         frames = clip_frames(lengths)
         seconds = frames / float(FPS)
@@ -313,7 +334,8 @@ class PixaromaH3Timeline:
 
         look, people, built, scene_conds, later_conds = None, [], {}, [], {}
         positive = latent = None
-        split = split_scenes(lengths)
+        cuts = {i for i, sc in enumerate(scenes) if i > 0 and sc["cut"]}
+        split = split_scenes(lengths, cuts, max_chunks)
 
         def make(text, i):
             key = (text, look[:4], tuple(people))
@@ -336,7 +358,8 @@ class PixaromaH3Timeline:
                 elif sc["picture"] not in people:
                     people = people + [sc["picture"]]
                     entering = (len(people) - 1,)
-            cond, lat = make(build_prompt(mode, sc["words"], len(people), entering, later=i > 0), i)
+            # a scene after a clean cut is a fresh shot that begins from its look picture, worded like scene 1
+            cond, lat = make(build_prompt(mode, sc["words"], len(people), entering, later=i > 0 and i not in cuts), i)
             if i == 0:
                 positive, latent = cond, lat
                 scene_conds.append(None)
@@ -352,7 +375,7 @@ class PixaromaH3Timeline:
         m = model.clone()
         kind = _diffusion_model_kind()
         m.remove_wrappers_with_key(kind, WRAPPER_KEY)     # H3 Long Video before this node: the scenes take over
-        m.add_wrapper_with_key(kind, WRAPPER_KEY, _SceneWindows(lengths, scene_conds, later_conds))
+        m.add_wrapper_with_key(kind, WRAPPER_KEY, _SceneWindows(lengths, scene_conds, later_conds, cuts, max_chunks))
 
         spans = describe_scenes(lengths, frames)
         ui = {"h3_timeline": [{"frames": frames, "seconds": round(seconds, 2), "mode": mode, "audio": note,

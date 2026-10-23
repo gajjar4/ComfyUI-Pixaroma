@@ -11,7 +11,7 @@ is split into several windows that read the same prompt (scene_windows).
 """
 from __future__ import annotations
 
-from ._h3_long_video_helpers import CHUNK_FRAMES, FPS, _num, audio_at, frames_of
+from ._h3_long_video_helpers import CHUNK_FRAMES, FPS, _num, audio_at, frames_of, ramp_weights
 
 SCENE_MIN_S = 4.0
 SCENE_MAX_S = 120.0
@@ -23,6 +23,7 @@ MIN_SCENE_CHUNKS = 5          # a first / last window is then >= 6 chunks (4.46 
 # 2 chunks = 4 chunks + 2 tokens of overlap = 73 frames, about 3 s.
 EDGE_CHUNKS = 2
 MAX_WINDOW_CHUNKS = 21        # 362 frames = 15.08 s
+MIN_WINDOW_CHUNKS = 6         # 107 frames = 4.46 s, H3's shortest clip
 
 
 def clean_lengths(lengths):
@@ -92,10 +93,52 @@ def _split(a, b, max_chunks):
     return plan(over)
 
 
-def scene_windows(latent_t, audio_t, lengths, max_chunks=MAX_WINDOW_CHUNKS):
+def _split_short(a, b, max_chunks, guard_lo, guard_hi):
+    """_split for the shorter windows of the node's window setting: the fewest windows (then the widest, never
+    under MIN_WINDOW_CHUNKS) EVENLY spaced over [a, b), overlapping each neighbour by 2+ chunks and never the one
+    two back. The second window starts after [a + guard_lo] and the second-last ends before [b - guard_hi], clear of
+    the neighbour scenes' windows (guard = the reach on that side, both ways). Pinning the last window to [b] like
+    _split does bunched the windows up there and three overlapped."""
+    n = b - a
+    for k in range(2, n + 1):
+        for w in range(max_chunks, MIN_WINDOW_CHUNKS - 1, -1):
+            if k * w < n:                       # k windows of w cannot cover n even end to end
+                break
+            p = [(s, s + w) for s in [a + (j * (n - w)) // (k - 1) for j in range(k)]]
+            if any(p[j][0] - p[j - 1][0] > w - 2 for j in range(1, k)):
+                continue                        # a 2-chunk overlap at least
+            if any(p[j][0] <= p[j - 2][1] for j in range(2, k)):
+                continue                        # only neighbours overlap (a window's 2 tail tokens reach on)
+            if p[1][0] <= a + guard_lo or p[-2][1] >= b - guard_hi:
+                continue
+            return p
+    return None
+
+
+WINDOW_MIN_S = 5.0
+
+
+def window_chunks(seconds):
+    """The longest window, from the node's window setting in seconds (0 / unreadable = automatic, the full
+    MAX_WINDOW_CHUNKS = 15 s). Shorter windows use less memory at big sizes; a scene longer than one is made in
+    several overlapping windows that read the same words (5 s = 7 chunks)."""
+    s = _num(seconds, 0.0)
+    if s <= 0:
+        return MAX_WINDOW_CHUNKS
+    return min(MAX_WINDOW_CHUNKS, max(7, int(round(max(WINDOW_MIN_S, s) * FPS / CHUNK_FRAMES))))
+
+
+def scene_windows(latent_t, audio_t, lengths, max_chunks=MAX_WINDOW_CHUNKS, cuts=()):
     """-> [(l0, l1, a0, a1, scene)] token / audio-frame ranges and the scene each window reads, or None when the
-    latent is not on H3's grid, has no audio, or one scene fills it in a single window (nothing to do)."""
+    latent is not on H3's grid, has no audio, or one scene fills it in a single window (nothing to do).
+
+    `cuts` = the scenes that START with a clean cut: no window reaches across that border, so the scene's first
+    window begins exactly on it like a fresh clip. The two windows still share the earlier one's 2 tail tokens (a
+    window is 5n + 2 tokens); cut_weights splits what two windows share at the border itself (cut_borders). A scene
+    with cuts on both sides can be only 5 chunks, below H3's shortest clip: its window renders 1 chunk of the
+    next scene (the last scene: of the one before), which cut_weights then drops."""
     latent_t, audio_t = int(latent_t), int(audio_t)
+    cuts = set(cuts or ())
     chunks = (latent_t - 2) // 5
     if latent_t != 5 * chunks + 2 or audio_t <= 0 or chunks < 1:
         return None
@@ -103,10 +146,14 @@ def scene_windows(latent_t, audio_t, lengths, max_chunks=MAX_WINDOW_CHUNKS):
     if len(b) < 2:
         return None
     k = len(b) - 1
-    out = []
+    # shorter windows (the node's window setting) reach 1 chunk into a neighbour: 2 would leave a 5 s window
+    # little of its own scene
+    capped = max_chunks < MAX_WINDOW_CHUNKS
+    edge = MIN_REACH_CHUNKS if capped else EDGE_CHUNKS
+    out, prev_ahead = [], 0
     for i in range(k):
-        back = EDGE_CHUNKS if i > 0 else 0
-        ahead = EDGE_CHUNKS if i < k - 1 else 0
+        back = edge if i > 0 and i not in cuts else 0
+        ahead = edge if i < k - 1 and i + 1 not in cuts else 0
         # A scene a little too long for one window keeps ONE window by reaching less into its neighbours (the
         # previous one first), never below 1 chunk (each border must stay inside an overlap). MEASURED 10-22
         # (t4_room, 10 s + 14 s, Add person): split in two, the windows put the man in different places and he
@@ -119,8 +166,25 @@ def scene_windows(latent_t, audio_t, lengths, max_chunks=MAX_WINDOW_CHUNKS):
                 na -= 1
         if b[i + 1] + na - (b[i] - nb) <= max_chunks:
             back, ahead = nb, na
-        for s, t in _split(b[i] - back, b[i + 1] + ahead, max_chunks):
+        short = MIN_WINDOW_CHUNKS - (b[i + 1] + ahead - (b[i] - back))
+        if short > 0:           # only next to clean cuts (no reach there)
+            if i < k - 1:
+                ahead += short
+            elif i > 0:
+                back += short
+        a, z = b[i] - back, b[i + 1] + ahead
+        if not capped:
+            parts = _split(a, z, max_chunks)
+        elif z - a <= max_chunks + 1:     # one chunk over (a short scene + its reach): no split leaves room
+            parts = [(a, z)]
+        else:
+            # how far the next scene's first window reaches back into this one (a last scene after a cut: 1)
+            nxt = edge if i < k - 1 and i + 1 not in cuts else (1 if i == k - 2 else 0)
+            parts = (_split_short(a, z, max_chunks, back + prev_ahead, ahead + nxt)
+                     or _split_short(a, z, max_chunks, 0, 0) or [(a, z)])
+        for s, t in parts:
             out.append((s, t, i))
+        prev_ahead = ahead
     if len(out) == 1:
         return None
     wins = []
@@ -132,13 +196,59 @@ def scene_windows(latent_t, audio_t, lengths, max_chunks=MAX_WINDOW_CHUNKS):
     return wins
 
 
-def split_scenes(lengths) -> set:
+def cut_borders(latent_t, lengths, wins, cuts):
+    """For cut_weights: per window, the clean-cut border where it starts its scene, as (token, audio frame), else
+    None (a window that blends, or a later window of the same scene)."""
+    b = scene_bounds(lengths, (int(latent_t) - 2) // 5)
+    cuts = set(cuts or ())
+    hv, ha = [], []
+    for j, w in enumerate(wins):
+        if j and w[4] != wins[j - 1][4] and w[4] in cuts:
+            t = 5 * b[w[4]]
+            hv.append(t)
+            ha.append(audio_at(frames_of(t)))
+        else:
+            hv.append(None)
+            ha.append(None)
+    return hv, ha
+
+
+def cut_weights(spans, borders):
+    """ramp_weights, except where borders[i] is a position: there window i - 1 and window i meet at a clean cut, so
+    of what they share, the part before the border belongs to window i - 1 alone and the rest to window i (no
+    blend). Nothing there = exactly ramp_weights."""
+    if all(x is None for x in borders):
+        return ramp_weights(spans)
+    ws = []
+    for i, (s, e) in enumerate(spans):
+        w = [1.0] * (e - s)
+        if i > 0 and spans[i - 1][1] > s:
+            if borders[i] is None:
+                width = spans[i - 1][1] - s
+                w = [min(v, (j + 0.5) / width) for j, v in enumerate(w)]
+            else:
+                w = [0.0 if s + j < borders[i] else v for j, v in enumerate(w)]
+        if i + 1 < len(spans) and spans[i + 1][0] < e:
+            if borders[i + 1] is None:
+                width = e - spans[i + 1][0]
+                w = [min(v, (e - (s + j) - 0.5) / width) for j, v in enumerate(w)]
+            else:
+                w = [0.0 if s + j >= borders[i + 1] else v for j, v in enumerate(w)]
+        ws.append([v if v == 0.0 else max(v, 1e-4) for v in w])
+    total = [0.0] * max(e for _, e in spans)
+    for (s, _), w in zip(spans, ws):
+        for j, v in enumerate(w):
+            total[s + j] += v
+    return [[v / total[s + j] if total[s + j] > 0 else 0.0 for j, v in enumerate(w)] for (s, _), w in zip(spans, ws)]
+
+
+def split_scenes(lengths, cuts=(), max_chunks=MAX_WINDOW_CHUNKS) -> set:
     """The scenes made in MORE than one window, on the latent the node makes for these lengths (clip_frames:
     17n + 5 frames = 5n + 2 tokens), by the same scene_windows the wrapper calls at sample time. Only their later
     windows read the node's `later_conds`, so the node builds that extra prompt only for them: each build is one more
     text + picture + audio encode (review 10-22: it was built for every scene a person joins in)."""
     count = {}
-    for w in scene_windows(5 * ((clip_frames(lengths) - 5) // CHUNK_FRAMES) + 2, 1, lengths) or []:
+    for w in scene_windows(5 * ((clip_frames(lengths) - 5) // CHUNK_FRAMES) + 2, 1, lengths, max_chunks, cuts) or []:
         count[w[4]] = count.get(w[4], 0) + 1
     return {s for s, n in count.items() if n > 1}
 
@@ -155,7 +265,8 @@ def _unit(v, fallback=0.5):
 def parse_state(raw):
     """The node's TimelineState JSON (untrusted) -> {"scenes": [...]} with every field clean:
     length (s), words, picture (an input-folder filename or None), role ("look" / "person"), x, y (where the cut
-    sits, 0..1) and fit ("cut" / "fit"). Always at least one scene."""
+    sits, 0..1), fit ("cut" / "fit") and cut (True = the scene starts with a clean cut, never on scene 1). Always
+    at least one scene."""
     import json
     try:
         data = json.loads(raw) if isinstance(raw, str) and raw.strip() else (raw if isinstance(raw, dict) else {})
@@ -176,10 +287,13 @@ def parse_state(raw):
             "x": _unit(sc.get("x")),
             "y": _unit(sc.get("y")),
             "fit": sc.get("fit") if sc.get("fit") in FITS else "cut",
+            "cut": bool(out) and sc.get("cut") is True,
         })
     if not out:
-        out = [{"length": SCENE_DEFAULT_S, "words": "", "picture": None, "role": "look", "x": 0.5, "y": 0.5, "fit": "cut"}]
-    return {"scenes": out}
+        out = [{"length": SCENE_DEFAULT_S, "words": "", "picture": None, "role": "look", "x": 0.5, "y": 0.5, "fit": "cut",
+                "cut": False}]
+    win = data.get("window") if isinstance(data, dict) else None
+    return {"scenes": out, "window": max(0.0, min(15.0, _num(win, 0.0)))}
 
 
 def cut_box(src_w, src_h, w, h, x=0.5, y=0.5):
