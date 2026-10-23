@@ -37,6 +37,18 @@ function injectCSS() {
       filter: brightness(1.08);
       box-shadow: none !important;
     }
+    /* Frontend 1.57+ paints the arrow beside Run in Run's own colour (data-variant="primary");
+       older ones draw it grey with no data-variant, and it stays that way. */
+    button.pix-rb-orange ~ button[data-testid="queue-mode-menu-trigger"][data-variant="primary"] {
+      background: #f66744 !important;
+      background-image: none !important;
+      color: #ffffff !important;
+      box-shadow: none !important;
+    }
+    button.pix-rb-orange ~ button[data-testid="queue-mode-menu-trigger"][data-variant="primary"]:hover,
+    button.pix-rb-orange ~ button[data-testid="queue-mode-menu-trigger"][data-variant="primary"][data-state="open"] {
+      filter: brightness(1.08);
+    }
 
     .pix-rb-fx-flame {
       position: fixed;
