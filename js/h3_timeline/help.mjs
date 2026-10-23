@@ -41,7 +41,7 @@ export const H3_TIMELINE_HELP = {
     },
     {
       heading: "Keep: redo only one scene",
-      body: "Liked the video except one scene? Click `Keep` on every scene you like, change the seed (or set it to random) and press Run again. The kept scenes come back as they were and only the others are made again, in less time (one scene of four at 704 x 1280: 4 minutes instead of 8). Repeat until every scene is right.\n\nKeep uses this node's last Run in this ComfyUI session, so it is lost when ComfyUI restarts. It holds a scene only while its length and picture are the same as in that Run: change a length and every scene is made new. It works best with Cut, where each scene is its own shot.",
+      body: "Liked the video except one scene? Click `Keep` on every scene you like, change the seed (or set it to random) and press Run again. The kept scenes come back as they were and only the others are made again, in less time (one scene of four at 704 x 1280: 4 minutes instead of 8). Repeat until every scene is right.\n\nKeep uses this node's last Run in this ComfyUI session, so it is lost when ComfyUI restarts. It holds a scene only while its length, picture and Blend / Cut stay the same as in that Run, at the same video size. Change a length, or add, remove or move a scene, and Keep lets go. It works best with Cut, where each scene is its own shot.",
     },
     {
       heading: "Bigger videos: Window",

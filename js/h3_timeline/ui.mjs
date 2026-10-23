@@ -146,7 +146,7 @@ export function buildFace(node) {
     const b = el("button", "", w ? `${w} s` : "Auto");
     b.dataset.w = String(w);
     b.title = w
-      ? `Make the video in parts of ${w} seconds at most: less memory, for big sizes like 960 x 1728 (best with Cut)`
+      ? `Make the video in parts of ${w} seconds at most: less memory` + (w === 5 ? ", for big sizes like 960 x 1728 (best with Cut)" : "")
       : "Parts up to 15 seconds, following your scenes (the default)";
     b.onclick = () => {
       const st = readState(node);
@@ -345,7 +345,7 @@ export function renderStrip(node, st = readState(node)) {
   if (run?.keep) {
     note.title = run.keep + (note.title ? `\n${note.title}` : "");
     note.textContent = run.keep;
-    note.className = "note " + (/made new/.test(run.keep) ? "warn" : "ok");
+    note.className = "note " + (/made new|made in full/.test(run.keep) ? "warn" : "ok");
   }
   f.lane.append(wave, note);
 }
@@ -539,12 +539,14 @@ function renderRows(node, st) {
       b.onclick = fn;
       tools.appendChild(b);
     };
+    // a moved scene lets go of Keep (both of the two swapped): Python matches Keep by POSITION, so a kept scene moved
+    // onto a slot of the same length would get the frames the last Run made for the OTHER scene there
     tool("up", `Move scene ${i + 1} earlier`, i > 0, () => {
-      change(node, (sc) => { [sc[i - 1], sc[i]] = [sc[i], sc[i - 1]]; }, true);
+      change(node, (sc) => { [sc[i - 1], sc[i]] = [{ ...sc[i], keep: false }, { ...sc[i - 1], keep: false }]; }, true);
       select(node, i - 1);
     });
     tool("down", `Move scene ${i + 1} later`, i < n - 1, () => {
-      change(node, (sc) => { [sc[i + 1], sc[i]] = [sc[i], sc[i + 1]]; }, true);
+      change(node, (sc) => { [sc[i + 1], sc[i]] = [{ ...sc[i], keep: false }, { ...sc[i + 1], keep: false }]; }, true);
       select(node, i + 1);
     });
     tool("dup", `Duplicate scene ${i + 1}`, n < MAX_SCENES, () => {

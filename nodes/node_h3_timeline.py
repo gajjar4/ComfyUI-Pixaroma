@@ -196,8 +196,14 @@ def _held(mask, dim):
         return None
 
 
-# Keep: the last finished latent of each Timeline node (by its node id), so a later Run can hold the kept scenes
+# Keep: the last finished latent of each Timeline node (by its node id), so a later Run can hold the kept scenes.
+# Only the newest few nodes are remembered: an entry is ~190 MB of RAM at 1088 x 1920 x 41 s.
 _LAST = {}
+_LAST_MAX = 4
+# per node id: how many times the sampler stored a Run (_KeepLast), and whether the node's last run() held a kept
+# scene; IS_CHANGED reads both (see there)
+_KEEP_RUNS = {}
+_KEEP_HELD = {}
 KEEP_KEY = "pixaroma_h3_timeline_keep"
 
 
@@ -217,7 +223,11 @@ class _KeepLast:
             import comfy.utils
             parts = comfy.utils.unpack_latents(out, latent_shapes) if latent_shapes and len(latent_shapes) > 1 else [out]
             if len(parts) >= 2 and getattr(parts[0], "ndim", 0) == 5:
+                _LAST.pop(self.key, None)                       # re-inserted = the newest
                 _LAST[self.key] = (parts[0].detach().float().cpu(), parts[1].detach().float().cpu(), self.sig)
+                while len(_LAST) > _LAST_MAX:
+                    _LAST.pop(next(iter(_LAST)))
+                _KEEP_RUNS[self.key] = _KEEP_RUNS.get(self.key, 0) + 1
         except Exception as e:
             print("[Pixaroma] H3 Timeline: could not remember this run for Keep ({}).".format(e))
         return out
@@ -436,7 +446,19 @@ class PixaromaH3Timeline:
     def IS_CHANGED(cls, TimelineState=None, **kwargs):
         # The scenes text is already in the cache key; this adds what the pictures ARE, so a picture edited or
         # replaced under the same name (or a folder picture's original) re-runs the node.
-        return _pictures_stamp(TimelineState)
+        stamp = _pictures_stamp(TimelineState)
+        # Keep that could NOT hold anything in this node's last run (none yet, e.g. a saved workflow opened after a
+        # restart with Keep already on; another size; a length changed): the node's cached latent has no kept
+        # scenes, and changing only the seed would reuse it forever. So the key moves each time the sampler
+        # stores a new Run, until Keep holds; from then on it stays put and the cache holds the kept frames.
+        try:
+            if any(sc["keep"] for sc in parse_state(TimelineState)["scenes"]):
+                key = str(kwargs.get("unique_id"))
+                if not _KEEP_HELD.get(key):
+                    return "{}|keep{}".format(stamp, _KEEP_RUNS.get(key, 0))
+        except Exception:
+            pass
+        return stamp
 
     def run(self, model, clip, vae, audio_vae, mode, width, height, audio=None, TimelineState=None, unique_id=None):
         try:
@@ -527,8 +549,10 @@ class PixaromaH3Timeline:
         m.add_wrapper_with_key(outer, KEEP_KEY, _KeepLast(key, _scene_sig(scenes)))
         keeps = {i for i, sc in enumerate(scenes) if sc["keep"]}
         keep_note = ""
+        _KEEP_HELD[key] = False
         if keeps:
             kept, info = _keep_latent(latent, _LAST.get(key), scenes, keeps)
+            _KEEP_HELD[key] = kept is not None
             if kept is None:
                 keep_note = "Keep: " + info
                 print("[Pixaroma] H3 Timeline: " + keep_note + ".")
