@@ -185,6 +185,7 @@ The groups are in order of how much they are used in real workflows, and inside 
 |---|---|
 | [LoRA&nbsp;Loader&nbsp;Pixaroma](https://workflows.pixaroma.com/help/nodes/lora-loader/) | Many LoRAs in one node, with trigger words read from each&nbsp;file. |
 | [Krea&nbsp;LoRA&nbsp;Converter&nbsp;Pixaroma](https://workflows.pixaroma.com/help/nodes/krea-lora-converter/) | Makes a Krea 2 LoRA trained on fal.ai load in&nbsp;ComfyUI. |
+| [Krea2&nbsp;Enhancer&nbsp;Pixaroma](https://workflows.pixaroma.com/help/nodes/krea2-enhancer/) | Makes a Krea 2 model follow your prompt more&nbsp;closely. |
 
 ### 🎨 Editors
 
@@ -246,6 +247,12 @@ The two editors can also use **rembg** (`pip install rembg`, then restart ComfyU
 ---
 
 ## 🛠 Changelog
+
+### **October 23, 2026 · v1.4.230**
+- **NEW: Krea2 Enhancer Pixaroma.** Makes a Krea 2 model follow your prompt more closely. It gives the same pictures as the Krea2T Enhancer, which its author removed, so our Krea 2 workflows work again.
+- **H3 Timeline:** each scene can start with a clean cut, Keep holds the scenes you like while you redo the others, and a shorter Window fits bigger sizes in memory.
+- **Spell check:** Pixaroma text boxes follow ComfyUI's own spell check setting.
+- **Run button effects:** the arrow next to Run turns orange too on newer ComfyUI, and Run stays orange after Run (Instant).
 
 ### **October 22, 2026 · v1.4.229**
 - **NEW: H3 Timeline Pixaroma.** Tell one long MiniMax H3 video as scenes, each with its own length, words and, if needed, a picture: a new look, or a person who walks in. One run, no cuts, tested up to 60 seconds.
@@ -983,7 +990,7 @@ The two editors can also use **rembg** (`pip install rembg`, then restart ComfyU
 ## 📜 About and license
 
 - **Home:** ComfyUI-Pixaroma is made on [GitLab](https://gitlab.com/pixaroma/comfyui-pixaroma). The copy on GitHub is a backup that is kept level with&nbsp;it.
-- **License:** [MIT](LICENSE). Free to use, copy, change and share, as long as the copyright notice stays with&nbsp;it.
+- **License:** [MIT](LICENSE). Free to use, copy, change and share, as long as the copyright notice stays with&nbsp;it. The Pixaroma name, logo and the Pixa mascot are not covered by the MIT&nbsp;license.
 - **Made with AI help:** a lot of this pack was written with AI assistance, and every change is tested before it is&nbsp;released.
 
 ComfyUI-Pixaroma is an independent, community-made extension. It is not affiliated with, endorsed by, or sponsored by Comfy Org or the ComfyUI project. Product names, logos, and trademarks are the property of their respective&nbsp;owners.
