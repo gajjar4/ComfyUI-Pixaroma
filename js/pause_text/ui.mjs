@@ -9,6 +9,7 @@ import { BRAND } from "../shared/utils.mjs";
 import { ACC_HOVER } from "../shared/node_settings.mjs";
 import { getState, isEdited } from "./state.mjs";
 import { textSize } from "../shared/text_size.mjs";
+import { followSpellcheck } from "../shared/spellcheck.mjs";
 import { isComfyTextShortcut } from "../shared/text_shortcuts.mjs";
 
 // Fixed vertical budget for the non-fill rows -> getMinHeight is a per-renderer
@@ -152,7 +153,7 @@ export function buildPauseTextWidget(node, callbacks) {
   hdr.append(hlbl, toggle, copyBtn, revertBtn);
   const ta = document.createElement("textarea");
   ta.className = "pix-pt-ta";
-  ta.spellcheck = false;
+  followSpellcheck(ta);
   ta.placeholder = "The model's text will appear here on Run";
   box.append(hdr, ta);
 

@@ -35,6 +35,7 @@ import {
 } from "../prompt/tag_field.mjs";
 import { openLibraryEditor, closeLibraryEditorFor } from "../prompt/library_editor.mjs";
 import { textSize, onTextSizeChange } from "../shared/text_size.mjs";
+import { followSpellcheck } from "../shared/spellcheck.mjs";
 import {
   IDEA_SHARE_DEFAULT,
   IDEA_SHARE_MAX,
@@ -526,7 +527,7 @@ export function buildFace(node, openPanel, openIdeaEditor) {
   const ideabd = el("div", "pix-ap-ideabd");
   const idea = el("textarea", "pix-ap-idea");
   idea.placeholder = "what you want, in plain words";
-  idea.spellcheck = true;
+  followSpellcheck(idea);
   ideawrap.append(ideabd, idea);
   inner.append(cap1, ideawrap);
 

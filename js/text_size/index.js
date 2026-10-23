@@ -42,6 +42,18 @@ const HELP_CORE_BOX = {
 };
 const HELP_WORDS = "font size text size bigger smaller larger zoom small text hard to read";
 
+// The boxes you write in follow ComfyUI's spell check setting (js/shared/spellcheck.mjs); few people know it is
+// there, so it gets a help section too. Not on Show Text / Prompt Reader (their box is read only).
+const NO_SPELL = new Set(["PixaromaShowText", "PixaromaPromptReader", "PixaromaTextMatch"]);
+const HELP_SPELL = {
+  heading: "Spell check",
+  body: "Turn it on in Settings > Comfy > Node Widget > Textarea widget spellcheck (or search the settings for "
+    + "spellcheck). It is off by default.\n\n"
+    + "The text boxes of this node follow that setting, like ComfyUI's own boxes: a word the browser does not know "
+    + "gets a red wavy underline.",
+};
+const SPELL_WORDS = "spell check spellcheck spelling typo misspelled";
+
 const comfySize = () => Number(app.ui.settings.getSettingValue(TEXT_SIZE_SETTING)) || NORMAL;
 const setComfySize = (v) => app.ui.settings.setSettingValueAsync(TEXT_SIZE_SETTING, Math.min(MAX, Math.max(MIN, v)));
 
@@ -71,6 +83,9 @@ app.registerExtension({
       if (!Array.isArray(def?.sections)) continue;
       if (!def.sections.some((s) => s?.heading === HELP_OWN.heading)) def.sections.push(own ? HELP_OWN : HELP_CORE_BOX);
       if (!String(def.keywords || "").includes(HELP_WORDS)) def.keywords = `${def.keywords || ""} ${HELP_WORDS}`.trim();
+      if (NO_SPELL.has(cls)) continue;
+      if (!def.sections.some((s) => s?.heading === HELP_SPELL.heading)) def.sections.push(HELP_SPELL);
+      if (!String(def.keywords || "").includes(SPELL_WORDS)) def.keywords = `${def.keywords || ""} ${SPELL_WORDS}`.trim();
     }
   },
 

@@ -22,6 +22,7 @@ import { notifyGraphChanged } from "../shared/graph_changed.mjs";
 // The themed seed question (no cycle: ai_prompt never imports video_prompt).
 import { askName } from "../ai_prompt/settings.mjs";
 import { textSize } from "../shared/text_size.mjs";
+import { followSpellcheck } from "../shared/spellcheck.mjs";
 import {
   IDEA_SHARE_DEFAULT, IDEA_SHARE_MAX, IDEA_SHARE_MIN,
   MODE_HINTS, MODE_LABELS, SEED_RANDOM, displaySeed, looksSpoken, modeOf,
@@ -460,6 +461,7 @@ export function buildFace(node, openPanel) {
   caprow.append(caption, expand);
   const idea = el("textarea", "pix-vp-idea");
   idea.placeholder = "she smiles and says: come and see this";
+  followSpellcheck(idea);
   idea.addEventListener("input", () => {
     writeState(node, { idea: idea.value });
     renderFace(node);

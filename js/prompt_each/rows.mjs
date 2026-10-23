@@ -14,6 +14,7 @@
 
 import { splitText, SPLIT_BLANK } from "./expand.mjs";
 import { el } from "./ui.mjs";
+import { followSpellcheck } from "../shared/spellcheck.mjs";
 
 const OFF = "#";
 
@@ -204,7 +205,7 @@ export function renderRows(parts, st, handlers) {
     const ta = el("textarea", "pix-each-rowta");
     ta.value = row.text;
     ta.placeholder = "a prompt";
-    ta.spellcheck = false;
+    followSpellcheck(ta);
     el_.appendChild(ta);
 
     handlers.wireRow(el_, i, { ta, tog, del, handle });

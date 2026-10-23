@@ -14,6 +14,7 @@
 
 import { installGraphUndoGuard } from "../shared/graph_undo_guard.mjs";
 import { passComfyShortcut } from "../shared/text_shortcuts.mjs";
+import { followSpellcheck } from "../shared/spellcheck.mjs";
 import { createAccentSection } from "../shared/node_settings.mjs";
 import { followNode, getNodeScreenRect, makeDraggable, placeBeside } from "../shared/node_panel.mjs";
 import { formatModelSize } from "../shared/utils.mjs";
@@ -719,7 +720,9 @@ export function openEditor(title, text, onSave, opts) {
   head.append(el("b", null, title), cnt, el("span", "sp"));
   const ta = el("textarea");
   ta.value = text || "";
-  ta.spellcheck = opts?.spellcheck === true;
+  // Prose follows ComfyUI's spell check setting; a formula stays off.
+  if (opts?.spellcheck === true) followSpellcheck(ta);
+  else ta.spellcheck = false;
   back._pixOwner = opts?.owner || null;
 
   const foot = el("div", "pix-ape-foot");

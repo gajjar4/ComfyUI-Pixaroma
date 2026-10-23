@@ -7,6 +7,7 @@
 import { readState } from "./core.mjs";
 import { attachLabelEditor, attachTextareaEditor, attachDragHandlers } from "./interaction.mjs";
 import { textSize } from "../shared/text_size.mjs";
+import { followSpellcheck } from "../shared/spellcheck.mjs";
 
 const CSS_ID = "pix-prompt-stack-css";
 
@@ -367,6 +368,7 @@ export function renderRows(node, root, rowHandlers) {
     ta.value = row.text || "";
     ta.rows = 2;
     ta.placeholder = "Type your prompt chunk here...";
+    followSpellcheck(ta);
     rowEl.appendChild(ta);
     attachTextareaEditor(node, ta, row.id);
 

@@ -20,6 +20,7 @@ import { applyAdaptiveCanvasOnly, keepRowWhenWired, isVueNodes, installResizeFlo
 import { ACC, installNodeAccent } from "../shared/node_settings.mjs";
 import { isComfyTextShortcut } from "../shared/text_shortcuts.mjs";
 import { textSize } from "../shared/text_size.mjs";
+import { followSpellcheck } from "../shared/spellcheck.mjs";
 
 export const MIN_FIELD_H = 56;     // smallest a single field box can shrink to
 const DEF_FIELD_H = 84;            // comfortable default per field on a fresh node
@@ -218,7 +219,7 @@ function makeFieldRow(node, cfg) {
 
   const ta = document.createElement("textarea");
   ta.className = "pix-tj-ta";
-  ta.spellcheck = false;
+  followSpellcheck(ta);
   ta.placeholder = "type here or wire";
 
   field.append(lbl, icons, ta);

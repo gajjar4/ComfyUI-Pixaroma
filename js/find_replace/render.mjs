@@ -14,6 +14,7 @@ import {
 import { attachFieldEditor, attachDragHandlers } from "./interaction.mjs";
 import { registerNodeHelp } from "../shared/index.mjs";
 import { textSize } from "../shared/text_size.mjs";
+import { followSpellcheck } from "../shared/spellcheck.mjs";
 
 const CSS_ID = "pix-find-replace-css";
 
@@ -475,6 +476,7 @@ function buildRuleRow(node, state, rule, handlers) {
   findTa.rows = 1;
   findTa.placeholder = "find...";
   findTa.title = "Text to find" + (state.regex ? " (regular expression)" : "");
+  followSpellcheck(findTa);
   rowEl.appendChild(findTa);
   attachFieldEditor(node, findTa, rule.id, "find");
 
@@ -489,6 +491,7 @@ function buildRuleRow(node, state, rule, handlers) {
   replaceTa.rows = 1;
   replaceTa.placeholder = "replace…";
   replaceTa.title = "Text to replace it with. Leave empty to delete the found text.";
+  followSpellcheck(replaceTa);
   rowEl.appendChild(replaceTa);
   attachFieldEditor(node, replaceTa, rule.id, "replace");
 

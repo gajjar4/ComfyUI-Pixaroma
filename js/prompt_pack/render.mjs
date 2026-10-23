@@ -18,6 +18,7 @@
 
 import { MODES, parsePrompts } from "./core.mjs";
 import { textSize } from "../shared/text_size.mjs";
+import { followSpellcheck } from "../shared/spellcheck.mjs";
 
 const BRAND = "#f66744";
 
@@ -219,7 +220,7 @@ export function buildRoot() {
   const ta = document.createElement("textarea");
   ta.className = "pix-pp-ta";
   ta.placeholder = "Paste your prompts here...\n\nPick the pill that matches how they are separated.\nA file from Save Text Pixaroma? Pick the same one you chose there.";
-  ta.spellcheck = false;
+  followSpellcheck(ta);
 
   tawrap.appendChild(ta);
 

@@ -5,6 +5,7 @@ import { BRAND, applyAdaptiveCanvasOnly, registerNodeHelp, closeHelpPopup, isVue
 import { resolveDynamicPrompt } from "./dynamic_prompts.mjs";
 import { isComfyTextShortcut } from "../shared/text_shortcuts.mjs";
 import { textSize } from "../shared/text_size.mjs";
+import { followSpellcheck } from "../shared/spellcheck.mjs";
 
 // Text Pixaroma: multi-line text field with a STRING output. The native
 // ComfyUI multiline widget is HIDDEN; we render our own DOM widget so the
@@ -314,7 +315,7 @@ function buildRoot() {
   ta.className = "pix-text-ta";
   ta.placeholder = "text";
   ta.title = "Type your text or prompt here. Ctrl+Up / Ctrl+Down changes the weight of the selected words. Press Ctrl+Enter to run the workflow.";
-  ta.spellcheck = false;
+  followSpellcheck(ta);
   tawrap.appendChild(ta);
 
   const bottombar = document.createElement("div");

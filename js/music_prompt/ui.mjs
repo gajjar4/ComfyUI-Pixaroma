@@ -37,6 +37,7 @@ import { installNativeTextMenu } from "../shared/native_text_menu.mjs";
 import { installResizeFloor } from "../shared/resize_floor.mjs";
 import { notifyGraphChanged } from "../shared/graph_changed.mjs";
 import { textSize, onTextSizeChange } from "../shared/text_size.mjs";
+import { followSpellcheck } from "../shared/spellcheck.mjs";
 import {
   IDEA_SHARE_DEFAULT,
   IDEA_SHARE_MAX,
@@ -496,7 +497,7 @@ export function buildFace(node, openPanel, openIdeaEditor) {
   const ideabd = el("div", "pix-mp-ideabd");
   const idea = el("textarea", "pix-mp-idea");
   idea.placeholder = "a slow acoustic song about coming home in the rain";
-  idea.spellcheck = true;
+  followSpellcheck(idea);
   ideawrap.append(ideabd, idea);
   inner.append(cap1, ideawrap);
 

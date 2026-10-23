@@ -8,6 +8,7 @@
 // never while typing - a rebuild would steal the field's focus mid-word.
 
 import { passComfyShortcut } from "../shared/text_shortcuts.mjs";
+import { followSpellcheck } from "../shared/spellcheck.mjs";
 import { MAX_DESC, MAX_TEXT, inkOn, objTag, readState, rgbaOf } from "./core.mjs";
 import {
   clearBoxes, deleteBox, redo, refresh, reorderBox, select, setField, setType, uiState, undo,
@@ -90,7 +91,7 @@ function field(cls, placeholder, title, value, max, onInput) {
   inp.title = title;
   inp.value = value || "";
   inp.maxLength = max;
-  inp.spellcheck = false;
+  followSpellcheck(inp);
   inp.addEventListener("input", () => onInput(inp.value));
   inp.addEventListener("keydown", (e) => {
     // Ctrl+S / Ctrl+Enter still reach ComfyUI (the value is already saved on
@@ -112,7 +113,7 @@ function area(placeholder, title, value, max, onInput) {
   ta.value = value || "";
   ta.maxLength = max;
   ta.rows = 2;
-  ta.spellcheck = false;
+  followSpellcheck(ta);
   const fit = () => {
     ta.style.height = "auto";
     ta.style.height = Math.min(140, Math.max(44, ta.scrollHeight + 2)) + "px";

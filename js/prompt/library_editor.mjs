@@ -10,6 +10,7 @@ import { app } from "../../../scripts/app.js";
 import { installGraphUndoGuard } from "../shared/graph_undo_guard.mjs";
 import { pixAsset } from "../shared/api_url.mjs";
 import { BRAND } from "../shared/utils.mjs";
+import { followSpellcheck } from "../shared/spellcheck.mjs";
 import {
   getLibrary, reloadLibrary, isSameAsStored, commitLibrary, flushLibrary, exportLibraryJSON, parseImport, applyImport,
   importCategories, subsetImport, isListTag, tagLines, catOf, sideOfCat, tagMode, catMode,
@@ -621,7 +622,7 @@ function makeCard(tag) {
   pill.addEventListener("click", (e) => { e.stopPropagation(); openCatMenu(tag, pill); });
   top.append(nm, pill);
   const tx = document.createElement("textarea");
-  tx.className = "ctx"; tx.value = tag.text; tx.spellcheck = false; tx.rows = 3;
+  tx.className = "ctx"; tx.value = tag.text; followSpellcheck(tx); tx.rows = 3;
   tx.addEventListener("input", () => { tag.text = tx.value; commit(); paintKind(); });
   tx.addEventListener("keydown", (e) => e.stopPropagation());
   const foot = document.createElement("div"); foot.className = "cfoot";
@@ -1255,7 +1256,7 @@ function buildCreateForm() {
   const nm = document.createElement("input"); nm.className = "cnm"; nm.placeholder = "new tag name"; nm.spellcheck = false;
   // A <textarea> (not <input>) so a multi-line "save selection as a tag" keeps its
   // line breaks (a text input strips newlines on assignment).
-  const tx = document.createElement("textarea"); tx.className = "ctx"; tx.spellcheck = false; tx.rows = 1;
+  const tx = document.createElement("textarea"); tx.className = "ctx"; followSpellcheck(tx); tx.rows = 1;
   // Text / List for the tag about to be created. Lives on the draft so it survives a
   // re-render, and follows the text (2+ lines = a List) until the user picks for
   // themselves - after that their choice sticks.

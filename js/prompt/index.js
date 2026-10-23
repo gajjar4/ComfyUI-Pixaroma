@@ -8,6 +8,7 @@ import { growToCoreMinHeight } from "../shared/core_min_size.mjs";
 import { registerNodeSettings } from "../shared/node_settings.mjs";
 import { isComfyTextShortcut } from "../shared/text_shortcuts.mjs";
 import { textSize, onTextSizeChange } from "../shared/text_size.mjs";
+import { followSpellcheck } from "../shared/spellcheck.mjs";
 // Only the re-highlight fanout is still needed here: everything that READS the
 // library (which tags exist, which category rolls what) moved into tag_field.mjs.
 import { subscribe } from "./library.mjs";
@@ -267,7 +268,7 @@ const PROMPT_HELP = {
       heading: "Reading the colours",
       body:
         "The colour tells you what a thing is: `@tag` in your accent colour (orange unless you changed it), `*category` in green, `#list` in violet.\n\n" +
-        "A name that does not match anything yet stays plain white with a red wavy underline, the way a spellchecker marks a word. That is what you see while you are still typing a name, so it stays easy to read, and it takes its real colour the moment it matches something in your library. An underline left behind after you have finished typing means a typo, or a tag you have since renamed or deleted.\n\n" +
+        "A name that does not match anything yet stays plain white with a red wavy underline, the way a spellchecker marks a word. That is what you see while you are still typing a name, so it stays easy to read, and it takes its real colour the moment it matches something in your library. An underline left behind after you have finished typing means a typo, or a tag you have since renamed or deleted. With ComfyUI's spell check on, the browser also underlines words it does not know, so a tag name that is not a real word can get its underline too.\n\n" +
         "While you are typing, `Show expanded` names the slot instead of guessing: `[random: Styles]`, `[shuffled line: animals]`, `[next line: poses]`. It cannot show a real pick yet, because the choice is made when you press Run, and a live one would change under your hands at every keystroke.\n\n" +
         "The moment you press Run it switches to the actual words that were used, so you can always see what a picture was made from. Edit the box and it goes back to naming the slots, because the old words no longer describe what you have written. The words also travel inside the picture: drag a finished image back onto the canvas and the box shows the prompt that made it, while your `#name` template stays exactly as you wrote it. Tip: with a fixed seed the picture only changes when the pick changes, so use a random seed if you want a new image every run.\n\n" +
         "The expanded words are coloured to match what they came from, so you can trace any piece back: words in your accent colour came from an `@tag`, green from a `*category`, violet from a `#list`. Where you have several of the same kind, each takes a slightly different shade of that colour, so two tags next to each other never blur into one run. Your own typed words stay plain grey. A prompt read back off a picture you dragged in is shown in plain text, because the colouring is worked out while the prompt is being built.",
@@ -449,7 +450,7 @@ function buildRoot(node) {
   ta.className = "pix-prm-ta";
   ta.placeholder = "your prompt - @ a tag, * a random tag, # a random line";
   ta.title = "Type your prompt. @name inserts a tag, *category picks a random tag each run, #name picks a random line from a list. Ctrl+Up / Ctrl+Down changes the weight of the selected words. Ctrl+Enter runs the workflow.";
-  ta.spellcheck = false;
+  followSpellcheck(ta);
   tawrap.append(backdrop, ta);
 
   const expand = document.createElement("div");

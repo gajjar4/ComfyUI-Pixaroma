@@ -18,6 +18,7 @@ import {
 } from "../shared/node_panel.mjs";
 import { formatModelSize } from "../shared/utils.mjs";
 import { passComfyShortcut } from "../shared/text_shortcuts.mjs";
+import { followSpellcheck } from "../shared/spellcheck.mjs";
 import { looksVision } from "../shared/model_kinds.mjs";
 import { installGraphUndoGuard } from "../shared/graph_undo_guard.mjs";
 // The themed dialogs, reused like Music Prompt does (no cycle: ai_prompt never
@@ -343,7 +344,9 @@ export function openEditor(title, text, onSave, opts) {
   head.append(name, cnt, el("span", "sp"));
   const ta = el("textarea");
   ta.value = text || "";
-  ta.spellcheck = opts?.spellcheck === true;
+  // Prose follows ComfyUI's spell check setting; a formula stays off.
+  if (opts?.spellcheck === true) followSpellcheck(ta);
+  else ta.spellcheck = false;
   back._pixOwner = opts?.owner || null;
   const foot = el("div", "pix-vpe-foot");
   const cancel = el("button", "pix-vpp-btn", "Cancel");

@@ -7,6 +7,7 @@
 import { readState, MODE_QUEUE, MODE_LIST } from "./core.mjs";
 import { attachLabelEditor, attachTextareaEditor, attachDragHandlers } from "./interaction.mjs";
 import { textSize } from "../shared/text_size.mjs";
+import { followSpellcheck } from "../shared/spellcheck.mjs";
 
 const CSS_ID = "pix-prompt-multi-css";
 
@@ -425,6 +426,7 @@ export function renderRows(node, root, rowHandlers) {
     ta.value = row.text || "";
     ta.rows = 2;
     ta.placeholder = "Type a prompt variant. Each enabled row with text queues one workflow run. Empty rows are skipped.";
+    followSpellcheck(ta);
     rowEl.appendChild(ta);
     attachTextareaEditor(node, ta, row.id);
 

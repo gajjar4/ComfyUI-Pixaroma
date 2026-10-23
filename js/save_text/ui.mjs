@@ -11,6 +11,7 @@
 import { ACC } from "../shared/node_settings.mjs";
 import { pixAsset } from "../shared/api_url.mjs";
 import { textSize } from "../shared/text_size.mjs";
+import { followSpellcheck } from "../shared/spellcheck.mjs";
 
 export function el(tag, cls, text) {
   const n = document.createElement(tag);
@@ -160,7 +161,7 @@ export function buildRoot() {
   root.appendChild(inner);
 
   const box = el("textarea", "pix-stx-box");
-  box.spellcheck = false;
+  followSpellcheck(box);
   box.placeholder =
     "Nothing collected yet.\n\nWire some text in and run: each run adds an entry here.";
   box.title = "Everything collected so far. Edit or delete freely, then press Save .txt.";
