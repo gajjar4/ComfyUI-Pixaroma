@@ -17,6 +17,7 @@ let currentFx = "None";
 let currentButton = null;
 let cleanupCurrent = () => {};
 let observer = null;
+let classObserver = null;
 let pendingCheck = false;
 
 function injectCSS() {
@@ -24,14 +25,14 @@ function injectCSS() {
   const style = document.createElement("style");
   style.id = "pix-rb-fx-css";
   style.textContent = `
-    button.pix-rb-orange {
+    button.pix-rb-orange:not([data-variant="destructive"]) {
       background: #f66744 !important;
       background-image: none !important;
       color: #ffffff !important;
       border-color: #f66744 !important;
       box-shadow: none !important;
     }
-    button.pix-rb-orange:hover {
+    button.pix-rb-orange:not([data-variant="destructive"]):hover {
       background: #f66744 !important;
       background-image: none !important;
       filter: brightness(1.08);
@@ -488,12 +489,23 @@ function applyFx(button, fx) {
   }
 }
 
+// Core rewrites the button's whole class list when its variant changes (the red "Stop Run (Instant)" and back),
+// which drops ours on the same element: put it back.
+function watchClass(button) {
+  if (classObserver) classObserver.disconnect();
+  classObserver = new MutationObserver(() => {
+    if (currentFx !== "None" && !button.classList.contains("pix-rb-orange")) button.classList.add("pix-rb-orange");
+  });
+  classObserver.observe(button, { attributes: true, attributeFilter: ["class"] });
+}
+
 function checkButton() {
   if (currentButton && document.body.contains(currentButton)) return;
   const btn = findRunButton();
   if (!btn) return;
   currentButton = btn;
   applyFx(btn, currentFx);
+  watchClass(btn);
 }
 
 function scheduleCheck() {
@@ -515,6 +527,10 @@ function stopObserver() {
   if (observer) {
     observer.disconnect();
     observer = null;
+  }
+  if (classObserver) {
+    classObserver.disconnect();
+    classObserver = null;
   }
   cleanupCurrent();
   cleanupCurrent = () => {};
