@@ -365,7 +365,7 @@ class PixaromaH3Timeline:
         "before (one continuous shot, no flash) or starts with a clean CUT (a new shot from its own picture, the "
         "audio still in time). KEEP on a scene holds it as your last Run made it: change the seed and Run again to "
         "redo only the other scenes, in less time. A shorter WINDOW (5 s) uses less memory, for big sizes like "
-        "1088 x 1920. A scene is 4 seconds or more. A person who joins stays for the "
+        "960 x 1728. A scene is 4 seconds or more. A person who joins stays for the "
         "scene they join in: write their arrival and what they do next in one scene, and keep that scene at about "
         "13 seconds or less (a longer one is made in two parts and the person can slide between them). Works only "
         "with MiniMax H3."

@@ -45,7 +45,7 @@ export const H3_TIMELINE_HELP = {
     },
     {
       heading: "Bigger videos: Window",
-      body: "H3 makes a long video in parts (windows) that follow your scenes, up to 15 seconds each. Memory grows with the window length times the video size, so big sizes run out of memory on a 24 GB card. A shorter `Window` (5 s) needs less memory: with Cut and Window 5 s, a 41 second video at 1088 x 1920 (Full HD) ran in about 24 minutes on an RTX 4090 and kept all four places. With Cut alone, 864 x 1536 fitted (14 minutes).\n\nBigger sizes drift more (H3 can zoom into the face or change a wall): check each scene, and fix one that drifted with Keep and another seed. `Auto` is right for 480 x 864.",
+      body: "H3 makes a long video in parts (windows) that follow your scenes, up to 15 seconds each. Memory grows with the window length times the video size, so big sizes run out of memory on a 24 GB card. A shorter `Window` (5 s) needs less memory: with Cut and Window 5 s, a 41 second video at 960 x 1728 ran in about 16 minutes on an RTX 4090 (24 GB) and kept all four places. 1088 x 1920 (Full HD) still ran out of memory there. With Cut alone, 704 x 1280 fits (about 8 minutes).\n\nBigger sizes drift more (H3 can zoom into the face or change a wall): check each scene, and fix one that drifted with Keep and another seed. `Auto` is right for 480 x 864.",
     },
     {
       heading: "What the video keeps of a picture",

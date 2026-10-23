@@ -146,7 +146,7 @@ export function buildFace(node) {
     const b = el("button", "", w ? `${w} s` : "Auto");
     b.dataset.w = String(w);
     b.title = w
-      ? `Make the video in parts of ${w} seconds at most: less memory, for big sizes like 1088 x 1920 (best with Cut)`
+      ? `Make the video in parts of ${w} seconds at most: less memory, for big sizes like 960 x 1728 (best with Cut)`
       : "Parts up to 15 seconds, following your scenes (the default)";
     b.onclick = () => {
       const st = readState(node);
