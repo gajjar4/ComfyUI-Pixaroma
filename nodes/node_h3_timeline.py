@@ -121,7 +121,16 @@ class _SceneWindows(_Windows):
             kw = dict(kwargs)
             kw["minimax_payload"] = self._window_payload(src, l0, l1, a0, a1, audio.shape[-1])
             if mask_v is not None:
-                kw["denoise_mask"] = mask_v[:, :, l0:l1]
+                mv = mask_v[:, :, l0:l1]
+                # Across a clean cut this window only renders the other scene's frames to throw them away (its 2
+                # tail tokens, a pre-roll). A KEPT scene there is held (0) and H3 reads held frames as a finished
+                # end / start picture: MEASURED 10-23 (keep_redo2), the redone desk scene turned into the kept sofa
+                # within 0.5 s. So for this window they are ordinary frames (1); with nothing kept it is all 1 anyway.
+                gone = w_v.view(-1) <= 0
+                if bool(gone.any()):
+                    mv = mv.clone()
+                    mv[:, :, gone.to(mv.device)] = 1.0
+                kw["denoise_mask"] = mv
             if mask_a is not None:
                 kw["audio_denoise_mask"] = mask_a[..., a0:a1]
             o = executor([video[:, :, l0:l1], audio[..., a0:a1]], timestep, ctx, transformer_options.copy(), **kw)
