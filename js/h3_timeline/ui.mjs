@@ -24,7 +24,7 @@ import { applyAdaptiveCanvasOnly } from "../shared/nodes2.mjs";
 import { installResizeFloor } from "../shared/resize_floor.mjs";
 import { passComfyShortcut } from "../shared/text_shortcuts.mjs";
 import {
-  MAX_SCENES, ROLE_LOOK, ROLE_PERSON, SCENE_STEP_S, cleanLength, clipFrames, fmtS, newScene, readState,
+  MAX_SCENES, ROLE_LOOK, ROLE_PERSON, SCENE_STEP_S, WINDOWS, cleanLength, clipFrames, fmtS, newScene, readState,
   sceneLooks, sceneStarts, writeState,
 } from "./core.mjs";
 import { keptWindow, openCrop } from "./crop.mjs";
@@ -138,7 +138,26 @@ export function buildFace(node) {
     requestAnimationFrame(() => node._pixH3tFace?.list.lastElementChild?.scrollIntoView({ block: "nearest" }));
   };
   const total = el("span", "pix-h3t-total");
-  foot.append(add, total);
+  // the longest window: shorter = less memory, for big sizes
+  const win = el("span", "pix-h3t-win");
+  win.appendChild(el("span", "pix-h3t-winlbl", "Window"));
+  const winSeg = el("span", "pix-h3t-seg");
+  for (const w of WINDOWS) {
+    const b = el("button", "", w ? `${w} s` : "Auto");
+    b.dataset.w = String(w);
+    b.title = w
+      ? `Make the video in parts of ${w} seconds at most: less memory, for big sizes like 1088 x 1920 (best with Cut)`
+      : "Parts up to 15 seconds, following your scenes (the default)";
+    b.onclick = () => {
+      const st = readState(node);
+      writeState(node, st.scenes, w);
+      notifyGraphChanged();
+      renderFace(node, false, true);
+    };
+    winSeg.appendChild(b);
+  }
+  win.appendChild(winSeg);
+  foot.append(add, total, win);
   inner.append(bar, list, foot);
   root.appendChild(inner);
 
@@ -271,6 +290,8 @@ export function renderStrip(node, st = readState(node)) {
     const L = looks[i];
     if (!L.own) b.classList.add("carried");
     if (i === sel) b.classList.add("sel");
+    if (i > 0 && s.cut) b.classList.add("cutin");
+    if (s.keep) b.classList.add("kept");
     b.style.left = `${(starts[i] / total) * 100}%`;
     b.style.width = `calc(${(s.length / total) * 100}% - 3px)`;
     const tiles = el("div", "pix-h3t-tiles");
@@ -288,7 +309,8 @@ export function renderStrip(node, st = readState(node)) {
     if (!L.own && i > 0) tag = el("span", "pix-h3t-tag", "same look");
     else if (L.entering) tag = el("span", "pix-h3t-tag", "+ person");
     if (tag) b.appendChild(tag);
-    b.title = `Scene ${i + 1}: ${fmtS(starts[i])} to ${fmtS(starts[i] + s.length)}`;
+    b.title = `Scene ${i + 1}: ${fmtS(starts[i])} to ${fmtS(starts[i] + s.length)}`
+      + (i > 0 && s.cut ? ", starts with a clean cut" : "") + (s.keep ? ", kept from your last Run" : "");
     b.onclick = () => {
       select(node, i);
       f.list.children[i]?.scrollIntoView({ block: "nearest" });
@@ -319,6 +341,12 @@ export function renderStrip(node, st = readState(node)) {
     run.audio.charAt(0).toUpperCase() + run.audio.slice(1));
   else note = el("span", "note", `${modeOf(node)}: the audio length is checked when you run`);
   note.title = note.textContent;
+  // what Keep did in the last Run comes first (one line, the full text in the tooltip)
+  if (run?.keep) {
+    note.title = run.keep + (note.title ? `\n${note.title}` : "");
+    note.textContent = run.keep;
+    note.className = "note " + (/made new/.test(run.keep) ? "warn" : "ok");
+  }
   f.lane.append(wave, note);
 }
 
@@ -478,6 +506,27 @@ function renderRows(node, st) {
       }
       top.appendChild(seg);
     }
+    // how this scene starts: blended out of the one before (one continuous shot) or a clean cut (a new shot)
+    if (i > 0) {
+      const how = el("span", "pix-h3t-seg pix-h3t-how");
+      for (const [cut, label, tip] of [
+        [false, "Blend", "The scene before blends into this one: one continuous shot"],
+        [true, "Cut", "A clean cut into this scene: a new shot that starts from its picture, still in time with the audio"],
+      ]) {
+        const b = el("button", s.cut === cut ? "on" : "", label);
+        b.title = tip;
+        b.setAttribute("aria-pressed", String(s.cut === cut));
+        b.onclick = () => change(node, (sc) => { if (sc[i]) sc[i].cut = cut; }, true);
+        how.appendChild(b);
+      }
+      top.appendChild(how);
+    }
+    const keep = el("button", "pix-h3t-keep" + (s.keep ? " on" : ""), "Keep");
+    keep.title = "Keep this scene as your last Run made it. Change the seed and Run again: only the scenes without "
+      + "Keep are made again, in less time";
+    keep.setAttribute("aria-pressed", String(!!s.keep));
+    keep.onclick = () => change(node, (sc) => { if (sc[i]) sc[i].keep = !sc[i].keep; }, true);
+    top.appendChild(keep);
     // the four row buttons wrap TOGETHER, never one alone on a line
     const tools = el("span", "pix-h3t-tools");
     top.appendChild(tools);
@@ -560,6 +609,11 @@ function renderFoot(node, st) {
   const n = st.scenes.length;
   const frames = clipFrames(st.scenes.map((s) => s.length));
   f.total.textContent = `Total ${fmtS(frames / 24)} · ${frames} frames · ${n} scene${n === 1 ? "" : "s"}`;
+  for (const b of f.foot.querySelectorAll(".pix-h3t-win button")) {
+    const on = Number(b.dataset.w) === st.window;
+    b.classList.toggle("on", on);
+    b.setAttribute("aria-pressed", String(on));
+  }
   f.add.disabled = n >= 12;
   f.add.title = n >= 12 ? "12 scenes at most" : "Add a scene after the last one (it keeps the look until you give it a picture)";
 }

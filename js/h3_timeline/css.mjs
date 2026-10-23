@@ -30,6 +30,9 @@ export function injectCSS() {
 .pix-h3t-tiles{position:absolute;inset:0;display:flex;gap:1px;}
 .pix-h3t-tile{flex:0 0 auto;height:100%;background-repeat:no-repeat;background-color:#111;}
 .pix-h3t-block.carried .pix-h3t-tiles{opacity:.38;}
+/* a scene that starts with a clean cut: a hard white left edge; a kept scene says so in its badge */
+.pix-h3t-block.cutin{border-left:3px solid #fff;}
+.pix-h3t-block.kept .pix-h3t-badge::after{content:" · Keep";}
 .pix-h3t-badge{position:absolute;left:4px;top:4px;padding:1px 6px;border-radius:3px;background:rgba(0,0,0,.72);
   color:#fff;font-size:11px;font-weight:600;white-space:nowrap;}
 .pix-h3t-block.sel .pix-h3t-badge{background:${ACC};}
@@ -85,6 +88,10 @@ export function injectCSS() {
   font:10px "Segoe UI",sans-serif;cursor:pointer;user-select:none;}
 .pix-h3t-seg button:hover{background:rgba(255,255,255,.18);color:#ddd;}
 .pix-h3t-seg button.on{background:${ACC};color:#fff;}
+.pix-h3t-keep{height:24px;padding:0 10px;box-sizing:border-box;background:#1d1d1d;border:1px solid #444;
+  border-radius:4px;color:#aaa;font:10px "Segoe UI",sans-serif;cursor:pointer;user-select:none;}
+.pix-h3t-keep:hover{border-color:${ACC};color:#ddd;}
+.pix-h3t-keep.on{background:${ACC};border-color:${ACC};color:#fff;}
 .pix-h3t-chip{height:22px;display:inline-flex;align-items:center;padding:0 8px;border-radius:4px;
   background:rgba(255,255,255,.08);color:#ccc;font-size:10px;white-space:nowrap;}
 .pix-h3t-tools{display:inline-flex;gap:2px;margin-left:auto;flex:none;}
@@ -105,6 +112,8 @@ export function injectCSS() {
 .pix-h3t-add:hover{background:${ACC_HOVER};border-color:${ACC_HOVER};}
 .pix-h3t-add:disabled{opacity:.45;cursor:default;}
 .pix-h3t-total{flex:1 1 auto;color:#ccc;font-size:11px;}
+.pix-h3t-win{display:inline-flex;align-items:center;gap:6px;flex:none;}
+.pix-h3t-winlbl{color:#aaa;font-size:11px;}
 
 /* the picker is Load Image's; its Upload button is the primary action. Only our own class here (one prefix per
    node, convention #38), doubled so it outranks Load Image's button rule whichever stylesheet loads last */

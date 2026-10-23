@@ -37,7 +37,8 @@ function applyRun(node, message) {
   const entry = message?.h3_timeline?.[0];
   if (!entry) return;
   // Runtime only: the readout belongs to this session's run, never to the file.
-  node._pixH3tRun = { audio: String(entry.audio || ""), seconds: entry.seconds, mode: entry.mode };
+  node._pixH3tRun = { audio: String(entry.audio || ""), seconds: entry.seconds, mode: entry.mode,
+    keep: String(entry.keep || "") };
   renderFace(node, false, false);
 }
 

@@ -38,8 +38,17 @@ export function cleanLength(v) {
 }
 
 export function newScene(length = SCENE_DEFAULT_S) {
-  return { length, words: "", picture: null, role: ROLE_LOOK, x: 0.5, y: 0.5, fit: "cut" };
+  return { length, words: "", picture: null, role: ROLE_LOOK, x: 0.5, y: 0.5, fit: "cut", cut: false, keep: false };
 }
+
+// The longest window in seconds (0 = automatic, 15 s). Shorter windows use less
+// memory at big sizes (nodes/_h3_timeline_helpers.window_chunks): the face offers
+// these, Python accepts 0 to 15.
+export const WINDOWS = [0, 10, 7, 5];
+export const cleanWindow = (v) => {
+  const f = num(v, 0);
+  return f > 0 ? Math.min(15, Math.max(5, f)) : 0;
+};
 
 function cleanScene(s) {
   if (!s || typeof s !== "object") return null;
@@ -53,6 +62,10 @@ function cleanScene(s) {
     x: unit(s.x),
     y: unit(s.y),
     fit: s.fit === "fit" ? "fit" : "cut",
+    // a clean cut INTO this scene (never on scene 1, Python ignores it there), and Keep = hold this scene as the
+    // last Run made it (Python checks the last Run still fits)
+    cut: s.cut === true,
+    keep: s.keep === true,
   };
 }
 
@@ -71,19 +84,22 @@ export function readState(node) {
     }
   }
   if (!scenes.length) scenes.push(newScene());
-  return { scenes };
+  return { scenes, window: cleanWindow(raw.window) };
 }
 
-/** The ONLY writer. Call it from user actions, never from a load path. */
-export function writeState(node, scenes) {
+/** The ONLY writer. Call it from user actions, never from a load path. The window
+ *  setting is kept as it is unless one is given. */
+export function writeState(node, scenes, window) {
   if (!node) return;
+  const w = window === undefined ? readState(node).window : cleanWindow(window);
   node.properties = node.properties || {};
-  node.properties[PROP] = { v: 1, scenes: scenes.slice(0, MAX_SCENES).map((s) => ({ ...cleanScene(s) })) };
+  node.properties[PROP] = { v: 1, scenes: scenes.slice(0, MAX_SCENES).map((s) => ({ ...cleanScene(s) })), window: w };
 }
 
 /** Exactly what Python receives. */
 export function injectedState(node) {
-  return { v: 1, scenes: readState(node).scenes };
+  const st = readState(node);
+  return { v: 1, scenes: st.scenes, window: st.window };
 }
 
 /** The clip's frame count: the scenes added up, on H3's 17n + 5 grid. MUST match

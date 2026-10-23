@@ -3,7 +3,7 @@
 
 export const H3_TIMELINE_HELP = {
   title: "H3 Timeline Pixaroma",
-  tagline: "Tell one long MiniMax H3 video as scenes: each scene its own length, its own words and, if it needs one, its own picture. Made in one run, with no cuts.",
+  tagline: "Tell one long MiniMax H3 video as scenes: each scene its own length, its own words and, if it needs one, its own picture. Made in one run: scenes blend into each other, or start with a clean cut.",
   sections: [
     {
       heading: "How to use it",
@@ -33,6 +33,21 @@ export const H3_TIMELINE_HELP = {
       ],
     },
     {
+      heading: "Blend or Cut",
+      defs: [
+        ["Blend", "The scene before flows into this one: one continuous shot. A New look picture fades in over about half a second."],
+        ["Cut", "A clean cut into this scene, like a cut in a music video: a new shot that starts from its own picture, so it can be another place or a whole different picture. The audio keeps playing across the cut, in time. Tested: one clean frame at each cut, the same as making each scene on its own."],
+      ],
+    },
+    {
+      heading: "Keep: redo only one scene",
+      body: "Liked the video except one scene? Click `Keep` on every scene you like, change the seed (or set it to random) and press Run again. The kept scenes come back as they were and only the others are made again, in less time (one scene of four at 704 x 1280: 4 minutes instead of 8). Repeat until every scene is right.\n\nKeep uses this node's last Run in this ComfyUI session, so it is lost when ComfyUI restarts. It holds a scene only while its length and picture are the same as in that Run: change a length and every scene is made new. It works best with Cut, where each scene is its own shot.",
+    },
+    {
+      heading: "Bigger videos: Window",
+      body: "H3 makes a long video in parts (windows) that follow your scenes, up to 15 seconds each. Memory grows with the window length times the video size, so big sizes run out of memory on a 24 GB card. A shorter `Window` (5 s) needs less memory: with Cut and Window 5 s, a 41 second video at 1088 x 1920 (Full HD) ran in about 24 minutes on an RTX 4090 and kept all four places. With Cut alone, 864 x 1536 fitted (14 minutes).\n\nBigger sizes drift more (H3 can zoom into the face or change a wall): check each scene, and fix one that drifted with Keep and another seed. `Auto` is right for 480 x 864.",
+    },
+    {
       heading: "What the video keeps of a picture",
       body: "The start picture and a New look become the video frame, so they are cut to the video's shape. Under each picture the node says `nothing cut` when the shapes match, or what gets cut. Click that word to open the crop view: drag the orange frame to choose what stays, or pick `Fit inside` to keep the whole picture with black bars. The time bar shows each scene's picture cut the same way.",
     },
@@ -51,7 +66,9 @@ export const H3_TIMELINE_HELP = {
     {
       heading: "Tips",
       bullets: [
-        "A scene change blends over a couple of seconds, so it reads as one continuous shot.",
+        "A scene change blends over a couple of seconds, so it reads as one continuous shot. For a new place or a different shot, pick Cut.",
+        "Put a cut in a pause of the song, between two sung lines, so it never lands in the middle of a word.",
+        "A pinned end picture is not needed: in tests, pinning the last frame made her reach that pose early and then hold still. Write the action in the words instead, and give the next scene the picture.",
         "At the start of a new scene she can drift back toward the picture's pose for a moment. A relaxed pose in the start picture looks most natural.",
         "Action first, picture after. A New look on its own makes the change fade in, which looks like magic. To make it natural, write the action in a scene with NO picture (`lifts a black hat and puts it on her head`), then give the next scene the New look picture (her wearing the hat): it only keeps the hat on from there. Tested on 3 seeds: each time she brought the hat up and put it on, with no fade.",
         "A person who joins stays for the scene they join in, but fades out like a ghost at the next scene change. So decide how they leave. To send them away, write it at the end of their own scene (`a man walks in from the right and stands beside her, then near the end of this part he turns and walks back out of the frame to the right`): tested on 3 seeds, he walked out with no fade. To keep them, give the next scene a New look picture with both of them in it: tested on 3 seeds, he stayed to the end, and she kept that picture's pose. The switch to that picture is a short crossfade, so he can look see-through for a moment (least when he already stands where the picture has him). Use a clean, full-size picture (like one made with an edit model from the start picture and their photo), never a frame taken from a video: the video copies that picture's look, and a video frame made the rest of the video harsher and her face a little different (tested).",
@@ -60,7 +77,7 @@ export const H3_TIMELINE_HELP = {
         "A person who joins can walk in late, halfway through their scene. To bring them in at the start, say so: `a man walks in from the right side of the frame right away, at the very start, and stands beside her`. Tested: he came in 3.5 seconds into a 14 second scene instead of 7.5.",
         "A person who joins fits best when there is room in the frame beside the main person. If their scene ends the video, they can fade out in its last half second: add a short scene after it, or trim the end.",
         "If the first part of the video comes out with a different background or light than the picture (a white background turned dark for 16 seconds), run again with another seed. It depends on the seed: the same scenes on another seed stayed white.",
-        "A New look that is a whole different picture (another person, another place) does not cut: it crossfades in about half a second, and things can carry over (a microphone stayed in front of the new person). A New look works best as the same shot with one change.",
+        "A New look that is a whole different picture (another person, another place) does not cut on Blend: it crossfades in about half a second, and things can carry over (a microphone stayed in front of the new person). Set that scene to Cut instead: it starts clean from its picture.",
         "Talk keeps the picture's pose (hands in pockets stay in pockets) and mostly follows the voice, not gesture words. Sing and Act follow movement words better.",
         "Act can speak: put a short line in quotes in a scene's words (`says \"welcome to the show\"`). The line tends to come late in its scene, so give it a few seconds.",
         "Works only with MiniMax H3. H3 Long Video is the simpler node for one long scene.",

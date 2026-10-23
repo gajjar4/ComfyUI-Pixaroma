@@ -120,20 +120,30 @@ class _SceneWindows(_Windows):
                     src.pop("text_token_tags", None)
             kw = dict(kwargs)
             kw["minimax_payload"] = self._window_payload(src, l0, l1, a0, a1, audio.shape[-1])
+            # Across a clean cut this window renders some of the OTHER scene's frames only to throw them away (its 2
+            # tail tokens, a pre-roll). Whatever is there leaks into this scene: MEASURED 10-23, with that scene
+            # KEPT (held, mask 0, read by H3 as a finished picture to end on) the redone desk turned into the kept
+            # sofa within 0.5 s; held but unmasked, its closer framing still made the desk zoom in. So this window
+            # sees ITS OWN nearest frame repeated there (the shot holds still for those few frames), marked as
+            # ordinary frames (1): a cut scene depends on nothing across its cuts.
+            xv = video[:, :, l0:l1]
+            gone = (w_v.view(-1) <= 0).to(video.device)
+            if bool(gone.any()):
+                own = (~gone).nonzero().flatten()
+                if own.numel():
+                    first, last = int(own[0]), int(own[-1])
+                    xv = xv.clone()
+                    for j in gone.nonzero().flatten().tolist():
+                        xv[:, :, j] = xv[:, :, first if j < first else last]
             if mask_v is not None:
                 mv = mask_v[:, :, l0:l1]
-                # Across a clean cut this window only renders the other scene's frames to throw them away (its 2
-                # tail tokens, a pre-roll). A KEPT scene there is held (0) and H3 reads held frames as a finished
-                # end / start picture: MEASURED 10-23 (keep_redo2), the redone desk scene turned into the kept sofa
-                # within 0.5 s. So for this window they are ordinary frames (1); with nothing kept it is all 1 anyway.
-                gone = w_v.view(-1) <= 0
                 if bool(gone.any()):
                     mv = mv.clone()
                     mv[:, :, gone.to(mv.device)] = 1.0
                 kw["denoise_mask"] = mv
             if mask_a is not None:
                 kw["audio_denoise_mask"] = mask_a[..., a0:a1]
-            o = executor([video[:, :, l0:l1], audio[..., a0:a1]], timestep, ctx, transformer_options.copy(), **kw)
+            o = executor([xv, audio[..., a0:a1]], timestep, ctx, transformer_options.copy(), **kw)
             out_v[:, :, l0:l1] += o[0].float() * w_v
             out_a[..., a0:a1] += o[1].float() * w_a.to(audio.device)
             del o
@@ -160,8 +170,9 @@ class _KeepLast:
     """An OUTER_SAMPLE wrapper: remembers what the sampler made (video and sound latents, on the CPU) for the
     Timeline node with this id. Never changes the result; any problem only skips the remembering."""
 
-    def __init__(self, key):
+    def __init__(self, key, sig):
         self.key = key
+        self.sig = sig          # what each scene was in this Run (_scene_sig): Keep holds only what still matches
 
     def __call__(self, executor, noise, latent_image, sampler, sigmas, denoise_mask=None, callback=None,
                  disable_pbar=False, seed=None, latent_shapes=None):
@@ -171,26 +182,39 @@ class _KeepLast:
             import comfy.utils
             parts = comfy.utils.unpack_latents(out, latent_shapes) if latent_shapes and len(latent_shapes) > 1 else [out]
             if len(parts) >= 2 and getattr(parts[0], "ndim", 0) == 5:
-                _LAST[self.key] = (parts[0].detach().float().cpu(), parts[1].detach().float().cpu())
+                _LAST[self.key] = (parts[0].detach().float().cpu(), parts[1].detach().float().cpu(), self.sig)
         except Exception as e:
             print("[Pixaroma] H3 Timeline: could not remember this run for Keep ({}).".format(e))
         return out
 
 
-def _keep_latent(latent, prev, lengths, keeps):
-    """The node's empty AV latent -> the kept scenes filled from the last run and held (noise_mask 0, video and
-    sound), or None when the last run does not fit (none yet, another size or length)."""
+def _scene_sig(scenes):
+    """Where each scene sits and what starts it: Keep may hold a scene only while these are the same as in the
+    Run it keeps from (a changed length moves every border after it; a moved or new picture is another scene)."""
+    return [(round(float(s["length"]), 3), s["picture"] or "", s["role"], bool(s["cut"])) for s in scenes]
+
+
+def _keep_latent(latent, prev, scenes, keeps):
+    """The node's empty AV latent -> (latent with the kept scenes filled from the last Run and held (noise_mask 0,
+    video and sound), [the scenes held]), or (None, why) when nothing can be kept."""
     import torch
     import comfy.nested_tensor
     samples = latent.get("samples") if isinstance(latent, dict) else None
     if prev is None or samples is None or not getattr(samples, "is_nested", False):
-        return None
+        return None, "no earlier Run of this node to keep from (made in full)"
     v, a = samples.unbind()[:2]
     if tuple(prev[0].shape) != tuple(v.shape) or tuple(prev[1].shape) != tuple(a.shape):
-        return None
+        return None, "the last Run was another size or length, so every scene is made new"
+    sig, old = _scene_sig(scenes), prev[2]
+    if [s[0] for s in sig] != [s[0] for s in old]:
+        return None, "a scene length changed since the last Run, so every scene is made new"
+    held = [i for i in sorted(keeps) if i < len(sig) and sig[i] == old[i]]
+    if not held:
+        return None, "the kept scenes changed since the last Run (picture or cut), so they are made new"
     nv, na = v.clone(), a.clone()
     vm, am = torch.ones_like(v), torch.ones_like(a)
-    for t0, t1, a0, a1 in keep_ranges(lengths, v.shape[2], a.shape[-1], keeps):
+    lengths = [s["length"] for s in scenes]
+    for t0, t1, a0, a1 in keep_ranges(lengths, v.shape[2], a.shape[-1], held):
         nv[:, :, t0:t1] = prev[0][:, :, t0:t1].to(nv)
         vm[:, :, t0:t1] = 0
         na[..., a0:a1] = prev[1][..., a0:a1].to(na)
@@ -198,7 +222,7 @@ def _keep_latent(latent, prev, lengths, keeps):
     out = dict(latent)
     out["samples"] = comfy.nested_tensor.NestedTensor((nv, na))
     out["noise_mask"] = comfy.nested_tensor.NestedTensor((vm, am))
-    return out
+    return out, held
 
 
 def _resolve_picture(name):
@@ -322,8 +346,11 @@ class PixaromaH3Timeline:
         "model, positive and latent out to H3 Audio Sync and the sampler. Sing and Talk put your words into the "
         "tested EP41 prompts and use the audio input as the song or the voice (lock it with H3 Audio Sync); Act needs "
         "no audio and H3 makes the sound itself.\n\n"
-        "The video is made in one run, in windows that follow your scenes, so each scene change blends over a "
-        "couple of seconds with no cut or flash. A scene is 4 seconds or more. A person who joins stays for the "
+        "The video is made in one run, in windows that follow your scenes. Each scene either BLENDS out of the one "
+        "before (one continuous shot, no flash) or starts with a clean CUT (a new shot from its own picture, the "
+        "audio still in time). KEEP on a scene holds it as your last Run made it: change the seed and Run again to "
+        "redo only the other scenes, in less time. A shorter WINDOW (5 s) uses less memory, for big sizes like "
+        "1088 x 1920. A scene is 4 seconds or more. A person who joins stays for the "
         "scene they join in: write their arrival and what they do next in one scene, and keep that scene at about "
         "13 seconds or less (a longer one is made in two parts and the person can slide between them). Works only "
         "with MiniMax H3."
@@ -462,18 +489,20 @@ class PixaromaH3Timeline:
         key = str(unique_id)
         outer = comfy.patcher_extension.WrappersMP.OUTER_SAMPLE
         m.remove_wrappers_with_key(outer, KEEP_KEY)
-        m.add_wrapper_with_key(outer, KEEP_KEY, _KeepLast(key))
+        m.add_wrapper_with_key(outer, KEEP_KEY, _KeepLast(key, _scene_sig(scenes)))
         keeps = {i for i, sc in enumerate(scenes) if sc["keep"]}
         keep_note = ""
         if keeps:
-            held = _keep_latent(latent, _LAST.get(key), lengths, keeps)
-            if held is None:
-                keep_note = "Keep: no earlier Run of this size and length to keep from, so every scene is made new"
+            kept, info = _keep_latent(latent, _LAST.get(key), scenes, keeps)
+            if kept is None:
+                keep_note = "Keep: " + info
                 print("[Pixaroma] H3 Timeline: " + keep_note + ".")
             else:
-                latent = held
+                latent = kept
                 keep_note = "Keep: scene{} {} kept from the last Run".format(
-                    "s" if len(keeps) > 1 else "", ", ".join(str(i + 1) for i in sorted(keeps)))
+                    "s" if len(info) > 1 else "", ", ".join(str(i + 1) for i in info))
+                if len(info) < len(keeps):
+                    keep_note += " (the others changed, so they are made new)"
 
         spans = describe_scenes(lengths, frames)
         ui = {"h3_timeline": [{"frames": frames, "seconds": round(seconds, 2), "mode": mode, "audio": note,
