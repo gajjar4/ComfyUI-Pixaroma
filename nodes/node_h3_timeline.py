@@ -21,7 +21,8 @@ from __future__ import annotations
 from ._folder_source import refresh_copy, source_stamp
 from ._h3_long_video_helpers import FPS
 from ._h3_timeline_helpers import (MAX_WINDOW_CHUNKS, clip_frames, cut_borders, cut_box, cut_weights,
-                                   describe_scenes, fit_box, parse_state, scene_windows, split_scenes, window_chunks)
+                                   describe_scenes, fit_box, keep_ranges, parse_state, scene_windows, split_scenes,
+                                   window_chunks)
 from ._h3_timeline_prompts import MODES, ROLE_PERSON, build_prompt
 from ._path_guard import is_path_under, rel_is_rooted
 from ._resize_helpers import normalize_bit_depth
@@ -32,11 +33,12 @@ class _SceneWindows(_Windows):
     """The H3 Long Video wrapper with windows that follow the scenes, each window reading its scene's text,
     token tags and references. Scene 1 is the sampler's own conditioning, so its windows run unchanged."""
 
-    def __init__(self, lengths, scene_conds, later_conds=None, cuts=(), max_chunks=MAX_WINDOW_CHUNKS):
+    def __init__(self, lengths, scene_conds, later_conds=None, cuts=(), max_chunks=MAX_WINDOW_CHUNKS, preroll=0):
         super().__init__(0, 0)
         self.lengths = list(lengths)
         self.cuts = frozenset(cuts or ())       # the scenes that start with a clean cut (scene_windows)
         self.max_chunks = max_chunks            # the longest window (window_chunks)
+        self.preroll = preroll                  # chunks a cut scene starts before its border (scene_windows)
         self.scene_conds = scene_conds          # [(cross_attn, extras) or None] per scene
         # {scene: (cross_attn, extras)}: the conditioning for the LATER windows of a scene that was split (too long
         # for one window even at the smallest reach, scene_windows), when someone walked in during its first window:
@@ -69,7 +71,7 @@ class _SceneWindows(_Windows):
         if not isinstance(x, (list, tuple)) or len(x) != 2 or getattr(x[0], "ndim", 0) != 5:
             return executor(x, timestep, context, transformer_options, **kwargs)
         video, audio = x[0], x[1]
-        wins = scene_windows(video.shape[2], audio.shape[-1], self.lengths, self.max_chunks, self.cuts)
+        wins = scene_windows(video.shape[2], audio.shape[-1], self.lengths, self.max_chunks, self.cuts, self.preroll)
         if wins is None:
             return executor(x, timestep, context, transformer_options, **kwargs)
         import torch
@@ -87,10 +89,17 @@ class _SceneWindows(_Windows):
         dm = getattr(executor, "class_obj", None)
         dm = getattr(dm, "diffusion_model", dm)
         mask_v, mask_a = kwargs.get("denoise_mask"), kwargs.get("audio_denoise_mask")
+        # Keep: a window whose every blended position is held (denoise mask 0: a kept scene, Audio Sync's track) is
+        # not run at all; the sampler puts the held latent there anyway, so a redo costs only its own windows
+        held_v, held_a = _held(mask_v, 2), _held(mask_a, -1)
         out_v = torch.zeros(video.shape, dtype=torch.float32, device=video.device)
         out_a = torch.zeros(audio.shape, dtype=torch.float32, device=audio.device)
         seen = set()
         for (l0, l1, a0, a1, sc), w_v, w_a in zip(wins, wv, wa):
+            if (held_v is not None and held_a is not None
+                    and bool(held_v[l0:l1][w_v.view(-1) > 0].all()) and bool(held_a[a0:a1][w_a.view(-1) > 0].all())):
+                seen.add(sc)
+                continue
             ctx, src = context, payload
             ck, entry = sc, None
             if own_text:
@@ -120,6 +129,67 @@ class _SceneWindows(_Windows):
             out_a[..., a0:a1] += o[1].float() * w_a.to(audio.device)
             del o
         return [out_v.to(video.dtype), out_a.to(audio.dtype)]
+
+
+def _held(mask, dim):
+    """A denoise mask -> per position along `dim` (time), True where nothing is denoised (all 0), else None."""
+    if mask is None or getattr(mask, "is_nested", False) or getattr(mask, "ndim", 0) < 2:
+        return None
+    try:
+        m = mask.movedim(dim, 0)
+        return (m.reshape(m.shape[0], -1).amax(dim=1) <= 0).to(mask.device)
+    except Exception:
+        return None
+
+
+# Keep: the last finished latent of each Timeline node (by its node id), so a later Run can hold the kept scenes
+_LAST = {}
+KEEP_KEY = "pixaroma_h3_timeline_keep"
+
+
+class _KeepLast:
+    """An OUTER_SAMPLE wrapper: remembers what the sampler made (video and sound latents, on the CPU) for the
+    Timeline node with this id. Never changes the result; any problem only skips the remembering."""
+
+    def __init__(self, key):
+        self.key = key
+
+    def __call__(self, executor, noise, latent_image, sampler, sigmas, denoise_mask=None, callback=None,
+                 disable_pbar=False, seed=None, latent_shapes=None):
+        out = executor(noise, latent_image, sampler, sigmas, denoise_mask, callback, disable_pbar, seed,
+                       latent_shapes=latent_shapes)
+        try:
+            import comfy.utils
+            parts = comfy.utils.unpack_latents(out, latent_shapes) if latent_shapes and len(latent_shapes) > 1 else [out]
+            if len(parts) >= 2 and getattr(parts[0], "ndim", 0) == 5:
+                _LAST[self.key] = (parts[0].detach().float().cpu(), parts[1].detach().float().cpu())
+        except Exception as e:
+            print("[Pixaroma] H3 Timeline: could not remember this run for Keep ({}).".format(e))
+        return out
+
+
+def _keep_latent(latent, prev, lengths, keeps):
+    """The node's empty AV latent -> the kept scenes filled from the last run and held (noise_mask 0, video and
+    sound), or None when the last run does not fit (none yet, another size or length)."""
+    import torch
+    import comfy.nested_tensor
+    samples = latent.get("samples") if isinstance(latent, dict) else None
+    if prev is None or samples is None or not getattr(samples, "is_nested", False):
+        return None
+    v, a = samples.unbind()[:2]
+    if tuple(prev[0].shape) != tuple(v.shape) or tuple(prev[1].shape) != tuple(a.shape):
+        return None
+    nv, na = v.clone(), a.clone()
+    vm, am = torch.ones_like(v), torch.ones_like(a)
+    for t0, t1, a0, a1 in keep_ranges(lengths, v.shape[2], a.shape[-1], keeps):
+        nv[:, :, t0:t1] = prev[0][:, :, t0:t1].to(nv)
+        vm[:, :, t0:t1] = 0
+        na[..., a0:a1] = prev[1][..., a0:a1].to(na)
+        am[..., a0:a1] = 0
+    out = dict(latent)
+    out["samples"] = comfy.nested_tensor.NestedTensor((nv, na))
+    out["noise_mask"] = comfy.nested_tensor.NestedTensor((vm, am))
+    return out
 
 
 def _resolve_picture(name):
@@ -335,7 +405,8 @@ class PixaromaH3Timeline:
         look, people, built, scene_conds, later_conds = None, [], {}, [], {}
         positive = latent = None
         cuts = {i for i, sc in enumerate(scenes) if i > 0 and sc["cut"]}
-        split = split_scenes(lengths, cuts, max_chunks)
+        preroll = state["preroll"] if cuts else 0
+        split = split_scenes(lengths, cuts, max_chunks, preroll)
 
         def make(text, i):
             key = (text, look[:4], tuple(people))
@@ -375,11 +446,29 @@ class PixaromaH3Timeline:
         m = model.clone()
         kind = _diffusion_model_kind()
         m.remove_wrappers_with_key(kind, WRAPPER_KEY)     # H3 Long Video before this node: the scenes take over
-        m.add_wrapper_with_key(kind, WRAPPER_KEY, _SceneWindows(lengths, scene_conds, later_conds, cuts, max_chunks))
+        m.add_wrapper_with_key(kind, WRAPPER_KEY, _SceneWindows(lengths, scene_conds, later_conds, cuts, max_chunks,
+                                                                preroll))
+        # Keep: remember what this Run makes; the kept scenes of a later Run are taken from it and held
+        import comfy.patcher_extension
+        key = str(unique_id)
+        outer = comfy.patcher_extension.WrappersMP.OUTER_SAMPLE
+        m.remove_wrappers_with_key(outer, KEEP_KEY)
+        m.add_wrapper_with_key(outer, KEEP_KEY, _KeepLast(key))
+        keeps = {i for i, sc in enumerate(scenes) if sc["keep"]}
+        keep_note = ""
+        if keeps:
+            held = _keep_latent(latent, _LAST.get(key), lengths, keeps)
+            if held is None:
+                keep_note = "Keep: no earlier Run of this size and length to keep from, so every scene is made new"
+                print("[Pixaroma] H3 Timeline: " + keep_note + ".")
+            else:
+                latent = held
+                keep_note = "Keep: scene{} {} kept from the last Run".format(
+                    "s" if len(keeps) > 1 else "", ", ".join(str(i + 1) for i in sorted(keeps)))
 
         spans = describe_scenes(lengths, frames)
         ui = {"h3_timeline": [{"frames": frames, "seconds": round(seconds, 2), "mode": mode, "audio": note,
-                               "scenes": [[a, b] for a, b in spans]}]}
+                               "keep": keep_note, "scenes": [[a, b] for a, b in spans]}]}
         return {"ui": ui, "result": (m, positive, latent, seconds)}
 
 

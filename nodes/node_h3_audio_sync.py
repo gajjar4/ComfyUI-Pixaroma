@@ -177,10 +177,15 @@ class PixaromaH3AudioSync:
 
         locked = dict(latent)
         locked["samples"] = comfy.nested_tensor.NestedTensor((video_latent, encoded))
-        # ones = denoise this stream, zeros = leave it exactly as it is.
-        locked["noise_mask"] = comfy.nested_tensor.NestedTensor(
-            (torch.ones_like(video_latent), torch.zeros_like(encoded))
-        )
+        # ones = denoise this stream, zeros = leave it exactly as it is. A video mask that is already on the latent
+        # (H3 Timeline's Keep: the scenes kept from the last Run held at 0) stays; only the sound is replaced.
+        video_mask = torch.ones_like(video_latent)
+        old = latent.get("noise_mask") if isinstance(latent, dict) else None
+        if old is not None and getattr(old, "is_nested", False):
+            old_v = old.unbind()[0]
+            if tuple(old_v.shape) == tuple(video_latent.shape):
+                video_mask = old_v.to(video_latent)
+        locked["noise_mask"] = comfy.nested_tensor.NestedTensor((video_mask, torch.zeros_like(encoded)))
 
         report = status(info, track_seconds, limit, when_short)
         if report["level"] != "ok":

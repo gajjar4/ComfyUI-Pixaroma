@@ -128,7 +128,7 @@ def window_chunks(seconds):
     return min(MAX_WINDOW_CHUNKS, max(7, int(round(max(WINDOW_MIN_S, s) * FPS / CHUNK_FRAMES))))
 
 
-def scene_windows(latent_t, audio_t, lengths, max_chunks=MAX_WINDOW_CHUNKS, cuts=()):
+def scene_windows(latent_t, audio_t, lengths, max_chunks=MAX_WINDOW_CHUNKS, cuts=(), preroll=0):
     """-> [(l0, l1, a0, a1, scene)] token / audio-frame ranges and the scene each window reads, or None when the
     latent is not on H3's grid, has no audio, or one scene fills it in a single window (nothing to do).
 
@@ -136,7 +136,10 @@ def scene_windows(latent_t, audio_t, lengths, max_chunks=MAX_WINDOW_CHUNKS, cuts
     window begins exactly on it like a fresh clip. The two windows still share the earlier one's 2 tail tokens (a
     window is 5n + 2 tokens); cut_weights splits what two windows share at the border itself (cut_borders). A scene
     with cuts on both sides can be only 5 chunks, below H3's shortest clip: its window renders 1 chunk of the
-    next scene (the last scene: of the one before), which cut_weights then drops."""
+    next scene (the last scene: of the one before), which cut_weights then drops.
+
+    `preroll` (chunks) starts a cut scene's first window that much BEFORE its border; cut_weights drops that part,
+    so the scene is already moving at the cut (a fresh shot starts almost frozen and settles in its first ~0.5 s)."""
     latent_t, audio_t = int(latent_t), int(audio_t)
     cuts = set(cuts or ())
     chunks = (latent_t - 2) // 5
@@ -151,8 +154,9 @@ def scene_windows(latent_t, audio_t, lengths, max_chunks=MAX_WINDOW_CHUNKS, cuts
     capped = max_chunks < MAX_WINDOW_CHUNKS
     edge = MIN_REACH_CHUNKS if capped else EDGE_CHUNKS
     out, prev_ahead = [], 0
+    preroll = max(0, min(2, int(preroll or 0)))
     for i in range(k):
-        back = edge if i > 0 and i not in cuts else 0
+        back = (edge if i not in cuts else preroll) if i > 0 else 0
         ahead = edge if i < k - 1 and i + 1 not in cuts else 0
         # A scene a little too long for one window keeps ONE window by reaching less into its neighbours (the
         # previous one first), never below 1 chunk (each border must stay inside an overlap). MEASURED 10-22
@@ -178,8 +182,9 @@ def scene_windows(latent_t, audio_t, lengths, max_chunks=MAX_WINDOW_CHUNKS, cuts
         elif z - a <= max_chunks + 1:     # one chunk over (a short scene + its reach): no split leaves room
             parts = [(a, z)]
         else:
-            # how far the next scene's first window reaches back into this one (a last scene after a cut: 1)
-            nxt = edge if i < k - 1 and i + 1 not in cuts else (1 if i == k - 2 else 0)
+            # how far the next scene's first window reaches back into this one (after a cut: its pre-roll, or
+            # 1 for a short last scene)
+            nxt = edge if i < k - 1 and i + 1 not in cuts else (max(preroll, 1 if i == k - 2 else 0) if i < k - 1 else 0)
             parts = (_split_short(a, z, max_chunks, back + prev_ahead, ahead + nxt)
                      or _split_short(a, z, max_chunks, 0, 0) or [(a, z)])
         for s, t in parts:
@@ -242,13 +247,14 @@ def cut_weights(spans, borders):
     return [[v / total[s + j] if total[s + j] > 0 else 0.0 for j, v in enumerate(w)] for (s, _), w in zip(spans, ws)]
 
 
-def split_scenes(lengths, cuts=(), max_chunks=MAX_WINDOW_CHUNKS) -> set:
+def split_scenes(lengths, cuts=(), max_chunks=MAX_WINDOW_CHUNKS, preroll=0) -> set:
     """The scenes made in MORE than one window, on the latent the node makes for these lengths (clip_frames:
     17n + 5 frames = 5n + 2 tokens), by the same scene_windows the wrapper calls at sample time. Only their later
     windows read the node's `later_conds`, so the node builds that extra prompt only for them: each build is one more
     text + picture + audio encode (review 10-22: it was built for every scene a person joins in)."""
     count = {}
-    for w in scene_windows(5 * ((clip_frames(lengths) - 5) // CHUNK_FRAMES) + 2, 1, lengths, max_chunks, cuts) or []:
+    for w in scene_windows(5 * ((clip_frames(lengths) - 5) // CHUNK_FRAMES) + 2, 1, lengths, max_chunks, cuts,
+                           preroll) or []:
         count[w[4]] = count.get(w[4], 0) + 1
     return {s for s, n in count.items() if n > 1}
 
@@ -288,12 +294,30 @@ def parse_state(raw):
             "y": _unit(sc.get("y")),
             "fit": sc.get("fit") if sc.get("fit") in FITS else "cut",
             "cut": bool(out) and sc.get("cut") is True,
+            "keep": sc.get("keep") is True,
         })
     if not out:
         out = [{"length": SCENE_DEFAULT_S, "words": "", "picture": None, "role": "look", "x": 0.5, "y": 0.5, "fit": "cut",
-                "cut": False}]
-    win = data.get("window") if isinstance(data, dict) else None
-    return {"scenes": out, "window": max(0.0, min(15.0, _num(win, 0.0)))}
+                "cut": False, "keep": False}]
+    d = data if isinstance(data, dict) else {}
+    return {"scenes": out, "window": max(0.0, min(15.0, _num(d.get("window"), 0.0))),
+            "preroll": max(0, min(2, int(_num(d.get("preroll"), 0))))}
+
+
+def keep_ranges(lengths, latent_t, audio_t, keeps):
+    """Keep (redo the other scenes only): per kept scene, its (token, token) video range and (frame, frame) audio
+    range on the latent, from the same borders as the windows (the last scene runs to the latent's end)."""
+    latent_t, audio_t = int(latent_t), int(audio_t)
+    b = scene_bounds(lengths, (latent_t - 2) // 5)
+    out = []
+    for i in sorted(set(keeps or ())):
+        if 0 <= i < len(b) - 1:
+            t0 = 5 * b[i]
+            t1 = latent_t if i == len(b) - 2 else 5 * b[i + 1]
+            a0 = min(audio_at(frames_of(t0)), audio_t)
+            a1 = audio_t if i == len(b) - 2 else min(audio_at(frames_of(t1)), audio_t)
+            out.append((t0, t1, a0, a1))
+    return out
 
 
 def cut_box(src_w, src_h, w, h, x=0.5, y=0.5):
