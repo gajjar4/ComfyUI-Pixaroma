@@ -39,6 +39,7 @@ class _SceneWindows(_Windows):
         self.cuts = frozenset(cuts or ())       # the scenes that start with a clean cut (scene_windows)
         self.max_chunks = max_chunks            # the longest window (window_chunks)
         self.preroll = preroll                  # chunks a cut scene starts before its border (scene_windows)
+        self._priv = {}                         # per window: (noise level, x0, eps) of its own frames across a cut
         self.scene_conds = scene_conds          # [(cross_attn, extras) or None] per scene
         # {scene: (cross_attn, extras)}: the conditioning for the LATER windows of a scene that was split (too long
         # for one window even at the smallest reach, scene_windows), when someone walked in during its first window:
@@ -92,6 +93,8 @@ class _SceneWindows(_Windows):
         # Keep: a window whose every blended position is held (denoise mask 0: a kept scene, Audio Sync's track) is
         # not run at all; the sampler puts the held latent there anyway, so a redo costs only its own windows
         held_v, held_a = _held(mask_v, 2), _held(mask_a, -1)
+        sg = transformer_options.get("sigmas")
+        sig = float(sg.max()) if torch.is_tensor(sg) and sg.numel() else None     # this step's noise level
         out_v = torch.zeros(video.shape, dtype=torch.float32, device=video.device)
         out_a = torch.zeros(audio.shape, dtype=torch.float32, device=audio.device)
         seen = set()
@@ -121,20 +124,28 @@ class _SceneWindows(_Windows):
             kw = dict(kwargs)
             kw["minimax_payload"] = self._window_payload(src, l0, l1, a0, a1, audio.shape[-1])
             # Across a clean cut this window renders some of the OTHER scene's frames only to throw them away (its 2
-            # tail tokens, a pre-roll). Whatever is there leaks into this scene: MEASURED 10-23, with that scene
-            # KEPT (held, mask 0, read by H3 as a finished picture to end on) the redone desk turned into the kept
-            # sofa within 0.5 s; held but unmasked, its closer framing still made the desk zoom in. So this window
-            # sees ITS OWN nearest frame repeated there (the shot holds still for those few frames), marked as
-            # ordinary frames (1): a cut scene depends on nothing across its cuts.
+            # tail tokens, a pre-roll). Whatever is there leaks into this scene. MEASURED 10-23: with that scene KEPT
+            # (held, mask 0, read by H3 as a finished picture to end on) the redone desk turned into the kept sofa
+            # within 0.5 s; held but unmasked, its closer framing still made the desk zoom in; this window's own
+            # nearest frame repeated there gave black streaks in the last frames before the cut (seed 111). So
+            # there this window keeps its OWN continuation of its shot, stepped from its own predictions as if the
+            # scene were made alone (as 4 separate renders were, clean), marked as ordinary frames (1).
             xv = video[:, :, l0:l1]
             gone = (w_v.view(-1) <= 0).to(video.device)
-            if bool(gone.any()):
-                own = (~gone).nonzero().flatten()
-                if own.numel():
-                    first, last = int(own[0]), int(own[-1])
-                    xv = xv.clone()
-                    for j in gone.nonzero().flatten().tolist():
-                        xv[:, :, j] = xv[:, :, first if j < first else last]
+            pk = (l0, l1, tuple(transformer_options.get("cond_or_uncond") or [0]))
+            if bool(gone.any()) and sig is not None:
+                prev = self._priv.get(pk)
+                xv = xv.clone()
+                if prev is not None and prev[0] > sig:          # a later step of the same sampling
+                    xv[:, :, gone] = ((1.0 - sig) * prev[1] + sig * prev[2]).to(xv.dtype)
+                else:
+                    # the first step: noise of its own, the same with or without Keep. A KEPT neighbour is CLEAN
+                    # here even at the first step (core injects held frames at full strength:
+                    # model_base.MiniMaxH3.scale_latent_inpaint), so the window's start would differ with Keep
+                    seed = int((kw.get("minimax_payload") or {}).get("seed", 0) or 0)
+                    g = torch.Generator().manual_seed((seed * 1000003 + l0) % (2 ** 62))
+                    n = torch.randn(tuple(xv[:, :, gone].shape), generator=g, dtype=torch.float32).to(xv.device)
+                    xv[:, :, gone] = (sig * n + (1.0 - sig) * xv[:, :, gone].float()).to(xv.dtype)
             if mask_v is not None:
                 mv = mask_v[:, :, l0:l1]
                 if bool(gone.any()):
@@ -144,6 +155,10 @@ class _SceneWindows(_Windows):
             if mask_a is not None:
                 kw["audio_denoise_mask"] = mask_a[..., a0:a1]
             o = executor([xv, audio[..., a0:a1]], timestep, ctx, transformer_options.copy(), **kw)
+            if bool(gone.any()) and sig is not None:
+                # flow model: x = (1 - s) x0 + s eps and the output v = eps - x0, so x0 = x - s v, eps = x + (1 - s) v
+                xin, vv = xv[:, :, gone].float(), o[0][:, :, gone].float()
+                self._priv[pk] = (sig, xin - sig * vv, xin + (1.0 - sig) * vv)
             out_v[:, :, l0:l1] += o[0].float() * w_v
             out_a[..., a0:a1] += o[1].float() * w_a.to(audio.device)
             del o
