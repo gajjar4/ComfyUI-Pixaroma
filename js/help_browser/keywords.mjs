@@ -123,6 +123,7 @@ export const KEYWORDS = {
   PixaromaVersionCheck: "version diagnostic about update which version",
 
   // ── Utility and editors ──
+  Krea2EnhancerPixaroma: "krea krea2 krea 2 turbo enhancer krea2t enhancer comfyui-krea2t-enhancer capitan01r prompt adherence follow the prompt ignores prompt missing details skips details stronger prompt better prompt following model patch missing node not found github 404 deleted",
   PixaromaLoraLoader: "lora stack weight trigger civitai xy plot compare grid sweep "
     + "moved move folder subfolder lost trigger words red name "
     + "api key token login account not found missing nsfw adult uncensored mature "

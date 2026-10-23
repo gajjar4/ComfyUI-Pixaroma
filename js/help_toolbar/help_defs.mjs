@@ -2134,6 +2134,33 @@ const HELP = {
     ],
     footer: "This node only works with MiniMax H3. On any other model it changes nothing.",
   },
+  "Krea2EnhancerPixaroma": {
+    title: "Krea2 Enhancer Pixaroma",
+    tagline: "Makes a Krea 2 model follow your prompt more closely.",
+    sections: [
+      {
+        heading: "What it does",
+        body: "Krea 2 sometimes skips details you wrote in the prompt. This node makes the model lean harder on the prompt while it draws, so more of what you asked for ends up in the picture.\n\nIt does not change your prompt and needs no extra nodes or downloads. It changes nothing on disk either: it works on a copy of the model inside the run.",
+      },
+      {
+        heading: "Where it goes",
+        body: "On the MODEL wire: the Krea 2 model loader, then any LoRA loaders, then Krea2 Enhancer Pixaroma, then the sampler.",
+      },
+      {
+        heading: "Strength",
+        body: "0 does nothing. Higher values push harder on the prompt. Our Krea 2 workflows use 0.1 for most, and 0.5 for most of the extra pass and 2K ones. Try a few values with the same seed and keep the one you like.\n\nToo much can look overcooked, and it can change logos, brand names and lettering. If text in the picture comes out wrong, lower the strength or turn the node off.",
+      },
+      {
+        heading: "Compare with and without",
+        body: "Turn `enabled` off and Run with the same seed to see the picture without the enhancer, then turn it on again.",
+      },
+      {
+        heading: "Where it comes from",
+        body: "It is the ComfyUI-Krea2T-Enhancer node by capitan01R (MIT licence). Its author removed it from GitHub and the Comfy Registry in October 2026, so the Pixaroma Krea 2 workflows now use this copy. The math is the same, so the pictures match the original node with the same settings and seed.",
+      },
+    ],
+    footer: "Works with Krea 2 models only. Any other model passes through unchanged.",
+  },
 };
 
 for (const [cls, def] of Object.entries(HELP)) registerNodeHelp(cls, def);
